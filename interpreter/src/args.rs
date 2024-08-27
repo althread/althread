@@ -1,54 +1,76 @@
 use std::{ffi::OsStr, fs, path::PathBuf};
 
-use clap::{
-    arg,
-    builder::{OsStringValueParser, TypedValueParser},
-    command, ArgMatches,
-};
 
-#[derive(Debug)]
-pub struct Config {
-    pub debug: bool,
-    pub input: String,
+use clap::builder::{TypedValueParser, ValueParser};
+use clap::{ArgAction, Args, ColorChoice, Parser, Subcommand, ValueEnum, ValueHint};
+
+/// An input that is either stdin or a real path.
+#[derive(Debug, Clone)]
+pub enum Input {
+    /// Stdin, represented by `-`.
+    Stdin,
+    /// A non-empty path.
+    Path(PathBuf),
 }
 
-impl Config {
-    /// Convert clap matches to Config
-    pub fn from_args(matches: &ArgMatches) -> Self {
-        Self {
-            debug: matches.get_flag("debug"),
-            input: matches
-                .get_one::<PathBuf>("input")
-                .expect("<Input> is required")
-                .as_path()
-                .to_string_lossy()
-                .to_string(),
+
+/// The Typst compiler.
+#[derive(Debug, Clone, Parser)]
+#[clap(name = "althread")]
+pub struct CliArguments {
+
+    /// Turn debugging information on
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    pub debug: u8,
+
+    #[command(subcommand)]
+    pub command: Command,
+}
+
+/// What to do.
+#[derive(Debug, Clone, Subcommand)]
+#[command()]
+pub enum Command {
+    /// Compiles an input file into a supported output format
+    #[command(visible_alias = "p")]
+    Parse(ParseCommand),
+
+}
+
+/// Compiles an input file into a supported output format
+#[derive(Debug, Clone, Parser)]
+pub struct ParseCommand {
+    /// Shared arguments
+    #[clap(flatten)]
+    pub common: SharedArgs,
+
+}
+
+/// Common arguments of compile, watch, and query.
+#[derive(Debug, Clone, Args)]
+pub struct SharedArgs {
+    /// Path to input Typst file. Use `-` to read input from stdin
+    #[clap(value_parser = make_input_value_parser(), value_hint = ValueHint::FilePath)]
+    pub input: Input,
+
+}
+
+
+/// The clap value parser used by `SharedArgs.input`
+fn make_input_value_parser() -> impl TypedValueParser<Value = Input> {
+    clap::builder::OsStringValueParser::new().try_map(|value| {
+        if value.is_empty() {
+            Err(clap::Error::new(clap::error::ErrorKind::InvalidValue))
+        } else if value == "-" {
+            Ok(Input::Stdin)
+        } else {
+            let path = PathBuf::from(value.clone());
+            if path.extension() != Some(OsStr::new("alt")) {
+                let mut err = clap::Error::new(clap::error::ErrorKind::ValueValidation);
+                err.insert(clap::error::ContextKind::InvalidValue, clap::error::ContextValue::String("Input file must have .alt extension".to_owned()));
+                return Err(err);
+            }
+            Ok(Input::Path(value.into()))
         }
-    }
-}
-
-/// Create clap args parser
-pub fn cmd() -> clap::Command {
-    command!()
-        // input file
-        .arg(
-            arg!(<input>)
-                .help("Input file")
-                .value_parser(OsStringValueParser::new().try_map(|os| {
-                    let path = PathBuf::from(os);
-                    if path.extension() != Some(OsStr::new("alt")) {
-                        return Err(String::from("Input file must have .alt extension"));
-                    }
-
-                    if fs::metadata(&path).is_err() {
-                        return Err(String::from("Input file does not exist"));
-                    }
-
-                    Ok(path)
-                })),
-        )
-        // debug flag
-        .arg(arg!(
-            -d --debug "Open debug mode"
-        ))
+    })
 }

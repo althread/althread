@@ -24,12 +24,27 @@ condition_keywords = _{ ALWAYS_KW | NEVER_KW }
 /// function calls, and control flow structures.
 statements = { statement* }
 
-statement             =  { assignment_statement | declaration_statement | expression_statement | print_statement | run_statement | if_control | while_control | scope }
+statement             =  { 
+      assignment_statement 
+    | declaration_statement 
+    | expression_statement 
+    | call_statement 
+    | run_statement
+    | if_control 
+    | while_control 
+    | scope 
+}
+
 assignment_statement  = _{ assignment ~ ";" }
 declaration_statement = _{ declaration ~ ";" }
 expression_statement  = _{ expression ~ ";" }
+call_statement        = _{ fn_call ~ ";" }
 run_statement         = _{ run_call ~ ";" }
-print_statement       = _{ print_call ~ ";" }
+
+fn_call               = { identifier ~ arg_list }
+run_call              = { RUN_KW ~ identifier ~ arg_list }
+
+arg_list = { "(" ~ ")"  | "("  ~ expression ~ ("," ~ expression)* ~  ")" }
 
 /// ### Assignments
 /// Assignments assign values to variables.
@@ -66,11 +81,6 @@ comparison_operator =  { LT_OP | GT_OP | LE_OP | GE_OP }
 term_operator       =  { ADD_OP | SUB_OP }
 factor_operator     =  { MUL_OP | DIV_OP | MOD_OP }
 
-/// ### Function Calls
-/// Function calls include running parallel processes and printing to the console.
-run_call   = { RUN_KW ~ identifier ~ "(" ~ ")" }
-print_call = { PRINT_KW ~ "(" ~ expression ~ ")" }
-
 /// ### Control Flow
 /// Control flow structures include conditional execution and loops.
 scope         = { "{" ~ statement* ~ "}" }
@@ -82,13 +92,21 @@ while_control = { WHILE_KW ~ "(" ~ expression ~ ")" ~ scope }
 
 /// ### Keywords
 /// Keywords define the core constructs of the language.
-KEYWORDS = _{ MAIN_KW | GLOBAL_KW | PROCESS_KW | ALWAYS_KW | NEVER_KW | LET_KW | CONST_KW | IF_KW | ELSE_KW | WHILE_KW | RUN_KW | PRINT_KW | BOOL | INT_TYPE | FLOAT_TYPE | STR_TYPE | VOID_TYPE }
+KEYWORDS = _{ 
+      MAIN_KW    | GLOBAL_KW | PROCESS_KW 
+    | ALWAYS_KW  | NEVER_KW  | RUN_KW 
+    | LET_KW     | CONST_KW  | IF_KW 
+    | ELSE_KW    | WHILE_KW  | BOOL      
+    | INT_TYPE   | FLOAT_TYPE| STR_TYPE 
+    | VOID_TYPE 
+}
 
 MAIN_KW    = _{ "main" }
 GLOBAL_KW  = _{ "shared" }
 PROCESS_KW = _{ "process" }
 ALWAYS_KW  =  { "always" }
 NEVER_KW   =  { "never" }
+RUN_KW     =  _{ "run" }
 
 LET_KW   = { "let" }
 CONST_KW = { "const" }
@@ -96,9 +114,6 @@ CONST_KW = { "const" }
 IF_KW    = _{ "if" }
 ELSE_KW  = _{ "else" }
 WHILE_KW = _{ "while" }
-
-RUN_KW   = _{ "run" }
-PRINT_KW = _{ "print" }
 
 TRUE_KW  = _{ "true" }
 FALSE_KW = _{ "false" }
