@@ -3,10 +3,11 @@ use std::fmt;
 use pest::iterators::Pairs;
 
 use crate::{env::process_env::ProcessEnv, error::AlthreadResult, parser::Rule};
+use crate::env::instruction::{Instruction, InstructionType, ProcessCode, ProcessEnv2};
 
 use super::{
     display::{AstDisplay, Prefix},
-    node::{Node, NodeBuilder, NodeExecutor},
+    node::{InstructionBuilder, Node, NodeBuilder, NodeExecutor},
     statement::Statement,
     token::literal::Literal,
 };
@@ -37,6 +38,15 @@ impl NodeExecutor for Block {
         }
 
         Ok((env.position >= self.children.len()).then(|| Literal::Null))
+    }
+}
+
+impl InstructionBuilder for Block {
+    fn flatten(&self, process_code: &mut ProcessCode, env: &mut Vec<String>) {
+        for node in &self.children {
+            node.flatten(process_code, env);
+            //node.flatten(env);
+        }
     }
 }
 

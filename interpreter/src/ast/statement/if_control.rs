@@ -5,10 +5,10 @@ use pest::iterators::Pairs;
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{Node, NodeBuilder, NodeExecutor},
+        node::{InstructionBuilder, Node, NodeBuilder, NodeExecutor},
         token::literal::Literal,
     },
-    env::process_env::ProcessEnv,
+    env::{instruction::{Instruction, InstructionType, ProcessCode}, process_env::ProcessEnv},
     error::AlthreadResult,
     parser::Rule,
 };
@@ -62,6 +62,28 @@ impl NodeExecutor for IfControl {
                 .map(|_| Literal::Null)),
             _ => unreachable!(),
         }
+    }
+}
+
+
+
+impl InstructionBuilder for IfControl {
+    fn flatten(&self, process_code: &mut ProcessCode, env: &mut Vec<String>) {
+        let if_instruction = Instruction {
+            dependencies: Vec::new(),
+            span: self.condition.line,
+            control: crate::env::instruction::InstructionType::Empty,
+        };
+        let if_instruction_index = process_code.instructions.len();
+        process_code.instructions.push(if_instruction);
+        self.then_block.value.children.get(0).unwrap().flatten(process_code, env);
+
+        //update the if_instruction to jump to the end of the if block if the condition is false
+        process_code.instructions[if_instruction_index].control = InstructionType::If(crate::env::instruction::IfControl {
+            condition: self.condition,
+            jump_true: 1,
+            jump_false: process_code.instructions.len() - if_instruction_index,
+        });
     }
 }
 

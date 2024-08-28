@@ -1,6 +1,7 @@
 pub mod process_env;
 pub mod running_process;
 pub mod symbol_table;
+pub mod instruction;
 
 use std::{cell::RefCell, rc::Rc};
 

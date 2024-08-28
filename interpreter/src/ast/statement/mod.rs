@@ -19,11 +19,11 @@ use run_call::RunCall;
 use scope::Scope;
 use while_control::WhileControl;
 
-use crate::{env::process_env::ProcessEnv, error::AlthreadResult, no_rule, parser::Rule};
+use crate::{env::{instruction::ProcessCode, process_env::ProcessEnv}, error::AlthreadResult, no_rule, parser::Rule};
 
 use super::{
     display::{AstDisplay, Prefix},
-    node::{Node, NodeBuilder, NodeExecutor},
+    node::{InstructionBuilder, Node, NodeBuilder, NodeExecutor},
     token::literal::Literal,
 };
 
@@ -68,6 +68,16 @@ impl NodeExecutor for Statement {
             Self::If(node) => node.eval(env),
             Self::While(node) => node.eval(env),
             Self::Scope(node) => node.eval(env),
+        }
+    }
+}
+
+impl InstructionBuilder for Statement {
+    fn flatten(&self, process_code: &mut ProcessCode, env: &mut Vec<String>) {
+        match self {
+            //Self::FnCall(node) => node.flatten(process_code, env),
+            Self::If(node) => node.flatten(process_code, env),
+            _ => panic!("Statement::flatten() not implemented for {:?}", self),
         }
     }
 }

@@ -16,7 +16,7 @@ use pest::iterators::Pairs;
 use token::{condition_keyword::ConditionKeyword, literal::Literal};
 
 use crate::{
-    env::{process_env::ProcessEnv, Env},
+    env::{instruction::ProcessCode, process_env::ProcessEnv, Env},
     error::{AlthreadError, AlthreadResult, ErrorType},
     no_rule,
     parser::Rule,
@@ -80,6 +80,16 @@ impl Ast {
         }
 
         Ok(ast)
+    }
+
+    pub fn flatten(&self) -> ProcessCode {
+        let mut process_code = ProcessCode {
+            instructions: Vec::new(),
+            name: "main".to_string(),
+        };
+        let mut env = Vec::new();
+        self.process_blocks.get("main").unwrap().flatten(&mut process_code, &mut env);
+        process_code
     }
 
     pub fn eval_process(

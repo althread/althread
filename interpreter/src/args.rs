@@ -35,11 +35,24 @@ pub enum Command {
     #[command(visible_alias = "p")]
     Parse(ParseCommand),
 
+    /// Compiles an input file into a supported output format
+    #[command(visible_alias = "r")]
+    Run(RunCommand),
+
 }
 
 /// Compiles an input file into a supported output format
 #[derive(Debug, Clone, Parser)]
 pub struct ParseCommand {
+    /// Shared arguments
+    #[clap(flatten)]
+    pub common: SharedArgs,
+
+}
+
+/// Compiles an input file into a supported output format
+#[derive(Debug, Clone, Parser)]
+pub struct RunCommand {
     /// Shared arguments
     #[clap(flatten)]
     pub common: SharedArgs,
