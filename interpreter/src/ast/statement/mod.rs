@@ -4,7 +4,6 @@ pub mod expression;
 pub mod if_control;
 pub mod fn_call;
 pub mod run_call;
-pub mod scope;
 pub mod while_control;
 
 use std::fmt;
@@ -16,15 +15,12 @@ use if_control::IfControl;
 use pest::iterators::Pairs;
 use fn_call::FnCall;
 use run_call::RunCall;
-use scope::Scope;
 use while_control::WhileControl;
 
-use crate::{env::{instruction::ProcessCode, process_env::ProcessEnv}, error::AlthreadResult, no_rule, parser::Rule};
+use crate::{compiler::State, env::{instruction::{Instruction, ProcessCode}, process_env::ProcessEnv}, error::AlthreadResult, no_rule, parser::Rule};
 
 use super::{
-    display::{AstDisplay, Prefix},
-    node::{InstructionBuilder, Node, NodeBuilder, NodeExecutor},
-    token::literal::Literal,
+    block::Block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder, NodeExecutor}, token::literal::Literal
 };
 
 #[derive(Debug)]
@@ -36,7 +32,7 @@ pub enum Statement {
     FnCall(Node<FnCall>),
     If(Node<IfControl>),
     While(Node<WhileControl>),
-    Scope(Node<Scope>),
+    Block(Node<Block>),
 }
 
 impl NodeBuilder for Statement {
@@ -51,7 +47,7 @@ impl NodeBuilder for Statement {
             Rule::run_call    => Ok(Self::Run(Node::build(pair)?)),
             Rule::if_control  => Ok(Self::If(Node::build(pair)?)),
             Rule::while_control => Ok(Self::While(Node::build(pair)?)),
-            Rule::scope => Ok(Self::Scope(Node::build(pair)?)),
+            Rule::code_block => Ok(Self::Block(Node::build(pair)?)),
             _ => Err(no_rule!(pair)),
         }
     }
@@ -67,17 +63,19 @@ impl NodeExecutor for Statement {
             Self::Run(node) => node.eval(env),
             Self::If(node) => node.eval(env),
             Self::While(node) => node.eval(env),
-            Self::Scope(node) => node.eval(env),
+            Self::Block(node) => node.eval(env),
         }
     }
 }
 
 impl InstructionBuilder for Statement {
-    fn flatten(&self, process_code: &mut ProcessCode, env: &mut Vec<String>) {
+    fn compile(&self, state: &mut State) -> Vec<Instruction> {
         match self {
-            //Self::FnCall(node) => node.flatten(process_code, env),
-            Self::If(node) => node.flatten(process_code, env),
-            _ => panic!("Statement::flatten() not implemented for {:?}", self),
+            //Self::FnCall(node) => node.compile(process_code, env),
+            Self::If(node) => node.compile(state),
+            Self::Assignment(node) => node.compile(state),
+            Self::Declaration(node) => node.compile(state),
+            _ => panic!("Statement::compile() not implemented for {:?}", self),
         }
     }
 }
@@ -105,7 +103,7 @@ impl AstDisplay for Statement {
             Statement::Run(node) => node.ast_fmt(f, prefix),
             Statement::If(node) => node.ast_fmt(f, prefix),
             Statement::While(node) => node.ast_fmt(f, prefix),
-            Statement::Scope(node) => node.ast_fmt(f, prefix),
+            Statement::Block(node) => node.ast_fmt(f, prefix),
         }
     }
 }

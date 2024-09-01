@@ -1,13 +1,12 @@
-use std::fmt;
+use std::{collections::HashMap, fmt, hash::Hash};
 
 use pest::iterators::{Pair, Pairs};
 
-use crate::{env::{process_env::ProcessEnv, symbol_table::symbol::Symbol}, error::AlthreadResult, parser::Rule};
-use crate::env::instruction::{ProcessCode, ProcessEnv2};
+use crate::{compiler::State, env::{instruction::Instruction, process_env::ProcessEnv, symbol_table::symbol::Symbol}, error::AlthreadResult, parser::Rule};
+use crate::env::instruction::ProcessCode;
 
 use super::{
-    display::{AstDisplay, Prefix},
-    token::literal::Literal,
+    display::{AstDisplay, Prefix}, statement::expression::{primary_expression::PrimaryExpression, Expression}, token::literal::Literal
 };
 
 #[derive(Debug, Clone)]
@@ -25,8 +24,12 @@ pub trait NodeExecutor: Sized {
     fn eval(&self, env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>>;
 }
 
+pub trait NodeExecutor2: Sized {
+    fn exec(&self, env: &mut ProcessEnv) -> AlthreadResult<()>;
+}
+
 pub trait InstructionBuilder: Sized {
-    fn flatten(&self, process_code: &mut ProcessCode, env: &mut Vec<String>);
+    fn compile(&self, state: &mut State) -> Vec<Instruction>;
 }
 
 
@@ -60,7 +63,70 @@ impl<T: fmt::Display> fmt::Display for Node<T> {
 }
 
 impl<T: InstructionBuilder> Node<T> {
-    pub fn flatten(&self, process_code: &mut ProcessCode, env: &mut Vec<String>) {
-        self.value.flatten(process_code, env)
+    pub fn compile(&self, state: &mut State) -> Vec<Instruction> {
+        self.value.compile(state)
     }
 }
+
+/*
+impl Node<Expression> {
+    pub fn compile(&self, state: &mut State) -> Vec<Instruction> {
+        let mut local_ast = self.clone();
+        let mut global_read: HashMap<&String,usize>  = HashMap::new(); 
+
+        // retrieve first the list of used global variables
+
+        //Then replace the global variables and local variables with their respective indexes in the stack
+
+        match self.value {
+            Expression::Primary(node) => {
+                match node.value {
+                    PrimaryExpression::Identifier(ident) => {
+                        if let Some(index) = state.global_table.get(ident.value.value.as_str()) {
+                            let index = global_read.get(&ident.value.value).or_insert_with(|| {
+                                state.global_table.len()
+                            });
+                            local_ast.node = PrimaryExpression::LocalRead(Node {
+                                value: LocalRead {
+                                    index: index,
+                                },
+                                line: 0,
+                                column: 0,
+                            });
+                        } else {
+                            let mut var_idx = 0;
+                            for var in state.program_stack.iter().rev() {
+                                if var.name = ident.value.value {
+                                    local_ast.node = PrimaryExpression::LocalRead(Node {
+                                        value: LocalRead {
+                                            index: var_idx,
+                                            //TODO: add the number of used global variables in the index of the local variables
+                                        },
+                                        line: 0,
+                                        column: 0,
+                                    });
+                                }
+                                var_idx += 1;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            },
+            Expression::Binary(node) => {
+                node.left.compile(state);
+                node.right.compile(state);
+            },
+            Expression::Unary(node) => {
+                node.right.compile(state);
+            },
+        }
+        // Then add the global variables to the stack (and instruction to add the value of the global variables)
+        // add the instruction to run the local AST
+        // unstack the global variables
+
+        self.get_global_read(self.value);
+        self.value.compile(process_code, env)
+    }
+}
+    */

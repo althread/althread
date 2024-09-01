@@ -1,20 +1,16 @@
-use std::fmt::{self, Debug};
+use std::{collections::HashSet, fmt::{self, Debug}};
 
 use pest::iterators::Pair;
+use rand::seq::index;
 
 use crate::{
     ast::{
         display::AstDisplay,
         node::{Node, NodeExecutor},
         token::{identifier::Identifier, literal::Literal},
-    },
-    env::process_env::ProcessEnv,
-    error::AlthreadResult,
-    no_rule,
-    parser::Rule,
+    }, compiler::Variable, env::process_env::ProcessEnv, error::AlthreadResult, no_rule, parser::Rule
 };
-
-use super::Expression;
+use super::{Expression, LocalExpressionNode};
 
 #[derive(Debug)]
 pub enum PrimaryExpression {
@@ -38,6 +34,32 @@ impl PrimaryExpression {
     }
 }
 
+impl PrimaryExpression {
+    pub fn get_vars(&self, vars: &mut HashSet<String>) {
+        match self {
+            Self::Literal(_) => (),
+            Self::Identifier(node) => { vars.insert(node.value.value.clone()); },
+            Self::Expression(node) => node.value.get_vars(vars),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct LocalLiteralNode {
+    pub value: Literal,
+}
+#[derive(Debug)]
+pub struct LocalVarNode {
+    pub index: usize,
+}
+
+#[derive(Debug)]
+pub enum LocalPrimaryExpressionNode {
+    Literal(LocalLiteralNode),
+    Var(LocalVarNode),
+    Expression(Box<LocalExpressionNode>),
+}
+
 impl NodeExecutor for PrimaryExpression {
     fn eval(&self, env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>> {
         match self {
@@ -46,6 +68,37 @@ impl NodeExecutor for PrimaryExpression {
             Self::Expression(node) => node.eval(env),
         }
     }
+}
+
+
+impl LocalPrimaryExpressionNode {
+    pub fn from_primary(primary: &PrimaryExpression, program_stack: &Vec<Variable>) -> Self {
+        match primary {
+            PrimaryExpression::Literal(node) => 
+                LocalPrimaryExpressionNode::Literal(LocalLiteralNode::from_literal(node)),
+            PrimaryExpression::Identifier(node) => 
+                LocalPrimaryExpressionNode::Var(LocalVarNode::from_identifier(node, program_stack)),
+            PrimaryExpression::Expression(node) => 
+                LocalPrimaryExpressionNode::Expression(Box::new(LocalExpressionNode::from_expression(&node.as_ref().value, program_stack))),
+        }
+    }
+}
+
+impl LocalLiteralNode {
+    pub fn from_literal(literal: &Node<Literal>) -> Self {
+        LocalLiteralNode {
+            value: literal.value.clone(),
+        }
+    }
+}
+impl LocalVarNode {
+    pub fn from_identifier(ident: &Node<Identifier>, program_stack: &Vec<Variable>) -> Self {
+        let index = program_stack.iter().rev().position(|var| var.name == ident.value.value).expect("Variable not found");
+        LocalVarNode {
+            index
+        }
+    }
+    
 }
 
 impl AstDisplay for PrimaryExpression {

@@ -4,6 +4,7 @@ pub mod node;
 pub mod statement;
 pub mod token;
 
+
 use std::{
     collections::HashMap,
     fmt::{self, Formatter},
@@ -16,10 +17,7 @@ use pest::iterators::Pairs;
 use token::{condition_keyword::ConditionKeyword, literal::Literal};
 
 use crate::{
-    env::{instruction::ProcessCode, process_env::ProcessEnv, Env},
-    error::{AlthreadError, AlthreadResult, ErrorType},
-    no_rule,
-    parser::Rule,
+    compiler::State, env::{instruction::ProcessCode, process_env::ProcessEnv, Env}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule
 };
 
 #[derive(Debug)]
@@ -82,14 +80,26 @@ impl Ast {
         Ok(ast)
     }
 
-    pub fn flatten(&self) -> ProcessCode {
+    pub fn compile(&self) -> AlthreadResult<ProcessCode> {
         let mut process_code = ProcessCode {
             instructions: Vec::new(),
             name: "main".to_string(),
         };
-        let mut env = Vec::new();
-        self.process_blocks.get("main").unwrap().flatten(&mut process_code, &mut env);
-        process_code
+        let mut state = State::new();
+        state.current_stack_depth = 1;
+
+        self.global_block.as_ref().map(|global| {
+            process_code.instructions = global.compile(&mut state);
+        });
+
+        for var in state.program_stack.iter() {
+            state.global_table.insert(var.name.clone(), var.clone());
+        }
+        
+        state.unstack_current_depth();
+
+        process_code.instructions = self.process_blocks.get("main").unwrap().compile(&mut state);
+        Ok(process_code)
     }
 
     pub fn eval_process(

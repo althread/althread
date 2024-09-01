@@ -33,7 +33,7 @@ pub struct CliArguments {
 pub enum Command {
     /// Compiles an input file into a supported output format
     #[command(visible_alias = "p")]
-    Parse(ParseCommand),
+    Compile(CompileCommand),
 
     /// Compiles an input file into a supported output format
     #[command(visible_alias = "r")]
@@ -43,7 +43,7 @@ pub enum Command {
 
 /// Compiles an input file into a supported output format
 #[derive(Debug, Clone, Parser)]
-pub struct ParseCommand {
+pub struct CompileCommand {
     /// Shared arguments
     #[clap(flatten)]
     pub common: SharedArgs,

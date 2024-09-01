@@ -5,16 +5,12 @@ use pest::iterators::Pairs;
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{Node, NodeBuilder, NodeExecutor},
+        node::{InstructionBuilder, Node, NodeBuilder, NodeExecutor},
         token::{
             datatype::DataType, declaration_keyword::DeclarationKeyword, identifier::Identifier,
             literal::Literal,
         },
-    },
-    env::process_env::ProcessEnv,
-    error::{AlthreadError, AlthreadResult, ErrorType},
-    no_rule,
-    parser::Rule,
+    }, compiler::{State, Variable}, env::{instruction::{Instruction, InstructionType}, process_env::ProcessEnv}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule
 };
 
 use super::expression::Expression;
@@ -52,6 +48,32 @@ impl NodeBuilder for Declaration {
             datatype,
             value,
         })
+    }
+}
+
+
+impl InstructionBuilder for Declaration {
+    fn compile(&self, state: &mut State) -> Vec<Instruction> {
+        let mut instructions = Vec::new();
+
+        if let Some(value) = &self.value {
+            instructions.extend(value.compile(state));
+        } else {
+            if let Some(datatype) = &self.datatype {
+                instructions.push(Instruction {
+                    control: InstructionType::PushNull,
+                    span: 0
+                });
+            } else {
+                todo!("Error: Declaration must have a datatype or a value");
+            }
+        }
+
+        let mut stack_top = state.program_stack.last_mut().expect("Error: Program stack is empty after compiling an expression");
+        stack_top.name = self.identifier.value.value.clone();
+        stack_top.mutable = self.keyword.value == DeclarationKeyword::Let;
+
+        instructions
     }
 }
 

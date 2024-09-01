@@ -1,11 +1,13 @@
 use std::{fs, io::Read, process::exit};
 
 mod args;
-use args::{CliArguments, Command, Input, ParseCommand, RunCommand};
+use args::{CliArguments, Command, Input, CompileCommand, RunCommand};
 use clap::Parser;
 
 mod parser;
 mod ast;
+mod compiler;
+
 use ast::Ast;
 
 mod error;
@@ -18,7 +20,7 @@ fn main() {
     let cli_args = CliArguments::parse();
 
     match &cli_args.command {
-        Command::Parse(command) => parse_command(&command.clone()),
+        Command::Compile(command) => compile_command(&command.clone()),
         Command::Run(command) => run_command(&command.clone()),
     }
 
@@ -26,7 +28,7 @@ fn main() {
 
 
 
-pub fn parse_command(cli_args: &ParseCommand) {
+pub fn compile_command(cli_args: &CompileCommand) {
     // Read file
     let source = match cli_args.common.input.clone() {
         args::Input::Stdin => {
@@ -51,7 +53,12 @@ pub fn parse_command(cli_args: &ParseCommand) {
         exit(1);
     });
 
-    println!("{}", ast);
+    let instructions = ast.compile().unwrap_or_else(|e| {
+        println!("{:?}", e);
+        exit(1);
+    });
+
+    println!("{}", instructions);
 
 }
 

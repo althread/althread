@@ -13,12 +13,12 @@ use crate::{
     parser::Rule,
 };
 
-use super::{expression::Expression, scope::Scope};
+use super::{expression::Expression, Statement};
 
 #[derive(Debug)]
 pub struct WhileControl {
     pub condition: Node<Expression>,
-    pub then_block: Node<Scope>,
+    pub then_block: Box<Node<Statement>>,
 }
 
 impl NodeBuilder for WhileControl {
@@ -28,7 +28,7 @@ impl NodeBuilder for WhileControl {
 
         Ok(Self {
             condition,
-            then_block,
+            then_block: Box::new(then_block),
         })
     }
 }

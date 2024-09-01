@@ -2,8 +2,9 @@ use std::fmt;
 
 use pest::iterators::Pairs;
 
+use crate::compiler::State;
 use crate::{env::process_env::ProcessEnv, error::AlthreadResult, parser::Rule};
-use crate::env::instruction::{Instruction, InstructionType, ProcessCode, ProcessEnv2};
+use crate::env::instruction::{Instruction, InstructionType, ProcessCode};
 
 use super::{
     display::{AstDisplay, Prefix},
@@ -42,11 +43,12 @@ impl NodeExecutor for Block {
 }
 
 impl InstructionBuilder for Block {
-    fn flatten(&self, process_code: &mut ProcessCode, env: &mut Vec<String>) {
+    fn compile(&self, state: &mut State) -> Vec<Instruction> {
+        let mut instructions = Vec::new();
         for node in &self.children {
-            node.flatten(process_code, env);
-            //node.flatten(env);
+            instructions.extend(node.compile(state));
         }
+        instructions
     }
 }
 

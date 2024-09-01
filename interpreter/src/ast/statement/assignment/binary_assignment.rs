@@ -5,16 +5,13 @@ use pest::iterators::Pairs;
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{Node, NodeBuilder, NodeExecutor},
+        node::{InstructionBuilder, Node, NodeBuilder, NodeExecutor},
         statement::expression::Expression,
         token::{
             binary_assignment_operator::BinaryAssignmentOperator, identifier::Identifier,
             literal::Literal,
         },
-    },
-    env::process_env::ProcessEnv,
-    error::{AlthreadError, AlthreadResult, ErrorType},
-    parser::Rule,
+    }, compiler::State, env::{instruction::{GlobalAssignmentControl, Instruction, InstructionType}, process_env::ProcessEnv}, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule
 };
 
 #[derive(Debug)]
@@ -37,6 +34,29 @@ impl NodeBuilder for BinaryAssignment {
         })
     }
 }
+
+
+
+impl InstructionBuilder for BinaryAssignment {
+    fn compile(&self, state: &mut State) -> Vec<Instruction> {
+        let mut instructions = Vec::new();
+
+        instructions.append(&mut self.value.compile(state));
+
+        instructions.push(Instruction {
+            span: 0,
+            control: InstructionType::GlobalAssignment(GlobalAssignmentControl{
+                identifier: self.identifier.value.value.clone(),
+                operator: self.operator.value.clone(),
+            })
+        });
+
+
+        instructions
+    }
+}
+
+
 
 impl NodeExecutor for BinaryAssignment {
     fn eval(&self, env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>> {

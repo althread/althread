@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{collections::HashSet, fmt};
 
 use pest::iterators::Pair;
 
@@ -7,19 +7,23 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::{Node, NodeExecutor},
         token::{binary_operator::BinaryOperator, literal::Literal},
-    },
-    env::process_env::ProcessEnv,
-    error::{AlthreadError, AlthreadResult, ErrorType},
-    parser::Rule,
+    }, compiler::Variable, env::process_env::ProcessEnv, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule
 };
 
-use super::Expression;
+use super::{Expression, LocalExpressionNode};
 
 #[derive(Debug)]
 pub struct BinaryExpression {
     pub left: Box<Node<Expression>>,
     pub operator: Node<BinaryOperator>,
     pub right: Box<Node<Expression>>,
+}
+
+#[derive(Debug)]
+pub struct LocalBinaryExpressionNode {
+    pub left: Box<LocalExpressionNode>,
+    pub operator: BinaryOperator,
+    pub right: Box<LocalExpressionNode>,
 }
 
 impl BinaryExpression {
@@ -39,6 +43,26 @@ impl BinaryExpression {
         })
     }
 }
+
+impl LocalBinaryExpressionNode {
+    
+    pub fn from_binary(bin_expression: &BinaryExpression, program_stack: &Vec<Variable>) -> Self {
+        Self {
+            left: Box::new(LocalExpressionNode::from_expression(&bin_expression.left.value, program_stack)),
+            operator: bin_expression.operator.value.clone(),
+            right: Box::new(LocalExpressionNode::from_expression(&bin_expression.right.value, program_stack)),
+        }    
+    }
+}
+
+
+impl BinaryExpression {
+    pub fn get_vars(&self, vars: &mut HashSet<String>) {
+        self.left.value.get_vars(vars);
+        self.right.value.get_vars(vars);
+    }
+}
+
 
 impl NodeExecutor for BinaryExpression {
     fn eval(&self, env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>> {

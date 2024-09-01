@@ -7,19 +7,16 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder, NodeExecutor},
         token::literal::Literal,
-    },
-    env::{instruction::{Instruction, InstructionType, ProcessCode}, process_env::ProcessEnv},
-    error::AlthreadResult,
-    parser::Rule,
+    }, compiler::State, env::{instruction::{Instruction, InstructionType, JumpControl, JumpIfControl}, process_env::ProcessEnv}, error::AlthreadResult, parser::Rule
 };
 
-use super::{expression::Expression, scope::Scope};
+use super::{expression::Expression, Statement};
 
 #[derive(Debug)]
 pub struct IfControl {
     pub condition: Node<Expression>,
-    pub then_block: Node<Scope>,
-    pub else_block: Option<Node<Scope>>,
+    pub then_block: Box<Node<Statement>>,
+    pub else_block: Option<Box<Node<Statement>>>,
 }
 
 impl NodeBuilder for IfControl {
@@ -28,10 +25,15 @@ impl NodeBuilder for IfControl {
         let then_block = Node::build(pairs.next().unwrap())?;
         let else_block = pairs.next().map(|pair| Node::build(pair)).transpose()?;
 
+        let else_block = match else_block {
+            Some(else_block) => Some(Box::new(else_block)),
+            None => None,
+        };
+
         Ok(Self {
             condition,
-            then_block,
-            else_block,
+            then_block: Box::new(then_block),
+            else_block: else_block,
         })
     }
 }
@@ -68,22 +70,31 @@ impl NodeExecutor for IfControl {
 
 
 impl InstructionBuilder for IfControl {
-    fn flatten(&self, process_code: &mut ProcessCode, env: &mut Vec<String>) {
-        let if_instruction = Instruction {
-            dependencies: Vec::new(),
-            span: self.condition.line,
-            control: crate::env::instruction::InstructionType::Empty,
-        };
-        let if_instruction_index = process_code.instructions.len();
-        process_code.instructions.push(if_instruction);
-        self.then_block.value.children.get(0).unwrap().flatten(process_code, env);
+    fn compile(&self, state: &mut State) -> Vec<Instruction> {
+        
+        let mut instructions = Vec::new();
+        let condition = self.condition.compile(state);
+        let then_block = self.then_block.compile(state);
+        let else_block = self.else_block.as_ref().map(|block| block.compile(state)).unwrap_or_default();
 
-        //update the if_instruction to jump to the end of the if block if the condition is false
-        process_code.instructions[if_instruction_index].control = InstructionType::If(crate::env::instruction::IfControl {
-            condition: self.condition,
-            jump_true: 1,
-            jump_false: process_code.instructions.len() - if_instruction_index,
+
+        instructions.extend(condition);
+        instructions.push(Instruction {
+            span: 0,
+            control: InstructionType::JumpIf(JumpIfControl { 
+                jump_false: then_block.len() + 2,
+            }),
         });
+        instructions.extend(then_block);
+        instructions.push(Instruction {
+            span: 0,
+            control: InstructionType::Jump(JumpControl { 
+                jump: else_block.len() + 1,
+            }),
+        });
+        instructions.extend(else_block);
+
+        instructions
     }
 }
 

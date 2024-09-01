@@ -11,10 +11,12 @@ program = _{ SOI ~ blocks* ~ EOI }
 /// - **Process Block**: Encapsulates code that runs concurrently in parallel processes.
 blocks = _{ main_block | global_block | condition_block | process_block }
 
-global_block    = { GLOBAL_KW ~ "{" ~ statements ~ "}" }
-condition_block = { condition_keywords ~ "{" ~ statements ~ "}" }
-process_block   = { PROCESS_KW ~ identifier ~ "(" ~ ")" ~ "{" ~ statements ~ "}" }
-main_block      = { MAIN_KW ~ "{" ~ statements ~ "}" }
+global_block    = { GLOBAL_KW ~ code_block }
+condition_block = { condition_keywords ~ code_block }
+process_block   = { PROCESS_KW ~ identifier ~ "(" ~ ")" ~ code_block }
+main_block      = { MAIN_KW ~ code_block }
+
+code_block = { "{" ~ statement* ~ "}" }
 
 condition_keywords = _{ ALWAYS_KW | NEVER_KW }
 
@@ -22,7 +24,6 @@ condition_keywords = _{ ALWAYS_KW | NEVER_KW }
 /// Statements are the executable instructions in the language.
 /// They include assignments, declarations, expressions, print statements,
 /// function calls, and control flow structures.
-statements = { statement* }
 
 statement             =  { 
       assignment_statement 
@@ -32,7 +33,7 @@ statement             =  {
     | run_statement
     | if_control 
     | while_control 
-    | scope 
+    | code_block 
 }
 
 assignment_statement  = _{ assignment ~ ";" }
@@ -83,9 +84,9 @@ factor_operator     =  { MUL_OP | DIV_OP | MOD_OP }
 
 /// ### Control Flow
 /// Control flow structures include conditional execution and loops.
-scope         = { "{" ~ statement* ~ "}" }
-if_control    = { IF_KW ~ "(" ~ expression ~ ")" ~ scope ~ (ELSE_KW ~ scope)? }
-while_control = { WHILE_KW ~ "(" ~ expression ~ ")" ~ scope }
+
+if_control    = { IF_KW ~ "(" ~ expression ~ ")" ~ statement ~ (ELSE_KW ~ statement)? }
+while_control = { WHILE_KW ~ "(" ~ expression ~ ")" ~ statement }
 
 /// ## Tokens
 /// This section defines the keywords, operators, datatypes, and other tokens used in Althread.

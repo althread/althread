@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{collections::HashSet, fmt};
 
 use pest::iterators::Pair;
 
@@ -7,18 +7,21 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::{Node, NodeExecutor},
         token::{literal::Literal, unary_operator::UnaryOperator},
-    },
-    env::process_env::ProcessEnv,
-    error::{AlthreadError, AlthreadResult, ErrorType},
-    parser::Rule,
+    }, compiler::Variable, env::process_env::ProcessEnv, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule
 };
 
-use super::Expression;
+use super::{Expression, LocalExpressionNode};
 
 #[derive(Debug)]
 pub struct UnaryExpression {
     pub operator: Node<UnaryOperator>,
     pub operand: Box<Node<Expression>>,
+}
+
+#[derive(Debug)]
+pub struct LocalUnaryExpressionNode {
+    pub operator: UnaryOperator,
+    pub operand: Box<LocalExpressionNode>,
 }
 
 impl UnaryExpression {
@@ -33,6 +36,22 @@ impl UnaryExpression {
         })
     }
 }
+
+impl LocalUnaryExpressionNode {
+    pub fn from_unary(un_expression: &UnaryExpression, program_stack: &Vec<Variable>) -> Self {
+        Self {
+            operator: un_expression.operator.value.clone(),
+            operand: Box::new(LocalExpressionNode::from_expression(&un_expression.operand.value, program_stack)),
+        }
+    }
+}
+
+impl UnaryExpression {
+    pub fn get_vars(&self, vars: &mut HashSet<String>) {
+        self.operand.value.get_vars(vars);
+    }
+}
+
 
 impl NodeExecutor for UnaryExpression {
     fn eval(&self, env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>> {
