@@ -11,14 +11,14 @@ pub struct Variable {
 }
 
 #[derive(Debug, Clone)]
-pub struct State {
+pub struct CompilerState {
     pub global_table: HashMap<String, Variable>,
     pub program_stack: Vec<Variable>,
     pub current_stack_depth: usize,
     pub is_atomic: bool,
 }
 
-impl State {
+impl CompilerState {
     pub fn new() -> Self {
         Self {
             global_table: HashMap::new(),
@@ -36,9 +36,3 @@ impl State {
     }
 }
 
-
-
-#[derive(Debug, Clone)]
-pub struct LocalReads {
-    pub variables: Vec<String>,
-}

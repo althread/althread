@@ -5,9 +5,9 @@ use pest::iterators::Pair;
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{Node, NodeExecutor},
+        node::{Node},
         token::{literal::Literal, unary_operator::UnaryOperator},
-    }, compiler::Variable, env::process_env::ProcessEnv, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule
+    }, compiler::Variable, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule
 };
 
 use super::{Expression, LocalExpressionNode};
@@ -49,28 +49,6 @@ impl LocalUnaryExpressionNode {
 impl UnaryExpression {
     pub fn get_vars(&self, vars: &mut HashSet<String>) {
         self.operand.value.get_vars(vars);
-    }
-}
-
-
-impl NodeExecutor for UnaryExpression {
-    fn eval(&self, env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>> {
-        let operand = self.operand.eval(env)?.unwrap();
-
-        match self.operator.value {
-            UnaryOperator::Positive => operand.positive(),
-            UnaryOperator::Negative => operand.negative(),
-            UnaryOperator::Not => operand.not(),
-        }
-        .map(|res| Some(res))
-        .map_err(|e| {
-            AlthreadError::new(
-                ErrorType::TypeError,
-                self.operator.line,
-                self.operator.column,
-                format!("{}", e),
-            )
-        })
     }
 }
 

@@ -2,8 +2,8 @@ use std::{collections::HashMap, fmt, hash::Hash};
 
 use pest::iterators::{Pair, Pairs};
 
-use crate::{compiler::State, env::{instruction::Instruction, process_env::ProcessEnv, symbol_table::symbol::Symbol}, error::AlthreadResult, parser::Rule};
-use crate::env::instruction::ProcessCode;
+use crate::{compiler::CompilerState, vm::instruction::Instruction, error::AlthreadResult, parser::Rule};
+use crate::vm::instruction::ProcessCode;
 
 use super::{
     display::{AstDisplay, Prefix}, statement::expression::{primary_expression::PrimaryExpression, Expression}, token::literal::Literal
@@ -20,16 +20,8 @@ pub trait NodeBuilder: Sized {
     fn build(pairs: Pairs<Rule>) -> AlthreadResult<Self>;
 }
 
-pub trait NodeExecutor: Sized {
-    fn eval(&self, env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>>;
-}
-
-pub trait NodeExecutor2: Sized {
-    fn exec(&self, env: &mut ProcessEnv) -> AlthreadResult<()>;
-}
-
 pub trait InstructionBuilder: Sized {
-    fn compile(&self, state: &mut State) -> Vec<Instruction>;
+    fn compile(&self, state: &mut CompilerState) -> Vec<Instruction>;
 }
 
 
@@ -44,11 +36,6 @@ impl<T: NodeBuilder> Node<T> {
     }
 }
 
-impl<T: NodeExecutor> Node<T> {
-    pub fn eval(&self, env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>> {
-        self.value.eval(env)
-    }
-}
 
 impl<T: AstDisplay> AstDisplay for Node<T> {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
@@ -63,7 +50,7 @@ impl<T: fmt::Display> fmt::Display for Node<T> {
 }
 
 impl<T: InstructionBuilder> Node<T> {
-    pub fn compile(&self, state: &mut State) -> Vec<Instruction> {
+    pub fn compile(&self, state: &mut CompilerState) -> Vec<Instruction> {
         self.value.compile(state)
     }
 }

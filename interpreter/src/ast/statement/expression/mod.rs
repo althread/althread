@@ -12,9 +12,9 @@ use unary_expression::{LocalUnaryExpressionNode, UnaryExpression};
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder, NodeExecutor},
+        node::{InstructionBuilder, Node, NodeBuilder},
         token::{datatype::DataType, literal::Literal},
-    }, compiler::{State, Variable}, env::{instruction::{ExpressionControl, GlobalReadsControl, Instruction, InstructionType}, process_env::ProcessEnv}, error::AlthreadResult, parser::Rule
+    }, compiler::{CompilerState, Variable}, vm::instruction::{ExpressionControl, GlobalReadsControl, Instruction, InstructionType}, error::AlthreadResult, parser::Rule
 };
 
 lazy_static::lazy_static! {
@@ -102,7 +102,7 @@ impl LocalExpressionNode {
 }
 
 impl InstructionBuilder for Expression {
-    fn compile(&self, state: &mut State) -> Vec<Instruction> {
+    fn compile(&self, state: &mut CompilerState) -> Vec<Instruction> {
         let mut instructions = Vec::new();
 
         let mut vars = HashSet::new();
@@ -158,16 +158,6 @@ impl Expression {
             Self::Binary(node) => node.value.get_vars(vars),
             Self::Unary(node) => node.value.get_vars(vars),
             Self::Primary(node) => node.value.get_vars(vars),
-        }
-    }
-}
-
-impl NodeExecutor for Expression {
-    fn eval(&self, _env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>> {
-        match self {
-            Self::Binary(node) => node.eval(_env),
-            Self::Unary(node) => node.eval(_env),
-            Self::Primary(node) => node.eval(_env),
         }
     }
 }

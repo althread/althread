@@ -5,10 +5,10 @@ use pest::iterators::Pairs;
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{Node, NodeBuilder, NodeExecutor},
+        node::{Node, NodeBuilder},
         token::literal::Literal,
     },
-    env::process_env::ProcessEnv,
+    
     error::AlthreadResult,
     parser::Rule,
 };
@@ -31,15 +31,6 @@ impl NodeBuilder for RunCall {
     }
 }
 
-impl NodeExecutor for RunCall {
-    fn eval(&self, env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>> {
-        env.process_table
-            .borrow_mut()
-            .queue(self.identifier.value.to_string());
-
-        Ok(Some(Literal::Null))
-    }
-}
 
 impl AstDisplay for RunCall {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {

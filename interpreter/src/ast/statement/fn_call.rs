@@ -5,10 +5,9 @@ use pest::iterators::Pairs;
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{Node, NodeBuilder, NodeExecutor},
+        node::{Node, NodeBuilder},
         token::{identifier::Identifier, literal::Literal},
     },
-    env::process_env::ProcessEnv,
     error::{AlthreadError, AlthreadResult, ErrorType},
     parser::Rule,
 };
@@ -31,25 +30,6 @@ impl NodeBuilder for FnCall {
     }
 }
 
-impl NodeExecutor for FnCall {
-    fn eval(&self, env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>> {
-        
-        if self.fn_name.value.value != "print" {
-            return Err(AlthreadError::new(
-                ErrorType::RuntimeError,
-                self.fn_name.line,
-                self.fn_name.column,
-                format!("Function {} not found", self.fn_name.value.value),
-            ));
-        }
-
-        if let Some(value) = self.value.eval(env)? {
-            println!("{}", value);
-        }
-
-        Ok(Some(Literal::Null))
-    }
-}
 
 impl AstDisplay for FnCall {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {

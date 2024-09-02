@@ -17,10 +17,10 @@ use fn_call::FnCall;
 use run_call::RunCall;
 use while_control::WhileControl;
 
-use crate::{compiler::State, env::{instruction::{Instruction, ProcessCode}, process_env::ProcessEnv}, error::AlthreadResult, no_rule, parser::Rule};
+use crate::{compiler::CompilerState, vm::instruction::{Instruction, ProcessCode}, error::AlthreadResult, no_rule, parser::Rule};
 
 use super::{
-    block::Block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder, NodeExecutor}, token::literal::Literal
+    block::Block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, token::literal::Literal
 };
 
 #[derive(Debug)]
@@ -53,23 +53,9 @@ impl NodeBuilder for Statement {
     }
 }
 
-impl NodeExecutor for Statement {
-    fn eval(&self, env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>> {
-        match self {
-            Self::Assignment(node) => node.eval(env),
-            Self::Declaration(node) => node.eval(env),
-            Self::Expression(node) => node.eval(env),
-            Self::FnCall(node) => node.eval(env),
-            Self::Run(node) => node.eval(env),
-            Self::If(node) => node.eval(env),
-            Self::While(node) => node.eval(env),
-            Self::Block(node) => node.eval(env),
-        }
-    }
-}
 
 impl InstructionBuilder for Statement {
-    fn compile(&self, state: &mut State) -> Vec<Instruction> {
+    fn compile(&self, state: &mut CompilerState) -> Vec<Instruction> {
         match self {
             //Self::FnCall(node) => node.compile(process_code, env),
             Self::If(node) => node.compile(state),

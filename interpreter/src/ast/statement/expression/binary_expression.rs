@@ -5,9 +5,9 @@ use pest::iterators::Pair;
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{Node, NodeExecutor},
+        node::{Node},
         token::{binary_operator::BinaryOperator, literal::Literal},
-    }, compiler::Variable, env::process_env::ProcessEnv, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule
+    }, compiler::Variable, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule
 };
 
 use super::{Expression, LocalExpressionNode};
@@ -60,39 +60,6 @@ impl BinaryExpression {
     pub fn get_vars(&self, vars: &mut HashSet<String>) {
         self.left.value.get_vars(vars);
         self.right.value.get_vars(vars);
-    }
-}
-
-
-impl NodeExecutor for BinaryExpression {
-    fn eval(&self, env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>> {
-        let left = self.left.eval(env)?.unwrap();
-        let right = self.right.eval(env)?.unwrap();
-
-        match self.operator.value {
-            BinaryOperator::Add => left.add(&right),
-            BinaryOperator::Subtract => left.subtract(&right),
-            BinaryOperator::Multiply => left.multiply(&right),
-            BinaryOperator::Divide => left.divide(&right),
-            BinaryOperator::Modulo => left.modulo(&right),
-            BinaryOperator::Equals => left.equals(&right),
-            BinaryOperator::NotEquals => left.not_equals(&right),
-            BinaryOperator::LessThan => left.less_than(&right),
-            BinaryOperator::LessThanOrEqual => left.less_than_or_equal(&right),
-            BinaryOperator::GreaterThan => left.greater_than(&right),
-            BinaryOperator::GreaterThanOrEqual => left.greater_than_or_equal(&right),
-            BinaryOperator::And => left.and(&right),
-            BinaryOperator::Or => left.or(&right),
-        }
-        .map(|res| Some(res))
-        .map_err(|e| {
-            AlthreadError::new(
-                ErrorType::TypeError,
-                self.operator.line,
-                self.operator.column,
-                format!("{}", e),
-            )
-        })
     }
 }
 

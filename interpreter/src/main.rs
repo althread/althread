@@ -7,14 +7,13 @@ use clap::Parser;
 mod parser;
 mod ast;
 mod compiler;
+mod vm;
 
 use ast::Ast;
 
 mod error;
 use error::AlthreadError;
 
-mod env;
-use env::Env;
 
 fn main() {
     let cli_args = CliArguments::parse();
@@ -89,10 +88,6 @@ pub fn run_command(cli_args: &RunCommand) {
 
     println!("{}", ast);
 
-    let mut env = Env::new();
-    env.run(&ast).unwrap_or_else(|e| {
-        println!("{:?}", e);
-        exit(1);
-    });
+    todo!("execute the code");
 
 }

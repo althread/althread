@@ -5,13 +5,13 @@ use pest::iterators::Pairs;
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder, NodeExecutor},
+        node::{InstructionBuilder, Node, NodeBuilder},
         statement::expression::Expression,
         token::{
             binary_assignment_operator::BinaryAssignmentOperator, identifier::Identifier,
             literal::Literal,
         },
-    }, compiler::State, env::{instruction::{GlobalAssignmentControl, Instruction, InstructionType}, process_env::ProcessEnv}, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule
+    }, compiler::CompilerState, vm::instruction::{GlobalAssignmentControl, Instruction, InstructionType}, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule
 };
 
 #[derive(Debug)]
@@ -38,7 +38,7 @@ impl NodeBuilder for BinaryAssignment {
 
 
 impl InstructionBuilder for BinaryAssignment {
-    fn compile(&self, state: &mut State) -> Vec<Instruction> {
+    fn compile(&self, state: &mut CompilerState) -> Vec<Instruction> {
         let mut instructions = Vec::new();
 
         instructions.append(&mut self.value.compile(state));
@@ -58,56 +58,6 @@ impl InstructionBuilder for BinaryAssignment {
 
 
 
-impl NodeExecutor for BinaryAssignment {
-    fn eval(&self, env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>> {
-        let current_value: Literal = env
-            .symbol_table
-            .borrow()
-            .get(&self.identifier.value)
-            .map_err(|e| {
-                AlthreadError::new(
-                    ErrorType::VariableError,
-                    self.identifier.line,
-                    self.identifier.column,
-                    e,
-                )
-            })?
-            .value;
-
-        let value = self.value.eval(env)?.unwrap();
-
-        let value = match self.operator.value {
-            BinaryAssignmentOperator::Assign => Ok(value),
-            BinaryAssignmentOperator::AddAssign => current_value.add(&value),
-            BinaryAssignmentOperator::SubtractAssign => current_value.subtract(&value),
-            BinaryAssignmentOperator::MultiplyAssign => current_value.multiply(&value),
-            BinaryAssignmentOperator::DivideAssign => current_value.divide(&value),
-            BinaryAssignmentOperator::ModuloAssign => current_value.modulo(&value),
-        }
-        .map_err(|e| {
-            AlthreadError::new(
-                ErrorType::VariableError,
-                self.identifier.line,
-                self.identifier.column,
-                e,
-            )
-        })?;
-
-        env.symbol_table
-            .borrow_mut()
-            .update(&self.identifier.value, value)
-            .map_err(|e| {
-                AlthreadError::new(
-                    ErrorType::VariableError,
-                    self.identifier.line,
-                    self.identifier.column,
-                    e,
-                )
-            })?;
-
-        Ok(Some(Literal::Null))
-    }
-}
 
 impl AstDisplay for BinaryAssignment {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {

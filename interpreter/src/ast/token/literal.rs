@@ -6,9 +6,9 @@ use pest::iterators::{Pair, Pairs};
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{NodeBuilder, NodeExecutor},
+        node::{NodeBuilder},
     },
-    env::process_env::ProcessEnv,
+    
     error::{AlthreadError, AlthreadResult, ErrorType},
     no_rule,
     parser::Rule,
@@ -51,11 +51,6 @@ impl NodeBuilder for Literal {
     }
 }
 
-impl NodeExecutor for Literal {
-    fn eval(&self, _env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>> {
-        Ok(Some(self.clone()))
-    }
-}
 
 impl Literal {
     pub fn from_datatype(datatype: &DataType) -> Self {

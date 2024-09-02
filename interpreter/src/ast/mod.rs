@@ -17,7 +17,7 @@ use pest::iterators::Pairs;
 use token::{condition_keyword::ConditionKeyword, literal::Literal};
 
 use crate::{
-    compiler::State, env::{instruction::ProcessCode, process_env::ProcessEnv, Env}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule
+    compiler::CompilerState, vm::instruction::ProcessCode, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule
 };
 
 #[derive(Debug)]
@@ -85,7 +85,7 @@ impl Ast {
             instructions: Vec::new(),
             name: "main".to_string(),
         };
-        let mut state = State::new();
+        let mut state = CompilerState::new();
         state.current_stack_depth = 1;
 
         self.global_block.as_ref().map(|global| {
@@ -102,62 +102,6 @@ impl Ast {
         Ok(process_code)
     }
 
-    pub fn eval_process(
-        &self,
-        identifier: String,
-        process: &mut ProcessEnv,
-    ) -> AlthreadResult<Option<Literal>> {
-        let block = self.process_blocks.get(&identifier).unwrap();
-        block.eval(process)
-    }
-
-    pub fn eval_globals(&self, env: &Env) -> AlthreadResult<()> {
-        if let Some(global) = &self.global_block {
-            let mut global_env = ProcessEnv::new_global(env);
-            while global.eval(&mut global_env)?.is_none() {}
-        }
-
-        Ok(())
-    }
-
-    pub fn eval_conditions(&self, env: &Env) -> AlthreadResult<()> {
-        for (keyword, condition_block) in &self.condition_blocks {
-            let mut condition_env = ProcessEnv::new_global(env);
-
-            let condition = Self::eval_condition_block(condition_block, &mut condition_env)?;
-
-            match keyword {
-                ConditionKeyword::Always if !condition => {
-                    Err("Always condition not met".to_string())
-                }
-                ConditionKeyword::Never if condition => Err("Never condition not met".to_string()),
-                _ => Ok(()),
-            }
-            .map_err(|e| {
-                AlthreadError::new(
-                    ErrorType::SyntaxError,
-                    condition_block.line,
-                    condition_block.column,
-                    e,
-                )
-            })?;
-        }
-
-        Ok(())
-    }
-
-    fn eval_condition_block(
-        condition_block: &Node<Block>,
-        process_env: &mut ProcessEnv,
-    ) -> AlthreadResult<bool> {
-        for condition in &condition_block.value.children {
-            if !condition.eval(process_env)?.unwrap().is_true() {
-                return Ok(false);
-            }
-        }
-
-        Ok(true)
-    }
 }
 
 impl fmt::Display for Ast {

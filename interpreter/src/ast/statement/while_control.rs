@@ -5,10 +5,9 @@ use pest::iterators::Pairs;
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{Node, NodeBuilder, NodeExecutor},
+        node::{Node, NodeBuilder},
         token::literal::Literal,
     },
-    env::process_env::ProcessEnv,
     error::AlthreadResult,
     parser::Rule,
 };
@@ -33,28 +32,6 @@ impl NodeBuilder for WhileControl {
     }
 }
 
-impl NodeExecutor for WhileControl {
-    fn eval(&self, env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>> {
-        match env.position {
-            0 => {
-                let condition = self.condition.eval(env.get_child())?.unwrap();
-                if condition.is_true() {
-                    env.position = 1;
-                    Ok(None)
-                } else {
-                    Ok(Some(Literal::Null))
-                }
-            }
-            1 => {
-                if self.then_block.eval(env.get_child())?.is_some() {
-                    env.reset();
-                }
-                Ok(None)
-            }
-            _ => unreachable!(),
-        }
-    }
-}
 
 impl AstDisplay for WhileControl {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {

@@ -2,13 +2,14 @@ use std::fmt;
 
 use pest::iterators::Pairs;
 
-use crate::compiler::State;
-use crate::{env::process_env::ProcessEnv, error::AlthreadResult, parser::Rule};
-use crate::env::instruction::{Instruction, InstructionType, ProcessCode};
+use crate::compiler::CompilerState;
+use crate::error::AlthreadResult;
+use crate::parser::Rule;
+use crate::vm::instruction::{Instruction, InstructionType, ProcessCode};
 
 use super::{
     display::{AstDisplay, Prefix},
-    node::{InstructionBuilder, Node, NodeBuilder, NodeExecutor},
+    node::{InstructionBuilder, Node, NodeBuilder},
     statement::Statement,
     token::literal::Literal,
 };
@@ -31,19 +32,8 @@ impl NodeBuilder for Block {
     }
 }
 
-impl NodeExecutor for Block {
-    fn eval(&self, env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>> {
-        let node = &self.children[env.position];
-        if node.eval(env.get_child())?.is_some() {
-            env.consume();
-        }
-
-        Ok((env.position >= self.children.len()).then(|| Literal::Null))
-    }
-}
-
 impl InstructionBuilder for Block {
-    fn compile(&self, state: &mut State) -> Vec<Instruction> {
+    fn compile(&self, state: &mut CompilerState) -> Vec<Instruction> {
         let mut instructions = Vec::new();
         for node in &self.children {
             instructions.extend(node.compile(state));

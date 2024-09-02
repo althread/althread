@@ -5,9 +5,9 @@ use pest::iterators::Pairs;
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder, NodeExecutor},
+        node::{InstructionBuilder, Node, NodeBuilder},
         token::literal::Literal,
-    }, compiler::State, env::{instruction::{Instruction, InstructionType, JumpControl, JumpIfControl}, process_env::ProcessEnv}, error::AlthreadResult, parser::Rule
+    }, compiler::CompilerState, vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl}, error::AlthreadResult, parser::Rule
 };
 
 use super::{expression::Expression, Statement};
@@ -38,39 +38,10 @@ impl NodeBuilder for IfControl {
     }
 }
 
-impl NodeExecutor for IfControl {
-    fn eval(&self, env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>> {
-        match env.position {
-            0 => {
-                let condition = self.condition.eval(env.get_child())?.unwrap();
-                env.position = if condition.is_true() {
-                    1
-                } else if self.else_block.is_some() {
-                    2
-                } else {
-                    return Ok(Some(Literal::Null));
-                };
-                Ok(None)
-            }
-            1 => Ok(self
-                .then_block
-                .eval(env.get_child())?
-                .map(|_| Literal::Null)),
-            2 => Ok(self
-                .else_block
-                .as_ref()
-                .unwrap()
-                .eval(env.get_child())?
-                .map(|_| Literal::Null)),
-            _ => unreachable!(),
-        }
-    }
-}
-
 
 
 impl InstructionBuilder for IfControl {
-    fn compile(&self, state: &mut State) -> Vec<Instruction> {
+    fn compile(&self, state: &mut CompilerState) -> Vec<Instruction> {
         
         let mut instructions = Vec::new();
         let condition = self.condition.compile(state);

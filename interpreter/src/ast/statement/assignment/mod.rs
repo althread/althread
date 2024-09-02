@@ -1,18 +1,16 @@
 pub mod binary_assignment;
-pub mod unary_assignment;
 
 use std::fmt::{self};
 
 use binary_assignment::BinaryAssignment;
 use pest::iterators::Pairs;
-use unary_assignment::UnaryAssignment;
 
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder, NodeExecutor},
+        node::{InstructionBuilder, Node, NodeBuilder},
         token::literal::Literal,
-    }, compiler::State, env::{instruction::Instruction, process_env::ProcessEnv}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule
+    }, compiler::CompilerState, vm::{instruction::Instruction}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule
 };
 
 #[derive(Debug)]
@@ -39,21 +37,13 @@ impl NodeBuilder for Assignment {
 
 
 impl InstructionBuilder for Assignment {
-    fn compile(&self, state: &mut State) -> Vec<Instruction> {
+    fn compile(&self, state: &mut CompilerState) -> Vec<Instruction> {
         match self {
             Self::Binary(node) => node.compile(state),
         }
     }
 }
 
-
-impl NodeExecutor for Assignment {
-    fn eval(&self, env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>> {
-        match self {
-            Self::Binary(node) => node.eval(env),
-        }
-    }
-}
 
 impl AstDisplay for Assignment {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {

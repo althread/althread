@@ -5,12 +5,12 @@ use pest::iterators::Pairs;
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder, NodeExecutor},
+        node::{InstructionBuilder, Node, NodeBuilder},
         token::{
             datatype::DataType, declaration_keyword::DeclarationKeyword, identifier::Identifier,
             literal::Literal,
         },
-    }, compiler::{State, Variable}, env::{instruction::{Instruction, InstructionType}, process_env::ProcessEnv}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule
+    }, compiler::{CompilerState, Variable}, vm::instruction::{Instruction, InstructionType}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule
 };
 
 use super::expression::Expression;
@@ -53,7 +53,7 @@ impl NodeBuilder for Declaration {
 
 
 impl InstructionBuilder for Declaration {
-    fn compile(&self, state: &mut State) -> Vec<Instruction> {
+    fn compile(&self, state: &mut CompilerState) -> Vec<Instruction> {
         let mut instructions = Vec::new();
 
         if let Some(value) = &self.value {
@@ -74,42 +74,6 @@ impl InstructionBuilder for Declaration {
         stack_top.mutable = self.keyword.value == DeclarationKeyword::Let;
 
         instructions
-    }
-}
-
-impl NodeExecutor for Declaration {
-    fn eval(&self, env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>> {
-        let datatype = self
-            .datatype
-            .as_ref()
-            .map(|datatype| datatype.value.clone());
-
-        let value = self
-            .value
-            .as_ref()
-            .map(|value| value.eval(env))
-            .transpose()?
-            .unwrap();
-
-        let mut symbol_table = env.symbol_table.borrow_mut();
-
-        symbol_table
-            .insert(
-                self.keyword.value == DeclarationKeyword::Let,
-                &self.identifier.value,
-                datatype,
-                value,
-            )
-            .map_err(|e| {
-                AlthreadError::new(
-                    ErrorType::VariableError,
-                    self.identifier.line,
-                    self.identifier.column,
-                    e,
-                )
-            })?;
-
-        Ok(Some(Literal::Null))
     }
 }
 

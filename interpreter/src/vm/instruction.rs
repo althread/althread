@@ -2,7 +2,6 @@ use std::fmt;
 
 use crate::ast::{node::Node, statement::{expression::{Expression, LocalExpression, LocalExpressionNode}, Statement}, token::{binary_assignment_operator::BinaryAssignmentOperator, literal::Literal}};
 
-use super::Env;
 
 struct Span {
     start: usize,

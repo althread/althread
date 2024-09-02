@@ -6,9 +6,9 @@ use rand::seq::index;
 use crate::{
     ast::{
         display::AstDisplay,
-        node::{Node, NodeExecutor},
+        node::{Node},
         token::{identifier::Identifier, literal::Literal},
-    }, compiler::Variable, env::process_env::ProcessEnv, error::AlthreadResult, no_rule, parser::Rule
+    }, compiler::Variable, error::AlthreadResult, no_rule, parser::Rule
 };
 use super::{Expression, LocalExpressionNode};
 
@@ -58,16 +58,6 @@ pub enum LocalPrimaryExpressionNode {
     Literal(LocalLiteralNode),
     Var(LocalVarNode),
     Expression(Box<LocalExpressionNode>),
-}
-
-impl NodeExecutor for PrimaryExpression {
-    fn eval(&self, env: &mut ProcessEnv) -> AlthreadResult<Option<Literal>> {
-        match self {
-            Self::Literal(node) => node.eval(env),
-            Self::Identifier(node) => node.eval(env),
-            Self::Expression(node) => node.eval(env),
-        }
-    }
 }
 
 
