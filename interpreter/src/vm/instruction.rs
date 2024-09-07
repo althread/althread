@@ -80,7 +80,7 @@ impl fmt::Display for AtomicControl {
 
 #[derive(Debug)]
 pub struct JumpIfControl {
-    pub jump_false: usize,
+    pub jump_false: i64,
     pub unstack_len: usize,
 }
 impl fmt::Display for JumpIfControl {
@@ -92,7 +92,7 @@ impl fmt::Display for JumpIfControl {
 
 #[derive(Debug)]
 pub struct JumpControl {
-    pub jump: usize,
+    pub jump: i64,
 }
 impl fmt::Display for JumpControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

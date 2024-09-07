@@ -5,11 +5,9 @@ use pest::iterators::Pairs;
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{Node, NodeBuilder},
-        token::literal::Literal,
-    },
-    error::AlthreadResult,
-    parser::Rule,
+        node::{InstructionBuilder, Node, NodeBuilder},
+        token::{datatype::DataType, literal::Literal},
+    }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl}
 };
 
 use super::{expression::Expression, Statement};
@@ -31,6 +29,54 @@ impl NodeBuilder for WhileControl {
         })
     }
 }
+
+
+impl InstructionBuilder for Node<WhileControl> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+
+        let mut instructions = Vec::new();
+
+        state.current_stack_depth += 1;
+        let cond_ins = self.value.condition.compile(state)?;
+        // Check if the top of the stack is a boolean
+        if state.program_stack.last().expect("stack should contain a value after an expression is compiled").datatype != DataType::Boolean {
+            return Err(AlthreadError::new(
+                ErrorType::TypeError,
+                self.value.condition.line,
+                self.value.condition.column,
+                "condition must be a boolean".to_string()
+            ));
+        }
+        // pop all variables from the stack at the given depth
+        let unstack_len = state.unstack_current_depth();
+
+        let block_ins = self.value.then_block.compile(state)?;
+        let block_len = block_ins.len();
+
+        instructions.extend(cond_ins);
+        instructions.push(Instruction {
+            line: self.value.condition.line,
+            column: self.value.condition.column,
+            control: InstructionType::JumpIf(JumpIfControl { 
+                jump_false: (block_len + 2) as i64,
+                unstack_len
+            }),
+        });
+        instructions.extend(block_ins);
+
+        instructions.push(Instruction {
+            line: self.line,
+            column: self.column,
+            control: InstructionType::Jump(JumpControl { 
+                jump: -((block_len + 2) as i64),
+            }),
+        });
+
+
+        Ok(instructions)
+    }
+}
+
 
 
 impl AstDisplay for WhileControl {

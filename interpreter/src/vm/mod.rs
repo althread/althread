@@ -141,7 +141,14 @@ impl<'a> RunningProgramState<'a> {
             }
             _ => panic!("Not implemented"),
         };
-        self.instruction_pointer += pos_inc;
+        let new_pos = (self.instruction_pointer as i64) + pos_inc;
+        if new_pos < 0 {
+            return Err(AlthreadError::new(
+                ErrorType::RuntimeError, 
+                0, 0,
+                "instruction pointer is becomming negative".to_string()))
+        }
+        self.instruction_pointer = new_pos as usize;
         Ok(action)
     }
 }

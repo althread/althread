@@ -72,7 +72,7 @@ impl InstructionBuilder for IfControl {
             line: self.condition.line,
             column: self.condition.column,
             control: InstructionType::JumpIf(JumpIfControl { 
-                jump_false: then_block.len() + 2,
+                jump_false: (then_block.len() + 2) as i64,
                 unstack_len
             }),
         });
@@ -82,7 +82,7 @@ impl InstructionBuilder for IfControl {
                 line: else_node.line,
                 column: else_node.column,
                 control: InstructionType::Jump(JumpControl { 
-                    jump: else_block.len() + 1,
+                    jump: (else_block.len() + 1) as i64,
                 }),
             });
             instructions.extend(else_block);
