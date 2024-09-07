@@ -7,8 +7,8 @@ use crate::{
     ast::{
         display::AstDisplay,
         node::Node,
-        token::{identifier::Identifier, literal::Literal},
-    }, compiler::Variable, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule
+        token::{datatype::DataType, identifier::Identifier, literal::Literal},
+    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule
 };
 use super::{Expression, LocalExpressionNode};
 
@@ -73,6 +73,18 @@ impl LocalPrimaryExpressionNode {
                 LocalPrimaryExpressionNode::Expression(Box::new(e))
             },
         })
+    }
+
+    pub fn datatype(&self, state: &CompilerState) -> Result<DataType, String> {
+        match self {
+            Self::Expression(e) => e.datatype(state),
+            Self::Literal(l) => Ok(l.value.get_datatype()),
+            Self::Var(v) => {
+                let mem_len = state.program_stack.len();
+                //println!("   var {}:{}", v.index, state.program_stack.get(v.index).expect("variable index does not exists").datatype);
+                Ok(state.program_stack.get(mem_len - 1 - v.index).expect("variable index does not exists").datatype.clone())
+            }
+        }
     }
 }
 

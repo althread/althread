@@ -37,38 +37,83 @@ impl NodeBuilder for BinaryAssignment {
 
 
 
-impl InstructionBuilder for BinaryAssignment {
+impl InstructionBuilder for Node<BinaryAssignment> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
         let mut instructions = Vec::new();
         
         state.current_stack_depth += 1;
-        instructions.append(&mut self.value.compile(state)?);
+        instructions.append(&mut self.value.value.compile(state)?);
+        let rdatatype = state.program_stack.last().expect("empty stack after expression").datatype.clone();
         let unstack_len = state.unstack_current_depth();
 
-        if let Some(_) = state.global_table.get(&self.identifier.value.value) {
+        if let Some(g_val) = state.global_table.get(&self.value.identifier.value.value) {
+            if g_val.datatype != rdatatype {
+                return Err(AlthreadError::new(
+                    ErrorType::TypeError,
+                    self.line,
+                    self.column,
+                    format!("Cannot assign value of type {} to variable of type {}", rdatatype, g_val.datatype)
+                ))
+            }
+            if !g_val.mutable {
+                return Err(AlthreadError::new(
+                    ErrorType::VariableError,
+                    self.line,
+                    self.column,
+                    format!("Cannot assign value to the immutable global variable {}", self.value.identifier.value.value)
+                ))
+            }
             instructions.push(Instruction {
-                line: self.identifier.line,
-                column: self.identifier.column,
+                line: self.value.identifier.line,
+                column: self.value.identifier.column,
                 control: InstructionType::GlobalAssignment(GlobalAssignmentControl{
-                    identifier: self.identifier.value.value.clone(),
-                    operator: self.operator.value.clone(),
+                    identifier: self.value.identifier.value.value.clone(),
+                    operator: self.value.operator.value.clone(),
                     unstack_len
                 })
             });
         } else {
             let mut var_idx = 0;
+            let mut l_var = None;
             for var in state.program_stack.iter().rev() {
-                if var.name == self.identifier.value.value {
+                if var.name == self.value.identifier.value.value {
+                    l_var = Some(var);
                     break;
                 }
                 var_idx += 1;
             }
+            if l_var.is_none() {
+                return Err(AlthreadError::new(
+                    ErrorType::VariableError,
+                    self.line,
+                    self.column,
+                    format!("Variable '{}' is undefined", self.value.identifier.value.value)
+                )) 
+            }
+            let l_var = l_var.unwrap();
+            if l_var.datatype != rdatatype {
+                return Err(AlthreadError::new(
+                    ErrorType::TypeError,
+                    self.line,
+                    self.column,
+                    format!("Cannot assign value of type {} to variable of type {}", rdatatype, l_var.datatype)
+                ))
+            }
+            if !l_var.mutable {
+                return Err(AlthreadError::new(
+                    ErrorType::VariableError,
+                    self.line,
+                    self.column,
+                    format!("Cannot assign value to the immutable local variable {}", self.value.identifier.value.value)
+                ))
+            }
+
             instructions.push(Instruction {
-                line: self.identifier.line,
-                column: self.identifier.column,
+                line: self.value.identifier.line,
+                column: self.value.identifier.column,
                 control: InstructionType::LocalAssignment(LocalAssignmentControl{
                     index: var_idx,
-                    operator: self.operator.value.clone(),
+                    operator: self.value.operator.value.clone(),
                     unstack_len
                 })
             });

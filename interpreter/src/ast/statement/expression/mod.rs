@@ -14,7 +14,7 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
         token::{datatype::DataType, literal::Literal},
-    }, compiler::{CompilerState, Variable}, vm::instruction::{ExpressionControl, GlobalReadsControl, Instruction, InstructionType}, error::AlthreadResult, parser::Rule
+    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule, vm::instruction::{ExpressionControl, GlobalReadsControl, Instruction, InstructionType}
 };
 
 lazy_static::lazy_static! {
@@ -98,8 +98,17 @@ impl LocalExpressionNode {
         };
         Ok(root)
     }
-    
+    pub fn datatype(&self, state: &CompilerState) -> Result<DataType, String> {
+        match self {
+            Self::Binary(node) =>node.datatype(state),
+            Self::Unary(node) => node.datatype(state),
+            Self::Primary(node) =>
+                node.datatype(state),
+        }
+    }
 }
+
+
 
 // we build directly the traits on the node
 // because we need line/column information
@@ -130,8 +139,14 @@ impl InstructionBuilder for Node<Expression> {
                 }),
             });
         }
-
+        
         let local_expr = LocalExpressionNode::from_expression(&self.value, &state.program_stack)?;
+        let restult_type = local_expr.datatype(state).map_err(|err| AlthreadError::new(
+            ErrorType::ExpressionError,
+            self.line,
+            self.column,
+            format!("Type of expression is not well-defined: {}", err)
+        ))?;
 
         instructions.push(Instruction {
             line: self.line,
@@ -145,7 +160,7 @@ impl InstructionBuilder for Node<Expression> {
             name: "".to_string(),
             depth: state.current_stack_depth,
             mutable: false,
-            datatype: DataType::Integer, // TODO: get datatype from expression
+            datatype: restult_type, // TODO: get datatype from expression
         });
         
         Ok(instructions)

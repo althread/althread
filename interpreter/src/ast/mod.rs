@@ -5,6 +5,7 @@ pub mod statement;
 pub mod token;
 
 
+use core::panic;
 use std::{
     collections::HashMap,
     fmt::{self, Formatter},
@@ -14,7 +15,7 @@ use block::Block;
 use display::{AstDisplay, Prefix};
 use node::Node;
 use pest::iterators::Pairs;
-use statement::expression::Expression;
+use statement::{expression::Expression, Statement};
 use token::{condition_keyword::ConditionKeyword, literal::Literal};
 
 use crate::{
@@ -87,44 +88,59 @@ impl Ast {
         // shared variables
         let mut state = CompilerState::new();
         let mut global_memory = HashMap::new();
+        let mut global_table = HashMap::new();
         state.current_stack_depth = 1;
         let memory = match self.global_block.as_ref() {
             Some(global) => {
                 let mut memory = VM::new_memory();
                 for node in global.value.children.iter() {
-                    for gi in node.compile(&mut state)? {
-                        let literal = match gi.control {
-                            InstructionType::Expression(exp) => {
-                                exp.root.eval(&memory).or_else(|err| Err(AlthreadError::new(
-                                    ErrorType::ExpressionError, 
-                                    gi.line,
-                                    gi.column,
-                                    err
-                                    )))
-                            },
-                            _ => {
-                                return Err(AlthreadError::new(
-                                    ErrorType::InstructionNotAllowed, 
-                                    gi.line,
-                                    gi.column,
-                                    "The 'shared' block can only contains assignment from an expression".to_string()
-                                    ));
+                    match &node.value {
+                        Statement::Declaration(decl) => {
+                            let mut literal = None;
+                            for gi in node.compile(&mut state)? {
+                                match gi.control {
+                                    InstructionType::Expression(exp) => {
+                                        literal = Some(exp.root.eval(&memory).or_else(|err| Err(AlthreadError::new(
+                                            ErrorType::ExpressionError, 
+                                            gi.line,
+                                            gi.column,
+                                            err
+                                            )))?);
+                                    },
+                                    InstructionType::Declaration(dec) => {
+                                        // do nothing
+                                        assert!(dec.unstack_len == 1)
+                                    }
+                                    InstructionType::PushNull(datatype) => {
+                                        memory.push(datatype.default())
+                                    }
+                                    _ => {
+                                        panic!("unexpected instruction in compiled declaration statement")
+                                    }
+                                }
                             }
-                        };
-                        let literal = literal?;
-                        memory.push(literal);
+                            let literal = literal.expect("declaration did not compiled to expression nor PushNull");
+                            memory.push(literal);
+
+                            let var_name = &decl.value.identifier.value.value;
+                            global_table.insert(var_name.clone(), state.program_stack.last().unwrap().clone());
+                            global_memory.insert(var_name.clone(), memory.last().unwrap().clone());
+                        },
+                        _ => return Err(AlthreadError::new(
+                            ErrorType::InstructionNotAllowed, 
+                            node.line,
+                            node.column,
+                            "The 'shared' block can only contains assignment from an expression".to_string()
+                            )),
                     }
+                    
                 }
                 memory
             }
             None => Vec::new()
         };
 
-        for var_i in 0..state.program_stack.len() {
-            let var = &state.program_stack[var_i];
-            state.global_table.insert(var.name.clone(), var.clone());
-            global_memory.insert(var.name.clone(), memory[var_i].clone());
-        }
+        state.global_table = global_table;
 
         state.unstack_current_depth();
         println!("{:?}", state.program_stack);

@@ -5,9 +5,9 @@ use pest::iterators::Pair;
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{Node},
-        token::{literal::Literal, unary_operator::UnaryOperator},
-    }, compiler::Variable, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule
+        node::Node,
+        token::{datatype::DataType, literal::Literal, unary_operator::UnaryOperator},
+    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule
 };
 
 use super::{Expression, LocalExpressionNode};
@@ -44,6 +44,21 @@ impl LocalUnaryExpressionNode {
             operator: un_expression.operator.value.clone(),
             operand: Box::new(e),
         })
+    }
+
+    pub fn datatype(&self, state: &CompilerState) -> Result<DataType, String> {
+        let operand_type = self.operand.as_ref().datatype(state)?;
+        match self.operator {
+            UnaryOperator::Positive => if operand_type.is_a_number() {
+                Ok(operand_type)
+            } else { Err("Can only apply operator '+' on a number".to_string()) },
+            UnaryOperator::Negative =>  if operand_type.is_a_number() {
+                Ok(operand_type)
+            } else { Err("Can only apply operator '-' on a number".to_string()) },
+            UnaryOperator::Not =>  if operand_type.is_boolean() {
+                Ok(operand_type)
+            } else { Err("Can only apply operator '!' on a boolean".to_string()) },
+        }
     }
 }
 

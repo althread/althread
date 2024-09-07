@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::ast::{node::Node, statement::{expression::{binary_expression::LocalBinaryExpressionNode, primary_expression::LocalPrimaryExpressionNode, unary_expression::LocalUnaryExpressionNode, Expression, LocalExpression, LocalExpressionNode}, Statement}, token::{binary_assignment_operator::BinaryAssignmentOperator, binary_operator::BinaryOperator, literal::Literal, unary_operator::UnaryOperator}};
+use crate::ast::{node::Node, statement::{expression::{binary_expression::LocalBinaryExpressionNode, primary_expression::LocalPrimaryExpressionNode, unary_expression::LocalUnaryExpressionNode, Expression, LocalExpression, LocalExpressionNode}, Statement}, token::{binary_assignment_operator::BinaryAssignmentOperator, binary_operator::BinaryOperator, datatype::DataType, literal::Literal, unary_operator::UnaryOperator}};
 
 use super::Memory;
 
@@ -25,8 +25,9 @@ pub enum InstructionType {
     RunCall(RunCallControl),
     EndProgram,
     FnCall(FnCallControl),
+    Declaration(DeclarationControl),
     Exit,
-    PushNull,
+    PushNull(DataType),
     //While(WhileControl),
     //Wait(WaitControl),
     //Receive,
@@ -48,7 +49,8 @@ impl fmt::Display for InstructionType {
             Self::EndProgram => {write!(f, "end program")?},
             Self::FnCall(a) => {write!(f, "{}", a)?},
             Self::Exit => {write!(f, "exit")?},
-            Self::PushNull => {write!(f, "push null")?},
+            Self::Declaration(d) => {write!(f, "{}", d)?},
+            Self::PushNull(d) => {write!(f, "push null ({})", d)?},
         }
         Ok(())
     }
@@ -136,6 +138,18 @@ impl fmt::Display for UnstackControl {
         Ok(())
     }
 }
+
+#[derive(Debug)]
+pub struct DeclarationControl {
+    pub unstack_len: usize,
+}
+impl fmt::Display for DeclarationControl {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "declare var with value")?;
+        Ok(())
+    }
+}
+
 
 #[derive(Debug)]
 pub struct GlobalAssignmentControl {

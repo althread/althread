@@ -7,10 +7,10 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
         token::{
-            datatype::DataType, declaration_keyword::DeclarationKeyword, identifier::Identifier,
+            datatype::{self, DataType}, declaration_keyword::DeclarationKeyword, identifier::Identifier,
             literal::Literal,
         },
-    }, compiler::{CompilerState, Variable}, vm::instruction::{Instruction, InstructionType}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule
+    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule, vm::instruction::{DeclarationControl, Instruction, InstructionType}
 };
 
 use super::expression::Expression;
@@ -55,24 +55,60 @@ impl NodeBuilder for Declaration {
 impl InstructionBuilder for Declaration {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
         let mut instructions = Vec::new();
+        let mut datatype = None;
 
-        if let Some(value) = &self.value {
-            instructions.extend(value.compile(state)?);
-        } else {
-            if let Some(datatype) = &self.datatype {
-                instructions.push(Instruction {
-                    control: InstructionType::PushNull,
-                    line: self.keyword.line,
-                    column: self.keyword.column,
-                });
-            } else {
-                todo!("Error: Declaration must have a datatype or a value");
-            }
+        if let Some(d) = &self.datatype {
+            datatype = Some(d.value.clone());
         }
+        if let Some(value) = &self.value {
+            state.current_stack_depth += 1;
+            instructions.extend(value.compile(state)?);
+            let computed_datatype = state.program_stack.last().expect("Error: Program stack is empty after compiling an expression").datatype.clone();
+            let unstack_len = state.unstack_current_depth();
 
-        let mut stack_top = state.program_stack.last_mut().expect("Error: Program stack is empty after compiling an expression");
-        stack_top.name = self.identifier.value.value.clone();
-        stack_top.mutable = self.keyword.value == DeclarationKeyword::Let;
+            if let Some(datatype) = datatype {
+                if datatype != computed_datatype {
+                    return Err(AlthreadError::new(
+                        ErrorType::TypeError,
+                        self.datatype.as_ref().unwrap().line,
+                        self.datatype.as_ref().unwrap().column,
+                        format!("Declared type and assignment do not match (found :{} = {})", datatype, computed_datatype)
+                    ))
+                }
+            }
+            datatype = Some(computed_datatype);
+
+            instructions.push(Instruction {
+                control: InstructionType::Declaration(DeclarationControl{
+                    unstack_len
+                }),
+                line: self.keyword.line,
+                column: self.keyword.column,
+            });
+        } else {
+            if datatype.is_none() {
+                return Err(AlthreadError::new(
+                    ErrorType::TypeError,
+                    self.identifier.line,
+                    self.identifier.column,
+                    "Declaration must have a datatype or a value".to_string()
+                ));
+            }
+            instructions.push(Instruction {
+                control: InstructionType::PushNull(datatype.as_ref().unwrap().clone()),
+                line: self.keyword.line,
+                column: self.keyword.column,
+            });
+        } 
+
+        let datatype = datatype.unwrap();
+        
+        state.program_stack.push(Variable {
+            mutable: self.keyword.value == DeclarationKeyword::Let,
+            name: self.identifier.value.value.clone(),
+            datatype,
+            depth: state.current_stack_depth
+        });
 
         Ok(instructions)
     }

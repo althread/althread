@@ -15,11 +15,20 @@ pub enum DataType {
     String,
 }
 
-/* impl DataType {
+impl DataType {
+    pub fn default(&self) -> Literal {
+        match self {
+            DataType::Void => Literal::Null,
+            DataType::Boolean => Literal::Bool(false),
+            DataType::Integer =>  Literal::Int(0),
+            DataType::Float =>  Literal::Float(0.0),
+            DataType::String =>  Literal::String("".to_string()),
+        }
+    }
     pub fn from_str(value: &str) -> Self {
         match value {
-            "bool" => Self::Bool,
-            "int" => Self::Int,
+            "bool" => Self::Boolean,
+            "int" => Self::Integer,
             "float" => Self::Float,
             "string" => Self::String,
             _ => Self::Void,
@@ -39,74 +48,27 @@ pub enum DataType {
     pub fn as_str(&self) -> &str {
         match self {
             DataType::Void => "void",
-            DataType::Bool => "bool",
-            DataType::Int => "int",
+            DataType::Boolean => "bool",
+            DataType::Integer => "int",
             DataType::Float => "float",
             DataType::String => "string",
         }
     }
 
-    pub fn can_unary(&self) -> Result<(), String> {
+    pub fn is_a_number(&self) -> bool {
         match self {
-            Self::Int | Self::Float => Ok(()),
-            _ => Err(format!("Cannot increment {}", self)),
+            Self::Integer | Self::Float => true,
+            _ => false,
         }
     }
-
-    pub fn can_add(&self, other: &DataType) -> Result<(), String> {
-        match (self, other) {
-            (Self::Int, Self::Int) | (Self::Float, Self::Float) | (Self::String, Self::String) => {
-                Ok(())
-            }
-            (i, j) => Err(format!("Cannot add {} and {}", i, j)),
-        }
-    }
-
-    pub fn can_arithmetic(&self, other: &DataType) -> Result<(), String> {
-        match (self, other) {
-            (Self::Int, Self::Int) | (Self::Float, Self::Float) => Ok(()),
-            (i, j) => Err(format!("Cannot subtract {} and {}", i, j)),
-        }
-    }
-
-    pub fn can_compare(&self, other: &DataType) -> Result<(), String> {
-        match (self, other) {
-            (Self::Int, Self::Int) | (Self::Float, Self::Float) => Ok(()),
-            (i, j) => Err(format!("No modulo between {} and {}", i, j)),
-        }
-    }
-
-    pub fn can_order(&self, other: &DataType) -> Result<(), String> {
-        match (self, other) {
-            (Self::Int, Self::Int) | (Self::Float, Self::Float) => Ok(()),
-            (i, j) => Err(format!("Cannot order {} and {}", i, j)),
-        }
-    }
-
-    pub fn can_logical(&self, other: &DataType) -> Result<(), String> {
-        match (self, other) {
-            (Self::Bool, Self::Bool) => Ok(()),
-            (i, j) => Err(format!(
-                "Cannot perform logical AND between {} and {}",
-                i, j
-            )),
-        }
-    }
-
-    pub fn can_not(&self) -> Result<(), String> {
+    pub fn is_boolean(&self) -> bool {
         match self {
-            Self::Bool => Ok(()),
-            i => Err(format!("Cannot perform logical NOT on {}", i)),
+            Self::Boolean => true,
+            _ => false,
         }
     }
 
-    pub fn can_neg(&self) -> Result<(), String> {
-        match self {
-            Self::Int | Self::Float => Ok(()),
-            i => Err(format!("Cannot negate {}", i)),
-        }
-    }
-} */
+} 
 
 impl NodeBuilder for DataType {
     fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {

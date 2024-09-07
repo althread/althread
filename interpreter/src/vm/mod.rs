@@ -119,6 +119,12 @@ impl<'a> RunningProgramState<'a> {
                 for _ in 0..unstack_ctrl.unstack_len { self.memory.pop(); }
                 1
             },
+            InstructionType::Declaration(dec) => {
+                let lit = self.memory.last().expect("Panic: stack is empty, cannot perform declaration with value").clone();
+                for _ in 0..dec.unstack_len { self.memory.pop(); }
+                self.memory.push(lit);
+                1
+            },
             InstructionType::RunCall(call) => {
                 action = GlobalAction::StartProgram(call.name.clone());
                 1
