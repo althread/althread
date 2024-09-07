@@ -73,12 +73,7 @@ impl InstructionBuilder for Statement {
                 node.column,
                 "Top level expressions are not yet implemented".to_string()
             )),
-            Self::Block(node) => Err(AlthreadError::new(
-                ErrorType::NotImplemented,
-                node.line,
-                node.column,
-                "Blocks are not yet implemented".to_string()
-            )),
+            Self::Block(node) => node.compile(state),
             Self::Run(node)  => node.compile(state),
             Self::FnCall(node)  => node.compile(state),
         }
