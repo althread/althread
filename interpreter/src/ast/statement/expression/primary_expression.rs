@@ -6,9 +6,9 @@ use rand::seq::index;
 use crate::{
     ast::{
         display::AstDisplay,
-        node::{Node},
+        node::Node,
         token::{identifier::Identifier, literal::Literal},
-    }, compiler::Variable, error::AlthreadResult, no_rule, parser::Rule
+    }, compiler::Variable, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule
 };
 use super::{Expression, LocalExpressionNode};
 
@@ -62,31 +62,38 @@ pub enum LocalPrimaryExpressionNode {
 
 
 impl LocalPrimaryExpressionNode {
-    pub fn from_primary(primary: &PrimaryExpression, program_stack: &Vec<Variable>) -> Self {
-        match primary {
+    pub fn from_primary(primary: &PrimaryExpression, program_stack: &Vec<Variable>) -> AlthreadResult<Self> {
+        Ok(match primary {
             PrimaryExpression::Literal(node) => 
-                LocalPrimaryExpressionNode::Literal(LocalLiteralNode::from_literal(node)),
+                LocalPrimaryExpressionNode::Literal(LocalLiteralNode::from_literal(node)?),
             PrimaryExpression::Identifier(node) => 
-                LocalPrimaryExpressionNode::Var(LocalVarNode::from_identifier(node, program_stack)),
-            PrimaryExpression::Expression(node) => 
-                LocalPrimaryExpressionNode::Expression(Box::new(LocalExpressionNode::from_expression(&node.as_ref().value, program_stack))),
-        }
+                LocalPrimaryExpressionNode::Var(LocalVarNode::from_identifier(node, program_stack)?),
+            PrimaryExpression::Expression(node) => {
+                let e = LocalExpressionNode::from_expression(&node.as_ref().value, program_stack)?;
+                LocalPrimaryExpressionNode::Expression(Box::new(e))
+            },
+        })
     }
 }
 
 impl LocalLiteralNode {
-    pub fn from_literal(literal: &Node<Literal>) -> Self {
-        LocalLiteralNode {
+    pub fn from_literal(literal: &Node<Literal>) -> AlthreadResult<Self> {
+        Ok(LocalLiteralNode {
             value: literal.value.clone(),
-        }
+        })
     }
 }
 impl LocalVarNode {
-    pub fn from_identifier(ident: &Node<Identifier>, program_stack: &Vec<Variable>) -> Self {
-        let index = program_stack.iter().rev().position(|var| var.name == ident.value.value).expect("Variable not found");
-        LocalVarNode {
+    pub fn from_identifier(ident: &Node<Identifier>, program_stack: &Vec<Variable>) -> AlthreadResult<Self> {
+        let index = program_stack.iter().rev().position(|var| var.name == ident.value.value).ok_or(AlthreadError::new(
+            ErrorType::VariableError,
+            ident.line,
+            ident.column,
+            format!("Variable '{}' not found", ident.value.value)
+        ))?;
+        Ok(LocalVarNode {
             index
-        }
+        })
     }
     
 }

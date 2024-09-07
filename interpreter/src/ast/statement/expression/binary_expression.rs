@@ -46,12 +46,12 @@ impl BinaryExpression {
 
 impl LocalBinaryExpressionNode {
     
-    pub fn from_binary(bin_expression: &BinaryExpression, program_stack: &Vec<Variable>) -> Self {
-        Self {
-            left: Box::new(LocalExpressionNode::from_expression(&bin_expression.left.value, program_stack)),
+    pub fn from_binary(bin_expression: &BinaryExpression, program_stack: &Vec<Variable>) -> AlthreadResult<Self> {
+        Ok(Self {
+            left: Box::new(LocalExpressionNode::from_expression(&bin_expression.left.value, program_stack)?),
             operator: bin_expression.operator.value.clone(),
-            right: Box::new(LocalExpressionNode::from_expression(&bin_expression.right.value, program_stack)),
-        }    
+            right: Box::new(LocalExpressionNode::from_expression(&bin_expression.right.value, program_stack)?),
+        })    
     }
 }
 

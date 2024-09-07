@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt, hash::Hash};
 use pest::iterators::{Pair, Pairs};
 
 use crate::{compiler::CompilerState, vm::instruction::Instruction, error::AlthreadResult, parser::Rule};
-use crate::vm::instruction::ProcessCode;
+use crate::vm::instruction::ProgramCode;
 
 use super::{
     display::{AstDisplay, Prefix}, statement::expression::{primary_expression::PrimaryExpression, Expression}, token::literal::Literal
@@ -21,7 +21,7 @@ pub trait NodeBuilder: Sized {
 }
 
 pub trait InstructionBuilder: Sized {
-    fn compile(&self, state: &mut CompilerState) -> Vec<Instruction>;
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>>;
 }
 
 
@@ -50,7 +50,7 @@ impl<T: fmt::Display> fmt::Display for Node<T> {
 }
 
 impl<T: InstructionBuilder> Node<T> {
-    pub fn compile(&self, state: &mut CompilerState) -> Vec<Instruction> {
+    pub fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
         self.value.compile(state)
     }
 }

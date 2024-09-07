@@ -17,7 +17,7 @@ use fn_call::FnCall;
 use run_call::RunCall;
 use while_control::WhileControl;
 
-use crate::{compiler::CompilerState, vm::instruction::{Instruction, ProcessCode}, error::AlthreadResult, no_rule, parser::Rule};
+use crate::{compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule, vm::instruction::{Instruction, ProgramCode}};
 
 use super::{
     block::Block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, token::literal::Literal
@@ -55,13 +55,32 @@ impl NodeBuilder for Statement {
 
 
 impl InstructionBuilder for Statement {
-    fn compile(&self, state: &mut CompilerState) -> Vec<Instruction> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
         match self {
             //Self::FnCall(node) => node.compile(process_code, env),
             Self::If(node) => node.compile(state),
             Self::Assignment(node) => node.compile(state),
             Self::Declaration(node) => node.compile(state),
-            _ => panic!("Statement::compile() not implemented for {:?}", self),
+            Self::While(node) => Err(AlthreadError::new(
+                ErrorType::NotImplemented,
+                node.line,
+                node.column,
+                "While is not yet implemented".to_string()
+            )),
+            Self::Expression(node)  => Err(AlthreadError::new(
+                ErrorType::NotImplemented,
+                node.line,
+                node.column,
+                "Top level expressions are not yet implemented".to_string()
+            )),
+            Self::Block(node) => Err(AlthreadError::new(
+                ErrorType::NotImplemented,
+                node.line,
+                node.column,
+                "Blocks are not yet implemented".to_string()
+            )),
+            Self::Run(node)  => node.compile(state),
+            Self::FnCall(node)  => node.compile(state),
         }
     }
 }

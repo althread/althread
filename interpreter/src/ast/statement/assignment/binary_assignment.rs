@@ -11,7 +11,7 @@ use crate::{
             binary_assignment_operator::BinaryAssignmentOperator, identifier::Identifier,
             literal::Literal,
         },
-    }, compiler::CompilerState, vm::instruction::{GlobalAssignmentControl, Instruction, InstructionType}, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule
+    }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule, vm::instruction::{GlobalAssignmentControl, Instruction, InstructionType, LocalAssignmentControl}
 };
 
 #[derive(Debug)]
@@ -38,21 +38,43 @@ impl NodeBuilder for BinaryAssignment {
 
 
 impl InstructionBuilder for BinaryAssignment {
-    fn compile(&self, state: &mut CompilerState) -> Vec<Instruction> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
         let mut instructions = Vec::new();
+        
+        state.current_stack_depth += 1;
+        instructions.append(&mut self.value.compile(state)?);
+        let unstack_len = state.unstack_current_depth();
 
-        instructions.append(&mut self.value.compile(state));
+        if let Some(_) = state.global_table.get(&self.identifier.value.value) {
+            instructions.push(Instruction {
+                line: self.identifier.line,
+                column: self.identifier.column,
+                control: InstructionType::GlobalAssignment(GlobalAssignmentControl{
+                    identifier: self.identifier.value.value.clone(),
+                    operator: self.operator.value.clone(),
+                    unstack_len
+                })
+            });
+        } else {
+            let mut var_idx = 0;
+            for var in state.program_stack.iter().rev() {
+                if var.name == self.identifier.value.value {
+                    break;
+                }
+                var_idx += 1;
+            }
+            instructions.push(Instruction {
+                line: self.identifier.line,
+                column: self.identifier.column,
+                control: InstructionType::LocalAssignment(LocalAssignmentControl{
+                    index: var_idx,
+                    operator: self.operator.value.clone(),
+                    unstack_len
+                })
+            });
+        }
 
-        instructions.push(Instruction {
-            span: 0,
-            control: InstructionType::GlobalAssignment(GlobalAssignmentControl{
-                identifier: self.identifier.value.value.clone(),
-                operator: self.operator.value.clone(),
-            })
-        });
-
-
-        instructions
+        Ok(instructions)
     }
 }
 

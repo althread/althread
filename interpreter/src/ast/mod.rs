@@ -14,10 +14,11 @@ use block::Block;
 use display::{AstDisplay, Prefix};
 use node::Node;
 use pest::iterators::Pairs;
+use statement::expression::Expression;
 use token::{condition_keyword::ConditionKeyword, literal::Literal};
 
 use crate::{
-    compiler::CompilerState, vm::instruction::ProcessCode, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule
+    compiler::{CompiledProject, CompilerState}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule, vm::{instruction::{Instruction, InstructionType, ProgramCode}, VM}
 };
 
 #[derive(Debug)]
@@ -80,25 +81,81 @@ impl Ast {
         Ok(ast)
     }
 
-    pub fn compile(&self) -> AlthreadResult<ProcessCode> {
-        let mut process_code = ProcessCode {
-            instructions: Vec::new(),
-            name: "main".to_string(),
-        };
+    pub fn compile(&self) -> AlthreadResult<CompiledProject> {
+
+        // "compile" the "shared" block to retrieve the set of 
+        // shared variables
         let mut state = CompilerState::new();
+        let mut global_memory = HashMap::new();
         state.current_stack_depth = 1;
+        let memory = match self.global_block.as_ref() {
+            Some(global) => {
+                let mut memory = VM::new_memory();
+                for node in global.value.children.iter() {
+                    for gi in node.compile(&mut state)? {
+                        let literal = match gi.control {
+                            InstructionType::Expression(exp) => {
+                                exp.root.eval(&memory).or_else(|err| Err(AlthreadError::new(
+                                    ErrorType::ExpressionError, 
+                                    gi.line,
+                                    gi.column,
+                                    err
+                                    )))
+                            },
+                            _ => {
+                                return Err(AlthreadError::new(
+                                    ErrorType::InstructionNotAllowed, 
+                                    gi.line,
+                                    gi.column,
+                                    "The 'shared' block can only contains assignment from an expression".to_string()
+                                    ));
+                            }
+                        };
+                        let literal = literal?;
+                        memory.push(literal);
+                    }
+                }
+                memory
+            }
+            None => Vec::new()
+        };
 
-        self.global_block.as_ref().map(|global| {
-            process_code.instructions = global.compile(&mut state);
-        });
-
-        for var in state.program_stack.iter() {
+        for var_i in 0..state.program_stack.len() {
+            let var = &state.program_stack[var_i];
             state.global_table.insert(var.name.clone(), var.clone());
+            global_memory.insert(var.name.clone(), memory[var_i].clone());
         }
-        
-        state.unstack_current_depth();
 
-        process_code.instructions = self.process_blocks.get("main").unwrap().compile(&mut state);
+        state.unstack_current_depth();
+        println!("{:?}", state.program_stack);
+        println!("{:?}", state.current_stack_depth);
+        assert!(state.current_stack_depth == 0);
+
+        let mut programs_code = HashMap::new();
+        for (name, _) in self.process_blocks.iter() {
+            let code = self.compile_program(name, &mut state)?;
+            programs_code.insert(name.clone(), code);
+            assert!(state.current_stack_depth == 0);
+        }
+
+        Ok(CompiledProject {
+            global_memory,
+            programs_code
+        })
+    }
+    fn compile_program(&self, name: &str, state: &mut CompilerState) -> AlthreadResult<ProgramCode> {
+
+        let mut process_code = ProgramCode {
+            instructions: Vec::new(),
+            name: name.to_string(),
+        };
+        let prog = self.process_blocks.get(name).expect("trying to compile a non-existant program");
+        process_code.instructions = prog.compile(state)?;
+        process_code.instructions.push(Instruction {
+            control: InstructionType::EndProgram,
+            line: prog.line,
+            column: prog.column,
+        });
         Ok(process_code)
     }
 

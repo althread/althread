@@ -87,58 +87,59 @@ impl NodeBuilder for Expression {
 
 
 impl LocalExpressionNode {
-    pub fn from_expression(expression: &Expression, program_stack: &Vec<Variable>) -> Self {
+    pub fn from_expression(expression: &Expression, program_stack: &Vec<Variable>) -> AlthreadResult<Self> {
         let root = match expression {
             Expression::Binary(node) =>    
-                LocalExpressionNode::Binary(LocalBinaryExpressionNode::from_binary(&node.value, program_stack)),
+                LocalExpressionNode::Binary(LocalBinaryExpressionNode::from_binary(&node.value, program_stack)?),
             Expression::Unary(node) =>
-                LocalExpressionNode::Unary(LocalUnaryExpressionNode::from_unary(&node.value, program_stack)),
+                LocalExpressionNode::Unary(LocalUnaryExpressionNode::from_unary(&node.value, program_stack)?),
             Expression::Primary(node) =>
-                LocalExpressionNode::Primary(LocalPrimaryExpressionNode::from_primary(&node.value, program_stack)),
+                LocalExpressionNode::Primary(LocalPrimaryExpressionNode::from_primary(&node.value, program_stack)?),
         };
-        root
+        Ok(root)
     }
     
 }
 
-impl InstructionBuilder for Expression {
-    fn compile(&self, state: &mut CompilerState) -> Vec<Instruction> {
+// we build directly the traits on the node
+// because we need line/column information
+impl InstructionBuilder for Node<Expression> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+
         let mut instructions = Vec::new();
 
         let mut vars = HashSet::new();
-        self.get_vars(&mut vars);
+        self.value.get_vars(&mut vars);
 
         vars.retain(|var| state.global_table.contains_key(var));
-
-        state.current_stack_depth += 1;
-        let depth = state.current_stack_depth;
 
         for var in vars.iter() {
             state.program_stack.push(Variable {
                 name: var.clone(),
-                depth,
+                depth: state.current_stack_depth,
                 mutable: false,
                 datatype: state.global_table.get(var).expect(&format!("Error: Variable '{}' not found in global table", var)).datatype.clone(),
             });
         }
+        if vars.len() > 0 {
+            instructions.push(Instruction {
+                line: self.line,
+                column: self.column,
+                control: InstructionType::GlobalReads(GlobalReadsControl {
+                    variables: vars.into_iter().collect(),
+                }),
+            });
+        }
+
+        let local_expr = LocalExpressionNode::from_expression(&self.value, &state.program_stack)?;
 
         instructions.push(Instruction {
-            span: 0,
-            control: InstructionType::GlobalReads(GlobalReadsControl {
-                variables: vars.into_iter().collect(),
-            }),
-        });
-
-        let local_expr = LocalExpressionNode::from_expression(self, &state.program_stack);
-
-        instructions.push(Instruction {
-            span: 0,
+            line: self.line,
+            column: self.column,
             control: InstructionType::Expression(ExpressionControl {
                 root: local_expr,
             })
         });
-        // pop all variables from the stack at the given depth
-        state.unstack_current_depth();
 
         state.program_stack.push(Variable {
             name: "".to_string(),
@@ -147,7 +148,7 @@ impl InstructionBuilder for Expression {
             datatype: DataType::Integer, // TODO: get datatype from expression
         });
         
-        return instructions;
+        Ok(instructions)
     }
 }
 

@@ -38,11 +38,12 @@ impl UnaryExpression {
 }
 
 impl LocalUnaryExpressionNode {
-    pub fn from_unary(un_expression: &UnaryExpression, program_stack: &Vec<Variable>) -> Self {
-        Self {
+    pub fn from_unary(un_expression: &UnaryExpression, program_stack: &Vec<Variable>) -> AlthreadResult<Self> {
+        let e = LocalExpressionNode::from_expression(&un_expression.operand.value, program_stack)?;
+        Ok(Self {
             operator: un_expression.operator.value.clone(),
-            operand: Box::new(LocalExpressionNode::from_expression(&un_expression.operand.value, program_stack)),
-        }
+            operand: Box::new(e),
+        })
     }
 }
 

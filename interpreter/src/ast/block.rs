@@ -5,7 +5,7 @@ use pest::iterators::Pairs;
 use crate::compiler::CompilerState;
 use crate::error::AlthreadResult;
 use crate::parser::Rule;
-use crate::vm::instruction::{Instruction, InstructionType, ProcessCode};
+use crate::vm::instruction::{Instruction, InstructionType, ProgramCode, UnstackControl};
 
 use super::{
     display::{AstDisplay, Prefix},
@@ -33,12 +33,22 @@ impl NodeBuilder for Block {
 }
 
 impl InstructionBuilder for Block {
-    fn compile(&self, state: &mut CompilerState) -> Vec<Instruction> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
         let mut instructions = Vec::new();
+        state.current_stack_depth += 1;
         for node in &self.children {
-            instructions.extend(node.compile(state));
+            let n_ins = node.compile(state)?;
+            instructions.extend(n_ins);
         }
-        instructions
+        let unstack_len = state.unstack_current_depth();
+        instructions.push(Instruction {
+            control: InstructionType::Unstack(UnstackControl {
+                unstack_len
+            }),
+            line: 0,
+            column: 0,
+        });
+        Ok(instructions)
     }
 }
 

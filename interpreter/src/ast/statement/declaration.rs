@@ -53,16 +53,17 @@ impl NodeBuilder for Declaration {
 
 
 impl InstructionBuilder for Declaration {
-    fn compile(&self, state: &mut CompilerState) -> Vec<Instruction> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
         let mut instructions = Vec::new();
 
         if let Some(value) = &self.value {
-            instructions.extend(value.compile(state));
+            instructions.extend(value.compile(state)?);
         } else {
             if let Some(datatype) = &self.datatype {
                 instructions.push(Instruction {
                     control: InstructionType::PushNull,
-                    span: 0
+                    line: self.keyword.line,
+                    column: self.keyword.column,
                 });
             } else {
                 todo!("Error: Declaration must have a datatype or a value");
@@ -73,7 +74,7 @@ impl InstructionBuilder for Declaration {
         stack_top.name = self.identifier.value.value.clone();
         stack_top.mutable = self.keyword.value == DeclarationKeyword::Let;
 
-        instructions
+        Ok(instructions)
     }
 }
 

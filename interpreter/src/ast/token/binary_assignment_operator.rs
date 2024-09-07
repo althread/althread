@@ -4,6 +4,8 @@ use pest::iterators::Pairs;
 
 use crate::{ast::node::NodeBuilder, error::AlthreadResult, no_rule, parser::Rule};
 
+use super::literal::Literal;
+
 #[derive(Debug, Clone)]
 pub enum BinaryAssignmentOperator {
     Assign,
@@ -12,6 +14,19 @@ pub enum BinaryAssignmentOperator {
     MultiplyAssign,
     DivideAssign,
     ModuloAssign,
+}
+
+impl BinaryAssignmentOperator { 
+    pub fn apply(&self, left: &Literal, right: &Literal) -> Result<Literal,String> {
+        match self {
+            Self::Assign => Ok(right.clone()),
+            Self::AddAssign => left.add(right),
+            Self::SubtractAssign => left.subtract(right),
+            Self::MultiplyAssign => left.multiply(right),
+            Self::DivideAssign => left.divide(right),
+            Self::ModuloAssign => left.modulo(right),
+        }
+    }
 }
 
 impl NodeBuilder for BinaryAssignmentOperator {

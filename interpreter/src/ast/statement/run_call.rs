@@ -5,12 +5,9 @@ use pest::iterators::Pairs;
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{Node, NodeBuilder},
+        node::{InstructionBuilder, Node, NodeBuilder},
         token::literal::Literal,
-    },
-    
-    error::AlthreadResult,
-    parser::Rule,
+    }, compiler::CompilerState, error::AlthreadResult, parser::Rule, vm::instruction::{Instruction, InstructionType, RunCallControl}
 };
 
 #[derive(Debug)]
@@ -31,6 +28,17 @@ impl NodeBuilder for RunCall {
     }
 }
 
+impl InstructionBuilder for Node<RunCall> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+        Ok(vec![Instruction {
+            control: InstructionType::RunCall(RunCallControl{
+                name: self.value.identifier.value.clone()
+            }), 
+            line: self.line, 
+            column: self.column 
+        }])
+    }
+}
 
 impl AstDisplay for RunCall {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {

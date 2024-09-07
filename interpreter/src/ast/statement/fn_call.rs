@@ -5,11 +5,9 @@ use pest::iterators::Pairs;
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{Node, NodeBuilder},
+        node::{InstructionBuilder, Node, NodeBuilder},
         token::{identifier::Identifier, literal::Literal},
-    },
-    error::{AlthreadError, AlthreadResult, ErrorType},
-    parser::Rule,
+    }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule, vm::instruction::{FnCallControl, Instruction, InstructionType}
 };
 
 use super::expression::Expression;
@@ -27,6 +25,35 @@ impl NodeBuilder for FnCall {
         let value = Node::build(pairs.next().unwrap())?;
 
         Ok(Self { fn_name, value })
+    }
+}
+
+impl InstructionBuilder for Node<FnCall> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+        let name = self.value.fn_name.value.value.clone();
+        if name != "print" {
+            return Err(AlthreadError::new(
+                ErrorType::UndefinedFunction,
+                self.line,
+                self.column,
+                "undefined function".to_string(),
+            ))
+        }
+
+        let mut instructions = Vec::new();
+        
+        state.current_stack_depth += 1;
+        instructions.append(&mut self.value.value.compile(state)?);
+        let unstack_len = state.unstack_current_depth();
+        instructions.push(Instruction {
+            control:InstructionType::FnCall(FnCallControl {
+                name,
+                unstack_len
+            }), 
+            line: self.line, 
+            column: self.column,
+        });
+        Ok(instructions)
     }
 }
 

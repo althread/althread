@@ -37,7 +37,7 @@ impl NodeBuilder for Assignment {
 
 
 impl InstructionBuilder for Assignment {
-    fn compile(&self, state: &mut CompilerState) -> Vec<Instruction> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
         match self {
             Self::Binary(node) => node.compile(state),
         }
