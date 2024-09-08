@@ -8,12 +8,12 @@ program = _{ SOI ~ blocks* ~ EOI }
 /// - **Main Block**: The entry point of the program.
 /// - **Shared Block**: Declares global variables accessible across different parts of the program.
 /// - **Condition Block**: Monitors conditions at each atomic step (e.g., always, never, eventually).
-/// - **Process Block**: Encapsulates code that runs concurrently in parallel processes.
-blocks = _{ main_block | global_block | condition_block | process_block }
+/// - **Program Block**: Encapsulates code that runs concurrently in parallel processes.
+blocks = _{ main_block | global_block | condition_block | program_block }
 
 global_block    = { GLOBAL_KW ~ code_block }
 condition_block = { condition_keywords ~ code_block }
-process_block   = { PROCESS_KW ~ identifier ~ "(" ~ ")" ~ code_block }
+program_block   = { PROGRAM_KW ~ identifier ~ "(" ~ ")" ~ code_block }
 main_block      = { MAIN_KW ~ code_block }
 
 code_block = { "{" ~ statement* ~ "}" }
@@ -94,7 +94,7 @@ while_control = { WHILE_KW ~  expression ~ code_block }
 /// ### Keywords
 /// Keywords define the core constructs of the language.
 KEYWORDS = _{ 
-      MAIN_KW    | GLOBAL_KW | PROCESS_KW 
+      MAIN_KW    | GLOBAL_KW | PROGRAM_KW 
     | ALWAYS_KW  | NEVER_KW  | RUN_KW 
     | LET_KW     | CONST_KW  | IF_KW 
     | ELSE_KW    | WHILE_KW  | BOOL      
@@ -104,7 +104,7 @@ KEYWORDS = _{
 
 MAIN_KW    = _{ "main" }
 GLOBAL_KW  = _{ "shared" }
-PROCESS_KW = _{ "process" }
+PROGRAM_KW = _{ "program" }
 ALWAYS_KW  =  { "always" }
 NEVER_KW   =  { "never" }
 RUN_KW     =  _{ "run" }

@@ -67,12 +67,12 @@ impl Ast {
                     ast.condition_blocks
                         .insert(condition_keyword, condition_block);
                 }
-                Rule::process_block => {
+                Rule::program_block => {
                     let mut pairs = pair.into_inner();
 
                     let process_identifier = pairs.next().unwrap().as_str().to_string();
-                    let process_block = Node::build(pairs.next().unwrap())?;
-                    ast.process_blocks.insert(process_identifier, process_block);
+                    let program_block = Node::build(pairs.next().unwrap())?;
+                    ast.process_blocks.insert(process_identifier, program_block);
                 }
                 Rule::EOI => (),
                 _ => return Err(no_rule!(pair)),

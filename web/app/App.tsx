@@ -2,52 +2,25 @@
 
 import { createSignal, onCleanup, onMount } from "solid-js";
 import init, { compile } from '../pkg/althread_web';
+import Editor from './Editor';
 
 init().then(() => {
   console.log('loaded');
 });
 
-function Count(props) {
-  onMount(() => {
-    console.log('Mounted Count');
-  });
-  onCleanup(() => {
-    console.log('Unmounted Count');
-  });
-  return (
-    <h1>Count: {props.children}</h1>
-  );
-}
-
 export default function App() {
-  const [count, setCount] = createSignal(0);
-
-  function increment() {
-    setCount((c) => c + 1);
-    if (count() === 5) {
-      console.log(compile("WebAssembly"));
-    }
-  }
-
-  function decrement() {
-    setCount((c) => c - 1);
-  }
-  onMount(() => {
-    console.log('Mounted App');
-  });
-  onCleanup(() => {
-    console.log('Unmounted App');
-  });
+  
 
   return (
     <>
-      <Count>{count()}</Count>
-      <button onClick={increment}>
-        Increment
-      </button>
-      <button onClick={decrement}>
-        Decrement
-      </button>
+      <h1>Althread Editor</h1>
+      <Editor onValueChange={(v) => {
+        try{
+          console.log(compile(v)) 
+        } catch(e) {
+          console.error(e);
+        }
+      }}/>
     </>
   );
 }
