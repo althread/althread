@@ -12,11 +12,12 @@ program = _{ SOI ~ blocks* ~ EOI }
 blocks = _{ main_block | global_block | condition_block | program_block }
 
 global_block    = { GLOBAL_KW ~ code_block }
-condition_block = { condition_keywords ~ code_block }
+condition_block = { condition_keywords ~ expression_block }
 program_block   = { PROGRAM_KW ~ identifier ~ "(" ~ ")" ~ code_block }
 main_block      = { MAIN_KW ~ code_block }
 
-code_block = { "{" ~ statement* ~ "}" }
+code_block       = { "{" ~ statement* ~ "}" }
+expression_block = { "{" ~ expression_statement* ~ "}" }
 
 condition_keywords = _{ ALWAYS_KW | NEVER_KW }
 
@@ -28,9 +29,9 @@ condition_keywords = _{ ALWAYS_KW | NEVER_KW }
 statement             =  { 
       assignment_statement 
     | declaration_statement 
-    | expression_statement 
     | call_statement 
     | run_statement
+    | wait_statement
     | if_control 
     | while_control 
     | code_block 
@@ -38,7 +39,8 @@ statement             =  {
 
 assignment_statement  = _{ assignment ~ ";" }
 declaration_statement = _{ declaration ~ ";" }
-expression_statement  = _{ expression ~ ";" }
+wait_statement        =  { WAIT_KW ~ expression ~ ";" }
+expression_statement  =  { expression ~ ";" }
 call_statement        = _{ fn_call ~ ";" }
 run_statement         = _{ run_call ~ ";" }
 
@@ -105,6 +107,7 @@ KEYWORDS = _{
 MAIN_KW    = _{ "main" }
 GLOBAL_KW  = _{ "shared" }
 PROGRAM_KW = _{ "program" }
+WAIT_KW    = _{ "wait" }
 ALWAYS_KW  =  { "always" }
 NEVER_KW   =  { "never" }
 RUN_KW     =  _{ "run" }

@@ -1,4 +1,5 @@
 pub mod block;
+pub mod condition_block;
 pub mod display;
 pub mod node;
 pub mod statement;
@@ -12,6 +13,7 @@ use std::{
 };
 
 use block::Block;
+use condition_block::ConditionBlock;
 use display::{AstDisplay, Prefix};
 use node::Node;
 use pest::iterators::Pairs;
@@ -25,7 +27,7 @@ use crate::{
 #[derive(Debug)]
 pub struct Ast {
     pub process_blocks: HashMap<String, Node<Block>>,
-    pub condition_blocks: HashMap<ConditionKeyword, Node<Block>>,
+    pub condition_blocks: HashMap<ConditionKeyword, Node<ConditionBlock>>,
     pub global_block: Option<Node<Block>>,
 }
 

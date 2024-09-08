@@ -28,8 +28,7 @@ pub enum InstructionType {
     Declaration(DeclarationControl),
     Exit,
     PushNull(DataType),
-    //While(WhileControl),
-    //Wait(WaitControl),
+    Wait(WaitControl),
     //Receive,
     //Any
 }
@@ -51,6 +50,7 @@ impl fmt::Display for InstructionType {
             Self::Exit => {write!(f, "exit")?},
             Self::Declaration(d) => {write!(f, "{}", d)?},
             Self::PushNull(d) => {write!(f, "push null ({})", d)?},
+            Self::Wait(w) => {write!(f, "{}", w)?},
         }
         Ok(())
     }
@@ -63,6 +63,7 @@ impl InstructionType {
             | Self::RunCall(_)
             | Self::GlobalReads(_) => false,
 
+            | Self::Wait(_) // wait is global only if the condition is false
             | Self::Empty
             | Self::Expression(_)
             | Self::LocalAssignment(_)
@@ -130,6 +131,19 @@ impl fmt::Display for JumpControl {
         Ok(())
     }
 }
+
+
+#[derive(Debug)]
+pub struct WaitControl {
+    pub jump: i64,
+}
+impl fmt::Display for WaitControl {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "wait {}", self.jump)?;
+        Ok(())
+    }
+}
+
 
 
 #[derive(Debug)]

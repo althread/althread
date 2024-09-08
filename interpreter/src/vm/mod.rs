@@ -172,7 +172,7 @@ impl<'a> RunningProgramState<'a> {
                 println!("{}", lit);
                 1
             }
-            _ => panic!("Not implemented"),
+            _ => panic!("Instruction '{:?}' not implemented", cur_inst.control),
         };
         let new_pos = (self.instruction_pointer as i64) + pos_inc;
         if new_pos < 0 {
