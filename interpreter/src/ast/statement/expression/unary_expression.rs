@@ -7,7 +7,7 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::Node,
         token::{datatype::DataType, literal::Literal, unary_operator::UnaryOperator},
-    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule
+    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, parser::Rule
 };
 
 use super::{Expression, LocalExpressionNode};
@@ -27,8 +27,12 @@ pub struct LocalUnaryExpressionNode {
 impl UnaryExpression {
     pub fn build(operator: Pair<Rule>, operand: Node<Expression>) -> AlthreadResult<Node<Self>> {
         Ok(Node {
-            line: operator.line_col().0,
-            column: operator.line_col().1,
+            pos: Pos {
+                line: operator.line_col().0,
+                col: operator.line_col().1,
+                start: operator.as_span().start(),
+                end: operand.pos.end,
+            },
             value: Self {
                 operator: Node::build(operator)?,
                 operand: Box::new(operand),

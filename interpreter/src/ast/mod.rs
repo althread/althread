@@ -102,8 +102,7 @@ impl Ast {
                                     InstructionType::Expression(exp) => {
                                         literal = Some(exp.root.eval(&memory).or_else(|err| Err(AlthreadError::new(
                                             ErrorType::ExpressionError, 
-                                            gi.line,
-                                            gi.column,
+                                            gi.pos,
                                             err
                                             )))?);
                                     },
@@ -128,8 +127,7 @@ impl Ast {
                         },
                         _ => return Err(AlthreadError::new(
                             ErrorType::InstructionNotAllowed, 
-                            node.line,
-                            node.column,
+                            Some(node.pos),
                             "The 'shared' block can only contains assignment from an expression".to_string()
                             )),
                     }
@@ -167,8 +165,7 @@ impl Ast {
         process_code.instructions = prog.compile(state)?;
         process_code.instructions.push(Instruction {
             control: InstructionType::EndProgram,
-            line: prog.line,
-            column: prog.column,
+            pos: Some(prog.pos),
         });
         Ok(process_code)
     }

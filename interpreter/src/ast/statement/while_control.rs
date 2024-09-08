@@ -40,8 +40,7 @@ impl InstructionBuilder for Node<WhileControl> {
         if state.program_stack.last().expect("stack should contain a value after an expression is compiled").datatype != DataType::Boolean {
             return Err(AlthreadError::new(
                 ErrorType::TypeError,
-                self.value.condition.line,
-                self.value.condition.column,
+                Some(self.value.condition.pos),
                 "condition must be a boolean".to_string()
             ));
         }
@@ -53,8 +52,7 @@ impl InstructionBuilder for Node<WhileControl> {
 
         instructions.extend(cond_ins);
         instructions.push(Instruction {
-            line: self.value.condition.line,
-            column: self.value.condition.column,
+            pos: Some(self.value.condition.pos),
             control: InstructionType::JumpIf(JumpIfControl { 
                 jump_false: (block_len + 2) as i64,
                 unstack_len
@@ -63,8 +61,7 @@ impl InstructionBuilder for Node<WhileControl> {
         instructions.extend(block_ins);
 
         instructions.push(Instruction {
-            line: self.line,
-            column: self.column,
+            pos: Some(self.pos),
             control: InstructionType::Jump(JumpControl { 
                 jump: -(instructions.len() as i64),
             }),

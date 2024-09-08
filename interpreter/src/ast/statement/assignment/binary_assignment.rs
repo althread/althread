@@ -50,22 +50,19 @@ impl InstructionBuilder for Node<BinaryAssignment> {
             if g_val.datatype != rdatatype {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    self.line,
-                    self.column,
+                    Some(self.pos),
                     format!("Cannot assign value of type {} to variable of type {}", rdatatype, g_val.datatype)
                 ))
             }
             if !g_val.mutable {
                 return Err(AlthreadError::new(
                     ErrorType::VariableError,
-                    self.line,
-                    self.column,
+                    Some(self.pos),
                     format!("Cannot assign value to the immutable global variable {}", self.value.identifier.value.value)
                 ))
             }
             instructions.push(Instruction {
-                line: self.value.identifier.line,
-                column: self.value.identifier.column,
+                pos: Some(self.value.identifier.pos),
                 control: InstructionType::GlobalAssignment(GlobalAssignmentControl{
                     identifier: self.value.identifier.value.value.clone(),
                     operator: self.value.operator.value.clone(),
@@ -85,8 +82,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
             if l_var.is_none() {
                 return Err(AlthreadError::new(
                     ErrorType::VariableError,
-                    self.line,
-                    self.column,
+                    Some(self.pos),
                     format!("Variable '{}' is undefined", self.value.identifier.value.value)
                 )) 
             }
@@ -94,23 +90,20 @@ impl InstructionBuilder for Node<BinaryAssignment> {
             if l_var.datatype != rdatatype {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    self.line,
-                    self.column,
+                    Some(self.pos),
                     format!("Cannot assign value of type {} to variable of type {}", rdatatype, l_var.datatype)
                 ))
             }
             if !l_var.mutable {
                 return Err(AlthreadError::new(
                     ErrorType::VariableError,
-                    self.line,
-                    self.column,
+                    Some(self.pos),
                     format!("Cannot assign value to the immutable local variable {}", self.value.identifier.value.value)
                 ))
             }
 
             instructions.push(Instruction {
-                line: self.value.identifier.line,
-                column: self.value.identifier.column,
+                pos: Some(self.value.identifier.pos),
                 control: InstructionType::LocalAssignment(LocalAssignmentControl{
                     index: var_idx,
                     operator: self.value.operator.value.clone(),

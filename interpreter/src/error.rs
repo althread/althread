@@ -1,14 +1,18 @@
 use std::fmt;
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug)]
+
+#[derive(Debug,Serialize, Deserialize, Clone, Copy)]
 pub struct Pos {
     pub line: usize,
     pub col: usize,
+    pub start: usize,
+    pub end: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug,Serialize, Deserialize)]
 pub struct AlthreadError {
-    pos: Pos,
+    pos: Option<Pos>,
     message: String,
     error_type: ErrorType,
 }
@@ -20,14 +24,19 @@ macro_rules! no_rule {
     ($pair:expr) => {
         $crate::error::AlthreadError::new(
             $crate::error::ErrorType::SyntaxError,
-            $pair.line_col().0,
-            $pair.line_col().1,
+            Some($crate::error::Pos { 
+                line: $pair.line_col().0,
+                col: $pair.line_col().1,
+                start: $pair.as_span().start(),
+                end: $pair.as_span().end(),
+            }),
             format!("Unexpected rule: {:?}", $pair.as_rule()),
         )
     };
 }
 
-#[derive(Debug)]
+
+#[derive(Debug,Serialize, Deserialize)]
 pub enum ErrorType {
     SyntaxError,
     TypeError,
@@ -58,33 +67,40 @@ impl fmt::Display for ErrorType {
 }
 
 impl AlthreadError {
-    pub fn new(error_type: ErrorType, line: usize, col: usize, message: String) -> Self {
+    pub fn new(error_type: ErrorType, pos: Option<Pos>, message: String) -> Self {
         Self {
-            pos: Pos { line, col },
+            pos,
             message,
             error_type,
         }
     }
 
     pub fn report(&self, input: &str) {
-        eprintln!("Error at {}:{}", self.pos.line, self.pos.col);
-        self.print_err_line(input);
+        match self.pos {
+            Some(pos) => {
+                eprintln!("Error at {}:{}", pos.line, pos.col);
+                self.print_err_line(input);
+            },
+            None => {eprintln!("Runtime Error:");},
+        };
         eprintln!("{}: {}", self.error_type, self.message);
     }
 
     fn print_err_line(&self, input: &str) {
-        if self.pos.line == 0 {
+        if self.pos.is_none() {
             return;
         }
-        let line = match input.lines().nth(self.pos.line - 1) {
+        let pos = self.pos.unwrap();
+
+        let line = match input.lines().nth(pos.line - 1) {
             Some(line) => line.to_string(),
             None => return,
         };
 
-        let line_indent = " ".repeat(self.pos.line.to_string().len());
+        let line_indent = " ".repeat(pos.line.to_string().len());
         eprintln!("{} |", line_indent);
-        eprintln!("{} | {}", self.pos.line, line);
-        eprintln!("{} |{}^---", line_indent, " ".repeat(self.pos.col));
+        eprintln!("{} | {}", pos.line, line);
+        eprintln!("{} |{}^---", line_indent, " ".repeat(pos.col));
         eprintln!("{} |", line_indent);
     }
 }

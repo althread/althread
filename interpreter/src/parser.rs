@@ -1,11 +1,11 @@
 use pest::{
-    error::{ErrorVariant, LineColLocation},
+    error::{ErrorVariant, InputLocation, LineColLocation},
     iterators::Pairs,
     Parser,
 };
 use pest_derive::Parser;
 
-use crate::error::{AlthreadError, ErrorType};
+use crate::error::{AlthreadError, ErrorType, Pos};
 
 #[derive(Parser)]
 #[grammar = "althread.pest"]
@@ -13,15 +13,31 @@ struct AlthreadParser;
 
 pub fn parse(source: &str) -> Result<Pairs<Rule>, AlthreadError> {
     AlthreadParser::parse(Rule::program, source).map_err(|e| {
-        let (line, col) = match e.line_col {
-            LineColLocation::Pos(pos) | LineColLocation::Span(pos, _) => pos,
+        let mut pos = match e.line_col {
+            LineColLocation::Pos(pos) | LineColLocation::Span(pos, _) => Pos {
+                line: pos.0,
+                col: pos.1,
+                start: 0,
+                end: 0,
+            },
         };
+        match e.location {
+            InputLocation::Pos(p) => {
+                pos.start = p;
+                pos.end = p + 1;
+            }
+            InputLocation::Span((start, end)) => {
+                pos.start = start;
+                pos.end = end;
+            }
+        };
+
         let error_message = match e.variant {
             ErrorVariant::ParsingError { positives, .. } => {
                 format!("Expected one of {:?}", positives)
             }
             ErrorVariant::CustomError { message } => message,
         };
-        AlthreadError::new(ErrorType::SyntaxError, line, col, error_message)
+        AlthreadError::new(ErrorType::SyntaxError, Some(pos), error_message)
     })
 }

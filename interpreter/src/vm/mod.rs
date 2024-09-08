@@ -4,7 +4,7 @@ use fastrand::Rng;
 
 use instruction::{Instruction, InstructionType, ProgramCode};
 
-use crate::{ast::token::{binary_assignment_operator::BinaryAssignmentOperator, literal::Literal}, compiler::CompiledProject, error::{AlthreadError, AlthreadResult, ErrorType}};
+use crate::{ast::token::{binary_assignment_operator::BinaryAssignmentOperator, literal::Literal}, compiler::CompiledProject, error::{AlthreadError, AlthreadResult, ErrorType, Pos}};
 pub mod instruction;
 
 
@@ -30,11 +30,10 @@ pub struct RunningProgramState<'a> {
 }
 
 
-fn str_to_expr_error(line: usize, col: usize) -> impl Fn(String) -> AlthreadError {
+fn str_to_expr_error(pos: Option<Pos>) -> impl Fn(String) -> AlthreadError {
     return move |msg| AlthreadError::new(
         ErrorType::ExpressionError,
-        line,
-        col,
+        pos,
         msg
     )
 }
@@ -85,8 +84,7 @@ impl<'a> RunningProgramState<'a> {
     fn next(&mut self, globals: &mut GlobalMemory) -> AlthreadResult<GlobalAction> {
         let cur_inst = self.code.instructions.get(self.instruction_pointer).ok_or(AlthreadError::new(
             ErrorType::InstructionNotAllowed,
-            0,
-            0,
+            None,
             "the current instruction pointer points to no instruction".to_string()
         ))?;
         let mut action = if cur_inst.control.is_local() {
@@ -108,9 +106,8 @@ impl<'a> RunningProgramState<'a> {
             InstructionType::Expression(exp) => {
                 let lit = exp.root.eval(&mut self.memory).map_err(|msg| AlthreadError::new(
                     ErrorType::ExpressionError,
-                    cur_inst.line,
-                    cur_inst.column,
-                    msg
+                    cur_inst.pos,
+                    msg,
                 ))?;
                 self.memory.push(lit);
                 1
@@ -128,7 +125,7 @@ impl<'a> RunningProgramState<'a> {
                 global_asgm.operator.apply(
                     &globals.get(&global_asgm.identifier).expect(format!("global variable '{}' not found", global_asgm.identifier).as_str()),
                     &lit)
-                    .map_err(str_to_expr_error(cur_inst.line, cur_inst.column))?;
+                    .map_err(str_to_expr_error(cur_inst.pos))?;
 
                 globals.insert(global_asgm.identifier.clone(), lit);
                 1
@@ -142,7 +139,7 @@ impl<'a> RunningProgramState<'a> {
                 self.memory[len - 1 - local_asgm.index] = local_asgm.operator.apply(
                     &self.memory[len - 1 - local_asgm.index], 
                     &lit)
-                    .map_err(str_to_expr_error(cur_inst.line, cur_inst.column))?;
+                    .map_err(str_to_expr_error(cur_inst.pos))?;
                 1
             },
             InstructionType::Unstack(unstack_ctrl) => {
@@ -181,7 +178,7 @@ impl<'a> RunningProgramState<'a> {
         if new_pos < 0 {
             return Err(AlthreadError::new(
                 ErrorType::RuntimeError, 
-                0, 0,
+                None,
                 "instruction pointer is becomming negative".to_string()))
         }
         self.instruction_pointer = new_pos as usize;

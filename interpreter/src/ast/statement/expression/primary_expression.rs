@@ -7,7 +7,7 @@ use crate::{
         display::AstDisplay,
         node::Node,
         token::{datatype::DataType, identifier::Identifier, literal::Literal},
-    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule
+    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, no_rule, parser::Rule
 };
 use super::{Expression, LocalExpressionNode};
 
@@ -21,8 +21,12 @@ pub enum PrimaryExpression {
 impl PrimaryExpression {
     pub fn build(pair: Pair<Rule>) -> AlthreadResult<Node<Self>> {
         Ok(Node {
-            line: pair.line_col().0,
-            column: pair.line_col().1,
+            pos: Pos {
+                line: pair.line_col().0,
+                col: pair.line_col().1,
+                start: pair.as_span().start(),
+                end: pair.as_span().end(),
+            },
             value: match pair.as_rule() {
                 Rule::literal => Self::Literal(Node::build(pair)?),
                 Rule::identifier => Self::Identifier(Node::build(pair)?),
@@ -98,8 +102,7 @@ impl LocalVarNode {
     pub fn from_identifier(ident: &Node<Identifier>, program_stack: &Vec<Variable>) -> AlthreadResult<Self> {
         let index = program_stack.iter().rev().position(|var| var.name == ident.value.value).ok_or(AlthreadError::new(
             ErrorType::VariableError,
-            ident.line,
-            ident.column,
+            Some(ident.pos),
             format!("Variable '{}' not found", ident.value.value)
         ))?;
         Ok(LocalVarNode {

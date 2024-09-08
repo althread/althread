@@ -14,7 +14,7 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
         token::{datatype::DataType, literal::Literal},
-    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule, vm::instruction::{ExpressionControl, GlobalReadsControl, Instruction, InstructionType}
+    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, parser::Rule, vm::instruction::{ExpressionControl, GlobalReadsControl, Instruction, InstructionType}
 };
 
 lazy_static::lazy_static! {
@@ -57,22 +57,34 @@ pub fn parse_expr(pairs: Pairs<Rule>) -> AlthreadResult<Node<Expression>> {
     PRATT_PARSER
         .map_primary(|primary| {
             Ok(Node {
-                line: primary.line_col().0,
-                column: primary.line_col().1,
+                pos: Pos {
+                    line: primary.line_col().0,
+                    col: primary.line_col().1,
+                    start: primary.as_span().start(),
+                    end: primary.as_span().end(),
+                },
                 value: Expression::Primary(PrimaryExpression::build(primary)?),
             })
         })
         .map_infix(|left, op, right| {
             Ok(Node {
-                line: op.line_col().0,
-                column: op.line_col().1,
+                pos: Pos {
+                    line: op.line_col().0,
+                    col: op.line_col().1,
+                    start: op.as_span().start(),
+                    end: op.as_span().end(),
+                },
                 value: Expression::Binary(BinaryExpression::build(left?, op, right?)?),
             })
         })
         .map_prefix(|op, right| {
             Ok(Node {
-                line: op.line_col().0,
-                column: op.line_col().1,
+                pos: Pos {
+                    line: op.line_col().0,
+                    col: op.line_col().1,
+                    start: op.as_span().start(),
+                    end: op.as_span().end(),
+                },
                 value: Expression::Unary(UnaryExpression::build(op, right?)?),
             })
         })
@@ -132,8 +144,7 @@ impl InstructionBuilder for Node<Expression> {
         }
         if vars.len() > 0 {
             instructions.push(Instruction {
-                line: self.line,
-                column: self.column,
+                pos: Some(self.pos),
                 control: InstructionType::GlobalReads(GlobalReadsControl {
                     variables: vars.into_iter().collect(),
                 }),
@@ -143,14 +154,12 @@ impl InstructionBuilder for Node<Expression> {
         let local_expr = LocalExpressionNode::from_expression(&self.value, &state.program_stack)?;
         let restult_type = local_expr.datatype(state).map_err(|err| AlthreadError::new(
             ErrorType::ExpressionError,
-            self.line,
-            self.column,
+            Some(self.pos),
             format!("Type of expression is not well-defined: {}", err)
         ))?;
 
         instructions.push(Instruction {
-            line: self.line,
-            column: self.column,
+            pos: Some(self.pos),
             control: InstructionType::Expression(ExpressionControl {
                 root: local_expr,
             })

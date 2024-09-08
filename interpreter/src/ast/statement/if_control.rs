@@ -49,8 +49,7 @@ impl InstructionBuilder for IfControl {
         if state.program_stack.last().expect("stack should contain a value after an expression is compiled").datatype != DataType::Boolean {
             return Err(AlthreadError::new(
                 ErrorType::TypeError,
-                self.condition.line,
-                self.condition.column,
+                Some(self.condition.pos),
                 "if condition must be a boolean".to_string()
             ));
         }
@@ -67,8 +66,7 @@ impl InstructionBuilder for IfControl {
 
         instructions.extend(condition);
         instructions.push(Instruction {
-            line: self.condition.line,
-            column: self.condition.column,
+            pos: Some(self.condition.pos),
             control: InstructionType::JumpIf(JumpIfControl { 
                 jump_false: (then_block.len()+1) as i64,
                 unstack_len
@@ -77,8 +75,7 @@ impl InstructionBuilder for IfControl {
         instructions.extend(then_block);
         if let Some(else_node) = &self.else_block {
             instructions.push(Instruction {
-                line: else_node.line,
-                column: else_node.column,
+                pos: Some(else_node.pos),
                 control: InstructionType::Jump(JumpControl { 
                     jump: (else_block.len() + 1) as i64,
                 }),

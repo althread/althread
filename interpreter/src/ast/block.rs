@@ -46,8 +46,7 @@ impl InstructionBuilder for Block {
                 control: InstructionType::Unstack(UnstackControl {
                     unstack_len
                 }),
-                line: 0,
-                column: 0,
+                pos: None,
             });
         }
         Ok(instructions)

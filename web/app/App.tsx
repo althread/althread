@@ -14,11 +14,13 @@ export default function App() {
   return (
     <>
       <h1>Althread Editor</h1>
-      <Editor onValueChange={(v) => {
+      <Editor
+      compile={compile}
+      onValueChange={(v) => {
         try{
-          console.log(compile(v)) 
+          //console.log(compile(v)) 
         } catch(e) {
-          console.error(e);
+          //console.error(e);
         }
       }}/>
     </>

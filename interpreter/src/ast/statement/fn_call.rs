@@ -34,8 +34,7 @@ impl InstructionBuilder for Node<FnCall> {
         if name != "print" {
             return Err(AlthreadError::new(
                 ErrorType::UndefinedFunction,
-                self.line,
-                self.column,
+                Some(self.pos),
                 "undefined function".to_string(),
             ))
         }
@@ -50,8 +49,7 @@ impl InstructionBuilder for Node<FnCall> {
                 name,
                 unstack_len
             }), 
-            line: self.line, 
-            column: self.column,
+            pos: Some(self.pos),
         });
         Ok(instructions)
     }

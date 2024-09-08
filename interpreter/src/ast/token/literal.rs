@@ -6,10 +6,10 @@ use pest::iterators::{Pair, Pairs};
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{NodeBuilder},
+        node::NodeBuilder,
     },
     
-    error::{AlthreadError, AlthreadResult, ErrorType},
+    error::{AlthreadError, AlthreadResult, ErrorType, Pos},
     no_rule,
     parser::Rule,
 };
@@ -33,8 +33,12 @@ impl NodeBuilder for Literal {
             pair.as_str().parse::<T>().map_err(|_| {
                 AlthreadError::new(
                     ErrorType::SyntaxError,
-                    pair.line_col().0,
-                    pair.line_col().1,
+                    Some(Pos {
+                        start: pair.as_span().start(),
+                        end: pair.as_span().end(),
+                        line:pair.line_col().0,
+                        col: pair.line_col().1,
+                    }),
                     format!("Cannot parse {}", pair.as_str()),
                 )
             })

@@ -7,7 +7,7 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::Node,
         token::{binary_operator::BinaryOperator, datatype::DataType, literal::Literal},
-    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule
+    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, parser::Rule
 };
 
 use super::{Expression, LocalExpressionNode};
@@ -33,8 +33,12 @@ impl BinaryExpression {
         right: Node<Expression>,
     ) -> AlthreadResult<Node<Self>> {
         Ok(Node {
-            line: operator.line_col().0,
-            column: operator.line_col().1,
+            pos: Pos {
+                start: left.pos.start,
+                end: right.pos.end,
+                line: left.pos.line,
+                col: left.pos.col,
+            },
             value: Self {
                 left: Box::new(left),
                 operator: Node::build(operator)?,

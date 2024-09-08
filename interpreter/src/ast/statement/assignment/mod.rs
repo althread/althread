@@ -10,7 +10,7 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
         token::literal::Literal,
-    }, compiler::CompilerState, vm::{instruction::Instruction}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule
+    }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, no_rule, parser::Rule, vm::instruction::Instruction
 };
 
 #[derive(Debug)]
@@ -26,8 +26,12 @@ impl NodeBuilder for Assignment {
             Rule::binary_assignment => Ok(Self::Binary(Node::build(pair)?)),
             Rule::unary_assignment => Err(AlthreadError::new(
                 ErrorType::SyntaxError,
-                pair.line_col().0,
-                pair.line_col().1,
+                Some(Pos {
+                    start: pair.as_span().start(),
+                    end: pair.as_span().end(),
+                    line: pair.line_col().0,
+                    col: pair.line_col().1,
+                }),
                 String::from("Unary assignment is not supported yet"),
             )),
             _ => Err(no_rule!(pair)),

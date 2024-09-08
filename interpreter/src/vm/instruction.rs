@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::ast::{node::Node, statement::{expression::{binary_expression::LocalBinaryExpressionNode, primary_expression::LocalPrimaryExpressionNode, unary_expression::LocalUnaryExpressionNode, Expression, LocalExpression, LocalExpressionNode}, Statement}, token::{binary_assignment_operator::BinaryAssignmentOperator, binary_operator::BinaryOperator, datatype::DataType, literal::Literal, unary_operator::UnaryOperator}};
+use crate::{ast::{node::Node, statement::{expression::{binary_expression::LocalBinaryExpressionNode, primary_expression::LocalPrimaryExpressionNode, unary_expression::LocalUnaryExpressionNode, Expression, LocalExpression, LocalExpressionNode}, Statement}, token::{binary_assignment_operator::BinaryAssignmentOperator, binary_operator::BinaryOperator, datatype::DataType, literal::Literal, unary_operator::UnaryOperator}}, error::Pos};
 
 use super::Memory;
 
@@ -83,13 +83,16 @@ impl InstructionType {
 
 #[derive(Debug)]
 pub struct Instruction {
-    pub line: usize,
-    pub column: usize,
+    pub pos: Option<Pos>,
     pub control: InstructionType,
 }
 impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: {}", self.line, self.control)?;
+        match self.pos {
+            Some(pos) => write!(f, "{}", pos.line)?,
+            None => { },
+        };
+        write!(f, ": {}", self.control)?;
         Ok(())
     }
 }

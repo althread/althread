@@ -2,6 +2,7 @@ use std::{collections::HashMap, fmt, hash::Hash};
 
 use pest::iterators::{Pair, Pairs};
 
+use crate::error::Pos;
 use crate::{compiler::CompilerState, vm::instruction::Instruction, error::AlthreadResult, parser::Rule};
 use crate::vm::instruction::ProgramCode;
 
@@ -12,8 +13,7 @@ use super::{
 #[derive(Debug, Clone)]
 pub struct Node<T> {
     pub value: T,
-    pub line: usize,
-    pub column: usize,
+    pub pos: Pos,
 }
 
 pub trait NodeBuilder: Sized {
@@ -29,9 +29,13 @@ impl<T: NodeBuilder> Node<T> {
     pub fn build(pair: Pair<Rule>) -> AlthreadResult<Self> {
         let (line, col) = pair.line_col();
         Ok(Node {
+            pos: Pos {
+                start: pair.as_span().start(),
+                end: pair.as_span().end(),
+                line,
+                col,
+            },
             value: T::build(pair.into_inner())?,
-            line,
-            column: col,
         })
     }
 }

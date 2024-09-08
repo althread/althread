@@ -7,7 +7,7 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
         token::literal::Literal,
-    }, compiler::CompilerState, error::AlthreadResult, parser::Rule, vm::instruction::{Instruction, InstructionType, RunCallControl}
+    }, compiler::CompilerState, error::{AlthreadResult, Pos}, parser::Rule, vm::instruction::{Instruction, InstructionType, RunCallControl}
 };
 
 #[derive(Debug)]
@@ -19,8 +19,12 @@ impl NodeBuilder for RunCall {
     fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
         let pair = pairs.next().unwrap();
         let identifier = Node {
-            line: pair.line_col().0,
-            column: pair.line_col().1,
+            pos: Pos {
+                line: pair.line_col().0,
+                col: pair.line_col().1,
+                start: pair.as_span().start(),
+                end: pair.as_span().end(),
+            },
             value: pair.as_str().to_string(),
         };
 
@@ -34,8 +38,7 @@ impl InstructionBuilder for Node<RunCall> {
             control: InstructionType::RunCall(RunCallControl{
                 name: self.value.identifier.value.clone()
             }), 
-            line: self.line, 
-            column: self.column 
+            pos: Some(self.pos),
         }])
     }
 }

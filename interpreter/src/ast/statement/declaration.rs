@@ -70,8 +70,7 @@ impl InstructionBuilder for Declaration {
                 if datatype != computed_datatype {
                     return Err(AlthreadError::new(
                         ErrorType::TypeError,
-                        self.datatype.as_ref().unwrap().line,
-                        self.datatype.as_ref().unwrap().column,
+                        Some(self.datatype.as_ref().unwrap().pos),
                         format!("Declared type and assignment do not match (found :{} = {})", datatype, computed_datatype)
                     ))
                 }
@@ -82,22 +81,19 @@ impl InstructionBuilder for Declaration {
                 control: InstructionType::Declaration(DeclarationControl{
                     unstack_len
                 }),
-                line: self.keyword.line,
-                column: self.keyword.column,
+                pos: Some(self.keyword.pos),
             });
         } else {
             if datatype.is_none() {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    self.identifier.line,
-                    self.identifier.column,
+                    Some(self.identifier.pos),
                     "Declaration must have a datatype or a value".to_string()
                 ));
             }
             instructions.push(Instruction {
                 control: InstructionType::PushNull(datatype.as_ref().unwrap().clone()),
-                line: self.keyword.line,
-                column: self.keyword.column,
+                pos: Some(self.keyword.pos),
             });
         } 
 

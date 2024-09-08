@@ -18,6 +18,8 @@ import {lintKeymap} from "@codemirror/lint"
 import {indentWithTab} from "@codemirror/commands"
 import {oneDark} from "@codemirror/theme-one-dark"
 
+import {linter, Diagnostic} from "@codemirror/lint"
+
 // (The superfluous function calls around the list of extensions work
 // around current limitations in tree-shaking software.)
 
@@ -144,6 +146,26 @@ main {
   createExtension(editor_lang());
 
   createExtension(oneDark);
+
+
+  const regexpLinter = linter(view => {
+    console.log('linting');
+    let diagnostics: Diagnostic[] = []
+    try {
+        props.compile(view.state.doc.toString())
+    } catch(e) {
+        console.log(e);
+        console.log(Object.keys(e));
+        diagnostics.push({
+            from: e.pos.start,
+            to: e.pos.end,
+            severity: "error",
+            message: e.message
+        })
+    }
+    return diagnostics
+  })
+  createExtension(regexpLinter);
 
   // if we want to highlight specific tags
   //const myHighlightStyle = HighlightStyle.define([
