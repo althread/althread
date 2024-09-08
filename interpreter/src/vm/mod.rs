@@ -1,8 +1,8 @@
 use std::{collections::HashMap, fmt};
-use rand::{rngs::ThreadRng, thread_rng};
+
+use fastrand::Rng;
 
 use instruction::{Instruction, InstructionType, ProgramCode};
-use rand::seq::SliceRandom;
 
 use crate::{ast::token::{binary_assignment_operator::BinaryAssignmentOperator, literal::Literal}, compiler::CompiledProject, error::{AlthreadError, AlthreadResult, ErrorType}};
 pub mod instruction;
@@ -195,7 +195,7 @@ pub struct VM<'a> {
     pub globals: GlobalMemory,
     pub running_programs: Vec<RunningProgramState<'a>>,
     pub programs_code: &'a HashMap<String, ProgramCode>,
-    rng: ThreadRng
+    rng: Rng
 }
 
 impl<'a> VM<'a> {
@@ -204,7 +204,7 @@ impl<'a> VM<'a> {
             globals: compiled_project.global_memory.clone(),
             running_programs: Vec::new(),
             programs_code: &compiled_project.programs_code,
-            rng: thread_rng(),
+            rng: Rng::new(),
         }
     }
 
@@ -225,7 +225,7 @@ impl<'a> VM<'a> {
     }
 
     pub fn next(&mut self) -> AlthreadResult<ExecutionStepInfo> {
-        let program = self.running_programs.choose_mut(&mut self.rng).expect("call next but no program is running");
+        let program = self.rng.choice(self.running_programs.iter_mut()).expect("call next but no program is running");
         
         let mut exec_info = ExecutionStepInfo {
             prog_name: program.name.clone(),

@@ -1,18 +1,11 @@
-use std::{cmp::max, fs, io::Read, process::exit};
+use std::{fs, io::Read, process::exit};
 
 mod args;
-use args::{CliArguments, Command, Input, CompileCommand, RunCommand};
+use args::{CliArguments, Command, CompileCommand, RunCommand};
 use clap::Parser;
 
-mod parser;
-mod ast;
-mod compiler;
-mod vm;
-
-use ast::Ast;
-
-mod error;
-use error::AlthreadError;
+use althread::ast::Ast;
+use althread::error::AlthreadError;
 
 
 fn main() {
@@ -42,7 +35,7 @@ pub fn compile_command(cli_args: &CompileCommand) {
     };
 
     // parse code with pest
-    let pairs = parser::parse(&source).unwrap_or_else(|e| {
+    let pairs = althread::parser::parse(&source).unwrap_or_else(|e| {
         println!("{:?}", e);
         exit(1);
     });
@@ -78,7 +71,7 @@ pub fn run_command(cli_args: &RunCommand) {
     };
 
     // parse code with pest
-    let pairs = parser::parse(&source).unwrap_or_else(|e| {
+    let pairs = althread::parser::parse(&source).unwrap_or_else(|e| {
         e.report(&source);
         exit(1);
     });
@@ -93,7 +86,7 @@ pub fn run_command(cli_args: &RunCommand) {
         exit(1);
     });
 
-    let mut vm = vm::VM::new(&compiled_project);
+    let mut vm = althread::vm::VM::new(&compiled_project);
 
     vm.start();
     for i in 0..100000 {

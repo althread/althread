@@ -1,7 +1,6 @@
 use std::{collections::HashSet, fmt::{self, Debug}};
 
 use pest::iterators::Pair;
-use rand::seq::index;
 
 use crate::{
     ast::{

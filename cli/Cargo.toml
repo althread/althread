@@ -1,0 +1,11 @@
+[package]
+name = "althread-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { workspace = true }
+althread = { workspace = true }
+
+[lints]
+workspace = true

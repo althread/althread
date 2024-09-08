@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+
+members = ["cli", "interpreter", "web"]
+default-members = ["cli"]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+
+[workspace.dependencies]
+althread = { path = "interpreter" }
+clap = { version = "4.5.11", features = ["cargo", "derive", "error-context"] }
+lazy_static = "1.5.0"
+pest = "2.7.10"
+pest_derive = "2.7.10"
+fastrand = { version = "2.1.1", features = ["js"] }
+wasm-bindgen = "0.2"
