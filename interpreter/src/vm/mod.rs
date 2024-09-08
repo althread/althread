@@ -13,6 +13,12 @@ pub mod instruction;
 type Memory = Vec<Literal>;
 type GlobalMemory = HashMap<String, Literal>;
 
+#[derive(Debug)]
+pub struct ExecutionStepInfo {
+    pub prog_name: String,
+    pub prog_id: usize,
+    pub instruction_count: usize,
+}
 
 #[derive(Debug)]
 pub struct RunningProgramState<'a> {
@@ -20,7 +26,7 @@ pub struct RunningProgramState<'a> {
     memory: Memory,
     code: &'a ProgramCode,
     instruction_pointer: usize,
-    id: usize,
+    pub id: usize,
 }
 
 
@@ -35,9 +41,18 @@ fn str_to_expr_error(line: usize, col: usize) -> impl Fn(String) -> AlthreadErro
 
 pub enum GlobalAction {
     Nothing,
+    Pause,
     StartProgram(String),
     EndProgram,
     Exit,
+}
+impl GlobalAction {
+    pub fn is_local(&self) -> bool {
+        match self {
+            Self::Nothing => true,
+            _ => false,
+        }
+    }
 }
 
 impl<'a> RunningProgramState<'a> {
@@ -55,15 +70,30 @@ impl<'a> RunningProgramState<'a> {
     pub fn current_instruction(&self) -> Option<&Instruction> {
         self.code.instructions.get(self.instruction_pointer)
     }
+    fn next_global(&mut self, globals: &mut GlobalMemory) -> AlthreadResult<(GlobalAction, usize)> {
+        let mut n = 0;
+        while true {
+            let action = self.next(globals)?;
+            n += 1;
+            if !action.is_local() {
+                return Ok((action, n));
+            }
+        }
+        unreachable!()
+    }
 
     fn next(&mut self, globals: &mut GlobalMemory) -> AlthreadResult<GlobalAction> {
-        let mut action = GlobalAction::Nothing;
         let cur_inst = self.code.instructions.get(self.instruction_pointer).ok_or(AlthreadError::new(
             ErrorType::InstructionNotAllowed,
             0,
             0,
             "the current instruction pointer points to no instruction".to_string()
         ))?;
+        let mut action = if cur_inst.control.is_local() {
+            GlobalAction::Nothing
+        } else {
+            GlobalAction::Pause
+        };
         let pos_inc = match &cur_inst.control {
             InstructionType::JumpIf(c) => {
                 let cond = self.memory.last().unwrap().is_true();
@@ -162,9 +192,9 @@ impl<'a> RunningProgramState<'a> {
 
 
 pub struct VM<'a> {
-    globals: GlobalMemory,
-    running_programs: Vec<RunningProgramState<'a>>,
-    programs_code: &'a HashMap<String, ProgramCode>,
+    pub globals: GlobalMemory,
+    pub running_programs: Vec<RunningProgramState<'a>>,
+    pub programs_code: &'a HashMap<String, ProgramCode>,
     rng: ThreadRng
 }
 
@@ -194,12 +224,19 @@ impl<'a> VM<'a> {
         self.run_program("main");
     }
 
-    pub fn next(&mut self) -> AlthreadResult<()> {
+    pub fn next(&mut self) -> AlthreadResult<ExecutionStepInfo> {
         let program = self.running_programs.choose_mut(&mut self.rng).expect("call next but no program is running");
-        println!("{}_{}: {}", &program.name, &program.id, program.current_instruction().unwrap());
-        let action = program.next(&mut self.globals)?;
+        
+        let mut exec_info = ExecutionStepInfo {
+            prog_name: program.name.clone(),
+            prog_id: program.id,
+            instruction_count: 0
+        };
+
+        let (action, instruction_count) = program.next_global(&mut self.globals)?;
         match action {
-            GlobalAction::Nothing => {},
+            GlobalAction::Nothing => {unreachable!("next_global should not pause on a local instruction")}
+            GlobalAction::Pause => {}
             GlobalAction::StartProgram(name) => {
                 self.run_program(&name);
             }
@@ -211,7 +248,8 @@ impl<'a> VM<'a> {
                 self.running_programs.clear()
             }
         }
-        Ok(())
+        exec_info.instruction_count = instruction_count;
+        Ok(exec_info)
     }
 
     pub fn new_memory() -> Memory {

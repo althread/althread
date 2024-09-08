@@ -85,8 +85,8 @@ factor_operator     =  { MUL_OP | DIV_OP | MOD_OP }
 /// ### Control Flow
 /// Control flow structures include conditional execution and loops.
 
-if_control    = { IF_KW ~ "(" ~ expression ~ ")" ~ statement ~ (ELSE_KW ~ statement)? }
-while_control = { WHILE_KW ~ "(" ~ expression ~ ")" ~ statement }
+if_control    = { IF_KW ~  expression ~ code_block ~ (ELSE_KW ~ code_block)? }
+while_control = { WHILE_KW ~  expression ~ code_block }
 
 /// ## Tokens
 /// This section defines the keywords, operators, datatypes, and other tokens used in Althread.

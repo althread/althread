@@ -4,9 +4,7 @@ use pest::iterators::Pairs;
 
 use crate::{
     ast::{
-        display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
-        token::{datatype::DataType, literal::Literal},
+        block::Block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, token::{datatype::DataType, literal::Literal}
     }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl}
 };
 
@@ -15,7 +13,7 @@ use super::{expression::Expression, Statement};
 #[derive(Debug)]
 pub struct WhileControl {
     pub condition: Node<Expression>,
-    pub then_block: Box<Node<Statement>>,
+    pub then_block: Box<Node<Block>>,
 }
 
 impl NodeBuilder for WhileControl {
@@ -68,7 +66,7 @@ impl InstructionBuilder for Node<WhileControl> {
             line: self.line,
             column: self.column,
             control: InstructionType::Jump(JumpControl { 
-                jump: -((block_len + 2) as i64),
+                jump: -(instructions.len() as i64),
             }),
         });
 

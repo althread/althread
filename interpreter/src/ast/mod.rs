@@ -143,8 +143,6 @@ impl Ast {
         state.global_table = global_table;
 
         state.unstack_current_depth();
-        println!("{:?}", state.program_stack);
-        println!("{:?}", state.current_stack_depth);
         assert!(state.current_stack_depth == 0);
 
         let mut programs_code = HashMap::new();

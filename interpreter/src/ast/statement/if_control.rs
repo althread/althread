@@ -4,9 +4,7 @@ use pest::iterators::Pairs;
 
 use crate::{
     ast::{
-        display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
-        token::{datatype::DataType, literal::Literal},
+        block::Block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, token::{datatype::DataType, literal::Literal}
     }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl}
 };
 
@@ -15,8 +13,8 @@ use super::{expression::Expression, Statement};
 #[derive(Debug)]
 pub struct IfControl {
     pub condition: Node<Expression>,
-    pub then_block: Box<Node<Statement>>,
-    pub else_block: Option<Box<Node<Statement>>>,
+    pub then_block: Box<Node<Block>>,
+    pub else_block: Option<Box<Node<Block>>>,
 }
 
 impl NodeBuilder for IfControl {
@@ -72,7 +70,7 @@ impl InstructionBuilder for IfControl {
             line: self.condition.line,
             column: self.condition.column,
             control: InstructionType::JumpIf(JumpIfControl { 
-                jump_false: (then_block.len() + 2) as i64,
+                jump_false: (then_block.len()+1) as i64,
                 unstack_len
             }),
         });

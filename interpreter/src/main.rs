@@ -96,12 +96,12 @@ pub fn run_command(cli_args: &RunCommand) {
     let mut vm = vm::VM::new(&compiled_project);
 
     vm.start();
-    for i in 0..20 {
-        //println!("STEP {} ----\n{}", i,  vm);
-        vm.next().unwrap_or_else(|err| {
+    for i in 0..100000 {
+        let info = vm.next().unwrap_or_else(|err| {
             println!("Error: {:?}", err);
             exit(1);
         });
+        //println!("{}_{}: {} stopped at {}", info.prog_name, info.prog_id, info.instruction_count, vm.running_programs.get(vm.running_programs.iter().position(|p| p.id == info.prog_id).unwrap()).unwrap().id);
     }
 
 }

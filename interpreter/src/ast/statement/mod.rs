@@ -61,12 +61,7 @@ impl InstructionBuilder for Statement {
             Self::If(node) => node.compile(state),
             Self::Assignment(node) => node.compile(state),
             Self::Declaration(node) => node.compile(state),
-            Self::While(node) => Err(AlthreadError::new(
-                ErrorType::NotImplemented,
-                node.line,
-                node.column,
-                "While is not yet implemented".to_string()
-            )),
+            Self::While(node) => node.compile(state),
             Self::Expression(node)  => Err(AlthreadError::new(
                 ErrorType::NotImplemented,
                 node.line,

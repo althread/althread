@@ -56,6 +56,31 @@ impl fmt::Display for InstructionType {
     }
 }
 
+impl InstructionType {
+    pub fn is_local(&self) -> bool {
+        match self {
+            Self::GlobalAssignment(_)
+            | Self::RunCall(_)
+            | Self::GlobalReads(_) => false,
+
+            | Self::Empty
+            | Self::Expression(_)
+            | Self::LocalAssignment(_)
+            | Self::JumpIf(_)
+            | Self::Jump(_)
+            | Self::Unstack(_)
+            | Self::EndProgram
+            | Self::FnCall(_)
+            | Self::Declaration(_)
+            | Self::Exit
+            | Self::PushNull(_) => true,
+
+            Self::Atomic(_) => todo!(),
+
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Instruction {
     pub line: usize,

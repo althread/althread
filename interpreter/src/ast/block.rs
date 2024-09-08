@@ -41,13 +41,15 @@ impl InstructionBuilder for Block {
             instructions.extend(n_ins);
         }
         let unstack_len = state.unstack_current_depth();
-        instructions.push(Instruction {
-            control: InstructionType::Unstack(UnstackControl {
-                unstack_len
-            }),
-            line: 0,
-            column: 0,
-        });
+        if unstack_len > 0 {
+            instructions.push(Instruction {
+                control: InstructionType::Unstack(UnstackControl {
+                    unstack_len
+                }),
+                line: 0,
+                column: 0,
+            });
+        }
         Ok(instructions)
     }
 }
