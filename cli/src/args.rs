@@ -39,6 +39,10 @@ pub enum Command {
     #[command(visible_alias = "r")]
     Run(RunCommand),
 
+    /// Compiles an input file into a supported output format
+    #[command()]
+    RandomSearch(RandomSearchCommand),
+
 }
 
 /// Compiles an input file into a supported output format
@@ -53,6 +57,14 @@ pub struct CompileCommand {
 /// Compiles an input file into a supported output format
 #[derive(Debug, Clone, Parser)]
 pub struct RunCommand {
+    /// Shared arguments
+    #[clap(flatten)]
+    pub common: SharedArgs,
+}
+
+/// Compiles an input file into a supported output format
+#[derive(Debug, Clone, Parser)]
+pub struct RandomSearchCommand {
     /// Shared arguments
     #[clap(flatten)]
     pub common: SharedArgs,

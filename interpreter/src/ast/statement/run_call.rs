@@ -10,7 +10,7 @@ use crate::{
     }, compiler::CompilerState, error::{AlthreadResult, Pos}, parser::Rule, vm::instruction::{Instruction, InstructionType, RunCallControl}
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RunCall {
     pub identifier: Node<String>,
 }

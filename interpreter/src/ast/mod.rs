@@ -15,7 +15,7 @@ use std::{
 use block::Block;
 use condition_block::ConditionBlock;
 use display::{AstDisplay, Prefix};
-use node::Node;
+use node::{InstructionBuilder, Node};
 use pest::iterators::Pairs;
 use statement::{expression::Expression, Statement};
 use token::{condition_keyword::ConditionKeyword, literal::Literal};
@@ -152,9 +152,54 @@ impl Ast {
             assert!(state.current_stack_depth == 0);
         }
 
+        let mut always_conditions = Vec::new();
+        for (name, condition_block) in self.condition_blocks.iter() {
+            match name {
+                ConditionKeyword::Always => {
+                    for condition in condition_block.value.children.iter() { 
+                        let compiled = condition.compile(&mut state)?;
+                        if compiled.len() == 1 {
+                            return Err(AlthreadError::new(
+                                ErrorType::InstructionNotAllowed,
+                                Some(condition.pos),
+                                "The condition must depend on shared variable(s)".to_string()
+                            ));
+                        }
+                        if compiled.len() != 2 {
+                            return Err(AlthreadError::new(
+                                ErrorType::InstructionNotAllowed,
+                                Some(condition.pos),
+                                "The condition must be a single expression".to_string()
+                            ));
+                        }
+                        if let InstructionType::GlobalReads(g_read) = &compiled[0].control {
+                            if let InstructionType::Expression(exp) = &compiled[1].control {
+                                always_conditions.push((g_read.variables.iter().map(|s| s.clone()).collect(), g_read.clone(),exp.clone(), condition.pos));
+                            } 
+                            else {
+                                return Err(AlthreadError::new(
+                                    ErrorType::InstructionNotAllowed,
+                                    Some(condition.pos),
+                                    "The condition must be a single expression".to_string()
+                                ));
+                            }
+                        } else {
+                            return Err(AlthreadError::new(
+                                ErrorType::InstructionNotAllowed,
+                                Some(condition.pos),
+                                "The condition must depend on shared variable(s)".to_string()
+                            ));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
         Ok(CompiledProject {
             global_memory,
-            programs_code
+            programs_code,
+            always_conditions,
         })
     }
     fn compile_program(&self, name: &str, state: &mut CompilerState) -> AlthreadResult<ProgramCode> {

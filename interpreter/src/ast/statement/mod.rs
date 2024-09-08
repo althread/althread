@@ -25,7 +25,7 @@ use super::{
     block::Block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, token::literal::Literal
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Statement {
     Assignment(Node<Assignment>),
     Declaration(Node<Declaration>),

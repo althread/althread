@@ -32,20 +32,20 @@ lazy_static::lazy_static! {
     };
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expression {
     Binary(Node<BinaryExpression>),
     Unary(Node<UnaryExpression>),
     Primary(Node<PrimaryExpression>),
 }
 
-//#[derive(Debug)]
+#[derive(Clone)]
 pub struct LocalExpression {
     pub root: LocalExpressionNode,
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LocalExpressionNode {
     Binary(LocalBinaryExpressionNode),
     Unary(LocalUnaryExpressionNode),

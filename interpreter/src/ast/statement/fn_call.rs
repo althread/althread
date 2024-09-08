@@ -12,7 +12,7 @@ use crate::{
 
 use super::expression::Expression;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FnCall {
     pub fn_name: Node<Identifier>,
     pub value: Node<Expression>,

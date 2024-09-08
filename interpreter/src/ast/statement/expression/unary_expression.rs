@@ -12,13 +12,13 @@ use crate::{
 
 use super::{Expression, LocalExpressionNode};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UnaryExpression {
     pub operator: Node<UnaryOperator>,
     pub operand: Box<Node<Expression>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LocalUnaryExpressionNode {
     pub operator: UnaryOperator,
     pub operand: Box<LocalExpressionNode>,

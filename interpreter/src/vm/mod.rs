@@ -2,7 +2,7 @@ use std::{collections::{HashMap, HashSet}, fmt};
 
 use fastrand::Rng;
 
-use instruction::{Instruction, InstructionType, ProgramCode};
+use instruction::{ExpressionControl, GlobalReadsControl, Instruction, InstructionType, ProgramCode};
 
 use crate::{ast::{statement::wait, token::{binary_assignment_operator::BinaryAssignmentOperator, literal::Literal}}, compiler::CompiledProject, error::{AlthreadError, AlthreadResult, ErrorType, Pos}};
 pub mod instruction;
@@ -127,7 +127,7 @@ impl<'a> RunningProgramState<'a> {
                 let lit = self.memory.last().expect("Panic: stack is empty, cannot perform assignment").clone();
                 for _ in 0..global_asgm.unstack_len { self.memory.pop(); }
 
-                global_asgm.operator.apply(
+                let lit = global_asgm.operator.apply(
                     &globals.get(&global_asgm.identifier).expect(format!("global variable '{}' not found", global_asgm.identifier).as_str()),
                     &lit)
                     .map_err(str_to_expr_error(cur_inst.pos))?;
@@ -209,12 +209,14 @@ pub struct VM<'a> {
     pub running_programs: HashMap<usize, RunningProgramState<'a>>,
     pub programs_code: &'a HashMap<String, ProgramCode>,
     pub executable_programs: HashSet<usize>,
+    pub always_conditions: &'a Vec<(HashSet<String>, GlobalReadsControl, ExpressionControl, Pos)>,
 
     /// The programs that are waiting for a condition to be true
     /// The condition depends on the global variables that are in the HashSet
     pub waiting_programs: HashMap<usize, HashSet<String>>,
     next_program_id: usize,
-    rng: Rng
+    rng: Rng,
+    seed: u64,
 }
 
 impl<'a> VM<'a> {
@@ -224,9 +226,11 @@ impl<'a> VM<'a> {
             running_programs: HashMap::new(),
             executable_programs: HashSet::new(),
             programs_code: &compiled_project.programs_code,
+            always_conditions: &compiled_project.always_conditions,
             next_program_id: 0,
             waiting_programs: HashMap::new(),
             rng: Rng::new(),
+            seed: 0,
         }
     }
 
@@ -241,11 +245,13 @@ impl<'a> VM<'a> {
         self.next_program_id += 1;
     }
 
-    pub fn start(&mut self) {
+    pub fn start(&mut self, seed: u64) {
+        self.rng = Rng::with_seed(seed);
         self.run_program("main");
     }
 
     pub fn next(&mut self) -> AlthreadResult<ExecutionStepInfo> {
+        
         let program = self.rng.choice(self.executable_programs.iter()).expect("call next but no program is executable");
 
         let program = self.running_programs.get_mut(program).expect("program is executable but not found in running programs");
@@ -261,16 +267,39 @@ impl<'a> VM<'a> {
             GlobalAction::Nothing => {unreachable!("next_global should not pause on a local instruction")}
             GlobalAction::Pause => {},
             GlobalAction::Write(var_name) => {
-                println!("program {} writes {}", program.id, var_name);
+                //println!("program {} writes {}", program.id, var_name);
                 // Check if the variable appears in the conditions of a waiting program
                 self.waiting_programs.retain(|prog_id, dependencies| {
                     if dependencies.contains(&var_name) {
                         self.executable_programs.insert(*prog_id);
-                        println!("program {} is woken up", prog_id);
+                        //println!("program {} is woken up", prog_id);
                         return false;
                     }
                     true
                 });
+
+                for (dependencies, read, expr, pos) in self.always_conditions.iter() {
+                    if dependencies.contains(&var_name) {
+                        // Check if the condition is true
+                        // create a small memory stack with the value of the variables
+                        let mut memory = Vec::new();
+                        for var_name in read.variables.iter() {
+                            memory.push(self.globals.get(var_name).expect(format!("global variable '{}' not found", var_name).as_str()).clone());
+                        }
+                        let cond = expr.root.eval(&memory).map_err(|msg| AlthreadError::new(
+                            ErrorType::ExpressionError,
+                            Some(*pos),
+                            msg
+                        ))?;
+                        if !cond.is_true() {
+                            return Err(AlthreadError::new(
+                                ErrorType::RuntimeError,
+                                Some(*pos),
+                                format!("the condition is false")
+                            ));
+                        }
+                    }
+                }
             }
             GlobalAction::StartProgram(name) => {
                 self.run_program(&name);
@@ -291,7 +320,7 @@ impl<'a> VM<'a> {
                     }
                     _ => unreachable!("waiting on an instruction that is not a global read")
                 }
-                println!("process {} is waiting for {:?}", program.id, dependencies);
+                //println!("process {} is waiting for {:?}", program.id, dependencies);
                 self.waiting_programs.insert(program.id, dependencies);
             }
             GlobalAction::Exit => {
@@ -299,7 +328,14 @@ impl<'a> VM<'a> {
             }
         }
         exec_info.instruction_count = instruction_count;
+
+
+        
         Ok(exec_info)
+    }
+
+    pub fn is_finished(&self) -> bool {
+        self.running_programs.is_empty()
     }
 
     pub fn new_memory() -> Memory {

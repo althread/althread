@@ -15,7 +15,7 @@ use crate::{
 
 use super::expression::Expression;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Declaration {
     pub keyword: Node<DeclarationKeyword>,
     pub identifier: Node<Identifier>,

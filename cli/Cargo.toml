@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 clap = { workspace = true }
 althread = { workspace = true }
+fastrand = { workspace = true }
 
 [lints]
 workspace = true

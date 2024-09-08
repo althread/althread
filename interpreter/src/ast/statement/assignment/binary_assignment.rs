@@ -14,7 +14,7 @@ use crate::{
     }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule, vm::instruction::{GlobalAssignmentControl, Instruction, InstructionType, LocalAssignmentControl}
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BinaryAssignment {
     pub identifier: Node<Identifier>,
     pub operator: Node<BinaryAssignmentOperator>,

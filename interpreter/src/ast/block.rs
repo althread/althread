@@ -14,7 +14,7 @@ use super::{
     token::literal::Literal,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Block {
     pub children: Vec<Node<Statement>>,
 }

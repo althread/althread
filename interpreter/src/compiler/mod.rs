@@ -1,6 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
+use crate::error::Pos;
+use crate::vm::instruction::{ExpressionControl, GlobalReadsControl, Instruction};
 use crate::{ast::token::{datatype::DataType, literal::Literal}, vm::instruction::ProgramCode};
 
 #[derive(Debug, Clone)]
@@ -44,6 +46,12 @@ impl CompilerState {
 pub struct CompiledProject {
     pub programs_code: HashMap<String, ProgramCode>,
     pub global_memory: HashMap<String, Literal>,
+
+    /// The conditions that should always be true
+    /// The first element is the variables that are used in the condition
+    /// The second element is the two instructions that are used to check the condition 
+    /// (the first in struction is the read operation and the second is the expression)
+    pub always_conditions: Vec<(HashSet<String>, GlobalReadsControl, ExpressionControl, Pos)>,
 }
 
 

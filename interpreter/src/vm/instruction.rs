@@ -11,7 +11,7 @@ struct Span {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum InstructionType {
     Empty,
     Atomic(AtomicControl),
@@ -82,7 +82,7 @@ impl InstructionType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Instruction {
     pub pos: Option<Pos>,
     pub control: InstructionType,
@@ -98,7 +98,7 @@ impl fmt::Display for Instruction {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AtomicControl {
     pub node: Node<Statement>,
 }
@@ -109,7 +109,7 @@ impl fmt::Display for AtomicControl {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct JumpIfControl {
     pub jump_false: i64,
     pub unstack_len: usize,
@@ -121,7 +121,7 @@ impl fmt::Display for JumpIfControl {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct JumpControl {
     pub jump: i64,
 }
@@ -133,7 +133,7 @@ impl fmt::Display for JumpControl {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WaitControl {
     pub jump: i64,
     pub unstack_len: usize,
@@ -147,7 +147,7 @@ impl fmt::Display for WaitControl {
 
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ExpressionControl {
     pub root: LocalExpressionNode,
 }
@@ -159,7 +159,7 @@ impl fmt::Display for ExpressionControl {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GlobalReadsControl {
     pub variables: Vec<String>,
 }
@@ -171,7 +171,7 @@ impl fmt::Display for GlobalReadsControl {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UnstackControl {
     pub unstack_len: usize,
 }
@@ -182,7 +182,7 @@ impl fmt::Display for UnstackControl {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DeclarationControl {
     pub unstack_len: usize,
 }
@@ -194,7 +194,7 @@ impl fmt::Display for DeclarationControl {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GlobalAssignmentControl {
     pub identifier: String,
     pub operator: BinaryAssignmentOperator,
@@ -208,7 +208,7 @@ impl fmt::Display for GlobalAssignmentControl {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LocalAssignmentControl {
     pub index: usize,
     pub operator: BinaryAssignmentOperator,
@@ -221,7 +221,7 @@ impl fmt::Display for LocalAssignmentControl {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RunCallControl {
     pub name: String
 }
@@ -232,7 +232,7 @@ impl fmt::Display for RunCallControl {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FnCallControl {
     pub name: String,
     pub unstack_len: usize,

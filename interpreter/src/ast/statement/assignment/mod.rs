@@ -13,7 +13,7 @@ use crate::{
     }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, no_rule, parser::Rule, vm::instruction::Instruction
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Assignment {
     Binary(Node<BinaryAssignment>),
 }

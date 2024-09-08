@@ -10,7 +10,7 @@ use crate::{
 
 use super::{expression::Expression, Statement};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WhileControl {
     pub condition: Node<Expression>,
     pub then_block: Box<Node<Block>>,

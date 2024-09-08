@@ -11,7 +11,7 @@ use crate::{
 };
 use super::{Expression, LocalExpressionNode};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PrimaryExpression {
     Literal(Node<Literal>),
     Identifier(Node<Identifier>),
@@ -47,16 +47,16 @@ impl PrimaryExpression {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LocalLiteralNode {
     pub value: Literal,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LocalVarNode {
     pub index: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LocalPrimaryExpressionNode {
     Literal(LocalLiteralNode),
     Var(LocalVarNode),
