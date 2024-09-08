@@ -136,6 +136,7 @@ impl fmt::Display for JumpControl {
 #[derive(Debug)]
 pub struct WaitControl {
     pub jump: i64,
+    pub unstack_len: usize,
 }
 impl fmt::Display for WaitControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -152,7 +153,7 @@ pub struct ExpressionControl {
 }
 impl fmt::Display for ExpressionControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "eval {:?}", self.root)?;
+        write!(f, "eval {}", self.root)?;
         Ok(())
     }
 }

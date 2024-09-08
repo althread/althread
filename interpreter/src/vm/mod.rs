@@ -1,10 +1,10 @@
-use std::{collections::HashMap, fmt};
+use std::{collections::{HashMap, HashSet}, fmt};
 
 use fastrand::Rng;
 
 use instruction::{Instruction, InstructionType, ProgramCode};
 
-use crate::{ast::token::{binary_assignment_operator::BinaryAssignmentOperator, literal::Literal}, compiler::CompiledProject, error::{AlthreadError, AlthreadResult, ErrorType, Pos}};
+use crate::{ast::{statement::wait, token::{binary_assignment_operator::BinaryAssignmentOperator, literal::Literal}}, compiler::CompiledProject, error::{AlthreadError, AlthreadResult, ErrorType, Pos}};
 pub mod instruction;
 
 
@@ -42,7 +42,9 @@ pub enum GlobalAction {
     Nothing,
     Pause,
     StartProgram(String),
+    Write(String),
     EndProgram,
+    Wait,
     Exit,
 }
 impl GlobalAction {
@@ -87,6 +89,9 @@ impl<'a> RunningProgramState<'a> {
             None,
             "the current instruction pointer points to no instruction".to_string()
         ))?;
+
+        //println!("{} running instruction {}", self.id, self.current_instruction().unwrap());
+
         let mut action = if cur_inst.control.is_local() {
             GlobalAction::Nothing
         } else {
@@ -128,6 +133,7 @@ impl<'a> RunningProgramState<'a> {
                     .map_err(str_to_expr_error(cur_inst.pos))?;
 
                 globals.insert(global_asgm.identifier.clone(), lit);
+                action = GlobalAction::Write(global_asgm.identifier.clone());
                 1
             },
             InstructionType::LocalAssignment(local_asgm) => {
@@ -172,6 +178,16 @@ impl<'a> RunningProgramState<'a> {
                 println!("{}", lit);
                 1
             }
+            InstructionType::Wait(wait_ctrl) => {
+                let cond = self.memory.last().unwrap().is_true();
+                for _ in 0..wait_ctrl.unstack_len { self.memory.pop(); }
+                if cond {
+                    1
+                } else {
+                    action = GlobalAction::Wait;
+                    wait_ctrl.jump
+                }
+            }
             _ => panic!("Instruction '{:?}' not implemented", cur_inst.control),
         };
         let new_pos = (self.instruction_pointer as i64) + pos_inc;
@@ -190,8 +206,14 @@ impl<'a> RunningProgramState<'a> {
 
 pub struct VM<'a> {
     pub globals: GlobalMemory,
-    pub running_programs: Vec<RunningProgramState<'a>>,
+    pub running_programs: HashMap<usize, RunningProgramState<'a>>,
     pub programs_code: &'a HashMap<String, ProgramCode>,
+    pub executable_programs: HashSet<usize>,
+
+    /// The programs that are waiting for a condition to be true
+    /// The condition depends on the global variables that are in the HashSet
+    pub waiting_programs: HashMap<usize, HashSet<String>>,
+    next_program_id: usize,
     rng: Rng
 }
 
@@ -199,22 +221,24 @@ impl<'a> VM<'a> {
     pub fn new(compiled_project: &'a CompiledProject) -> Self {
         Self {
             globals: compiled_project.global_memory.clone(),
-            running_programs: Vec::new(),
+            running_programs: HashMap::new(),
+            executable_programs: HashSet::new(),
             programs_code: &compiled_project.programs_code,
+            next_program_id: 0,
+            waiting_programs: HashMap::new(),
             rng: Rng::new(),
         }
     }
 
     fn run_program(&mut self, program_name: &str) {
-        let new_id = match self.running_programs.last() {
-            Some(p) => p.id + 1,
-            None => 0
-        };
-        self.running_programs.push(RunningProgramState::new(
-            new_id,
-            program_name.to_string(), 
-            &self.programs_code[program_name]
-        ));
+        self.running_programs.insert(self.next_program_id,
+            RunningProgramState::new(
+                self.next_program_id,
+                program_name.to_string(), 
+                &self.programs_code[program_name]
+            ));
+        self.executable_programs.insert(self.next_program_id);
+        self.next_program_id += 1;
     }
 
     pub fn start(&mut self) {
@@ -222,7 +246,9 @@ impl<'a> VM<'a> {
     }
 
     pub fn next(&mut self) -> AlthreadResult<ExecutionStepInfo> {
-        let program = self.rng.choice(self.running_programs.iter_mut()).expect("call next but no program is running");
+        let program = self.rng.choice(self.executable_programs.iter()).expect("call next but no program is executable");
+
+        let program = self.running_programs.get_mut(program).expect("program is executable but not found in running programs");
         
         let mut exec_info = ExecutionStepInfo {
             prog_name: program.name.clone(),
@@ -233,13 +259,40 @@ impl<'a> VM<'a> {
         let (action, instruction_count) = program.next_global(&mut self.globals)?;
         match action {
             GlobalAction::Nothing => {unreachable!("next_global should not pause on a local instruction")}
-            GlobalAction::Pause => {}
+            GlobalAction::Pause => {},
+            GlobalAction::Write(var_name) => {
+                println!("program {} writes {}", program.id, var_name);
+                // Check if the variable appears in the conditions of a waiting program
+                self.waiting_programs.retain(|prog_id, dependencies| {
+                    if dependencies.contains(&var_name) {
+                        self.executable_programs.insert(*prog_id);
+                        println!("program {} is woken up", prog_id);
+                        return false;
+                    }
+                    true
+                });
+            }
             GlobalAction::StartProgram(name) => {
                 self.run_program(&name);
             }
             GlobalAction::EndProgram => {
                 let remove_id = program.id;
-                self.running_programs.retain(|f| f.id != remove_id)
+                self.running_programs.remove(&remove_id);
+                self.executable_programs.remove(&remove_id);
+            }
+            GlobalAction::Wait => {
+                self.executable_programs.remove(&program.id);
+                let mut dependencies = HashSet::new();
+                match &program.current_instruction().expect("waiting on no instruction").control {
+                    InstructionType::GlobalReads(global_read) => {
+                        for var_name in global_read.variables.iter() {
+                            dependencies.insert(var_name.clone());
+                        }
+                    }
+                    _ => unreachable!("waiting on an instruction that is not a global read")
+                }
+                println!("process {} is waiting for {:?}", program.id, dependencies);
+                self.waiting_programs.insert(program.id, dependencies);
             }
             GlobalAction::Exit => {
                 self.running_programs.clear()
@@ -263,7 +316,7 @@ impl<'a> fmt::Display for VM<'a> {
             writeln!(f,"  {}: {}", name, val);
         }
         writeln!(f,"'main' stack:")?;
-        for val in self.running_programs.get(0).expect("no program is not running, cannot print the VM").memory.iter() {
+        for val in self.running_programs.get(&0).expect("no program is not running, cannot print the VM").memory.iter() {
             writeln!(f," - {}", val)?;
         }
         Ok(())

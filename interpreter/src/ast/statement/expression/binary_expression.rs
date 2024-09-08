@@ -25,6 +25,11 @@ pub struct LocalBinaryExpressionNode {
     pub operator: BinaryOperator,
     pub right: Box<LocalExpressionNode>,
 }
+impl fmt::Display for LocalBinaryExpressionNode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} {} {}", self.left, self.operator, self.right)
+    }
+}
 
 impl BinaryExpression {
     pub fn build(

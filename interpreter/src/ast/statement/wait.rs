@@ -50,6 +50,7 @@ impl InstructionBuilder for Node<Wait> {
             pos: Some(self.pos),
             control: InstructionType::Wait(WaitControl { 
                 jump: -(instructions.len() as i64),
+                unstack_len,
             }),
         });
 

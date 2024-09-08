@@ -23,6 +23,11 @@ pub struct LocalUnaryExpressionNode {
     pub operator: UnaryOperator,
     pub operand: Box<LocalExpressionNode>,
 }
+impl fmt::Display for LocalUnaryExpressionNode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}{}", self.operator, self.operand)
+    }   
+}
 
 impl UnaryExpression {
     pub fn build(operator: Pair<Rule>, operand: Node<Expression>) -> AlthreadResult<Node<Self>> {

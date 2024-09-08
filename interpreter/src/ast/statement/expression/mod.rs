@@ -51,7 +51,20 @@ pub enum LocalExpressionNode {
     Unary(LocalUnaryExpressionNode),
     Primary(LocalPrimaryExpressionNode),
 }
-
+impl fmt::Display for LocalExpression {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.root)
+    }
+}
+impl fmt::Display for LocalExpressionNode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Binary(node) => write!(f, "{}", node),
+            Self::Unary(node) => write!(f, "{}", node),
+            Self::Primary(node) => write!(f, "{}", node),
+        }
+    }
+}
 
 pub fn parse_expr(pairs: Pairs<Rule>) -> AlthreadResult<Node<Expression>> {
     PRATT_PARSER

@@ -94,7 +94,17 @@ pub fn run_command(cli_args: &RunCommand) {
             println!("Error: {:?}", err);
             exit(1);
         });
-        //println!("{}_{}: {} stopped at {}", info.prog_name, info.prog_id, info.instruction_count, vm.running_programs.get(vm.running_programs.iter().position(|p| p.id == info.prog_id).unwrap()).unwrap().id);
+        match vm.running_programs.iter()
+            .find(|(id, _)| **id == info.prog_id) {
+            Some((_, p)) => match p
+                .current_instruction() {
+                Some(i) => println!("{}_{}: stopped at {}", info.prog_name, info.prog_id, i),
+                None => println!("{}_{}: stopped at ?", info.prog_name, info.prog_id),
+            },
+            None => {
+                println!("Program  {} not found", info.prog_id);
+            }
+        }
     }
 
 }

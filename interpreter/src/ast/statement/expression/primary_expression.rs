@@ -63,6 +63,16 @@ pub enum LocalPrimaryExpressionNode {
     Expression(Box<LocalExpressionNode>),
 }
 
+impl fmt::Display for LocalPrimaryExpressionNode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Literal(node) => write!(f, "{}", node.value),
+            Self::Var(node) => write!(f, "{}", node.index),
+            Self::Expression(node) => write!(f, "({})", node),
+        }
+    }
+}
+
 
 impl LocalPrimaryExpressionNode {
     pub fn from_primary(primary: &PrimaryExpression, program_stack: &Vec<Variable>) -> AlthreadResult<Self> {
