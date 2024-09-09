@@ -14,6 +14,7 @@ pub enum BinaryAssignmentOperator {
     MultiplyAssign,
     DivideAssign,
     ModuloAssign,
+    OrAssign,
 }
 
 impl BinaryAssignmentOperator { 
@@ -25,6 +26,7 @@ impl BinaryAssignmentOperator {
             Self::MultiplyAssign => left.multiply(right),
             Self::DivideAssign => left.divide(right),
             Self::ModuloAssign => left.modulo(right),
+            Self::OrAssign => left.or(right),
         }
     }
 }
@@ -39,6 +41,7 @@ impl NodeBuilder for BinaryAssignmentOperator {
             Rule::MUL_ASSIGN_OP => Ok(Self::MultiplyAssign),
             Rule::DIV_ASSIGN_OP => Ok(Self::DivideAssign),
             Rule::MOD_ASSIGN_OP => Ok(Self::ModuloAssign),
+            Rule::OR_ASSIGN_OP => Ok(Self::OrAssign),
             _ => Err(no_rule!(pair)),
         }
     }
@@ -53,6 +56,7 @@ impl fmt::Display for BinaryAssignmentOperator {
             Self::MultiplyAssign => write!(f, "*="),
             Self::DivideAssign => write!(f, "/="),
             Self::ModuloAssign => write!(f, "%="),
+            Self::OrAssign => write!(f, "|="),
         }
     }
 }

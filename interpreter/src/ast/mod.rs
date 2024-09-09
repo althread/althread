@@ -111,8 +111,8 @@ impl Ast {
                                         // do nothing
                                         assert!(dec.unstack_len == 1)
                                     }
-                                    InstructionType::PushNull(datatype) => {
-                                        memory.push(datatype.default())
+                                    InstructionType::Push(literal) => {
+                                        memory.push(literal.clone())
                                     }
                                     _ => {
                                         panic!("unexpected instruction in compiled declaration statement")

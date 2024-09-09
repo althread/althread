@@ -4,14 +4,14 @@ use pest::iterators::Pairs;
 
 use crate::{
     ast::{
-        block::Block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, token::{datatype::DataType, literal::Literal}
-    }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl, WaitControl}
+        block::Block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, token::{binary_assignment_operator::BinaryAssignmentOperator, datatype::DataType, literal::Literal}
+    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl, LocalAssignmentControl, WaitControl}
 };
 
 use super::{expression::Expression, waiting_case::WaitingBlockCase, Statement};
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum WaitingBlockKind {
     First,
     Seq,
@@ -61,7 +61,82 @@ impl InstructionBuilder for Node<Wait> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
 
         let mut instructions = Vec::new();
-        todo!("waiting block not implemented");
+
+        state.program_stack.push(Variable {
+            datatype: DataType::Boolean,
+            name: "".to_string(),
+            mutable: true,
+            depth: state.current_stack_depth,
+        });
+        
+        instructions.push(Instruction {
+            pos: Some(self.pos),
+            control: InstructionType::Push(Literal::Bool(false))
+        });
+
+        let jump_if_offset = if self.value.block_kind == WaitingBlockKind::First {
+            1
+        } else {
+            0
+        };
+        let mut jump_index = Vec::new();
+        for case in &self.value.waiting_cases {
+            
+            state.current_stack_depth += 1;
+            let mut case_condition = case.value.expression.compile(state)?;
+            let unstack_len = state.unstack_current_depth();
+
+            let mut case_statement = match &case.value.statement {
+                Some(s) => s.compile(state)?,
+                None => vec![],
+            };
+
+            
+            case_statement.push(Instruction {
+                pos: Some(case.pos),
+                control: InstructionType::Push(Literal::Bool(true))
+            });
+            case_statement.push(Instruction {
+                pos: Some(case.pos),
+                control: InstructionType::LocalAssignment(LocalAssignmentControl{
+                    index: 0,
+                    operator: BinaryAssignmentOperator::OrAssign,
+                    unstack_len:1,
+                })
+            });
+
+            // the offset is because a jump will be added after the statement            
+            case_condition.push(Instruction {
+                pos: Some(case.pos),
+                control: InstructionType::JumpIf(JumpIfControl {
+                    jump_false: (case_statement.len() + 1 + jump_if_offset) as i64,
+                    unstack_len,
+                }),
+            });
+            instructions.extend(case_condition);
+            instructions.extend(case_statement);
+            jump_index.push(instructions.len());
+        }
+
+        if self.value.block_kind == WaitingBlockKind::First {
+            for index in jump_index.iter().rev() {
+                instructions.insert(*index, Instruction {
+                    pos: Some(self.pos),
+                    control: InstructionType::Jump(JumpControl {
+                        jump: (instructions.len() - index + 1) as i64,
+                    }),
+                });
+            }
+        }
+
+        instructions.push(Instruction {
+            pos: Some(self.pos),
+            control: InstructionType::Wait(WaitControl {
+                jump: -(instructions.len() as i64),
+                unstack_len: 1,
+            }),
+        });
+        state.program_stack.pop();
 /*
         state.current_stack_depth += 1;
         let cond_ins = self.value.condition.compile(state)?;

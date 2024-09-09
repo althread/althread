@@ -192,6 +192,10 @@ impl<'a> RunningProgramState<'a> {
                     wait_ctrl.jump
                 }
             }
+            InstructionType::Push(literal) => {
+                self.memory.push(literal.clone());
+                1
+            }
             _ => panic!("Instruction '{:?}' not implemented", cur_inst.control),
         };
         let new_pos = (self.instruction_pointer as i64) + pos_inc;

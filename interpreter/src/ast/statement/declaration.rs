@@ -92,7 +92,7 @@ impl InstructionBuilder for Declaration {
                 ));
             }
             instructions.push(Instruction {
-                control: InstructionType::PushNull(datatype.as_ref().unwrap().clone()),
+                control: InstructionType::Push(datatype.as_ref().unwrap().default()),
                 pos: Some(self.keyword.pos),
             });
         } 

@@ -61,7 +61,7 @@ impl fmt::Display for CompiledProject {
 
         writeln!(f, "- shared memory:")?;
         for (k, v) in self.global_memory.iter() {
-            writeln!(f, "{}: {:?}", k, v)?;
+            writeln!(f, "{}: {}", k, v)?;
         };
         for (k, v) in self.programs_code.iter() {
             writeln!(f, "- program '{}':", k)?;

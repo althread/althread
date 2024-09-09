@@ -27,7 +27,7 @@ pub enum InstructionType {
     FnCall(FnCallControl),
     Declaration(DeclarationControl),
     Exit,
-    PushNull(DataType),
+    Push(Literal),
     Wait(WaitControl),
     //Receive,
     //Any
@@ -49,7 +49,7 @@ impl fmt::Display for InstructionType {
             Self::FnCall(a) => {write!(f, "{}", a)?},
             Self::Exit => {write!(f, "exit")?},
             Self::Declaration(d) => {write!(f, "{}", d)?},
-            Self::PushNull(d) => {write!(f, "push null ({})", d)?},
+            Self::Push(l) => {write!(f, "push ({})", l)?},
             Self::Wait(w) => {write!(f, "{}", w)?},
         }
         Ok(())
@@ -74,7 +74,7 @@ impl InstructionType {
             | Self::FnCall(_)
             | Self::Declaration(_)
             | Self::Exit
-            | Self::PushNull(_) => true,
+            | Self::Push(_) => true,
 
             Self::Atomic(_) => todo!(),
 
@@ -116,7 +116,7 @@ pub struct JumpIfControl {
 }
 impl fmt::Display for JumpIfControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "jumpIf {}", self.jump_false)?;
+        write!(f, "jumpIf {} (unstack {})", self.jump_false, self.unstack_len)?;
         Ok(())
     }
 }
@@ -140,7 +140,7 @@ pub struct WaitControl {
 }
 impl fmt::Display for WaitControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "wait {}", self.jump)?;
+        write!(f, "wait {} (unstack {})", self.jump, self.unstack_len)?;
         Ok(())
     }
 }
@@ -188,7 +188,7 @@ pub struct DeclarationControl {
 }
 impl fmt::Display for DeclarationControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "declare var with value")?;
+        write!(f, "declare var with value (unstack {})", self.unstack_len)?;
         Ok(())
     }
 }
@@ -202,7 +202,7 @@ pub struct GlobalAssignmentControl {
 }
 impl fmt::Display for GlobalAssignmentControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} {} ", self.identifier, self.operator)?;
+        write!(f, "{} {} (unstack {})", self.identifier, self.operator, self.unstack_len)?;
         Ok(())
     }
 }
@@ -216,7 +216,7 @@ pub struct LocalAssignmentControl {
 }
 impl fmt::Display for LocalAssignmentControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "[{}] {} ", self.index, self.operator)?;
+        write!(f, "[{}] {}  (unstack {})", self.index, self.operator, self.unstack_len)?;
         Ok(())
     }
 }
@@ -239,7 +239,7 @@ pub struct FnCallControl {
 }
 impl fmt::Display for FnCallControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}()", self.name)?;
+        write!(f, "{}()  (unstack {})", self.name, self.unstack_len)?;
         Ok(())
     }
 }
@@ -256,7 +256,7 @@ impl fmt::Display for ProgramCode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "{}", self.name)?;
         for i in self.instructions.iter() {
-            writeln!(f, "  - {:?}", i.control)?;
+            writeln!(f, "  - {}", i.control)?;
         }
         Ok(())
     }
