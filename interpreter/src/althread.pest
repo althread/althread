@@ -16,8 +16,9 @@ condition_block = { condition_keywords ~ expression_block }
 program_block   = { PROGRAM_KW ~ identifier ~ "(" ~ ")" ~ code_block }
 main_block      = { MAIN_KW ~ code_block }
 
-code_block       = { "{" ~ statement* ~ "}" }
-expression_block = { "{" ~ expression_statement* ~ "}" }
+code_block           = { "{" ~ statement* ~ "}" }
+expression_block     = { "{" ~ expression_statement* ~ "}" }
+expression_statement = { expression ~ ";" }
 
 condition_keywords = _{ ALWAYS_KW | NEVER_KW }
 
@@ -26,28 +27,29 @@ condition_keywords = _{ ALWAYS_KW | NEVER_KW }
 /// They include assignments, declarations, expressions, print statements,
 /// function calls, and control flow structures.
 
-statement             =  { 
-      assignment_statement 
-    | declaration_statement 
-    | call_statement 
-    | run_statement
-    | wait_statement
-    | if_control 
-    | while_control 
-    | code_block 
+statement = {
+    assignment_statement
+  | declaration_statement
+  | run_statement
+  | wait_statement
+  | if_control
+  | while_control
+  | call_statement
+  | code_block
 }
 
 assignment_statement  = _{ assignment ~ ";" }
 declaration_statement = _{ declaration ~ ";" }
-wait_statement        =  { WAIT_KW ~ expression ~ ";" }
-expression_statement  =  { expression ~ ";" }
+wait_statement        =  { WAIT_KW ~ (
+      waiting_block 
+    | expression) ~ ";" }
 call_statement        = _{ fn_call ~ ";" }
 run_statement         = _{ run_call ~ ";" }
 
-fn_call               = { identifier ~ arg_list }
-run_call              = { RUN_KW ~ identifier ~ arg_list }
+fn_call  = { identifier ~ arg_list }
+run_call = { RUN_KW ~ identifier ~ arg_list }
 
-arg_list = { "(" ~ ")"  | "("  ~ expression ~ ("," ~ expression)* ~  ")" }
+arg_list = { "(" ~ ")" | "(" ~ expression ~ ("," ~ expression)* ~ ")" }
 
 /// ### Assignments
 /// Assignments assign values to variables.
@@ -68,7 +70,11 @@ declaration_keyword = { LET_KW | CONST_KW }
 
 /// ### Expressions
 /// Expressions evaluate values based on arithmetic and logical operations, following standard precedence rules.
-expression = { binary_expression | unary_expression | primary_expression }
+expression = {
+    binary_expression
+  | unary_expression
+  | primary_expression
+}
 
 primary_expression = _{ literal | identifier | "(" ~ expression ~ ")" }
 
@@ -84,24 +90,39 @@ comparison_operator =  { LT_OP | GT_OP | LE_OP | GE_OP }
 term_operator       =  { ADD_OP | SUB_OP }
 factor_operator     =  { MUL_OP | DIV_OP | MOD_OP }
 
+waiting_block = {
+    (SEQ_KW | FIRST_KW) ~ "{" ~ waiting_block_case* ~ "}"
+}
+waiting_block_case       = { expression ~ "=>" ~ statement }
+
 /// ### Control Flow
 /// Control flow structures include conditional execution and loops.
 
-if_control    = { IF_KW ~  expression ~ code_block ~ (ELSE_KW ~ code_block)? }
-while_control = { WHILE_KW ~  expression ~ code_block }
+if_control    = { IF_KW ~ expression ~ code_block ~ (ELSE_KW ~ code_block)? }
+while_control = { WHILE_KW ~ expression ~ code_block }
 
 /// ## Tokens
 /// This section defines the keywords, operators, datatypes, and other tokens used in Althread.
 
 /// ### Keywords
 /// Keywords define the core constructs of the language.
-KEYWORDS = _{ 
-      MAIN_KW    | GLOBAL_KW | PROGRAM_KW 
-    | ALWAYS_KW  | NEVER_KW  | RUN_KW 
-    | LET_KW     | CONST_KW  | IF_KW 
-    | ELSE_KW    | WHILE_KW  | BOOL      
-    | INT_TYPE   | FLOAT_TYPE| STR_TYPE 
-    | VOID_TYPE 
+KEYWORDS = _{
+    MAIN_KW
+  | GLOBAL_KW
+  | PROGRAM_KW
+  | ALWAYS_KW
+  | NEVER_KW
+  | RUN_KW
+  | LET_KW
+  | CONST_KW
+  | IF_KW
+  | ELSE_KW
+  | WHILE_KW
+  | BOOL
+  | INT_TYPE
+  | FLOAT_TYPE
+  | STR_TYPE
+  | VOID_TYPE
 }
 
 MAIN_KW    = _{ "main" }
@@ -110,7 +131,10 @@ PROGRAM_KW = _{ "program" }
 WAIT_KW    = _{ "wait" }
 ALWAYS_KW  =  { "always" }
 NEVER_KW   =  { "never" }
-RUN_KW     =  _{ "run" }
+RUN_KW     = _{ "run" }
+
+FIRST_KW = { "first" }
+SEQ_KW   = { "seq" }
 
 LET_KW   = { "let" }
 CONST_KW = { "const" }

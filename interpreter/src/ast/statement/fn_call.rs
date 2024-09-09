@@ -31,7 +31,7 @@ impl NodeBuilder for FnCall {
 impl InstructionBuilder for Node<FnCall> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
         let name = self.value.fn_name.value.value.clone();
-        if name != "print" {
+        if name != "print" && name != "println" {
             return Err(AlthreadError::new(
                 ErrorType::UndefinedFunction,
                 Some(self.pos),

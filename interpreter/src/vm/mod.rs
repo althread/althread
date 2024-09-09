@@ -169,13 +169,17 @@ impl<'a> RunningProgramState<'a> {
             InstructionType::Empty => 1,
             InstructionType::FnCall(f) => {
                 // currently, only the print function is implemented
-                if f.name != "print" {
+                if f.name != "print" && f.name != "println" {
                     panic!("implement a proper function call in the VM");
                 }
                 let lit = self.memory.last().expect("Panic: stack is empty, cannot perform function call").clone();
                 for _ in 0..f.unstack_len { self.memory.pop(); }
 
-                println!("{}", lit);
+                if f.name == "print" {
+                    print!("{}", lit);
+                } else {
+                    println!("{}", lit);
+                }
                 1
             }
             InstructionType::Wait(wait_ctrl) => {

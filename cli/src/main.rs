@@ -38,19 +38,19 @@ pub fn compile_command(cli_args: &CompileCommand) {
 
     // parse code with pest
     let pairs = althread::parser::parse(&source).unwrap_or_else(|e| {
-        println!("{:?}", e);
+        e.report(&source);
         exit(1);
     });
 
     let ast = Ast::build(pairs).unwrap_or_else(|e| {
-        println!("{:?}", e);
+        e.report(&source);
         exit(1);
     });
 
     println!("{}", &ast);
 
     let compiled_project = ast.compile().unwrap_or_else(|e| {
-        println!("{:?}", e);
+        e.report(&source);
         exit(1);
     });
 

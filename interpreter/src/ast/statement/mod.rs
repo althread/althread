@@ -6,6 +6,7 @@ pub mod fn_call;
 pub mod run_call;
 pub mod while_control;
 pub mod wait;
+pub mod waiting_case;
 
 use std::fmt;
 
