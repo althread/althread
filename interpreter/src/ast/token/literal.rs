@@ -80,6 +80,13 @@ impl Literal {
         }
     }
 
+    pub fn to_pid(&self) -> Result<usize, String> {
+        match self {
+            Self::Process(_, pid) => Ok(*pid),
+            i => Err(format!("Cannot convert {} to pid", i.get_datatype())),
+        }
+    }
+
     pub fn is_true(&self) -> bool {
         match self {
             Self::Null => false,
@@ -290,7 +297,7 @@ impl fmt::Display for Literal {
             Self::Int(value) => write!(f, "{}", value),
             Self::Float(value) => write!(f, "{}", value),
             Self::String(value) => write!(f, "{}", value),
-            Self::Process(name, pid) => write!(f, "{}[&{}]", name, pid),
+            Self::Process(name, pid) => write!(f, "{}#{}", name, pid),
         }
     }
 }

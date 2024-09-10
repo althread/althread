@@ -24,6 +24,7 @@ pub enum InstructionType {
     Push(Literal),
     Wait(WaitControl),
     Send(SendControl),
+    Connect(ConnectionControl),
     //Receive,
     //Any
 }
@@ -47,6 +48,7 @@ impl fmt::Display for InstructionType {
             Self::Push(l) => {write!(f, "push ({})", l)?},
             Self::Wait(w) => {write!(f, "{}", w)?},
             Self::Send(s) => {write!(f, "{}", s)?},
+            Self::Connect(c) => {write!(f, "{}", c)?},
         }
         Ok(())
     }
@@ -60,6 +62,7 @@ impl InstructionType {
             | Self::RunCall(_)
             | Self::GlobalReads(_) => false,
 
+            Self::Connect(_) // connect is global only if a process was waiting
             | Self::Wait(_) // wait is global only if the condition is false
             | Self::Empty
             | Self::Expression(_)
@@ -203,6 +206,25 @@ impl fmt::Display for SendControl {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ConnectionControl {
+    /// the index of the sender pid in the stack (none if the sender is the current process)
+    pub sender_idx: Option<usize>,
+    /// the index of the receiver pid in the stack (none if the receiver is the current process)
+    pub receiver_idx: Option<usize>,
+    pub sender_channel: String,
+    pub receiver_channel: String,
+}
+impl fmt::Display for ConnectionControl {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "connect [&{}] {}->{} [&{}]", 
+        if self.sender_idx.is_none() { "self".to_string() } else { self.sender_idx.unwrap().to_string() }, 
+        self.sender_channel, self.receiver_channel, 
+        if self.receiver_idx.is_none() { "self".to_string() } else { self.receiver_idx.unwrap().to_string() }, 
+    )?;
+        Ok(())
+    }
+}
 
 
 #[derive(Debug, Clone)]

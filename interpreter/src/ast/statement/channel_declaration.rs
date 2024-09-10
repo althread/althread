@@ -6,8 +6,8 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
-        token::datatype::DataType,
-    }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, parser::Rule, vm::instruction::Instruction
+        token::{datatype::DataType, literal::Literal},
+    }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, parser::Rule, vm::instruction::{ConnectionControl, Instruction, InstructionType}
 };
 
 #[derive(Debug, Clone)]
@@ -47,9 +47,9 @@ impl NodeBuilder for ChannelDeclaration {
 }
 
 
-fn get_prog_name(var_name: &str, state: &mut CompilerState, pos: &Pos) -> AlthreadResult<String> {
+fn get_var_id(var_name: &str, state: &mut CompilerState, pos: &Pos) -> AlthreadResult<Option<usize>> {
     if var_name == "self" {
-        return Ok(state.current_program_name.clone());
+        return Ok(None);
     }
     let var_idx = state.program_stack.iter().rev().position(|var| var.name == var_name).ok_or(AlthreadError::new(
         ErrorType::VariableError,
@@ -57,13 +57,22 @@ fn get_prog_name(var_name: &str, state: &mut CompilerState, pos: &Pos) -> Althre
         format!("Variable '{}' not found", var_name)
     ))?;
 
-    match &state.program_stack.get(var_idx).unwrap().datatype {
-        DataType::Process(n) => Ok(n.clone()),
-        _ => return Err(AlthreadError::new(
-            ErrorType::TypeError,
-            Some(*pos),
-            format!("Variable '{}' is not a process", var_name)
-        ))
+    Ok(Some(var_idx))
+}
+
+fn get_prog_name(var_name: &str, state: &mut CompilerState, pos: &Pos) -> AlthreadResult<String> {
+    if let Some(var_idx) = get_var_id(var_name, state, pos)? {
+        match &state.program_stack.get(var_idx).unwrap().datatype {
+            DataType::Process(n) => Ok(n.clone()),
+            _ => return Err(AlthreadError::new(
+                ErrorType::TypeError,
+                Some(*pos),
+                format!("Variable '{}' is not a process", var_name)
+            ))
+        }
+    }
+    else {
+        return Ok(state.current_program_name.clone());
     }
 }
 
@@ -118,9 +127,15 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
             state.channels.insert(right_key, (dec.datatypes.clone(), self.pos.clone()));
         }
 
-        
-        // No instructions because it's just a declaration
-        Ok(vec![])
+        Ok(vec![Instruction {
+            control: InstructionType::Connect(ConnectionControl { 
+                sender_idx: get_var_id(&dec.ch_left_prog, state, &self.pos)?,
+                receiver_idx: get_var_id(&dec.ch_right_prog, state, &self.pos)?,
+                sender_channel: dec.ch_left_name.clone(), 
+                receiver_channel: dec.ch_right_name.clone(),
+             }),
+            pos: Some(self.pos),
+        }])
     }
 }
 
