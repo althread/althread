@@ -150,6 +150,15 @@ impl Ast {
             assert!(state.current_stack_depth == 0);
         }
 
+        // check if all the channed used have been declared
+        for (channel_name, (datatypes, pos)) in state.undefined_channels.iter() {
+            return Err(AlthreadError::new(
+                ErrorType::UndefinedChannel,
+                Some(pos.clone()),
+                format!("Channel '{}' used in program '{}' at line {} has not been declared", channel_name.1, channel_name.0, pos.line)
+            ));
+        }
+
         let mut always_conditions = Vec::new();
         for (name, condition_block) in self.condition_blocks.iter() {
             match name {

@@ -158,7 +158,7 @@ impl<'a> RunningProgramState<'a> {
                 1
             },
             InstructionType::RunCall(call) => {
-                self.memory.push(Literal::Int(next_pid as i64));
+                self.memory.push(Literal::Process(call.name.clone(), next_pid));
                 action = GlobalAction::StartProgram(call.name.clone(), next_pid);
                 next_pid += 1;
                 1

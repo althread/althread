@@ -48,7 +48,8 @@ pub enum ErrorType {
     InstructionNotAllowed,
     ExpressionError,
     NotImplemented,
-    UndefinedFunction
+    UndefinedFunction,
+    UndefinedChannel,
 }
 
 impl fmt::Display for ErrorType {
@@ -61,6 +62,11 @@ impl fmt::Display for ErrorType {
             ErrorType::DivisionByZero => write!(f, "Division by zero"),
             ErrorType::ArithmeticError => write!(f, "Arithmetic Error"),
             ErrorType::ProcessError => write!(f, "Process Error"),
+            ErrorType::InstructionNotAllowed => write!(f, "Instruction Not Allowed"),
+            ErrorType::ExpressionError => write!(f, "Expression Error"),
+            ErrorType::NotImplemented => write!(f, "Not Implemented"),
+            ErrorType::UndefinedFunction => write!(f, "Undefined Function"),
+            ErrorType::UndefinedChannel => write!(f, "Undefined Channel"),
             _ => write!(f,"Error")
         }
     }

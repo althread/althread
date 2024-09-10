@@ -23,6 +23,7 @@ pub enum Literal {
     Int(i64),
     Float(f64),
     String(String),
+    Process(String, usize),
 }
 
 impl NodeBuilder for Literal {
@@ -64,6 +65,7 @@ impl Literal {
             DataType::Integer => Self::Int(0),
             DataType::Float => Self::Float(0.0),
             DataType::String => Self::String("".to_string()),
+            DataType::Process(_) => Self::Null,
         }
     }
 
@@ -74,6 +76,7 @@ impl Literal {
             Self::Int(_) => DataType::Integer,
             Self::Float(_) => DataType::Float,
             Self::String(_) => DataType::String,
+            Self::Process(n,_) => DataType::Process(n.to_string()),
         }
     }
 
@@ -287,6 +290,7 @@ impl fmt::Display for Literal {
             Self::Int(value) => write!(f, "{}", value),
             Self::Float(value) => write!(f, "{}", value),
             Self::String(value) => write!(f, "{}", value),
+            Self::Process(name, pid) => write!(f, "{}[&{}]", name, pid),
         }
     }
 }
@@ -299,6 +303,7 @@ impl AstDisplay for Literal {
             Self::Int(value) => writeln!(f, "{prefix}int: {value}"),
             Self::Float(value) => writeln!(f, "{prefix}float: {value}"),
             Self::String(value) => writeln!(f, "{prefix}string: \"{value}\""),
+            Self::Process(name, pid) => write!(f, "{prefix}pid {} instance of {}", pid, name),
         }
     }
 }

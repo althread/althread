@@ -9,6 +9,7 @@ pub mod loop_control;
 pub mod wait;
 pub mod waiting_case;
 pub mod channel_declaration;
+pub mod send;
 
 use std::fmt;
 
@@ -20,6 +21,7 @@ use loop_control::LoopControl;
 use pest::iterators::Pairs;
 use fn_call::FnCall;
 use run_call::RunCall;
+use send::SendStatement;
 use wait::Wait;
 use while_control::WhileControl;
 
@@ -33,6 +35,7 @@ use super::{
 pub enum Statement {
     Assignment(Node<Assignment>),
     Declaration(Node<Declaration>),
+    Send(Node<SendStatement>),
     ChannelDeclaration(Node<ChannelDeclaration>),
     Run(Node<RunCall>),
     FnCall(Node<FnCall>),
@@ -57,6 +60,7 @@ impl NodeBuilder for Statement {
             Rule::while_control  => Ok(Self::While(Node::build(pair)?)),
             Rule::loop_control   => Ok(Self::Loop(Node::build(pair)?)),
             Rule::code_block     => Ok(Self::Block(Node::build(pair)?)),
+            Rule::send_call      => Ok(Self::Send(Node::build(pair)?)),
             Rule::channel_declaration => Ok(Self::ChannelDeclaration(Node::build(pair)?)),
             _ => Err(no_rule!(pair)),
         }
@@ -76,6 +80,7 @@ impl InstructionBuilder for Statement {
             Self::Loop(node) => node.compile(state),
             Self::Wait(node) => node.compile(state),
             Self::Block(node) => node.compile(state),
+            Self::Send(node) => node.compile(state),
             Self::Run(node)  => {
                 // a run call returns a value, so we have to ustack it
                 let mut instructions = node.compile(state)?;
@@ -110,6 +115,7 @@ impl AstDisplay for Statement {
         match self {
             Statement::Assignment(node) => node.ast_fmt(f, prefix),
             Statement::Declaration(node) => node.ast_fmt(f, prefix),
+            Statement::Send(node) => node.ast_fmt(f, prefix),
             Statement::ChannelDeclaration(node) => node.ast_fmt(f, prefix),
             Statement::Wait(node) => node.ast_fmt(f, prefix),
             Statement::FnCall(node) => node.ast_fmt(f, prefix),

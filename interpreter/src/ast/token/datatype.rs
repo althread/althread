@@ -13,6 +13,7 @@ pub enum DataType {
     Integer,
     Float,
     String,
+    Process(String),
 }
 
 impl DataType {
@@ -23,6 +24,7 @@ impl DataType {
             DataType::Integer =>  Literal::Int(0),
             DataType::Float =>  Literal::Float(0.0),
             DataType::String =>  Literal::String("".to_string()),
+            DataType::Process(_) => Literal::Null,
         }
     }
     pub fn from_str(value: &str) -> Self {
@@ -52,6 +54,7 @@ impl DataType {
             DataType::Integer => "int",
             DataType::Float => "float",
             DataType::String => "string",
+            DataType::Process(n) => n,
         }
     }
 
@@ -64,6 +67,12 @@ impl DataType {
     pub fn is_boolean(&self) -> bool {
         match self {
             Self::Boolean => true,
+            _ => false,
+        }
+    }
+    pub fn is_process_of(&self, name: &str) -> bool {
+        match self {
+            Self::Process(n) => n == name,
             _ => false,
         }
     }
@@ -92,6 +101,7 @@ impl DataType {
             DataType::Integer => Literal::Int(0),
             DataType::Float => Literal::Float(0.0),
             DataType::String => Literal::String("".to_string()),
+            DataType::Process(_) => Literal::Null,
         }
     }
 }
@@ -104,6 +114,7 @@ impl fmt::Display for DataType {
             DataType::Integer => "int",
             DataType::Float => "float",
             DataType::String => "string",
+            DataType::Process(n) => { write!(f, "process({})", n); "" },
         };
 
         write!(f, "{}", datatype)

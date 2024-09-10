@@ -29,6 +29,7 @@ pub enum InstructionType {
     Exit,
     Push(Literal),
     Wait(WaitControl),
+    Send(SendControl),
     //Receive,
     //Any
 }
@@ -51,6 +52,7 @@ impl fmt::Display for InstructionType {
             Self::Declaration(d) => {write!(f, "{}", d)?},
             Self::Push(l) => {write!(f, "push ({})", l)?},
             Self::Wait(w) => {write!(f, "{}", w)?},
+            Self::Send(s) => {write!(f, "{}", s)?},
         }
         Ok(())
     }
@@ -60,6 +62,7 @@ impl InstructionType {
     pub fn is_local(&self) -> bool {
         match self {
             Self::GlobalAssignment(_)
+            | Self::Send(_)
             | Self::RunCall(_)
             | Self::GlobalReads(_) => false,
 
@@ -192,6 +195,20 @@ impl fmt::Display for DeclarationControl {
         Ok(())
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct SendControl {
+    pub channel_name: String,
+    pub nb_values: usize,
+    pub unstack_len: usize,
+}
+impl fmt::Display for SendControl {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "send {} {}-tuple (unstack {})", self.channel_name, self.nb_values, self.unstack_len)?;
+        Ok(())
+    }
+}
+
 
 
 #[derive(Debug, Clone)]

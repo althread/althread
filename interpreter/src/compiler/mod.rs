@@ -21,7 +21,8 @@ pub struct CompilerState {
     
     /// Store the channels data types that can be attached to a program
     /// The key is the program name and the channel name
-    pub channels: HashMap<(String,String), Vec<DataType>>,
+    pub channels: HashMap<(String,String), (Vec<DataType>, Pos)>,
+    pub undefined_channels: HashMap<(String,String), (Vec<DataType>, Pos)>,
 
     pub current_program_name: String,
     pub is_atomic: bool,
@@ -34,6 +35,7 @@ impl CompilerState {
             program_stack: Vec::new(),
             current_stack_depth: 0,
             channels: HashMap::new(),
+            undefined_channels: HashMap::new(),
             current_program_name: String::new(),
             is_atomic: false,
         }

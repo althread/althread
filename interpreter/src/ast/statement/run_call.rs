@@ -38,7 +38,7 @@ impl InstructionBuilder for Node<RunCall> {
             name: "".to_string(),
             depth: state.current_stack_depth,
             mutable: false,
-            datatype: DataType::Integer,
+            datatype: DataType::Process(self.value.identifier.value.clone()),
         });
 
         Ok(vec![Instruction {
