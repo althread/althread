@@ -9,8 +9,7 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
-        token::literal::Literal,
-    }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, no_rule, parser::Rule, vm::instruction::Instruction
+    }, compiler::CompilerState, error::AlthreadResult, no_rule, parser::Rule, vm::instruction::Instruction
 };
 
 #[derive(Debug, Clone)]

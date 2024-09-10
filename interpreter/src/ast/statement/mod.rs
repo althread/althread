@@ -25,10 +25,10 @@ use send::SendStatement;
 use wait::Wait;
 use while_control::WhileControl;
 
-use crate::{compiler::CompilerState, error::{AlthreadResult, ErrorType}, no_rule, parser::Rule, vm::instruction::{self, Instruction, InstructionType, UnstackControl}};
+use crate::{compiler::CompilerState, error::AlthreadResult, no_rule, parser::Rule, vm::instruction::{ Instruction, InstructionType, UnstackControl}};
 
 use super::{
-    block::Block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, token::literal::Literal
+    block::Block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}
 };
 
 #[derive(Debug, Clone)]

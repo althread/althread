@@ -4,11 +4,11 @@ use pest::iterators::Pairs;
 
 use crate::{
     ast::{
-        block::Block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, token::{datatype::DataType, literal::Literal}
+        block::Block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, token::datatype::DataType
     }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl}
 };
 
-use super::{expression::Expression, Statement};
+use super::expression::Expression;
 
 #[derive(Debug, Clone)]
 pub struct IfControl {

@@ -67,7 +67,6 @@ impl fmt::Display for ErrorType {
             ErrorType::NotImplemented => write!(f, "Not Implemented"),
             ErrorType::UndefinedFunction => write!(f, "Undefined Function"),
             ErrorType::UndefinedChannel => write!(f, "Undefined Channel"),
-            _ => write!(f,"Error")
         }
     }
 }

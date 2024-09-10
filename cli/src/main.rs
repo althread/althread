@@ -1,4 +1,3 @@
-use std::ops::RangeBounds;
 use std::{fs, io::Read, process::exit};
 
 mod args;
@@ -6,7 +5,6 @@ use args::{CliArguments, Command, CompileCommand, RandomSearchCommand, RunComman
 use clap::Parser;
 
 use althread::ast::Ast;
-use althread::error::AlthreadError;
 
 
 fn main() {
@@ -27,7 +25,7 @@ pub fn compile_command(cli_args: &CompileCommand) {
     let source = match cli_args.common.input.clone() {
         args::Input::Stdin => {
             let mut buf = Vec::new();
-            std::io::stdin().read_to_end(&mut buf);
+            let _ = std::io::stdin().read_to_end(&mut buf);
             String::from_utf8(buf).expect("Could not read stdin")
         },
         args::Input::Path(path) => {
@@ -63,7 +61,7 @@ pub fn run_command(cli_args: &RunCommand) {
     let source = match cli_args.common.input.clone() {
         args::Input::Stdin => {
             let mut buf = Vec::new();
-            std::io::stdin().read_to_end(&mut buf);
+            let _ = std::io::stdin().read_to_end(&mut buf);
             String::from_utf8(buf).expect("Could not read stdin")
         },
         args::Input::Path(path) => {
@@ -91,7 +89,7 @@ pub fn run_command(cli_args: &RunCommand) {
     let mut vm = althread::vm::VM::new(&compiled_project);
 
     vm.start(fastrand::u64(0..(1 << 63)));
-    for i in 0..100000 {
+    for _ in 0..100000 {
         if vm.is_finished() {
             break;
         }
@@ -120,7 +118,7 @@ pub fn random_search_command(cli_args: &RandomSearchCommand) {
     let source = match cli_args.common.input.clone() {
         args::Input::Stdin => {
             let mut buf = Vec::new();
-            std::io::stdin().read_to_end(&mut buf);
+            let _ = std::io::stdin().read_to_end(&mut buf);
             String::from_utf8(buf).expect("Could not read stdin")
         },
         args::Input::Path(path) => {
@@ -149,11 +147,11 @@ pub fn random_search_command(cli_args: &RandomSearchCommand) {
         println!("Seed: {}/10000", s);
         let mut vm = althread::vm::VM::new(&compiled_project);
         vm.start(s);
-        for i in 0..100000 {
+        for _ in 0..100000 {
             if vm.is_finished() {
                 break;
             }
-            let info = vm.next().unwrap_or_else(|err| {
+            let _info = vm.next().unwrap_or_else(|err| {
                 println!("Error with seed {}:", s);
                 err.report(&source);
                 exit(1);

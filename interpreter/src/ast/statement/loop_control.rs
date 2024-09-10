@@ -4,11 +4,11 @@ use pest::iterators::Pairs;
 
 use crate::{
     ast::{
-        block::Block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, token::{datatype::DataType, literal::Literal}
-    }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl}
+        display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, 
+    }, compiler::CompilerState, error::AlthreadResult, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpControl}
 };
 
-use super::{expression::Expression, Statement};
+use super::Statement;
 
 #[derive(Debug, Clone)]
 pub struct LoopControl {

@@ -6,7 +6,7 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
-        token::{identifier::Identifier, literal::Literal},
+        token::identifier::Identifier,
     }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule, vm::instruction::{FnCallControl, Instruction, InstructionType}
 };
 

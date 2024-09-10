@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use crate::error::Pos;
-use crate::vm::instruction::{ExpressionControl, GlobalReadsControl, Instruction};
+use crate::vm::instruction::{ExpressionControl, GlobalReadsControl};
 use crate::{ast::token::{datatype::DataType, literal::Literal}, vm::instruction::ProgramCode};
 
 #[derive(Debug, Clone)]

@@ -13,7 +13,7 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
-        token::{datatype::DataType, literal::Literal},
+        token::datatype::DataType,
     }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, no_rule, parser::Rule, vm::instruction::{ExpressionControl, GlobalReadsControl, Instruction, InstructionType}
 };
 

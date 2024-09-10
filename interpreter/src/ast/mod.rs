@@ -151,7 +151,7 @@ impl Ast {
         }
 
         // check if all the channed used have been declared
-        for (channel_name, (datatypes, pos)) in state.undefined_channels.iter() {
+        for (channel_name, (_, pos)) in state.undefined_channels.iter() {
             return Err(AlthreadError::new(
                 ErrorType::UndefinedChannel,
                 Some(pos.clone()),

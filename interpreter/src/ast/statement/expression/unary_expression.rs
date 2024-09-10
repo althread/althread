@@ -6,8 +6,8 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::Node,
-        token::{datatype::DataType, literal::Literal, unary_operator::UnaryOperator},
-    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, parser::Rule
+        token::{datatype::DataType, unary_operator::UnaryOperator},
+    }, compiler::{CompilerState, Variable}, error::{AlthreadResult, Pos}, parser::Rule
 };
 
 use super::{Expression, LocalExpressionNode};

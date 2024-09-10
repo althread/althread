@@ -4,11 +4,11 @@ use pest::iterators::Pairs;
 
 use crate::{
     ast::{
-        block::Block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, token::{binary_assignment_operator::BinaryAssignmentOperator, datatype::DataType, literal::Literal}
-    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl, LocalAssignmentControl, WaitControl}
+        display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, token::{binary_assignment_operator::BinaryAssignmentOperator, datatype::DataType, literal::Literal}
+    }, compiler::{CompilerState, Variable}, error::AlthreadResult, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl, LocalAssignmentControl, WaitControl}
 };
 
-use super::{expression::Expression, waiting_case::WaitingBlockCase, Statement};
+use super::waiting_case::WaitingBlockCase;
 
 
 #[derive(Debug, Clone, PartialEq)]

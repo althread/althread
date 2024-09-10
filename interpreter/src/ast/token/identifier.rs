@@ -2,13 +2,11 @@ use pest::iterators::Pairs;
 
 use crate::{
     ast::node::{Node, NodeBuilder},
-    
-    error::{AlthreadError, AlthreadResult, ErrorType, Pos},
+    error::{AlthreadResult, Pos},
     no_rule,
     parser::Rule,
 };
 
-use super::literal::Literal;
 
 pub type Identifier = Node<String>;
 

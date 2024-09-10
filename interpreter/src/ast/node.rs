@@ -1,14 +1,11 @@
-use std::{collections::HashMap, fmt, hash::Hash};
+use std::fmt;
 
 use pest::iterators::{Pair, Pairs};
 
 use crate::error::Pos;
 use crate::{compiler::CompilerState, vm::instruction::Instruction, error::AlthreadResult, parser::Rule};
-use crate::vm::instruction::ProgramCode;
 
-use super::{
-    display::{AstDisplay, Prefix}, statement::expression::{primary_expression::PrimaryExpression, Expression}, token::literal::Literal
-};
+use super::display::{AstDisplay, Prefix};
 
 #[derive(Debug, Clone)]
 pub struct Node<T> {

@@ -6,10 +6,9 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
-        statement::expression::{Expression, SideEffectExpression},
+        statement::expression::SideEffectExpression,
         token::{
             binary_assignment_operator::BinaryAssignmentOperator, identifier::Identifier,
-            literal::Literal,
         },
     }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule, vm::instruction::{GlobalAssignmentControl, Instruction, InstructionType, LocalAssignmentControl}
 };

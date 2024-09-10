@@ -1,14 +1,8 @@
 use std::fmt;
 
-use crate::{ast::{node::Node, statement::{expression::{binary_expression::LocalBinaryExpressionNode, primary_expression::LocalPrimaryExpressionNode, unary_expression::LocalUnaryExpressionNode, Expression, LocalExpression, LocalExpressionNode}, Statement}, token::{binary_assignment_operator::BinaryAssignmentOperator, binary_operator::BinaryOperator, datatype::DataType, literal::Literal, unary_operator::UnaryOperator}}, error::Pos};
+use crate::{ast::{node::Node, statement::{expression::{binary_expression::LocalBinaryExpressionNode, primary_expression::LocalPrimaryExpressionNode, unary_expression::LocalUnaryExpressionNode, LocalExpressionNode}, Statement}, token::{binary_assignment_operator::BinaryAssignmentOperator, binary_operator::BinaryOperator, literal::Literal, unary_operator::UnaryOperator}}, error::Pos};
 
 use super::Memory;
-
-
-struct Span {
-    start: usize,
-    end: usize,
-}
 
 
 #[derive(Debug, Clone)]

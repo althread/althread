@@ -1,8 +1,8 @@
-use std::{ffi::OsStr, fs, path::PathBuf};
+use std::{ffi::OsStr, path::PathBuf};
 
 
-use clap::builder::{TypedValueParser, ValueParser};
-use clap::{ArgAction, Args, ColorChoice, Parser, Subcommand, ValueEnum, ValueHint};
+use clap::builder::TypedValueParser;
+use clap::{Args, Parser, Subcommand, ValueHint};
 
 /// An input that is either stdin or a real path.
 #[derive(Debug, Clone)]

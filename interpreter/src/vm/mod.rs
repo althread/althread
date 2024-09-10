@@ -160,7 +160,7 @@ impl<'a> RunningProgramState<'a> {
             InstructionType::RunCall(call) => {
                 self.memory.push(Literal::Process(call.name.clone(), next_pid));
                 action = GlobalAction::StartProgram(call.name.clone(), next_pid);
-                next_pid += 1;
+                next_pid += 1; // TODO: will be used when several global actions are implemented
                 1
             }
             InstructionType::EndProgram => {
@@ -225,7 +225,6 @@ pub struct VM<'a> {
     pub waiting_programs: HashMap<usize, HashSet<String>>,
     next_program_id: usize,
     rng: Rng,
-    seed: u64,
 }
 
 impl<'a> VM<'a> {
@@ -239,7 +238,6 @@ impl<'a> VM<'a> {
             next_program_id: 0,
             waiting_programs: HashMap::new(),
             rng: Rng::new(),
-            seed: 0,
         }
     }
 

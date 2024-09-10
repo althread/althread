@@ -5,13 +5,12 @@ use pest::iterators::Pairs;
 use crate::compiler::CompilerState;
 use crate::error::AlthreadResult;
 use crate::parser::Rule;
-use crate::vm::instruction::{Instruction, InstructionType, ProgramCode, UnstackControl};
+use crate::vm::instruction::{Instruction, InstructionType, UnstackControl};
 
 use super::{
     display::{AstDisplay, Prefix},
     node::{InstructionBuilder, Node, NodeBuilder},
     statement::Statement,
-    token::literal::Literal,
 };
 
 #[derive(Debug, Clone)]

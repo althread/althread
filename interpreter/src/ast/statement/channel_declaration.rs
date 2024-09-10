@@ -6,14 +6,9 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
-        token::{
-            datatype::{self, DataType}, declaration_keyword::DeclarationKeyword, identifier::Identifier,
-            literal::Literal,
-        },
-    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, no_rule, parser::Rule, vm::instruction::{DeclarationControl, Instruction, InstructionType}
+        token::datatype::DataType,
+    }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, parser::Rule, vm::instruction::Instruction
 };
-
-use super::expression::Expression;
 
 #[derive(Debug, Clone)]
 pub struct ChannelDeclaration {
@@ -34,7 +29,7 @@ impl NodeBuilder for ChannelDeclaration {
 
         // TODO parse types
         pairs.next();
-        let mut datatypes: Vec<DataType> = vec![DataType::Integer];
+        let datatypes: Vec<DataType> = vec![DataType::Integer];
 
         let mut right_pairs = pairs.next().unwrap().into_inner();
         let right_prog = String::from(right_pairs.next().unwrap().as_str());

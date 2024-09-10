@@ -7,13 +7,12 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
         token::{
-            datatype::{self, DataType}, declaration_keyword::DeclarationKeyword, identifier::Identifier,
-            literal::Literal,
+            datatype::DataType, declaration_keyword::DeclarationKeyword, identifier::Identifier,
         },
     }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule, vm::instruction::{DeclarationControl, Instruction, InstructionType}
 };
 
-use super::expression::{Expression, SideEffectExpression};
+use super::expression::SideEffectExpression;
 
 #[derive(Debug, Clone)]
 pub struct Declaration {

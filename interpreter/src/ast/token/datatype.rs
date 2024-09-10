@@ -114,7 +114,7 @@ impl fmt::Display for DataType {
             DataType::Integer => "int",
             DataType::Float => "float",
             DataType::String => "string",
-            DataType::Process(n) => { write!(f, "process({})", n); "" },
+            DataType::Process(n) => { write!(f, "process({})", n)?; "" },
         };
 
         write!(f, "{}", datatype)
