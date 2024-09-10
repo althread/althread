@@ -52,11 +52,23 @@ impl NodeBuilder for ChannelDeclaration {
 }
 
 
-impl InstructionBuilder for ChannelDeclaration {
+impl InstructionBuilder for Node<ChannelDeclaration> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
-        let mut instructions = Vec::new();
-        
-        Ok(instructions)
+        let dec = &self.value;
+        // check if a channel with the same name already exists on this program
+        if let Some(datatypes) = state.channels.get(&(dec.ch_left_prog.clone(), dec.ch_left_name.clone())) {
+            // check if the datatypes are the same
+            if datatypes != &dec.datatypes {
+                return Err(AlthreadError::new(
+                    ErrorType::TypeError, 
+                    Some(self.pos),
+                    format!("Channel {} already attached with different types", dec.ch_left_name)));
+            }
+        }
+        state.channels.insert((dec.ch_left_prog.clone(), dec.ch_left_name.clone()), dec.datatypes.clone());
+        state.channels.insert((dec.ch_right_prog.clone(), dec.ch_right_name.clone()), dec.datatypes.clone());
+        // No instructions because it's just a declaration
+        Ok(vec![])
     }
 }
 

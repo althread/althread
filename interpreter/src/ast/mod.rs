@@ -207,6 +207,7 @@ impl Ast {
             name: name.to_string(),
         };
         let prog = self.process_blocks.get(name).expect("trying to compile a non-existant program");
+        state.current_program_name = name.to_string();
         process_code.instructions = prog.compile(state)?;
         process_code.instructions.push(Instruction {
             control: InstructionType::EndProgram,

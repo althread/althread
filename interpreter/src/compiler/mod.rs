@@ -18,6 +18,12 @@ pub struct CompilerState {
     pub global_table: HashMap<String, Variable>,
     pub program_stack: Vec<Variable>,
     pub current_stack_depth: usize,
+    
+    /// Store the channels data types that can be attached to a program
+    /// The key is the program name and the channel name
+    pub channels: HashMap<(String,String), Vec<DataType>>,
+
+    pub current_program_name: String,
     pub is_atomic: bool,
 }
 
@@ -27,6 +33,8 @@ impl CompilerState {
             global_table: HashMap::new(),
             program_stack: Vec::new(),
             current_stack_depth: 0,
+            channels: HashMap::new(),
+            current_program_name: String::new(),
             is_atomic: false,
         }
     }
