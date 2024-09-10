@@ -30,9 +30,12 @@ condition_keywords = _{ ALWAYS_KW | NEVER_KW }
 statement = {
     assignment_statement
   | declaration_statement
+  | channel_declaration_statement
   | run_statement
+  | send_statement
   | wait_statement
   | if_control
+  | loop_control
   | while_control
   | call_statement
   | code_block
@@ -45,28 +48,42 @@ wait_statement        =  { WAIT_KW ~ (
     | expression) ~ ";" }
 call_statement        = _{ fn_call ~ ";" }
 run_statement         = _{ run_call ~ ";" }
+send_statement         = _{ send_call ~ ";" }
+channel_declaration_statement = _{ channel_declaration ~ ";" }
 
 fn_call  = { identifier ~ arg_list }
 run_call = { RUN_KW ~ identifier ~ arg_list }
+send_call = { SEND_KW ~ object_identifier ~ arg_list }
+channel_declaration = { 
+    CHANNEL_KW ~ 
+    object_identifier ~ 
+    "<"? ~
+    type_list ~ 
+    ">"? ~
+    object_identifier }
 
 arg_list = { "(" ~ ")" | "(" ~ expression ~ ("," ~ expression)* ~ ")" }
-
+type_list = { "(" ~ datatype ~ ("," ~ datatype)* ~ ")" }
 /// ### Assignments
 /// Assignments assign values to variables.
 /// - **Unary Assignments**: Increment or decrement a variable (e.g., a++).
 /// - **Binary Assignments**: Assign the result of an expression to a variable (e.g., a = b + c).
-assignment = { unary_assignment | binary_assignment }
+assignment = { binary_assignment }
 
-unary_assignment          = { identifier ~ unary_assignment_operator }
-unary_assignment_operator = { INC_OP | DEC_OP }
+side_effect_expression    = { run_call | expression }
 
-binary_assignment          = { identifier ~ binary_assignment_operator ~ expression }
+binary_assignment          = { 
+    identifier ~ 
+    binary_assignment_operator ~ 
+    side_effect_expression }
 binary_assignment_operator = { ASSIGN_OP | ADD_ASSIGN_OP | SUB_ASSIGN_OP | MUL_ASSIGN_OP | DIV_ASSIGN_OP | MOD_ASSIGN_OP }
 
 /// ### Declarations
 /// Declarations introduce new variables, which can be mutable (let) or immutable (const).
-declaration         = { declaration_keyword ~ identifier ~ (":" ~ datatype)? ~ ("=" ~ expression)? }
+declaration         = { declaration_keyword ~ identifier ~ (":" ~ datatype)? ~ ("=" ~ side_effect_expression)? }
 declaration_keyword = { LET_KW | CONST_KW }
+
+receive_expression = { RECEIVE_KW ~ object_identifier? ~ arg_list }
 
 /// ### Expressions
 /// Expressions evaluate values based on arithmetic and logical operations, following standard precedence rules.
@@ -93,13 +110,16 @@ factor_operator     =  { MUL_OP | DIV_OP | MOD_OP }
 waiting_block = {
     (SEQ_KW | FIRST_KW) ~ "{" ~ waiting_block_case* ~ "}"
 }
-waiting_block_case       = { expression ~ "=>" ~ statement }
+waiting_block_case       = { 
+   (receive_expression | expression)
+   ~ "=>" ~ statement }
 
 /// ### Control Flow
 /// Control flow structures include conditional execution and loops.
 
 if_control    = { IF_KW ~ expression ~ code_block ~ (ELSE_KW ~ code_block)? }
 while_control = { WHILE_KW ~ expression ~ code_block }
+loop_control = { LOOP_KW ~ statement }
 
 /// ## Tokens
 /// This section defines the keywords, operators, datatypes, and other tokens used in Althread.
@@ -142,6 +162,11 @@ CONST_KW = { "const" }
 IF_KW    = _{ "if" }
 ELSE_KW  = _{ "else" }
 WHILE_KW = _{ "while" }
+LOOP_KW = _{ "loop" }
+
+SEND_KW = _{ "send" }
+RECEIVE_KW = _{ "receive" }
+CHANNEL_KW = _{ "channel" }
 
 TRUE_KW  = _{ "true" }
 FALSE_KW = _{ "false" }
@@ -176,9 +201,6 @@ DIV_ASSIGN_OP = { "/=" }
 MOD_ASSIGN_OP = { "%=" }
 OR_ASSIGN_OP  = { "|=" }
 
-INC_OP = { "++" }
-DEC_OP = { "--" }
-
 /// ### Datatypes
 /// Datatypes supported in Althread include boolean, integer, float, string, and void.
 datatype   = { BOOL_TYPE | INT_TYPE | FLOAT_TYPE | STR_TYPE | VOID_TYPE }
@@ -200,6 +222,8 @@ NULL    = @{ NULL_KW }
 /// ### Identifiers
 /// Identifiers are used for naming variables, functions, and other constructs.
 identifier        = { IDENT }
+object_identifier = { (IDENT ~ "." ~ object_identifier) | IDENT }
+
 reserved_keywords = { (KEYWORDS | datatype) ~ !IDENT_CHAR }
 
 IDENT      = @{ !reserved_keywords ~ ASCII_ALPHA ~ IDENT_CHAR* }

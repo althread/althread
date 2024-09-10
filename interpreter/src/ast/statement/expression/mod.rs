@@ -14,8 +14,10 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
         token::{datatype::DataType, literal::Literal},
-    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, parser::Rule, vm::instruction::{ExpressionControl, GlobalReadsControl, Instruction, InstructionType}
+    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, no_rule, parser::Rule, vm::instruction::{ExpressionControl, GlobalReadsControl, Instruction, InstructionType}
 };
+
+use super::run_call::RunCall;
 
 lazy_static::lazy_static! {
     static ref PRATT_PARSER: PrattParser<Rule> = {
@@ -31,6 +33,44 @@ lazy_static::lazy_static! {
             .op(Op::prefix(Rule::unary_operator))
     };
 }
+
+#[derive(Debug, Clone)]
+pub enum SideEffectExpression {
+    Expression(Node<Expression>),
+    RunCall(Node<RunCall>),
+}
+
+impl NodeBuilder for SideEffectExpression {
+    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+        let pair = pairs.next().unwrap();
+
+        match pair.as_rule() {
+            Rule::expression => Ok(Self::Expression(Node::build(pair)?)),
+            Rule::run_call => Ok(Self::RunCall(Node::build(pair)?)),
+            _ => Err(no_rule!(pair)),
+        }
+    }
+}
+
+impl InstructionBuilder for SideEffectExpression {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+        match self {
+            Self::Expression(node) => node.compile(state),
+            Self::RunCall(node) => node.compile(state),
+        }
+    }
+}
+
+impl AstDisplay for SideEffectExpression {
+    fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
+        match self {
+            Self::Expression(node) => node.ast_fmt(f, prefix),
+            Self::RunCall(node) => node.ast_fmt(f, prefix),
+        }
+    }
+}
+
+
 
 #[derive(Debug, Clone)]
 pub enum Expression {

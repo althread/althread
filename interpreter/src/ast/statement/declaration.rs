@@ -13,14 +13,14 @@ use crate::{
     }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule, vm::instruction::{DeclarationControl, Instruction, InstructionType}
 };
 
-use super::expression::Expression;
+use super::expression::{Expression, SideEffectExpression};
 
 #[derive(Debug, Clone)]
 pub struct Declaration {
     pub keyword: Node<DeclarationKeyword>,
     pub identifier: Node<Identifier>,
     pub datatype: Option<Node<DataType>>,
-    pub value: Option<Node<Expression>>,
+    pub value: Option<Node<SideEffectExpression>>,
 }
 
 impl NodeBuilder for Declaration {
@@ -35,7 +35,7 @@ impl NodeBuilder for Declaration {
                 Rule::datatype => {
                     datatype = Some(Node::build(pair)?);
                 }
-                Rule::expression => {
+                Rule::side_effect_expression => {
                     value = Some(Node::build(pair)?);
                 }
                 _ => return Err(no_rule!(pair)),

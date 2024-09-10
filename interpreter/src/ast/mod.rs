@@ -16,8 +16,8 @@ use condition_block::ConditionBlock;
 use display::{AstDisplay, Prefix};
 use node::{InstructionBuilder, Node};
 use pest::iterators::Pairs;
-use statement::{expression::Expression, Statement};
-use token::{condition_keyword::ConditionKeyword, literal::Literal};
+use statement::Statement;
+use token::condition_keyword::ConditionKeyword;
 
 use crate::{
     compiler::{CompiledProject, CompilerState}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule, vm::{instruction::{Instruction, InstructionType, ProgramCode}, VM}
@@ -91,7 +91,7 @@ impl Ast {
         let mut global_memory = HashMap::new();
         let mut global_table = HashMap::new();
         state.current_stack_depth = 1;
-        let memory = match self.global_block.as_ref() {
+         match self.global_block.as_ref() {
             Some(global) => {
                 let mut memory = VM::new_memory();
                 for node in global.value.children.iter() {
@@ -134,9 +134,8 @@ impl Ast {
                     }
                     
                 }
-                memory
             }
-            None => Vec::new()
+            None => (),
         };
 
         state.global_table = global_table;

@@ -24,16 +24,6 @@ impl NodeBuilder for Assignment {
 
         match pair.as_rule() {
             Rule::binary_assignment => Ok(Self::Binary(Node::build(pair)?)),
-            Rule::unary_assignment => Err(AlthreadError::new(
-                ErrorType::SyntaxError,
-                Some(Pos {
-                    start: pair.as_span().start(),
-                    end: pair.as_span().end(),
-                    line: pair.line_col().0,
-                    col: pair.line_col().1,
-                }),
-                String::from("Unary assignment is not supported yet"),
-            )),
             _ => Err(no_rule!(pair)),
         }
     }

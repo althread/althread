@@ -5,5 +5,4 @@ pub mod datatype;
 pub mod declaration_keyword;
 pub mod identifier;
 pub mod literal;
-pub mod unary_assignment_operator;
 pub mod unary_operator;

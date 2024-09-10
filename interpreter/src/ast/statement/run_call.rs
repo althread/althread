@@ -5,9 +5,8 @@ use pest::iterators::Pairs;
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
-        token::literal::Literal,
-    }, compiler::CompilerState, error::{AlthreadResult, Pos}, parser::Rule, vm::instruction::{Instruction, InstructionType, RunCallControl}
+        node::{InstructionBuilder, Node, NodeBuilder}, token::datatype::DataType,
+    }, compiler::{CompilerState, Variable}, error::{AlthreadResult, Pos}, parser::Rule, vm::instruction::{Instruction, InstructionType, RunCallControl}
 };
 
 #[derive(Debug, Clone)]
@@ -34,6 +33,14 @@ impl NodeBuilder for RunCall {
 
 impl InstructionBuilder for Node<RunCall> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+
+        state.program_stack.push(Variable {
+            name: "".to_string(),
+            depth: state.current_stack_depth,
+            mutable: false,
+            datatype: DataType::Integer,
+        });
+
         Ok(vec![Instruction {
             control: InstructionType::RunCall(RunCallControl{
                 name: self.value.identifier.value.clone()

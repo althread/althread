@@ -4,7 +4,7 @@ use fastrand::Rng;
 
 use instruction::{ExpressionControl, GlobalReadsControl, Instruction, InstructionType, ProgramCode};
 
-use crate::{ast::{statement::wait, token::{binary_assignment_operator::BinaryAssignmentOperator, literal::Literal}}, compiler::CompiledProject, error::{AlthreadError, AlthreadResult, ErrorType, Pos}};
+use crate::{ast::token::literal::Literal, compiler::CompiledProject, error::{AlthreadError, AlthreadResult, ErrorType, Pos}};
 pub mod instruction;
 
 
@@ -41,7 +41,7 @@ fn str_to_expr_error(pos: Option<Pos>) -> impl Fn(String) -> AlthreadError {
 pub enum GlobalAction {
     Nothing,
     Pause,
-    StartProgram(String),
+    StartProgram(String, usize),
     Write(String),
     EndProgram,
     Wait,
@@ -71,19 +71,18 @@ impl<'a> RunningProgramState<'a> {
     pub fn current_instruction(&self) -> Option<&Instruction> {
         self.code.instructions.get(self.instruction_pointer)
     }
-    fn next_global(&mut self, globals: &mut GlobalMemory) -> AlthreadResult<(GlobalAction, usize)> {
+    fn next_global(&mut self, globals: &mut GlobalMemory, next_pid: usize) -> AlthreadResult<(GlobalAction, usize)> {
         let mut n = 0;
-        while true {
-            let action = self.next(globals)?;
+        loop {
+            let action = self.next(globals, next_pid)?;
             n += 1;
             if !action.is_local() {
                 return Ok((action, n));
             }
         }
-        unreachable!()
     }
 
-    fn next(&mut self, globals: &mut GlobalMemory) -> AlthreadResult<GlobalAction> {
+    fn next(&mut self, globals: &mut GlobalMemory, mut next_pid: usize) -> AlthreadResult<GlobalAction> {
         let cur_inst = self.code.instructions.get(self.instruction_pointer).ok_or(AlthreadError::new(
             ErrorType::InstructionNotAllowed,
             None,
@@ -159,7 +158,9 @@ impl<'a> RunningProgramState<'a> {
                 1
             },
             InstructionType::RunCall(call) => {
-                action = GlobalAction::StartProgram(call.name.clone());
+                self.memory.push(Literal::Int(next_pid as i64));
+                action = GlobalAction::StartProgram(call.name.clone(), next_pid);
+                next_pid += 1;
                 1
             }
             InstructionType::EndProgram => {
@@ -270,7 +271,7 @@ impl<'a> VM<'a> {
             instruction_count: 0
         };
 
-        let (action, instruction_count) = program.next_global(&mut self.globals)?;
+        let (action, instruction_count) = program.next_global(&mut self.globals, self.next_program_id)?;
         match action {
             GlobalAction::Nothing => {unreachable!("next_global should not pause on a local instruction")}
             GlobalAction::Pause => {},
@@ -309,7 +310,8 @@ impl<'a> VM<'a> {
                     }
                 }
             }
-            GlobalAction::StartProgram(name) => {
+            GlobalAction::StartProgram(name, next_pid) => {
+                assert!(next_pid == self.next_program_id);
                 self.run_program(&name);
             }
             GlobalAction::EndProgram => {
@@ -357,7 +359,7 @@ impl<'a> fmt::Display for VM<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f,"Globals:")?;
         for (name, val) in self.globals.iter() {
-            writeln!(f,"  {}: {}", name, val);
+            writeln!(f,"  {}: {}", name, val)?;
         }
         writeln!(f,"'main' stack:")?;
         for val in self.running_programs.get(&0).expect("no program is not running, cannot print the VM").memory.iter() {

@@ -5,22 +5,25 @@ pub mod if_control;
 pub mod fn_call;
 pub mod run_call;
 pub mod while_control;
+pub mod loop_control;
 pub mod wait;
 pub mod waiting_case;
+pub mod channel_declaration;
 
 use std::fmt;
 
 use assignment::Assignment;
+use channel_declaration::ChannelDeclaration;
 use declaration::Declaration;
-use expression::Expression;
 use if_control::IfControl;
+use loop_control::LoopControl;
 use pest::iterators::Pairs;
 use fn_call::FnCall;
 use run_call::RunCall;
 use wait::Wait;
 use while_control::WhileControl;
 
-use crate::{compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule, vm::instruction::{Instruction, ProgramCode}};
+use crate::{compiler::CompilerState, error::{AlthreadResult, ErrorType}, no_rule, parser::Rule, vm::instruction::{self, Instruction, InstructionType, UnstackControl}};
 
 use super::{
     block::Block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, token::literal::Literal
@@ -30,10 +33,12 @@ use super::{
 pub enum Statement {
     Assignment(Node<Assignment>),
     Declaration(Node<Declaration>),
+    ChannelDeclaration(Node<ChannelDeclaration>),
     Run(Node<RunCall>),
     FnCall(Node<FnCall>),
     If(Node<IfControl>),
     While(Node<WhileControl>),
+    Loop(Node<LoopControl>),
     Wait(Node<Wait>),
     Block(Node<Block>),
 }
@@ -50,7 +55,9 @@ impl NodeBuilder for Statement {
             Rule::run_call       => Ok(Self::Run(Node::build(pair)?)),
             Rule::if_control     => Ok(Self::If(Node::build(pair)?)),
             Rule::while_control  => Ok(Self::While(Node::build(pair)?)),
+            Rule::loop_control   => Ok(Self::Loop(Node::build(pair)?)),
             Rule::code_block     => Ok(Self::Block(Node::build(pair)?)),
+            Rule::channel_declaration => Ok(Self::ChannelDeclaration(Node::build(pair)?)),
             _ => Err(no_rule!(pair)),
         }
     }
@@ -64,10 +71,23 @@ impl InstructionBuilder for Statement {
             Self::If(node) => node.compile(state),
             Self::Assignment(node) => node.compile(state),
             Self::Declaration(node) => node.compile(state),
+            Self::ChannelDeclaration(node) => node.compile(state),
             Self::While(node) => node.compile(state),
+            Self::Loop(node) => node.compile(state),
             Self::Wait(node) => node.compile(state),
             Self::Block(node) => node.compile(state),
-            Self::Run(node)  => node.compile(state),
+            Self::Run(node)  => {
+                // a run call returns a value, so we have to ustack it
+                let mut instructions = node.compile(state)?;
+                instructions.push(Instruction {
+                    pos: Some(node.pos),
+                    control: InstructionType::Unstack(UnstackControl {
+                        unstack_len: 1,
+                    }),
+                });
+                state.program_stack.pop();
+                Ok(instructions)
+            },
             Self::FnCall(node)  => node.compile(state),
         }
     }
@@ -90,11 +110,13 @@ impl AstDisplay for Statement {
         match self {
             Statement::Assignment(node) => node.ast_fmt(f, prefix),
             Statement::Declaration(node) => node.ast_fmt(f, prefix),
+            Statement::ChannelDeclaration(node) => node.ast_fmt(f, prefix),
             Statement::Wait(node) => node.ast_fmt(f, prefix),
             Statement::FnCall(node) => node.ast_fmt(f, prefix),
             Statement::Run(node) => node.ast_fmt(f, prefix),
             Statement::If(node) => node.ast_fmt(f, prefix),
             Statement::While(node) => node.ast_fmt(f, prefix),
+            Statement::Loop(node) => node.ast_fmt(f, prefix),
             Statement::Block(node) => node.ast_fmt(f, prefix),
         }
     }
