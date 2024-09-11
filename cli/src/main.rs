@@ -88,7 +88,7 @@ pub fn run_command(cli_args: &RunCommand) {
 
     let mut vm = althread::vm::VM::new(&compiled_project);
 
-    vm.start(fastrand::u64(0..(1 << 63)));
+    vm.start(cli_args.seed.unwrap_or(fastrand::u64(0..(1 << 63))));
     for _ in 0..100000 {
         if vm.is_finished() {
             break;
@@ -105,7 +105,7 @@ pub fn run_command(cli_args: &RunCommand) {
                 None => println!("{}_{}: stopped at ?", info.prog_name, info.prog_id),
             },
             None => {
-                println!("Program  {} not found", info.prog_id);
+                println!("Program {} stopped", info.prog_id);
             }
         }
     }

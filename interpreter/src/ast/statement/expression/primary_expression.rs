@@ -4,9 +4,7 @@ use pest::iterators::Pair;
 
 use crate::{
     ast::{
-        display::AstDisplay,
-        node::Node,
-        token::{datatype::DataType, identifier::Identifier, literal::Literal},
+        display::AstDisplay, node::Node, statement::waiting_case::WaitDependency, token::{datatype::DataType, identifier::Identifier, literal::Literal}
     }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, no_rule, parser::Rule
 };
 use super::{Expression, LocalExpressionNode};
@@ -38,6 +36,13 @@ impl PrimaryExpression {
 }
 
 impl PrimaryExpression {
+    pub fn add_dependencies(&self, dependencies: &mut WaitDependency) {
+        match self {
+            Self::Literal(_) => (),
+            Self::Identifier(node) => { dependencies.variables.insert(node.value.value.clone()); },
+            Self::Expression(node) => node.value.add_dependencies(dependencies),
+        }
+    }
     pub fn get_vars(&self, vars: &mut HashSet<String>) {
         match self {
             Self::Literal(_) => (),

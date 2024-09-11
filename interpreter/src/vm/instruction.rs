@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::{ast::{node::Node, statement::{expression::{binary_expression::LocalBinaryExpressionNode, primary_expression::LocalPrimaryExpressionNode, unary_expression::LocalUnaryExpressionNode, LocalExpressionNode}, Statement}, token::{binary_assignment_operator::BinaryAssignmentOperator, binary_operator::BinaryOperator, literal::Literal, unary_operator::UnaryOperator}}, error::Pos};
+use crate::{ast::{node::Node, statement::{expression::{binary_expression::LocalBinaryExpressionNode, primary_expression::LocalPrimaryExpressionNode, unary_expression::LocalUnaryExpressionNode, LocalExpressionNode}, waiting_case::WaitDependency, Statement}, token::{binary_assignment_operator::BinaryAssignmentOperator, binary_operator::BinaryOperator, literal::Literal, unary_operator::UnaryOperator}}, error::Pos};
 
 use super::Memory;
 
@@ -24,6 +24,7 @@ pub enum InstructionType {
     ChannelPop(String),
     Exit,
     Push(Literal),
+    WaitStart(WaitStartControl),
     Wait(WaitControl),
     Send(SendControl),
     Connect(ConnectionControl),
@@ -48,6 +49,7 @@ impl fmt::Display for InstructionType {
             Self::Exit => {write!(f, "exit")?},
             Self::Declaration(d) => {write!(f, "{}", d)?},
             Self::Push(l) => {write!(f, "push ({})", l)?},
+            Self::WaitStart(w) => {write!(f, "{}", w)?},
             Self::Wait(w) => {write!(f, "{}", w)?},
             Self::Send(s) => {write!(f, "{}", s)?},
             Self::ChannelPeek(s) => {write!(f, "peek '{}'", s)?},
@@ -70,6 +72,7 @@ impl InstructionType {
             Self::Connect(_) // connect is global only if a process was waiting
             | Self::Wait(_) // wait is global only if the condition is false
             | Self::ChannelPeek(_) // This is a local peek that should be directly followed by a pop is the read occurs
+            | Self::WaitStart(_)
             | Self::Empty
             | Self::Expression(_)
             | Self::LocalAssignment(_)
@@ -151,6 +154,16 @@ impl fmt::Display for WaitControl {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct WaitStartControl {
+    pub dependencies: WaitDependency,
+}
+impl fmt::Display for WaitStartControl {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "wait start")?;
+        Ok(())
+    }
+}
 
 
 #[derive(Debug, Clone)]

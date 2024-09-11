@@ -60,6 +60,10 @@ pub struct RunCommand {
     /// Shared arguments
     #[clap(flatten)]
     pub common: SharedArgs,
+
+    /// seed
+    #[clap(long)]
+    pub seed: Option<u64>,
 }
 
 /// Compiles an input file into a supported output format

@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt;
 
 use pest::iterators::Pairs;
@@ -15,6 +16,22 @@ use super::super::{
     statement::Statement,
 };
 use super::receive::ReceiveStatement;
+
+#[derive(Debug, Clone)]
+pub struct WaitDependency {
+    pub channels_state: HashSet<String>,
+    pub channels_connection: HashSet<String>,
+    pub variables: HashSet<String>,
+}
+impl WaitDependency {
+    pub fn new() -> Self {
+        Self {
+            channels_state: HashSet::new(),
+            channels_connection: HashSet::new(),
+            variables: HashSet::new(),
+        }
+    }
+}
 
 
 #[derive(Debug, Clone)]
@@ -75,6 +92,14 @@ impl AstDisplay for WaitingBlockCase {
 }
 
 
+impl WaitingBlockCaseRule {
+    pub fn add_dependencies(&self, dependencies: &mut WaitDependency) {
+        match self {
+            WaitingBlockCaseRule::Expression(expr) => expr.value.add_dependencies(dependencies),
+            WaitingBlockCaseRule::Receive(receive) => receive.value.add_dependencies(dependencies),
+        }
+    }
+}
 impl InstructionBuilder for WaitingBlockCaseRule {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
         match self {

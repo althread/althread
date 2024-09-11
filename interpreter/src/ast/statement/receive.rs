@@ -9,7 +9,7 @@ use crate::{
     }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpIfControl, UnstackControl}
 };
 
-use super::Statement;
+use super::{waiting_case::WaitDependency, Statement};
 
 
 #[derive(Debug, Clone)]
@@ -52,6 +52,13 @@ impl NodeBuilder for ReceiveStatement {
     }
 }
 
+impl ReceiveStatement {
+    pub fn add_dependencies(&self, dependencies: &mut WaitDependency) {
+        dependencies.variables.extend(self.variables.clone());
+        dependencies.channels_state.insert(self.channel.clone());
+    }
+}
+
 impl InstructionBuilder for Node<ReceiveStatement> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
 
@@ -59,9 +66,9 @@ impl InstructionBuilder for Node<ReceiveStatement> {
         // a false value, and if it is true, then the stack contains all the read variables from the channel and a true value.
         let channel_name =  self.value.channel.clone();
 
-        let mut instructions = Vec::new();
 
-
+        // Channel peek either push all the values and a true value, or just a false value
+        // here add all the variables to the stack and remove them only in the branch where the boolean is true
         for variable in &self.value.variables {
             state.program_stack.push(Variable {
                 mutable: true,
@@ -70,6 +77,7 @@ impl InstructionBuilder for Node<ReceiveStatement> {
                 depth: state.current_stack_depth,
             })
         }
+        // Here we could add a boolean to the stack but if you look at the instructions below, we will remove it anyway
 
 
         let guard_instructions = vec![Instruction{ 
@@ -91,7 +99,6 @@ impl InstructionBuilder for Node<ReceiveStatement> {
                 "guard condition must be a boolean".to_string()
             ));
         }
-
         state.program_stack.pop();
 
         let statement_instructions = match &self.value.statement {
@@ -100,6 +107,8 @@ impl InstructionBuilder for Node<ReceiveStatement> {
         };
 
 
+        let mut instructions = Vec::new();
+
         instructions.push(Instruction{ 
             control: InstructionType::ChannelPeek(channel_name.clone()),
             pos: Some(self.pos),
@@ -107,7 +116,7 @@ impl InstructionBuilder for Node<ReceiveStatement> {
 
         instructions.push(Instruction{ 
             control: InstructionType::JumpIf(JumpIfControl {
-                jump_false: 6 + (guard_instructions.len() + statement_instructions.len()) as i64, // If the channel is empty, jump to the end
+                jump_false: 7 + (guard_instructions.len() + statement_instructions.len()) as i64, // If the channel is empty, jump to the end
                 unstack_len: 0, // we keep the false value on the stack
             }),
             pos: Some(self.pos),
@@ -124,7 +133,7 @@ impl InstructionBuilder for Node<ReceiveStatement> {
 
         instructions.push(Instruction{ 
             control: InstructionType::JumpIf(JumpIfControl {
-                jump_false: 4 + statement_instructions.len() as i64, // If the guard is false, jump to the end
+                jump_false: 5 + statement_instructions.len() as i64, // If the guard is false, jump to the end
                 unstack_len: 0, // keep the boolean of the guard on the stack
             }),
             pos: Some(self.pos),
@@ -143,14 +152,27 @@ impl InstructionBuilder for Node<ReceiveStatement> {
         instructions.extend(statement_instructions);
 
         instructions.push(Instruction{ 
+            control: InstructionType::Unstack(UnstackControl {
+                unstack_len: self.value.variables.len(), // remove the variables from the stack
+            }),
+            pos: Some(self.pos),
+        }); 
+        for _ in 0..self.value.variables.len() { state.program_stack.pop(); }
+
+        instructions.push(Instruction{ 
             control: InstructionType::Push(Literal::Bool(true)), // the statement is finished, the global condition is a success
             pos: Some(self.pos),
         }); 
 
+        // In all the branches above, a boolean is pushed on the stack:
+        state.program_stack.push(Variable {
+            mutable: false,
+            name: "".to_string(),
+            datatype: DataType::Boolean,
+            depth: state.current_stack_depth,
+        });
         // The next instruction will likely be a wait or an if based on the current stack top.
 
-        // We should do this I think
-        //state.program_stack.pop_n(self.value.variables.len());
         
         Ok(instructions)
     }

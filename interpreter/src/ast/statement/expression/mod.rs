@@ -17,7 +17,7 @@ use crate::{
     }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, no_rule, parser::Rule, vm::instruction::{ExpressionControl, GlobalReadsControl, Instruction, InstructionType}
 };
 
-use super::run_call::RunCall;
+use super::{run_call::RunCall, waiting_case::WaitDependency};
 
 lazy_static::lazy_static! {
     static ref PRATT_PARSER: PrattParser<Rule> = {
@@ -222,13 +222,23 @@ impl InstructionBuilder for Node<Expression> {
             name: "".to_string(),
             depth: state.current_stack_depth,
             mutable: false,
-            datatype: restult_type, // TODO: get datatype from expression
+            datatype: restult_type,
         });
         
         Ok(instructions)
     }
 }
 
+
+impl Expression {
+    pub fn add_dependencies(&self, dependencies: &mut WaitDependency) {
+        match self {
+            Self::Binary(node) => node.value.add_dependencies(dependencies),
+            Self::Unary(node) => node.value.add_dependencies(dependencies),
+            Self::Primary(node) => node.value.add_dependencies(dependencies),
+        }
+    }
+}
 
 impl Expression {
     pub fn get_vars(&self, vars: &mut HashSet<String>) {

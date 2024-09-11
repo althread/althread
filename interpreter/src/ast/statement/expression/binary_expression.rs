@@ -4,9 +4,7 @@ use pest::iterators::Pair;
 
 use crate::{
     ast::{
-        display::{AstDisplay, Prefix},
-        node::Node,
-        token::{binary_operator::BinaryOperator, datatype::DataType},
+        display::{AstDisplay, Prefix}, node::Node, statement::waiting_case::WaitDependency, token::{binary_operator::BinaryOperator, datatype::DataType}
     }, compiler::{CompilerState, Variable}, error::{AlthreadResult, Pos}, parser::Rule
 };
 
@@ -106,6 +104,10 @@ impl LocalBinaryExpressionNode {
 
 
 impl BinaryExpression {
+    pub fn add_dependencies(&self, dependencies: &mut WaitDependency) {
+        self.left.value.add_dependencies(dependencies);
+        self.right.value.add_dependencies(dependencies);
+    }
     pub fn get_vars(&self, vars: &mut HashSet<String>) {
         self.left.value.get_vars(vars);
         self.right.value.get_vars(vars);

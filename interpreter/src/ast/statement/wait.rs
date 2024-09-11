@@ -5,10 +5,10 @@ use pest::iterators::Pairs;
 use crate::{
     ast::{
         display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, token::{binary_assignment_operator::BinaryAssignmentOperator, datatype::DataType, literal::Literal}
-    }, compiler::{CompilerState, Variable}, error::AlthreadResult, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl, LocalAssignmentControl, WaitControl}
+    }, compiler::{CompilerState, Variable}, error::AlthreadResult, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl, LocalAssignmentControl, WaitControl, WaitStartControl}
 };
 
-use super::waiting_case::WaitingBlockCase;
+use super::waiting_case::{WaitingBlockCase, WaitDependency};
 
 
 #[derive(Debug, Clone, PartialEq)]
@@ -61,6 +61,19 @@ impl InstructionBuilder for Node<Wait> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
 
         let mut instructions = Vec::new();
+
+
+        let mut dependencies = WaitDependency::new();
+        for wc in self.value.waiting_cases.iter() {
+            wc.value.rule.add_dependencies(&mut dependencies);
+        }
+
+        instructions.push(Instruction {
+            pos: Some(self.pos),
+            control: InstructionType::WaitStart(WaitStartControl {
+                dependencies,
+            }),
+        });
 
         state.program_stack.push(Variable {
             datatype: DataType::Boolean,

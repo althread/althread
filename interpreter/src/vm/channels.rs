@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ast::token::literal::Literal;
+use crate::{ast::token::literal::Literal, error::AlthreadResult};
 
 
 
@@ -10,6 +10,7 @@ pub struct Channels {
     waiting_proc: HashMap<usize, (String, Vec<Literal>)>,
 }
 
+#[derive(Debug)]
 pub struct ReceiverInfo {
     pub program_id: usize,
     pub channel_name: String,
@@ -58,17 +59,20 @@ impl Channels {
      * Connect a proc to another proc
      * If the sender proc was waiting to send on the channel, it will send the values
      */
-    pub fn connect(&mut self, program_id: usize, channel_name: String, to_program_id: usize, to_channel_name: String) -> Option<(usize, String)> {
+    pub fn connect(&mut self, program_id: usize, channel_name: String, to_program_id: usize, to_channel_name: String) -> Result<Option<(usize, String)>, String> {
+        if self.connections.contains_key(&(program_id, channel_name.clone())) {
+            return Err("This channel name is already used as a source on this process".into());
+        }
         self.connections.insert((program_id, channel_name.clone()), (to_program_id, to_channel_name.clone()));
 
         if let Some((channel_waiting, values)) = self.waiting_proc.get(&program_id) {
             if channel_waiting == &channel_name {
                 let (_, values) = self.waiting_proc.remove(&program_id).unwrap();
                 self.send(program_id, channel_name.clone(), values);
-                return Some((program_id, channel_name));
+                return Ok(Some((program_id, channel_name)));
             }
         }
-        None
+        Ok(None)
     }
 
     /**

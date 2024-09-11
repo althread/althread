@@ -4,9 +4,7 @@ use pest::iterators::Pair;
 
 use crate::{
     ast::{
-        display::{AstDisplay, Prefix},
-        node::Node,
-        token::{datatype::DataType, unary_operator::UnaryOperator},
+        display::{AstDisplay, Prefix}, node::Node, statement::waiting_case::WaitDependency, token::{datatype::DataType, unary_operator::UnaryOperator}
     }, compiler::{CompilerState, Variable}, error::{AlthreadResult, Pos}, parser::Rule
 };
 
@@ -72,6 +70,9 @@ impl LocalUnaryExpressionNode {
 }
 
 impl UnaryExpression {
+    pub fn add_dependencies(&self, dependencies: &mut WaitDependency) {
+        self.operand.value.add_dependencies(dependencies);
+    }
     pub fn get_vars(&self, vars: &mut HashSet<String>) {
         self.operand.value.get_vars(vars);
     }
