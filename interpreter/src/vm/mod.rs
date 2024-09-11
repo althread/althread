@@ -18,7 +18,7 @@ type GlobalMemory = HashMap<String, Literal>;
 pub struct ExecutionStepInfo {
     pub prog_name: String,
     pub prog_id: usize,
-    pub instruction_count: usize,
+    pub instructions: Vec<Instruction>,
 }
 
 #[derive(Debug)]
@@ -79,13 +79,16 @@ impl<'a> RunningProgramState<'a> {
     pub fn current_instruction(&self) -> Option<&Instruction> {
         self.code.instructions.get(self.instruction_pointer)
     }
-    fn next_global(&mut self, globals: &mut GlobalMemory, channels: &mut Channels, next_pid: usize, global_state_id: u64) -> AlthreadResult<(GlobalAction, usize)> {
-        let mut n = 0;
+    fn next_global(&mut self, globals: &mut GlobalMemory, channels: &mut Channels, next_pid: usize, global_state_id: u64) -> AlthreadResult<(GlobalAction, Vec<Instruction>)> {
+
+        let mut instructions = Vec::new();
         loop {
+            if let Some(inst) = self.current_instruction() { instructions.push(inst.clone()); }
+            
             let action = self.next(globals, channels, next_pid, global_state_id)?;
-            n += 1;
+            
             if !action.is_local() {
-                return Ok((action, n));
+                return Ok((action, instructions));
             }
         }
     }
@@ -355,10 +358,10 @@ impl<'a> VM<'a> {
         let mut exec_info = ExecutionStepInfo {
             prog_name: program.name.clone(),
             prog_id: program.id,
-            instruction_count: 0
+            instructions: Vec::new(),
         };
 
-        let (action, instruction_count) = program.next_global(&mut self.globals, &mut self.channels, self.next_program_id, self.global_state_id)?;
+        let (action, executed_instructions) = program.next_global(&mut self.globals, &mut self.channels, self.next_program_id, self.global_state_id)?;
 
         match action {
             GlobalAction::Nothing => {unreachable!("next_global should not pause on a local instruction")}
@@ -451,7 +454,7 @@ impl<'a> VM<'a> {
                 self.running_programs.clear()
             }
         }
-        exec_info.instruction_count = instruction_count;
+        exec_info.instructions = executed_instructions;
 
 
         
