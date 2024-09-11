@@ -83,7 +83,7 @@ impl InstructionBuilder for Node<Wait> {
         for case in &self.value.waiting_cases {
             
             state.current_stack_depth += 1;
-            let mut case_condition = case.value.expression.compile(state)?;
+            let mut case_condition = case.value.rule.compile(state)?;
             let unstack_len = state.unstack_current_depth();
 
             let mut case_statement = match &case.value.statement {

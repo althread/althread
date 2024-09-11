@@ -23,7 +23,7 @@ impl NodeBuilder for Identifier {
                 },
                 value: pair.as_str().to_string(),
             }),
-            _ => Err(no_rule!(pair)),
+            _ => Err(no_rule!(pair, "Identifier")),
         }
     }
 }

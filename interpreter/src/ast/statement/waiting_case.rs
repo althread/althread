@@ -2,8 +2,11 @@ use std::fmt;
 
 use pest::iterators::Pairs;
 
+use crate::ast::node::InstructionBuilder;
+use crate::compiler::CompilerState;
 use crate::error::AlthreadResult;
 use crate::parser::Rule;
+use crate::vm::instruction::Instruction;
 
 use super::expression::Expression;
 use super::super::{
@@ -11,27 +14,41 @@ use super::super::{
     node::{Node, NodeBuilder},
     statement::Statement,
 };
-
+use super::receive::ReceiveStatement;
 
 
 #[derive(Debug, Clone)]
+pub enum WaitingBlockCaseRule {
+    Expression(Node<Expression>),
+    Receive(Node<ReceiveStatement>),
+}
+
+#[derive(Debug, Clone)]
 pub struct WaitingBlockCase {
-    pub expression: Node<Expression>,
+    pub rule: WaitingBlockCaseRule,
     pub statement: Option<Node<Statement>>,
 }
 
 impl NodeBuilder for WaitingBlockCase {
     fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
 
-        let expression = Node::build(pairs.next().unwrap())?;
-        
-        let statement = match pairs.next() {
+        let pair = pairs.next().unwrap();
+
+        let rule = match pair.as_rule() {
+            Rule::expression => WaitingBlockCaseRule::Expression(Node::build(pair)?),
+            Rule::receive_expression => WaitingBlockCaseRule::Receive(Node::build(pair)?),
+            _ => panic!("Invalid rule while parsing waiting block case"),
+        };
+
+        let pair = pairs.next();
+
+        let statement = match pair {
             Some(p) => Some(Node::build(p)?),
             None => None,
         };
 
         Ok(Self {
-            expression,
+            rule,
             statement,
         })
     }
@@ -44,8 +61,7 @@ impl AstDisplay for WaitingBlockCase {
 
         {
             let prefix = prefix.add_branch();
-            writeln!(f, "{prefix}condition")?;
-            self.expression.ast_fmt(f, &prefix.add_leaf())?;
+            self.rule.ast_fmt(f, &prefix)?;
         }
         if let Some(statement) = &self.statement {
             let prefix = prefix.add_leaf();
@@ -55,5 +71,23 @@ impl AstDisplay for WaitingBlockCase {
 
 
         Ok(())
+    }
+}
+
+
+impl InstructionBuilder for WaitingBlockCaseRule {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+        match self {
+            WaitingBlockCaseRule::Expression(expr) => expr.compile(state),
+            WaitingBlockCaseRule::Receive(receive) => receive.compile(state),
+        }
+    }
+}
+impl AstDisplay for WaitingBlockCaseRule {
+    fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
+        match self {
+            WaitingBlockCaseRule::Expression(expr) => expr.ast_fmt(f, prefix),
+            WaitingBlockCaseRule::Receive(receive) => receive.ast_fmt(f, prefix),
+        }
     }
 }

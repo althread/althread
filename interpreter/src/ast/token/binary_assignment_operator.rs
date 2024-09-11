@@ -42,7 +42,7 @@ impl NodeBuilder for BinaryAssignmentOperator {
             Rule::DIV_ASSIGN_OP => Ok(Self::DivideAssign),
             Rule::MOD_ASSIGN_OP => Ok(Self::ModuloAssign),
             Rule::OR_ASSIGN_OP => Ok(Self::OrAssign),
-            _ => Err(no_rule!(pair)),
+            _ => Err(no_rule!(pair, "BinaryAssignmentOperator")),
         }
     }
 }

@@ -70,4 +70,27 @@ impl Channels {
         }
         None
     }
+
+    /**
+     * Look at the values that are currently in the channel, return them if they exist without removing them
+     */
+    pub fn peek(&self, program_id: usize, channel_name: String) -> Option<&Vec<Literal>> {
+        match self.states.get(&(program_id, channel_name)) {
+            Some(state) => state.get(0),
+            None => None,
+        }
+    }
+
+    /**
+     * Pop the first values from the channel
+     */
+    pub fn pop(&mut self, program_id: usize, channel_name: String) -> Option<Vec<Literal>> {
+        match self.states.get_mut(&(program_id, channel_name)) {
+            Some(state) => {
+                let values = state.remove(0);
+                Some(values)
+            },
+            None => None,
+        }
+    }
 }

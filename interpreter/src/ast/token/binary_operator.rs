@@ -38,7 +38,7 @@ impl NodeBuilder for BinaryOperator {
             Rule::GE_OP => Ok(Self::GreaterThanOrEqual),
             Rule::AND_OP => Ok(Self::And),
             Rule::OR_OP => Ok(Self::Or),
-            _ => Err(no_rule!(pair)),
+            _ => Err(no_rule!(pair, "BinaryOperator")),
         }
     }
 }

@@ -19,9 +19,10 @@ pub struct AlthreadError {
 
 pub type AlthreadResult<T> = Result<T, AlthreadError>;
 
+
 #[macro_export]
 macro_rules! no_rule {
-    ($pair:expr) => {
+    ($pair:expr, $loc:expr) => {
         $crate::error::AlthreadError::new(
             $crate::error::ErrorType::SyntaxError,
             Some($crate::error::Pos { 
@@ -30,7 +31,7 @@ macro_rules! no_rule {
                 start: $pair.as_span().start(),
                 end: $pair.as_span().end(),
             }),
-            format!("Unexpected rule: {:?}", $pair.as_rule()),
+            format!("Unexpected rule: {:?} in object {}", $pair.as_rule(), $loc),
         )
     };
 }

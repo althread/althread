@@ -10,6 +10,7 @@ pub mod wait;
 pub mod waiting_case;
 pub mod channel_declaration;
 pub mod send;
+pub mod receive;
 
 use std::fmt;
 
@@ -62,7 +63,7 @@ impl NodeBuilder for Statement {
             Rule::code_block     => Ok(Self::Block(Node::build(pair)?)),
             Rule::send_call      => Ok(Self::Send(Node::build(pair)?)),
             Rule::channel_declaration => Ok(Self::ChannelDeclaration(Node::build(pair)?)),
-            _ => Err(no_rule!(pair)),
+            _ => Err(no_rule!(pair, "Statement")),
         }
     }
 }

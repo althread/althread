@@ -16,7 +16,7 @@ impl NodeBuilder for DeclarationKeyword {
         match pair.as_rule() {
             Rule::LET_KW => Ok(Self::Let),
             Rule::CONST_KW => Ok(Self::Const),
-            _ => Err(no_rule!(pair)),
+            _ => Err(no_rule!(pair, "DeclarationKeyword")),
         }
     }
 }

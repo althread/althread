@@ -31,7 +31,7 @@ impl PrimaryExpression {
                 Rule::literal => Self::Literal(Node::build(pair)?),
                 Rule::identifier => Self::Identifier(Node::build(pair)?),
                 Rule::expression => Self::Expression(Box::new(Node::build(pair)?)),
-                _ => return Err(no_rule!(pair)),
+                _ => return Err(no_rule!(pair, "PrimaryExpression")),
             },
         })
     }

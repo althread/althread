@@ -20,6 +20,8 @@ pub enum InstructionType {
     EndProgram,
     FnCall(FnCallControl),
     Declaration(DeclarationControl),
+    ChannelPeek(String),
+    ChannelPop(String),
     Exit,
     Push(Literal),
     Wait(WaitControl),
@@ -48,6 +50,8 @@ impl fmt::Display for InstructionType {
             Self::Push(l) => {write!(f, "push ({})", l)?},
             Self::Wait(w) => {write!(f, "{}", w)?},
             Self::Send(s) => {write!(f, "{}", s)?},
+            Self::ChannelPeek(s) => {write!(f, "peek '{}'", s)?},
+            Self::ChannelPop(s) => {write!(f, "pop '{}'", s)?},
             Self::Connect(c) => {write!(f, "{}", c)?},
         }
         Ok(())
@@ -60,10 +64,12 @@ impl InstructionType {
             Self::GlobalAssignment(_)
             | Self::Send(_)
             | Self::RunCall(_)
+            | Self::ChannelPop(_)
             | Self::GlobalReads(_) => false,
 
             Self::Connect(_) // connect is global only if a process was waiting
             | Self::Wait(_) // wait is global only if the condition is false
+            | Self::ChannelPeek(_) // This is a local peek that should be directly followed by a pop is the read occurs
             | Self::Empty
             | Self::Expression(_)
             | Self::LocalAssignment(_)

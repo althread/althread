@@ -51,7 +51,7 @@ impl NodeBuilder for Literal {
             Rule::INT => Self::Int(safe_parse(&pair)?),
             Rule::FLOAT => Self::Float(safe_parse(&pair)?),
             Rule::STR => Self::String(pair.as_str().to_string()),
-            _ => return Err(no_rule!(pair)),
+            _ => return Err(no_rule!(pair, "Literal")),
         })
     }
 }

@@ -23,7 +23,7 @@ impl NodeBuilder for Assignment {
 
         match pair.as_rule() {
             Rule::binary_assignment => Ok(Self::Binary(Node::build(pair)?)),
-            _ => Err(no_rule!(pair)),
+            _ => Err(no_rule!(pair, "Assignment")),
         }
     }
 }

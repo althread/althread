@@ -214,6 +214,25 @@ impl<'a> RunningProgramState<'a> {
                 action = GlobalAction::Send(send_ctrl.channel_name.clone(), receiver);
                 1
             }
+            InstructionType::ChannelPeek(channel_name) => {
+                let values = channels.peek(self.id, channel_name.clone());
+                match values {
+                    Some(values) => {
+                        for val in values.iter() {
+                            self.memory.push(val.clone());
+                        }
+                        self.memory.push(Literal::Bool(true));
+                    }
+                    None => {
+                        self.memory.push(Literal::Bool(false));
+                    }
+                }
+                1
+            }
+            InstructionType::ChannelPop(channel_name) => {
+                let _ = channels.pop(self.id, channel_name.clone());
+                1
+            }
             InstructionType::Connect(connect_ctrl) => {
                 let sender_pid = match connect_ctrl.sender_idx {
                     None => self.id,
@@ -245,6 +264,7 @@ impl<'a> RunningProgramState<'a> {
 }
 
 enum ProcessDependency {
+    Unknown,
     ChannelReceive(String),
     ChannelConnection(String),
     Global(HashSet<String>),
@@ -298,6 +318,14 @@ impl<'a> VM<'a> {
 
     pub fn next(&mut self) -> AlthreadResult<ExecutionStepInfo> {
         
+        if self.waiting_programs.len() == self.running_programs.len() {
+            return Err(AlthreadError::new(
+                ErrorType::RuntimeError,
+                None,
+                "all programs are waiting, deadlock".to_string()
+            ));
+        }
+
         let program = self.rng.choice(self.executable_programs.iter()).expect("call next but no program is executable");
 
         let program = self.running_programs.get_mut(program).expect("program is executable but not found in running programs");
@@ -307,6 +335,8 @@ impl<'a> VM<'a> {
             prog_id: program.id,
             instruction_count: 0
         };
+
+        self.waiting_programs.remove(&program.id);
 
         let (action, instruction_count) = program.next_global(&mut self.globals, &mut self.channels, self.next_program_id)?;
         match action {
@@ -398,18 +428,21 @@ impl<'a> VM<'a> {
                 self.executable_programs.remove(&remove_id);
             }
             GlobalAction::Wait => {
-                self.executable_programs.remove(&program.id);
-                let mut dependencies = HashSet::new();
-                match &program.current_instruction().expect("waiting on no instruction").control {
+                self.waiting_programs.insert(program.id, ProcessDependency::Unknown);
+                /*match &program.current_instruction().expect("waiting on no instruction").control {
                     InstructionType::GlobalReads(global_read) => {
+                        self.executable_programs.remove(&program.id);
+                        let mut dependencies = HashSet::new();
                         for var_name in global_read.variables.iter() {
                             dependencies.insert(var_name.clone());
                         }
+                        self.waiting_programs.insert(program.id, ProcessDependency::Global(dependencies));
                     }
                     _ => unreachable!("waiting on an instruction that is not a global read")
-                }
-                //println!("process {} is waiting for {:?}", program.id, dependencies);
-                self.waiting_programs.insert(program.id, ProcessDependency::Global(dependencies));
+                }*/
+                // Currently we cannot know all the dependencies of a wait because a wait can have multiple 
+                // branch and we are just waiting at the first one
+                // So we do nothing and the scheduler will eventually execute the program again.
             }
             GlobalAction::Exit => {
                 self.running_programs.clear()

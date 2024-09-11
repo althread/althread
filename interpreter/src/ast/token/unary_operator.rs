@@ -18,7 +18,7 @@ impl NodeBuilder for UnaryOperator {
             Rule::POS_OP => Ok(Self::Positive),
             Rule::NEG_OP => Ok(Self::Negative),
             Rule::NOT_OP => Ok(Self::Not),
-            _ => Err(no_rule!(pair)),
+            _ => Err(no_rule!(pair, "UnaryOperator")),
         }
     }
 }

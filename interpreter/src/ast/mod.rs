@@ -62,7 +62,7 @@ impl Ast {
                     let condition_keyword = match keyword_pair.as_rule() {
                         Rule::ALWAYS_KW => ConditionKeyword::Always,
                         Rule::NEVER_KW => ConditionKeyword::Never,
-                        _ => return Err(no_rule!(keyword_pair)),
+                        _ => return Err(no_rule!(keyword_pair, "condition keyword")),
                     };
                     let condition_block = Node::build(pairs.next().unwrap())?;
                     ast.condition_blocks
@@ -76,7 +76,7 @@ impl Ast {
                     ast.process_blocks.insert(process_identifier, program_block);
                 }
                 Rule::EOI => (),
-                _ => return Err(no_rule!(pair)),
+                _ => return Err(no_rule!(pair, "root ast")),
             }
         }
 

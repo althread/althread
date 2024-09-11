@@ -37,7 +37,7 @@ impl NodeBuilder for Declaration {
                 Rule::side_effect_expression => {
                     value = Some(Node::build(pair)?);
                 }
-                _ => return Err(no_rule!(pair)),
+                _ => return Err(no_rule!(pair, "declaration")),
             }
         }
 

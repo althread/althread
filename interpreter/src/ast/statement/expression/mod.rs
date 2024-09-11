@@ -47,7 +47,7 @@ impl NodeBuilder for SideEffectExpression {
         match pair.as_rule() {
             Rule::expression => Ok(Self::Expression(Node::build(pair)?)),
             Rule::run_call => Ok(Self::RunCall(Node::build(pair)?)),
-            _ => Err(no_rule!(pair)),
+            _ => Err(no_rule!(pair, "SideEffectExpression")),
         }
     }
 }

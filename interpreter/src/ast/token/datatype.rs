@@ -88,7 +88,7 @@ impl NodeBuilder for DataType {
             Rule::FLOAT_TYPE => Ok(Self::Float),
             Rule::STR_TYPE => Ok(Self::String),
             Rule::VOID_TYPE => Ok(Self::Void),
-            _ => Err(no_rule!(pair)),
+            _ => Err(no_rule!(pair, "DataType")),
         }
     }
 }
