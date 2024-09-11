@@ -5,7 +5,7 @@ use pest::iterators::Pairs;
 use crate::{
     ast::{
         display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, token::{binary_assignment_operator::BinaryAssignmentOperator, datatype::DataType, literal::Literal}
-    }, compiler::{CompilerState, Variable}, error::AlthreadResult, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl, LocalAssignmentControl, WaitControl, WaitStartControl}
+    }, compiler::{CompilerState, Variable}, error::AlthreadResult, no_rule, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl, LocalAssignmentControl, WaitControl, WaitStartControl}
 };
 
 use super::waiting_case::{WaitingBlockCase, WaitDependency};
@@ -27,6 +27,7 @@ impl NodeBuilder for Wait {
     fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
         let pair = pairs.next().unwrap();
         let mut block_kind = WaitingBlockKind::First;
+        
         let waiting_cases = match pair.as_rule() {
             Rule::waiting_block => {
                 let mut pair = pair.into_inner();
@@ -42,11 +43,11 @@ impl NodeBuilder for Wait {
                 }
                 children
             },
-            Rule::expression => {
+            Rule::waiting_block_case => {
                 let node: Node<WaitingBlockCase> = Node::build(pair)?;
                 vec![node]
             },
-            _ => unreachable!("waiting block should be followed by a waiting block or an expression"),
+            _ => { return Err(no_rule!(pair, "Wait"));  },
         };
 
         Ok(Self {
