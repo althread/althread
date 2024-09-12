@@ -1,6 +1,8 @@
 import { styleTags, tags as t } from "@lezer/highlight";
+import { ProgName } from "./parser.terms";
 
 export const althreadHighlight = styleTags({
+  "CallExpression!": t.className,
   "atomic": t.modifier,
   "while wait if else receive send run":
     t.controlKeyword,
@@ -14,17 +16,11 @@ export const althreadHighlight = styleTags({
   this: t.self,
   null: t.null,
   Star: t.modifier,
-  Identifier: t.variableName,
-  VariableName: t.variableName,
-  "CallExpression/VariableName TaggedTemplateExpression/VariableName":
-    t.function(t.variableName),
-  VariableDefinition: t.definition(t.variableName),
-  ProgName: t.propertyName,
-  "CallExpression/MemberExpression/PropertyName": t.function(t.propertyName),
-  "FunctionDeclaration/VariableDefinition": t.function(
-    t.definition(t.variableName)
-  ),
-  "ClassDeclaration/VariableDefinition": t.definition(t.className),
+  //LocalVariableName: t.variableName,
+  //SharedVariableName: t.propertyName,
+  ProgName: t.className,
+
+  
   PropertyDefinition: t.definition(t.propertyName),
   PrivatePropertyDefinition: t.definition(t.special(t.propertyName)),
   UpdateOp: t.updateOperator,

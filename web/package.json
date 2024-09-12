@@ -4,6 +4,7 @@
   "scripts": {
     "start": "parcel --no-hmr",
     "build": "parcel build",
+    "lezer": "lezer-generator lezer/althread.grammar -o lezer/parser.js",
     "prepare": "wasm-pack build --target web && lezer-generator lezer/althread.grammar -o lezer/parser.js",
     "install-deps": "cargo install wasm-pack"
   },

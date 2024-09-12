@@ -17,6 +17,8 @@ import {autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap} fr
 import {lintKeymap} from "@codemirror/lint"
 import {indentWithTab} from "@codemirror/commands"
 import {oneDark} from "@codemirror/theme-one-dark"
+import { tags as t } from '@lezer/highlight';
+import customStyle from "./custom-style";
 
 import {linter, Diagnostic} from "@codemirror/lint"
 
@@ -96,7 +98,7 @@ const Editor =  (props) => {
     value: `
     
 shared {
-    let i = 0;
+    let A = 0;
 }
 
 program A() {
@@ -104,8 +106,10 @@ program A() {
 }
 
 program B() {
+    i += A + 2;
     i += 1;
-    i += 1;
+    A = 0;
+    let j = false;
 }
 
 always {
@@ -145,7 +149,6 @@ main {
   createExtension(keymap.of([indentWithTab]));
   createExtension(editor_lang());
 
-  createExtension(oneDark);
 
   const debugTheme = EditorView.theme({
     ".cm-line span": {
@@ -177,6 +180,12 @@ main {
 
 
 
+  
+  const highlightStyle = HighlightStyle.define(customStyle);  
+  const modifiedTheme = [EditorView.theme({}), syntaxHighlighting(highlightStyle)];
+
+  createExtension(modifiedTheme);
+  createExtension(oneDark);
 
 
   const regexpLinter = linter(view => {

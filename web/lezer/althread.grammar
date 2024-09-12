@@ -19,16 +19,16 @@
 @top Project { project_block* }
 
 project_block {
-  global_block |
-  main_block |
-  program_block |
-  condition_block
+  GlobalBlock |
+  MainBlock |
+  ProgramBlock |
+  ConditionBlock
 }
 
-global_block  { kw<"shared"> code_block }
-main_block    { kw<"main"> code_block }
-program_block { kw<"program"> ProgName "(" ")" code_block }
-condition_block { kw<"always"> expression_block }
+GlobalBlock  { kw<"shared"> "{" shared_declaration* "}" }
+MainBlock    { kw<"main"> code_block }
+ProgramBlock { kw<"program"> ProgName "(" ")" code_block }
+ConditionBlock { kw<"always"> expression_block }
 
 code_block {
   !statement "{" statement* "}"
@@ -36,6 +36,10 @@ code_block {
 expression_block {
   !statement "{" (expression ";")* "}"
 }
+
+shared_declaration { 
+  (kw<"let"> | kw<"const">)
+  SharedVariableName ("=" expression)? semi }
 
 statement {
   VariableDeclaration |
@@ -45,7 +49,17 @@ statement {
   send_statement |
   wait_statement |
   code_block |
-  call_statement
+  call_statement | 
+  assignment_statement
+}
+
+//!assign
+
+assignment_statement {
+  AssignmentExpression semi
+}
+AssignmentExpression {
+  identifier !assign UpdateOp expression
 }
 
 
@@ -53,7 +67,7 @@ statement {
 
 VariableDeclaration {
   (kw<"let"> | kw<"const">)
-  Identifier ("=" expression)? semi
+  LocalVariableName ("=" expression)? semi
 }
 
 //!whilestatement
@@ -71,44 +85,44 @@ IfStatement {
 //!run_statement
 
 run_statement {
-   run_expression ";"
+   RunExpression ";"
 }
-run_expression { kw<"run"> ProgName ArgList }
+RunExpression { kw<"run"> ProgName ArgList }
 
 //!send_statement
 
 send_statement {
-   send_expression ";"
+   SendExpression ";"
 }
-send_expression { kw<"send"> object_identifier ArgList }
+SendExpression { kw<"send"> object_identifier ArgList }
 
 //!wait_statement
 wait_statement  { kw<"wait"> (
-      waiting_block 
-    | waiting_block_case) }
+      WaitingBlock 
+    | WaitingBlockCase) }
 
-waiting_block {
-    (kw<"seq"> | kw<"first">) "{" waiting_block_case* "}"
+WaitingBlock {
+    (kw<"seq"> | kw<"first">) "{" WaitingBlockCase* "}"
 }
-waiting_block_case { 
-   (receive_expression | expression)
+WaitingBlockCase { 
+   (ReceiveExpression | expression)
    (";" | ("=>" statement)) 
 }
 
-receive_expression { kw<"receive"> object_identifier? pattern_list (!wait_block "=>" statement)? }
+ReceiveExpression { kw<"receive"> object_identifier? pattern_list (!wait_block "=>" statement)? }
 
-object_identifier { (Identifier "." object_identifier) | Identifier }
+object_identifier { (identifier "." object_identifier) | identifier }
 
 pattern_list { "(" pattern ("," pattern)* ")" }
 
-pattern { Identifier | Literal }
+pattern { LocalVariableName | Literal }
 
 //!call_statement
 
 call_statement {
-   call_expression ";"
+   CallExpression ";"
 }
-call_expression { Identifier ArgList }
+CallExpression { FnName ArgList }
 
 
 //!expression
@@ -116,22 +130,15 @@ call_expression { Identifier ArgList }
 expression[@isGroup=Expression] {
   Number |
   String |
-  Identifier ~arrow |
-  @specialize[@name=BooleanLiteral]<Identifier, "true" | "false"> |
+  identifier ~arrow |
+  @specialize[@name=BooleanLiteral]<LocalVariableName, "true" | "false"> |
   kw<"self"> |
   kw<"null"> |
   RegExp |
   UnaryExpression |
   ParenthesizedExpression |
   MemberExpression |
-  BinaryExpression |
-  ConditionalExpression {
-    expression !ternary LogicOp<"?"> expression LogicOp<":"> expression
-  } |
-  AssignmentExpression |
-  CallExpression {
-    expression !call ArgList
-  }
+  BinaryExpression
 }
 
 //!expression_misc
@@ -163,12 +170,6 @@ BinaryExpression {
   expression !rel CompareOp expression
 }
 
-//!assign
-
-AssignmentExpression {
-  (Identifier | MemberExpression) !assign UpdateOp expression
-}
-
 MemberExpression {
   expression !member ("." PropertyName | "[" expression "]")
 }
@@ -187,7 +188,9 @@ commaSep1<content> {
 
 Literal { String | Number }
 
-kw<term> { @specialize[@name={term}]<Identifier, term> }
+kw<term> { @specialize[@name={term}]<LocalVariableName, term> }
+
+identifier { SharedVariableName | LocalVariableName  }
 
 //!semi
 
@@ -207,14 +210,21 @@ semi { ";" }
   @else blockCommentContent
 }
 
+FnName { LocalVariableName | SharedVariableName }
+
 @tokens {
+  
   // Identifiers
   identifierChar { @asciiLetter | $[_$\u{a1}-\u{10ffff}] }
+  identifierTail { (identifierChar | @digit)* }
 
-  Identifier { identifierChar (identifierChar | @digit)* }
 
-  PropertyName { Identifier }
-  ProgName { Identifier }
+  
+  PropertyName { LocalVariableName | SharedVariableName }
+  ProgName { LocalVariableName | SharedVariableName }
+  LocalVariableName { $[a-z] identifierTail }
+  SharedVariableName { $[A-Z] identifierTail }
+  
 
 //!numberTokens
 
@@ -237,7 +247,7 @@ semi { ";" }
   ArithOp<expr> { expr }
   LogicOp<expr> { expr }
 
-  UpdateOp { $[+\-/%*] "=" }
+  UpdateOp { $[+\-/%*]? "=" }
 
   CompareOp { ("<" | ">" | "==" | "!=") }
 
