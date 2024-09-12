@@ -29,6 +29,7 @@ pages:
     - cd web
     - pnpm install # install dependencies
     - pnpm build
+    - mv dist ../public
   cache:
     key:
       files:
