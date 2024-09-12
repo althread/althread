@@ -156,6 +156,9 @@ main {
 
 
   const debugTheme = EditorView.theme({
+    ".cm-gutters": {
+      borderRight: "#383e48 solid 2px",
+    },
     ".cm-line span": {
       position: "relative",
     },
@@ -181,13 +184,17 @@ main {
   );
   
   const debug = [debugTheme, syntaxHighlighting(debugHighlightStyle)];
-  createExtension(debug);
+  //createExtension(debug);
 
 
 
   
   const highlightStyle = HighlightStyle.define(customStyle);  
-  const modifiedTheme = [EditorView.theme({}), syntaxHighlighting(highlightStyle)];
+  const modifiedTheme = [EditorView.theme({
+    ".cm-gutters": {
+      borderRight: "#383e48 solid 2px",
+    }
+  }), syntaxHighlighting(highlightStyle)];
 
   createExtension(modifiedTheme);
   createExtension(oneDark);
@@ -219,8 +226,24 @@ main {
     //{tag: tags.comment, color: "#05d", fontStyle: "italic"}
   //]);
 
+  let [out, setOut] = createSignal("");
 
-  return <div ref={editorRef} />;
+  return <>
+  <div>
+    <button onClick={(e) => {
+      console.log(editorView)
+      try {
+        setOut(props.run(editorView().state.doc.toString()));
+      } catch(e) {
+        setOut("ERROR: "+(e.pos && ('line '+e.pos.line))+"\n"+e.message);
+      }
+    }}>Run</button>
+  </div>
+  <div ref={editorRef} />
+<pre>
+{out()}
+</pre>
+  </>;
 };
 
 export default Editor;

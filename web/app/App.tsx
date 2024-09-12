@@ -1,7 +1,7 @@
 // @refresh granular
 
 import { createSignal, onCleanup, onMount } from "solid-js";
-import init, { compile } from '../pkg/althread_web';
+import init, { compile, run } from '../pkg/althread_web';
 import Editor from './Editor';
 
 init().then(() => {
@@ -16,6 +16,7 @@ export default function App() {
       <h1>Althread Editor</h1>
       <Editor
       compile={compile}
+      run={run}
       onValueChange={(v) => {
         try{
           //console.log(compile(v)) 

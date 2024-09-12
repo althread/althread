@@ -26,6 +26,7 @@ pub struct CompilerState {
 
     pub current_program_name: String,
     pub is_atomic: bool,
+    pub is_shared: bool,
 }
 
 impl CompilerState {
@@ -38,6 +39,7 @@ impl CompilerState {
             undefined_channels: HashMap::new(),
             current_program_name: String::new(),
             is_atomic: false,
+            is_shared: false,
         }
     }
 

@@ -56,9 +56,36 @@ impl InstructionBuilder for Declaration {
         let mut instructions = Vec::new();
         let mut datatype = None;
 
+        if state.global_table.contains_key(&self.identifier.value.value) {
+            return Err(AlthreadError::new(
+                ErrorType::VariableError,
+                Some(self.identifier.pos),
+                format!("Variable {} already declared", self.identifier.value.value)
+            ));
+        }
+        // if the variable start with a capital letter, return an error because it is reserved for shared variables
+        if self.identifier.value.value.chars().next().unwrap().is_uppercase() {
+            if !state.is_shared {
+                return Err(AlthreadError::new(
+                    ErrorType::VariableError,
+                    Some(self.identifier.pos),
+                    format!("Variable {} starts with a capital letter, which is reserved for shared variables", self.identifier.value.value)
+                ));
+            }
+        } else {
+            if state.is_shared {
+                return Err(AlthreadError::new(
+                    ErrorType::VariableError,
+                    Some(self.identifier.pos),
+                    format!("Variable {} does not start with a capital letter, which is mandatory for shared variables", self.identifier.value.value)
+                ));
+            }
+        }
+
         if let Some(d) = &self.datatype {
             datatype = Some(d.value.clone());
         }
+
         if let Some(value) = &self.value {
             state.current_stack_depth += 1;
             instructions.extend(value.compile(state)?);

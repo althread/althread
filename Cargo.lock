@@ -27,6 +27,7 @@ name = "althread-web"
 version = "0.1.0"
 dependencies = [
  "althread",
+ "fastrand",
  "serde",
  "serde-wasm-bindgen",
  "wasm-bindgen",

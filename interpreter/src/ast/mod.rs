@@ -91,6 +91,7 @@ impl Ast {
         let mut global_memory = HashMap::new();
         let mut global_table = HashMap::new();
         state.current_stack_depth = 1;
+        state.is_shared = true;
          match self.global_block.as_ref() {
             Some(global) => {
                 let mut memory = VM::new_memory();
@@ -143,6 +144,8 @@ impl Ast {
         state.unstack_current_depth();
         assert!(state.current_stack_depth == 0);
 
+        
+        state.is_shared = false;
         let mut programs_code = HashMap::new();
         for (name, _) in self.process_blocks.iter() {
             let code = self.compile_program(name, &mut state)?;

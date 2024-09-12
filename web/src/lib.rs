@@ -1,5 +1,5 @@
 use wasm_bindgen::prelude::*;
-
+use fastrand;
 
 use althread::{ast::Ast, error::AlthreadError};
 
@@ -21,4 +21,34 @@ pub fn compile(source: &str) -> Result<String,JsValue> {
     let compiled_project = ast.compile().map_err(error_to_js)?;
 
     Ok(format!("{}", compiled_project))
+}
+
+#[wasm_bindgen]
+pub fn run(source: &str) -> Result<String,JsValue> {
+    
+    // parse code with pest
+    let pairs = althread::parser::parse(&source).map_err(error_to_js)?;
+
+    let ast = Ast::build(pairs).map_err(error_to_js)?;
+
+    println!("{}", &ast);
+
+    let compiled_project = ast.compile().map_err(error_to_js)?;
+
+    let mut vm = althread::vm::VM::new(&compiled_project);
+
+    vm.start(fastrand::u64(0..(1<<32)));
+    
+    let mut result = String::new();
+
+    for _ in 0..100000 {
+        if vm.is_finished() {
+            break;
+        }
+        let info = vm.next().map_err(error_to_js)?;
+        for inst in info.instructions.iter() {
+            result.push_str(&format!("#{}: {}\n", info.prog_id, inst));
+        }
+    }
+    Ok(result)
 }

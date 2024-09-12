@@ -11,3 +11,4 @@ wasm-bindgen = { workspace = true }
 althread = { workspace = true }
 serde = { workspace = true }
 serde-wasm-bindgen = { workspace = true }
+fastrand = { workspace = true }
