@@ -59,8 +59,9 @@ assignment_statement {
   AssignmentExpression semi
 }
 AssignmentExpression {
-  identifier !assign UpdateOp expression
+  Variable !assign UpdateOp expression
 }
+Variable { LocalVariableName | SharedVariableName }
 
 
 //!variabledeclaration
@@ -111,7 +112,7 @@ WaitingBlockCase {
 
 ReceiveExpression { kw<"receive"> object_identifier? pattern_list (!wait_block "=>" statement)? }
 
-object_identifier { (identifier "." object_identifier) | identifier }
+object_identifier { (Variable "." object_identifier) | Variable }
 
 pattern_list { "(" pattern ("," pattern)* ")" }
 
@@ -130,8 +131,8 @@ CallExpression { FnName ArgList }
 expression[@isGroup=Expression] {
   Number |
   String |
-  identifier ~arrow |
-  @specialize[@name=BooleanLiteral]<LocalVariableName, "true" | "false"> |
+  Variable ~arrow |
+  @specialize[@name=BooleanLiteral]<non_global_identifer, "true" | "false"> |
   kw<"self"> |
   kw<"null"> |
   RegExp |
@@ -188,9 +189,7 @@ commaSep1<content> {
 
 Literal { String | Number }
 
-kw<term> { @specialize[@name={term}]<LocalVariableName, term> }
-
-identifier { SharedVariableName | LocalVariableName  }
+kw<term> { @specialize[@name={term}]<non_global_identifer, term> }
 
 //!semi
 
@@ -210,20 +209,24 @@ semi { ";" }
   @else blockCommentContent
 }
 
-FnName { LocalVariableName | SharedVariableName }
+FnName { identifier }
+
+PropertyName { identifier }
+ProgName { identifier }
+
+identifier { non_global_identifer | global_identifer }
+
+LocalVariableName { non_global_identifer }
+SharedVariableName { global_identifer }
 
 @tokens {
   
   // Identifiers
   identifierChar { @asciiLetter | $[_$\u{a1}-\u{10ffff}] }
   identifierTail { (identifierChar | @digit)* }
-
-
   
-  PropertyName { LocalVariableName | SharedVariableName }
-  ProgName { LocalVariableName | SharedVariableName }
-  LocalVariableName { $[a-z] identifierTail }
-  SharedVariableName { $[A-Z] identifierTail }
+  non_global_identifer { $[a-z] identifierTail }
+  global_identifer { $[A-Z] identifierTail }
   
 
 //!numberTokens

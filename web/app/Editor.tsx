@@ -14,7 +14,7 @@ import {defaultHighlightStyle, syntaxHighlighting, indentOnInput, bracketMatchin
 import {defaultKeymap, history, historyKeymap} from "@codemirror/commands"
 import {searchKeymap, highlightSelectionMatches} from "@codemirror/search"
 import {autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap} from "@codemirror/autocomplete"
-import {lintKeymap} from "@codemirror/lint"
+import {lintKeymap, lintGutter} from "@codemirror/lint"
 import {indentWithTab} from "@codemirror/commands"
 import {oneDark} from "@codemirror/theme-one-dark"
 import { tags as t } from '@lezer/highlight';
@@ -206,6 +206,7 @@ main {
     return diagnostics
   })
   createExtension(regexpLinter);
+  createExtension(lintGutter());
 
   // if we want to highlight specific tags
   //const myHighlightStyle = HighlightStyle.define([
