@@ -9,138 +9,120 @@
   rel @left,
   ternary @right,
   assign @right,
-
+  wait_block,
   forIn,
   else,
   statement @cut
 }
 
-//!top
 
-@top Script { statement* }
+@top Project { project_block* }
 
-@top SingleExpression { expression }
+project_block {
+  global_block |
+  main_block |
+  program_block |
+  condition_block
+}
 
-//!statement
+global_block  { kw<"shared"> code_block }
+main_block    { kw<"main"> code_block }
+program_block { kw<"program"> ProgName "(" ")" code_block }
+condition_block { kw<"always"> expression_block }
 
-statement[@isGroup=Statement] {
-  FunctionDeclaration |
+code_block {
+  !statement "{" statement* "}"
+}
+expression_block {
+  !statement "{" (expression ";")* "}"
+}
+
+statement {
   VariableDeclaration |
-  ForStatement |
   WhileStatement |
   IfStatement |
-  ReturnStatement |
-  Block |
-  LabeledStatement { Identifier ":" statement } |
-  ExpressionStatement { expression semi } |
-  EmptyStatement { ";" }
+  run_statement |
+  send_statement |
+  wait_statement |
+  code_block |
+  call_statement
+}
+
+
+//!variabledeclaration
+
+VariableDeclaration {
+  (kw<"let"> | kw<"const">)
+  Identifier ("=" expression)? semi
 }
 
 //!whilestatement
 
 WhileStatement {
-  kw<"while"> ParenthesizedExpression statement
+  kw<"while"> expression code_block
 }
 
 //!ifstatement
 
 IfStatement {
-  kw<"if"> ParenthesizedExpression statement (!else kw<"else"> statement)?
+  kw<"if"> expression code_block (!else kw<"else"> code_block)?
 }
 
-//!returnstatement
+//!run_statement
 
-ReturnStatement {
-  kw<"return"> (noSemi expression)? semi
+run_statement {
+   run_expression ";"
+}
+run_expression { kw<"run"> ProgName ArgList }
+
+//!send_statement
+
+send_statement {
+   send_expression ";"
+}
+send_expression { kw<"send"> object_identifier ArgList }
+
+//!wait_statement
+wait_statement  { kw<"wait"> (
+      waiting_block 
+    | waiting_block_case) }
+
+waiting_block {
+    (kw<"seq"> | kw<"first">) "{" waiting_block_case* "}"
+}
+waiting_block_case { 
+   (receive_expression | expression)
+   (";" | ("=>" statement)) 
 }
 
-//!for
+receive_expression { kw<"receive"> object_identifier? pattern_list (!wait_block "=>" statement)? }
 
-ForStatement {
-  kw<"for"> (ForSpec | ForInSpec) statement
+object_identifier { (Identifier "." object_identifier) | Identifier }
+
+pattern_list { "(" pattern ("," pattern)* ")" }
+
+pattern { Identifier | Literal }
+
+//!call_statement
+
+call_statement {
+   call_expression ";"
 }
+call_expression { Identifier ArgList }
 
-ForSpec {
-  "("
-  (VariableDeclaration | expression ";" | ";") expression? ";" expression?
-  ")"
-}
-
-ForInSpec {
-  "("
-  ((kw<"let"> | kw<"var"> | kw<"const">) pattern | Identifier)
-  !forIn kw<"in"> expression
-  ")"
-}
-
-//!functiondeclaration
-
-FunctionDeclaration {
-  !statement kw<"function"> Identifier ParamList Block
-}
-
-ParamList {
-  "(" commaSep<"..."? pattern ("=" expression)?> ")"
-}
-
-//!variabledeclaration
-
-VariableDeclaration {
-  (kw<"let"> | kw<"var"> | kw<"const">)
-  commaSep1<pattern ("=" expression)?> semi
-}
-
-//!pattern
-
-pattern {
-  Identifier ~arrow |
-  ArrayPattern {
-    "[" commaSep<("..."? pattern ("=" expression)?)?> ~destructure "]"
-  } |
-  ObjectPattern {
-    "{" commaSep<PatternProperty> ~destructure "}"
-  }
-}
-
-PatternProperty {
-  ("..." pattern | propName ":" pattern | PropertyName) ("=" expression)?
-}
-
-//!block
-
-Block {
-  !statement "{" statement* "}"
-}
 
 //!expression
 
 expression[@isGroup=Expression] {
   Number |
   String |
-  TemplateString |
   Identifier ~arrow |
   @specialize[@name=BooleanLiteral]<Identifier, "true" | "false"> |
-  kw<"this"> |
+  kw<"self"> |
   kw<"null"> |
-  kw<"super"> |
   RegExp |
-  ArrayExpression {
-    "[" commaSep1<"..."? expression | ""> ~destructure "]"
-  } |
-  ObjectExpression {
-    "{" commaSep<Property> ~destructure "}"
-  } |
-  NewExpression {
-    kw<"new"> expression (!newArgs ArgList)?
-  } |
   UnaryExpression |
   ParenthesizedExpression |
-  FunctionExpression {
-    kw<"function"> Identifier? ParamList Block
-  } |
-  ArrowFunction {
-    (ParamList { Identifier ~arrow } | ParamList) "=>" (Block | expression)
-  } |
   MemberExpression |
   BinaryExpression |
   ConditionalExpression {
@@ -184,8 +166,7 @@ BinaryExpression {
 //!assign
 
 AssignmentExpression {
-  (Identifier | MemberExpression) !assign UpdateOp expression |
-  (MemberExpression | pattern) !assign "=" expression
+  (Identifier | MemberExpression) !assign UpdateOp expression
 }
 
 MemberExpression {
@@ -202,48 +183,19 @@ commaSep1<content> {
   content ("," content)*
 }
 
-//!kw
+
+
+Literal { String | Number }
 
 kw<term> { @specialize[@name={term}]<Identifier, term> }
 
-//!propKw
-
-propKw<term> { @extend[@name={term}]<PropertyName, term> }
-
 //!semi
 
-semi { ";" | insertSemi }
+semi { ";" }
 
 //!skip
 
 @skip { spaces | newline | LineComment | BlockComment }
-
-//!context
-
-@context trackNewline from "./tokens.js"
-
-//!noSemi
-
-@external tokens noSemicolon from "./tokens.js" { noSemi }
-
-//!templateStrings
-
-@skip {} {
-  TemplateString {
-    "`" (templateEscape | templateContent | Interpolation)* templateEnd
-  }
-}
-
-Interpolation { InterpolationStart expression "}" }
-
-@local tokens {
-  InterpolationStart[@name="${"] { "${" }
-  templateEnd { "`" }
-  templateEscape { "\\" _ }
-  @else templateContent
-}
-
-//!blockComment
 
 @skip {} {
   BlockComment { "/*" (blockCommentContent | blockCommentNewline)* blockCommentEnd }
@@ -255,34 +207,20 @@ Interpolation { InterpolationStart expression "}" }
   @else blockCommentContent
 }
 
-//!tokens
-
 @tokens {
-
-//!skippedTokens
-  spaces[@export] { $[\u0009 \u000b\u00a0]+ }
-
-  newline[@export] { $[\r\n] }
-
-  LineComment { "//" ![\n]* }
-
-  @precedence { "/*", LineComment, ArithOp<"/"> }
-
-  @precedence { "/*", LineComment, RegExp }
-
-//!identifierTokens
-
+  // Identifiers
   identifierChar { @asciiLetter | $[_$\u{a1}-\u{10ffff}] }
 
   Identifier { identifierChar (identifierChar | @digit)* }
 
   PropertyName { Identifier }
+  ProgName { Identifier }
 
 //!numberTokens
 
   hex { @digit | $[a-fA-F] }
-
-  Number {
+  
+    Number {
     (@digit ("_" | @digit)* ("." ("_" | @digit)*)? | "." @digit ("_" | @digit)*)
       (("e" | "E") ("+" | "-")? ("_" | @digit)+)? |
     @digit ("_" | @digit)* "n" |
@@ -293,12 +231,6 @@ Interpolation { InterpolationStart expression "}" }
 
   @precedence { Number "." }
 
-//!stringTokens
-
-  String {
-    '"' (![\\\n"] | "\\" _)* '"'? |
-    "'" (![\\\n'] | "\\" _)* "'"?
-  }
 
 //!operatorTokens
 
@@ -307,7 +239,7 @@ Interpolation { InterpolationStart expression "}" }
 
   UpdateOp { $[+\-/%*] "=" }
 
-  CompareOp { ("<" | ">" | "==" | "!=") "="? }
+  CompareOp { ("<" | ">" | "==" | "!=") }
 
 //!regexpTokens
 
@@ -318,14 +250,25 @@ Interpolation { InterpolationStart expression "}" }
   "=" "..." "=>"
   "(" ")" "[" "]" "{" "}"
   "." "," ";" ":"
+  
+//!stringTokens
+
+  String {
+    '"' (![\\\n"] | "\\" _)* '"'? |
+    "'" (![\\\n'] | "\\" _)* "'"?
+  }
+
+  
+//!skippedTokens
+
+  spaces[@export] { $[\u0009 \u000b\u00a0]+ }
+
+  newline[@export] { $[\r\n] }
+
+  LineComment { "//" ![\n]* }
+  
+  @precedence { "/*", LineComment, ArithOp<"/"> }
+
+  @precedence { "/*", LineComment, RegExp }
+  
 }
-
-//!insertSemicolon
-
-@external tokens insertSemicolon from "./tokens.js" { insertSemi }
-
-@external propSource jsHighlight from "./highlight"
-
-//!detectDelim
-
-@detectDelim

@@ -7,18 +7,12 @@ import {styleTags, tags as t} from "@lezer/highlight"
 import {LRLanguage} from "@codemirror/language"
 import {completeFromList} from "@codemirror/autocomplete"
   
+import {althreadHighlight} from "../lezer/highlight.js"
 
-
-let parserWithMetadata = parser.configure({});
-    /*{
+let parserWithMetadata = parser.configure(//{}); /*
+    {
 props: [
-    styleTags({
-    Identifier: t.variableName,
-    Boolean: t.bool,
-    String: t.string,
-    LineComment: t.lineComment,
-    "( )": t.paren
-    }),
+    althreadHighlight,
     indentNodeProp.add({
     Application: context => context.column(context.node.from) + context.unit
     }),
@@ -26,7 +20,7 @@ props: [
     Application: foldInside
     })
 ]
-});*/
+}); // */
 
 
 export const exampleLanguage = LRLanguage.define({

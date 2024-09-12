@@ -1,12 +1,12 @@
 import { styleTags, tags as t } from "@lezer/highlight";
 
-export const jsHighlight = styleTags({
-  "get set async static": t.modifier,
-  "for while do if else switch try catch finally return throw break continue default case":
+export const althreadHighlight = styleTags({
+  "atomic": t.modifier,
+  "while wait if else receive send run":
     t.controlKeyword,
-  "in of await yield void typeof delete instanceof": t.operatorKeyword,
-  "let var const function class extends": t.definitionKeyword,
-  "import export from": t.moduleKeyword,
+  "instanceof": t.operatorKeyword,
+  "let const": t.definitionKeyword,
+  "program always main shared": t.moduleKeyword,
   "with debugger as new": t.keyword,
   TemplateString: t.special(t.string),
   super: t.atom,
@@ -14,13 +14,12 @@ export const jsHighlight = styleTags({
   this: t.self,
   null: t.null,
   Star: t.modifier,
+  Identifier: t.variableName,
   VariableName: t.variableName,
   "CallExpression/VariableName TaggedTemplateExpression/VariableName":
     t.function(t.variableName),
   VariableDefinition: t.definition(t.variableName),
-  Label: t.labelName,
-  PropertyName: t.propertyName,
-  PrivatePropertyName: t.special(t.propertyName),
+  ProgName: t.propertyName,
   "CallExpression/MemberExpression/PropertyName": t.function(t.propertyName),
   "FunctionDeclaration/VariableDefinition": t.function(
     t.definition(t.variableName)
@@ -47,18 +46,4 @@ export const jsHighlight = styleTags({
   "InterpolationStart InterpolationEnd": t.special(t.brace),
   ".": t.derefOperator,
   ", ;": t.separator,
-
-  TypeName: t.typeName,
-  TypeDefinition: t.definition(t.typeName),
-  "type enum interface implements namespace module declare":
-    t.definitionKeyword,
-  "abstract global Privacy readonly override": t.modifier,
-  "is keyof unique infer": t.operatorKeyword,
-
-  JSXAttributeValue: t.attributeValue,
-  JSXText: t.content,
-  "JSXStartTag JSXStartCloseTag JSXSelfCloseEndTag JSXEndTag": t.angleBracket,
-  "JSXIdentifier JSXNameSpacedName": t.tagName,
-  "JSXAttribute/JSXIdentifier JSXAttribute/JSXNameSpacedName": t.attributeName,
-  "JSXBuiltin/JSXIdentifier": t.standard(t.tagName),
 });

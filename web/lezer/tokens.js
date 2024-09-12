@@ -3,15 +3,6 @@
 import {ContextTracker} from "@lezer/lr"
 import {spaces, newline, BlockComment, LineComment} from "./parser.terms"
 
-export const trackNewline = new ContextTracker({
-  start: false,
-  shift(context, term) {
-    return term == LineComment || term == BlockComment || term == spaces
-      ? context : term == newline
-  },
-  strict: false
-})
-
 //!externalTokenizers
 
 import {ExternalTokenizer} from "@lezer/lr"
