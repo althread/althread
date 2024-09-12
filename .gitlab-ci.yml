@@ -28,7 +28,7 @@ pages:
   script:
     - cd web
     - pnpm install # install dependencies
-    - pnpm build
+    - pnpm build --public-url althread/
     - mv dist ../public
   cache:
     key:
