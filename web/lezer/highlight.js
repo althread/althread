@@ -6,9 +6,9 @@ export const althreadHighlight = styleTags({
   "while wait if else receive send run":
     t.controlKeyword,
   "instanceof": t.operatorKeyword,
-  "let const": t.definitionKeyword,
+  "let const channel": t.definitionKeyword,
   "program always main shared": t.moduleKeyword,
-  "with debugger as new": t.keyword,
+  //"with as new": t.keyword,
   TemplateString: t.special(t.string),
   super: t.atom,
   BooleanLiteral: t.bool,
@@ -16,15 +16,13 @@ export const althreadHighlight = styleTags({
   null: t.null,
   Star: t.modifier,
   Type: t.typeName,
-
+  
+  "Variable/self": t.self,
   LocalVariableName: t.variableName,
   SharedVariableName: t.propertyName,
   ProgName: t.className,
   FnName: t.macroName,
 
-  
-  PropertyDefinition: t.definition(t.propertyName),
-  PrivatePropertyDefinition: t.definition(t.special(t.propertyName)),
   UpdateOp: t.updateOperator,
   LineComment: t.lineComment,
   BlockComment: t.blockComment,
@@ -37,7 +35,6 @@ export const althreadHighlight = styleTags({
   RegExp: t.regexp,
   Equals: t.definitionOperator,
   Arrow: t.function(t.punctuation),
-  ": Spread": t.punctuation,
   "( )": t.paren,
   "[ ]": t.squareBracket,
   "{ }": t.brace,

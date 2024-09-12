@@ -43,6 +43,7 @@ shared_declaration {
 
 statement {
   VariableDeclaration |
+  ChannelDeclarationStatement |
   WhileStatement |
   IfStatement |
   run_statement |
@@ -61,7 +62,7 @@ assignment_statement {
 AssignmentExpression {
   Variable !assign UpdateOp expression
 }
-Variable { LocalVariableName | SharedVariableName }
+Variable { LocalVariableName | SharedVariableName | kw<"self"> }
 
 
 //!variabledeclaration
@@ -69,6 +70,12 @@ Variable { LocalVariableName | SharedVariableName }
 VariableDeclaration {
   (kw<"let"> | kw<"const">)
   LocalVariableName (":" Type)? ("=" expression)? semi
+}
+
+//!ChannelDeclarationStatement
+
+ChannelDeclarationStatement {
+  kw<"channel"> object_identifier "<"? "(" commaSep<Type> ")" ">"? object_identifier ";"
 }
 
 //!whilestatement
@@ -133,7 +140,6 @@ expression[@isGroup=Expression] {
   String |
   Variable ~arrow |
   @specialize[@name=BooleanLiteral]<non_global_identifer, "true" | "false"> |
-  kw<"self"> |
   kw<"null"> |
   RegExp |
   UnaryExpression |
