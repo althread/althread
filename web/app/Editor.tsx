@@ -96,37 +96,36 @@ const Editor =  (props) => {
      * The initial value of the editor
      */
     value: `
-    
-
-  
 shared {
-    let A: bool = false;
-    let B: bool = true;
+  let A: bool = false;
+  let B: bool = true;
+  let Done = 0;
 }
 
 program A() {
-    print("starting A");
-    A = false;
-    B = true;
+  print("starting A");
+  A = false;
+  B = true;
+  Done += 1;
 }
 
 program B() {
-    print("starting B");
-    A = true;
-    B = false;
+  print("starting B");
+  A = true;
+  B = false;
+  Done += 1;
 }
 
 always {
-    A || B;
+  A || B;
 }
 
 main {
-    run A();
-    run B();
+  run A();
+  run B();
+  wait Done == 2;
+  println("DONE");
 }
-       
-
-    
     `,
     /**
      * Fired whenever the editor code value changes.
