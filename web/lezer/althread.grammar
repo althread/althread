@@ -39,7 +39,7 @@ expression_block {
 
 shared_declaration { 
   (kw<"let"> | kw<"const">)
-  SharedVariableName ("=" expression)? semi }
+  SharedVariableName (":" Type)? ("=" expression)? semi }
 
 statement {
   VariableDeclaration |
@@ -68,7 +68,7 @@ Variable { LocalVariableName | SharedVariableName }
 
 VariableDeclaration {
   (kw<"let"> | kw<"const">)
-  LocalVariableName ("=" expression)? semi
+  LocalVariableName (":" Type)? ("=" expression)? semi
 }
 
 //!whilestatement
@@ -244,6 +244,7 @@ SharedVariableName { global_identifer }
 
   @precedence { Number "." }
 
+  Type { "bool" | "int" | "float" | "string" }
 
 //!operatorTokens
 

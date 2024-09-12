@@ -15,6 +15,7 @@ export const althreadHighlight = styleTags({
   this: t.self,
   null: t.null,
   Star: t.modifier,
+  Type: t.typeName,
 
   LocalVariableName: t.variableName,
   SharedVariableName: t.propertyName,

@@ -97,30 +97,35 @@ const Editor =  (props) => {
      */
     value: `
     
+
+  
 shared {
-    let A = 0;
+    let A: bool = false;
+    let B: bool = true;
 }
 
 program A() {
-    print("a");
+    print("starting A");
+    A = false;
+    B = true;
 }
 
 program B() {
-    i += A + 2;
-    i += 1;
-    A = 0;
-    let j = false;
+    print("starting B");
+    A = true;
+    B = false;
 }
 
 always {
-    i == 0;
+    A || B;
 }
 
 main {
     run A();
     run B();
 }
-         
+       
+
     
     `,
     /**
