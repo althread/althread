@@ -28,7 +28,6 @@ pages:
   script:
     - cd web
     - pnpm install # install dependencies
-    - pnpm lezer
     - pnpm build
   cache:
     key:
