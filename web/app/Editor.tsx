@@ -96,6 +96,7 @@ const Editor =  (props) => {
      * The initial value of the editor
      */
     value: `
+
 shared {
   let A: bool = false;
   let B: bool = true;
@@ -107,6 +108,7 @@ program A() {
   A = false;
   B = true;
   Done += 1;
+  send out(42,true);
 }
 
 program B() {
@@ -121,11 +123,18 @@ always {
 }
 
 main {
-  run A();
+  let a = run A();
   run B();
   wait Done == 2;
-  println("DONE");
+
+  channel a.out (int, bool)> self.in;
+
+  wait receive in(x,y) => {
+    print("Receive", x, y);
+  };
+  print("DONE");
 }
+    
     `,
     /**
      * Fired whenever the editor code value changes.
