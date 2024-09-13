@@ -129,7 +129,8 @@ impl InstructionBuilder for Declaration {
             mutable: self.keyword.value == DeclarationKeyword::Let,
             name: self.identifier.value.value.clone(),
             datatype,
-            depth: state.current_stack_depth
+            depth: state.current_stack_depth,
+            declare_pos: Some(self.identifier.pos),
         });
 
         Ok(instructions)

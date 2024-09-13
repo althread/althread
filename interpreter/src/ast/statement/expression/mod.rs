@@ -1,20 +1,22 @@
 pub mod binary_expression;
 pub mod primary_expression;
 pub mod unary_expression;
+pub mod tuple_expression;
 
 use std::{collections::HashSet, fmt};
 
 use binary_expression::{BinaryExpression, LocalBinaryExpressionNode};
-use pest::{iterators::Pairs, pratt_parser::PrattParser};
+use pest::{iterators::{Pair, Pairs}, pratt_parser::PrattParser};
 use primary_expression::{LocalPrimaryExpressionNode, PrimaryExpression};
+use tuple_expression::{LocalTupleExpressionNode, TupleExpression};
 use unary_expression::{LocalUnaryExpressionNode, UnaryExpression};
 
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
-        token::datatype::DataType,
-    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, no_rule, parser::Rule, vm::instruction::{ExpressionControl, GlobalReadsControl, Instruction, InstructionType}
+        token::{datatype::DataType, literal::Literal},
+    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, no_rule, parser::Rule, vm::{instruction::{ExpressionControl, GlobalReadsControl, Instruction, InstructionType}, Memory}
 };
 
 use super::{run_call::RunCall, waiting_case::WaitDependency};
@@ -77,6 +79,7 @@ pub enum Expression {
     Binary(Node<BinaryExpression>),
     Unary(Node<UnaryExpression>),
     Primary(Node<PrimaryExpression>),
+    Tuple(Node<TupleExpression>),
 }
 
 #[derive(Clone)]
@@ -90,6 +93,7 @@ pub enum LocalExpressionNode {
     Binary(LocalBinaryExpressionNode),
     Unary(LocalUnaryExpressionNode),
     Primary(LocalPrimaryExpressionNode),
+    Tuple(LocalTupleExpressionNode),
 }
 impl fmt::Display for LocalExpression {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -102,6 +106,7 @@ impl fmt::Display for LocalExpressionNode {
             Self::Binary(node) => write!(f, "{}", node),
             Self::Unary(node) => write!(f, "{}", node),
             Self::Primary(node) => write!(f, "{}", node),
+            Self::Tuple(node) => write!(f, "{}", node),
         }
     }
 }
@@ -149,6 +154,35 @@ impl NodeBuilder for Expression {
         parse_expr(pairs).map(|node| node.value)
     }
 }
+impl Expression {
+    pub fn build_top_level(pair: Pair<Rule>) -> AlthreadResult<Node<Self>> {
+        let pos = Pos {
+            line: pair.line_col().0,
+            col: pair.line_col().1,
+            start: pair.as_span().start(),
+            end: pair.as_span().end(),
+        };
+        match pair.as_rule() {
+            //Rule::expression => Self::build(pair.into_inner()),
+            Rule::tuple_expression => {
+                let mut values = Vec::new();
+                for pair in pair.into_inner() {
+                    values.push(Node::build(pair)?);
+                }
+                Ok(Node {
+                    pos,
+                    value: Expression::Tuple(Node {
+                        pos,
+                        value: TupleExpression {
+                            values
+                        }
+                    })
+                })
+            },
+            _ => Err(no_rule!(pair, "Expression::build_top_level")),
+        }
+    }
+}
 
 
 impl LocalExpressionNode {
@@ -160,6 +194,8 @@ impl LocalExpressionNode {
                 LocalExpressionNode::Unary(LocalUnaryExpressionNode::from_unary(&node.value, program_stack)?),
             Expression::Primary(node) =>
                 LocalExpressionNode::Primary(LocalPrimaryExpressionNode::from_primary(&node.value, program_stack)?),
+            Expression::Tuple(node) =>
+                LocalExpressionNode::Tuple(LocalTupleExpressionNode::from_tuple(&node.value, program_stack)?),
         };
         Ok(root)
     }
@@ -169,6 +205,34 @@ impl LocalExpressionNode {
             Self::Unary(node) => node.datatype(state),
             Self::Primary(node) =>
                 node.datatype(state),
+            Self::Tuple(node) => node.datatype(state),
+        }
+    }
+    pub fn eval(&self, mem: &Memory) -> Result<Literal, String> {
+        match self {
+            LocalExpressionNode::Binary(binary_exp) => {
+                binary_exp.eval(mem)
+            },
+            LocalExpressionNode::Unary(unary_exp) => {
+                unary_exp.eval(mem)
+            },
+            LocalExpressionNode::Primary(primary_exp) => {
+                match primary_exp {
+                    LocalPrimaryExpressionNode::Literal(literal) => {
+                        Ok(literal.value.clone())
+                    },
+                    LocalPrimaryExpressionNode::Var(local_var) => {
+                        let lit = mem.get(mem.len() - 1 - local_var.index).ok_or("local variable index does not exist in memory".to_string())?;
+                        Ok(lit.clone())
+                    },
+                    LocalPrimaryExpressionNode::Expression(expr) => {
+                        expr.as_ref().eval(mem)
+                    },
+                }
+            },
+            LocalExpressionNode::Tuple(tuple_exp) => {
+                tuple_exp.eval(mem)
+            },
         }
     }
 }
@@ -188,11 +252,13 @@ impl InstructionBuilder for Node<Expression> {
         vars.retain(|var| state.global_table.contains_key(var));
 
         for var in vars.iter() {
+            let global_var = state.global_table.get(var).expect(&format!("Error: Variable '{}' not found in global table", var));
             state.program_stack.push(Variable {
                 name: var.clone(),
                 depth: state.current_stack_depth,
                 mutable: false,
-                datatype: state.global_table.get(var).expect(&format!("Error: Variable '{}' not found in global table", var)).datatype.clone(),
+                datatype: global_var.datatype.clone(),
+                declare_pos: global_var.declare_pos,
             });
         }
         if vars.len() > 0 {
@@ -223,6 +289,7 @@ impl InstructionBuilder for Node<Expression> {
             depth: state.current_stack_depth,
             mutable: false,
             datatype: restult_type,
+            declare_pos: None,
         });
         
         Ok(instructions)
@@ -236,6 +303,13 @@ impl Expression {
             Self::Binary(node) => node.value.add_dependencies(dependencies),
             Self::Unary(node) => node.value.add_dependencies(dependencies),
             Self::Primary(node) => node.value.add_dependencies(dependencies),
+            Self::Tuple(node) => node.value.add_dependencies(dependencies),
+        }
+    }
+    pub fn is_tuple(&self) -> bool {
+        match self {
+            Self::Tuple(_) => true,
+            _ => false,
         }
     }
 }
@@ -246,6 +320,7 @@ impl Expression {
             Self::Binary(node) => node.value.get_vars(vars),
             Self::Unary(node) => node.value.get_vars(vars),
             Self::Primary(node) => node.value.get_vars(vars),
+            Self::Tuple(node) => node.value.get_vars(vars),
         }
     }
 }
@@ -256,6 +331,7 @@ impl AstDisplay for Expression {
             Self::Binary(node) => node.ast_fmt(f, prefix),
             Self::Unary(node) => node.ast_fmt(f, prefix),
             Self::Primary(node) => node.ast_fmt(f, prefix),
+            Self::Tuple(node) => node.ast_fmt(f, prefix),
         }
     }
 }

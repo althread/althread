@@ -24,6 +24,7 @@ pub enum Literal {
     Float(f64),
     String(String),
     Process(String, usize),
+    Tuple(Vec<Literal>),
 }
 
 impl NodeBuilder for Literal {
@@ -58,16 +59,6 @@ impl NodeBuilder for Literal {
 
 
 impl Literal {
-    pub fn from_datatype(datatype: &DataType) -> Self {
-        match datatype {
-            DataType::Void => Self::Null,
-            DataType::Boolean => Self::Bool(false),
-            DataType::Integer => Self::Int(0),
-            DataType::Float => Self::Float(0.0),
-            DataType::String => Self::String("".to_string()),
-            DataType::Process(_) => Self::Null,
-        }
-    }
 
     pub fn get_datatype(&self) -> DataType {
         match self {
@@ -77,6 +68,7 @@ impl Literal {
             Self::Float(_) => DataType::Float,
             Self::String(_) => DataType::String,
             Self::Process(n,_) => DataType::Process(n.to_string()),
+            Self::Tuple(t) => DataType::Tuple(t.iter().map(|l| l.get_datatype()).collect()),
         }
     }
 
@@ -84,6 +76,18 @@ impl Literal {
         match self {
             Self::Process(_, pid) => Ok(*pid),
             i => Err(format!("Cannot convert {} to pid", i.get_datatype())),
+        }
+    }
+    pub fn to_tuple(&self) -> Result<&Vec<Literal>, String> {
+        match self {
+            Self::Tuple(t) => Ok(t),
+            i => Err(format!("Cannot convert {} to tuple", i.get_datatype())),
+        }
+    }
+    pub fn into_tuple(self) -> Result<Vec<Literal>, String> {
+        match self {
+            Self::Tuple(t) => Ok(t),
+            i => Err(format!("Cannot convert {} to tuple", i.get_datatype())),
         }
     }
 
@@ -298,6 +302,15 @@ impl fmt::Display for Literal {
             Self::Float(value) => write!(f, "{}", value),
             Self::String(value) => write!(f, "{}", value),
             Self::Process(name, pid) => write!(f, "{}#{}", name, pid),
+            Self::Tuple(values) => write!(
+                f,
+                "({})",
+                values
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
         }
     }
 }
@@ -311,6 +324,13 @@ impl AstDisplay for Literal {
             Self::Float(value) => writeln!(f, "{prefix}float: {value}"),
             Self::String(value) => writeln!(f, "{prefix}string: \"{value}\""),
             Self::Process(name, pid) => write!(f, "{prefix}pid {} instance of {}", pid, name),
+            Self::Tuple(values) => {
+                writeln!(f, "{prefix}tuple")?;
+                for value in values {
+                    value.ast_fmt(f, &prefix.add_leaf())?;
+                }
+                Ok(())
+            }
         }
     }
 }

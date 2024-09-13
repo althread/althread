@@ -9,7 +9,7 @@ use crate::{
     }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpIfControl, UnstackControl}
 };
 
-use super::{waiting_case::WaitDependency, Statement};
+use super::{expression::tuple_expression::TupleExpression, waiting_case::WaitDependency, Statement};
 
 
 #[derive(Debug, Clone)]
@@ -66,20 +66,46 @@ impl InstructionBuilder for Node<ReceiveStatement> {
         // a false value, and if it is true, then the stack contains all the read variables from the channel and a true value.
         let channel_name =  self.value.channel.clone();
 
+        // first check that the correct number of variables are supplied
+        // retreive the variable from the declared channel:
+        let (channel_types, pos) = state.channels.get(&(state.current_program_name.clone(), channel_name.clone())).ok_or(AlthreadError::new(
+            ErrorType::TypeError,
+            Some(self.pos),
+            format!("Cannot infer the types of the channel '{}', please declare the channel in the main (even if not used)", channel_name)
+        ))?.clone();
+        // check that the number of variables is correct
+        if channel_types.len() != self.value.variables.len() {
+            return Err(AlthreadError::new(
+                ErrorType::TypeError,
+                Some(self.pos),
+                format!("Channel {}, bound at line {}, expects {} values, but {} variables are given", 
+                self.value.channel, pos.line, channel_types.len(), self.value.variables.len())
+            ))
+        }
+
+        let mut instructions = Vec::new();
+
+        instructions.push(Instruction{ 
+            control: InstructionType::ChannelPeek(channel_name.clone()),
+            pos: Some(self.pos),
+        }); // Peek has the effect of adding an anonymous tuple to the stack
+        state.program_stack.push(Variable {
+            mutable: false,
+            name: "".to_string(),
+            datatype: DataType::Tuple(channel_types.clone()),
+            depth: state.current_stack_depth,
+            declare_pos: Some(self.pos),
+        });
+
 
         // Channel peek either push all the values and a true value, or just a false value
         // here add all the variables to the stack and remove them only in the branch where the boolean is true
-        for variable in &self.value.variables {
-            state.program_stack.push(Variable {
-                mutable: true,
-                name: variable.clone(),
-                datatype: DataType::Integer,
-                depth: state.current_stack_depth,
-            })
-        }
+
+        let destruct_instruction = TupleExpression::destruct_tuple(&self.value.variables, &channel_types, state, self.pos)?;
+        // destructing remove the top of the stack and replace it with n values
+
+
         // Here we could add a boolean to the stack but if you look at the instructions below, we will remove it anyway
-
-
         let guard_instructions = vec![Instruction{ 
             control: InstructionType::Push(Literal::Bool(true)), //to be replaced by the evaluation of the guard condition
             pos: Some(self.pos),
@@ -89,6 +115,7 @@ impl InstructionBuilder for Node<ReceiveStatement> {
             name: "".to_string(),
             datatype: DataType::Boolean,
             depth: state.current_stack_depth,
+            declare_pos: None,
         });
 
         // check if the top of the stack is a boolean
@@ -107,16 +134,10 @@ impl InstructionBuilder for Node<ReceiveStatement> {
         };
 
 
-        let mut instructions = Vec::new();
-
-        instructions.push(Instruction{ 
-            control: InstructionType::ChannelPeek(channel_name.clone()),
-            pos: Some(self.pos),
-        });
 
         instructions.push(Instruction{ 
             control: InstructionType::JumpIf(JumpIfControl {
-                jump_false: 7 + (guard_instructions.len() + statement_instructions.len()) as i64, // If the channel is empty, jump to the end
+                jump_false: 8 + (guard_instructions.len() + statement_instructions.len()) as i64, // If the channel is empty, jump to the end
                 unstack_len: 0, // we keep the false value on the stack
             }),
             pos: Some(self.pos),
@@ -128,6 +149,8 @@ impl InstructionBuilder for Node<ReceiveStatement> {
             }),
             pos: Some(self.pos),
         });
+
+        instructions.push(destruct_instruction);
         
         instructions.extend(guard_instructions);
 
@@ -157,6 +180,8 @@ impl InstructionBuilder for Node<ReceiveStatement> {
             }),
             pos: Some(self.pos),
         }); 
+
+        // removing the variables from the compiler stack (added in the destruct_tuple function)
         for _ in 0..self.value.variables.len() { state.program_stack.pop(); }
 
         instructions.push(Instruction{ 
@@ -170,6 +195,7 @@ impl InstructionBuilder for Node<ReceiveStatement> {
             name: "".to_string(),
             datatype: DataType::Boolean,
             depth: state.current_stack_depth,
+            declare_pos: None,
         });
         // The next instruction will likely be a wait or an if based on the current stack top.
 

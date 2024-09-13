@@ -1,8 +1,7 @@
 use std::fmt;
 
-use crate::{ast::{node::Node, statement::{expression::{binary_expression::LocalBinaryExpressionNode, primary_expression::LocalPrimaryExpressionNode, unary_expression::LocalUnaryExpressionNode, LocalExpressionNode}, waiting_case::WaitDependency, Statement}, token::{binary_assignment_operator::BinaryAssignmentOperator, binary_operator::BinaryOperator, literal::Literal, unary_operator::UnaryOperator}}, error::Pos};
+use crate::{ast::{node::Node, statement::{expression::LocalExpressionNode, waiting_case::WaitDependency, Statement}, token::{binary_assignment_operator::BinaryAssignmentOperator, literal::Literal}}, error::Pos};
 
-use super::Memory;
 
 
 #[derive(Debug, Clone)]
@@ -22,6 +21,7 @@ pub enum InstructionType {
     Declaration(DeclarationControl),
     ChannelPeek(String),
     ChannelPop(String),
+    Destruct(usize),
     Exit,
     Push(Literal),
     WaitStart(WaitStartControl),
@@ -43,6 +43,7 @@ impl fmt::Display for InstructionType {
             Self::JumpIf(a) => {write!(f, "{}", a)?},
             Self::Jump(a) => {write!(f, "{}", a)?},
             Self::Unstack(a) => {write!(f, "{}", a)?},
+            Self::Destruct(d) => {write!(f, "destruct {}", d)?},
             Self::RunCall(a) => {write!(f, "{}", a)?},
             Self::EndProgram => {write!(f, "end program")?},
             Self::FnCall(a) => {write!(f, "{}", a)?},
@@ -78,6 +79,7 @@ impl InstructionType {
             | Self::LocalAssignment(_)
             | Self::JumpIf(_)
             | Self::Jump(_)
+            | Self::Destruct(_)
             | Self::Unstack(_)
             | Self::EndProgram
             | Self::FnCall(_)
@@ -215,12 +217,11 @@ impl fmt::Display for DeclarationControl {
 #[derive(Debug, Clone)]
 pub struct SendControl {
     pub channel_name: String,
-    pub nb_values: usize,
     pub unstack_len: usize,
 }
 impl fmt::Display for SendControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "send {} {}-tuple (unstack {})", self.channel_name, self.nb_values, self.unstack_len)?;
+        write!(f, "send to {} (unstack {})", self.channel_name, self.unstack_len)?;
         Ok(())
     }
 }
@@ -314,63 +315,3 @@ impl fmt::Display for ProgramCode {
     }
 }
 
-
-impl LocalExpressionNode {
-    pub fn eval(&self, mem: &Memory) -> Result<Literal, String> {
-        match self {
-            LocalExpressionNode::Binary(binary_exp) => {
-                binary_exp.eval(mem)
-            },
-            LocalExpressionNode::Unary(unary_exp) => {
-                unary_exp.eval(mem)
-            },
-            LocalExpressionNode::Primary(primary_exp) => {
-                match primary_exp {
-                    LocalPrimaryExpressionNode::Literal(literal) => {
-                        Ok(literal.value.clone())
-                    },
-                    LocalPrimaryExpressionNode::Var(local_var) => {
-                        let lit = mem.get(mem.len() - 1 - local_var.index).ok_or("local variable index does not exist in memory".to_string())?;
-                        Ok(lit.clone())
-                    },
-                    LocalPrimaryExpressionNode::Expression(expr) => {
-                        expr.as_ref().eval(mem)
-                    },
-                }
-            },
-        }
-    }
-}
-
-impl LocalBinaryExpressionNode {
-    pub fn eval(&self, mem: &Memory) -> Result<Literal, String> {
-        let left = self.left.eval(mem)?;
-        let right = self.right.eval(mem)?;
-
-        match self.operator {
-            BinaryOperator::Add => left.add(&right),
-            BinaryOperator::Subtract => left.subtract(&right),
-            BinaryOperator::Multiply => left.multiply(&right),
-            BinaryOperator::Divide => left.divide(&right),
-            BinaryOperator::Modulo => left.modulo(&right),
-            BinaryOperator::Equals => left.equals(&right),
-            BinaryOperator::NotEquals => left.not_equals(&right),
-            BinaryOperator::LessThan => left.less_than(&right),
-            BinaryOperator::LessThanOrEqual => left.less_than_or_equal(&right),
-            BinaryOperator::GreaterThan => left.greater_than(&right),
-            BinaryOperator::GreaterThanOrEqual => right.greater_than_or_equal(&right),
-            BinaryOperator::And => left.and(&right),
-            BinaryOperator::Or => left.or(&right),
-        }
-    }
-}
-impl LocalUnaryExpressionNode {
-    pub fn eval(&self, mem: &Memory) -> Result<Literal, String> {
-        let operand = self.operand.eval(mem)?;
-        match self.operator {
-            UnaryOperator::Positive => operand.positive(),
-            UnaryOperator::Negative => operand.negative(),
-            UnaryOperator::Not => operand.not(),
-        }
-    }
-}

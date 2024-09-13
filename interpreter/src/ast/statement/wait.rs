@@ -81,6 +81,7 @@ impl InstructionBuilder for Node<Wait> {
             name: "".to_string(),
             mutable: true,
             depth: state.current_stack_depth,
+            declare_pos: None,
         });
         
         instructions.push(Instruction {

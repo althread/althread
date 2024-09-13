@@ -147,7 +147,16 @@ impl Ast {
         
         state.is_shared = false;
         let mut programs_code = HashMap::new();
+        // start with the main program
+
+        let code = self.compile_program("main", &mut state)?;
+        programs_code.insert("main".to_string(), code);
+        assert!(state.current_stack_depth == 0);
+
         for (name, _) in self.process_blocks.iter() {
+            if name == "main" {
+                continue;
+            }
             let code = self.compile_program(name, &mut state)?;
             programs_code.insert(name.clone(), code);
             assert!(state.current_stack_depth == 0);

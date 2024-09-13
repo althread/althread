@@ -11,6 +11,7 @@ pub struct Variable {
     pub name: String,
     pub datatype: DataType,
     pub depth: usize,
+    pub declare_pos: Option<Pos>,
 }
 
 #[derive(Debug, Clone)]

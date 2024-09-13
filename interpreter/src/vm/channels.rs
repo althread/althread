@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
-use crate::{ast::token::literal::Literal, error::AlthreadResult};
+use crate::ast::token::literal::Literal;
 
 
 
 pub struct Channels {
-    states: HashMap<(usize, String), Vec<Vec<Literal>>>,
+    states: HashMap<(usize, String), Vec<Literal>>,
     connections: HashMap<(usize, String), (usize, String)>,
-    waiting_proc: HashMap<usize, (String, Vec<Literal>)>,
+    waiting_proc: HashMap<usize, (String, Literal)>,
 }
 
 #[derive(Debug)]
@@ -28,13 +28,13 @@ impl Channels {
     /**
      * Send values to a channel. If the channel is not connected, the values are stored and the proc is waiting
      */
-    pub fn send(&mut self, program_id: usize, channel_name: String, values: Vec<Literal>) -> Option<ReceiverInfo> {
+    pub fn send(&mut self, program_id: usize, channel_name: String, value: Literal) -> Option<ReceiverInfo> {
         if let Some((to_program_id, to_channel_name)) = self.connections.get(&(program_id, channel_name.clone())) {
             // get the state of the channel (create it if it doesn't exist)
             if let Some(state) = self.states.get_mut(&(*to_program_id, to_channel_name.clone())) {
-                state.push(values);
+                state.push(value);
             } else {
-                self.states.insert((*to_program_id, to_channel_name.clone()), vec![values]);
+                self.states.insert((*to_program_id, to_channel_name.clone()), vec![value]);
             }
             return Some(ReceiverInfo {
                 program_id: *to_program_id,
@@ -43,7 +43,7 @@ impl Channels {
         }
 
         assert!(self.waiting_proc.get(&program_id).is_none(), "A proc can only wait on one channel");
-        self.waiting_proc.insert(program_id, (channel_name.clone(), values));
+        self.waiting_proc.insert(program_id, (channel_name.clone(), value));
         None
 
     }
@@ -65,7 +65,7 @@ impl Channels {
         }
         self.connections.insert((program_id, channel_name.clone()), (to_program_id, to_channel_name.clone()));
 
-        if let Some((channel_waiting, values)) = self.waiting_proc.get(&program_id) {
+        if let Some((channel_waiting, _)) = self.waiting_proc.get(&program_id) {
             if channel_waiting == &channel_name {
                 let (_, values) = self.waiting_proc.remove(&program_id).unwrap();
                 self.send(program_id, channel_name.clone(), values);
@@ -78,7 +78,7 @@ impl Channels {
     /**
      * Look at the values that are currently in the channel, return them if they exist without removing them
      */
-    pub fn peek(&self, program_id: usize, channel_name: String) -> Option<&Vec<Literal>> {
+    pub fn peek(&self, program_id: usize, channel_name: String) -> Option<&Literal> {
         match self.states.get(&(program_id, channel_name)) {
             Some(state) => state.get(0),
             None => None,
@@ -88,11 +88,11 @@ impl Channels {
     /**
      * Pop the first values from the channel
      */
-    pub fn pop(&mut self, program_id: usize, channel_name: String) -> Option<Vec<Literal>> {
+    pub fn pop(&mut self, program_id: usize, channel_name: String) -> Option<Literal> {
         match self.states.get_mut(&(program_id, channel_name)) {
             Some(state) => {
-                let values = state.remove(0);
-                Some(values)
+                let value = state.remove(0);
+                Some(value)
             },
             None => None,
         }

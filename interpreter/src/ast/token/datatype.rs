@@ -14,6 +14,7 @@ pub enum DataType {
     Float,
     String,
     Process(String),
+    Tuple(Vec<DataType>),
 }
 
 impl DataType {
@@ -25,6 +26,7 @@ impl DataType {
             DataType::Float =>  Literal::Float(0.0),
             DataType::String =>  Literal::String("".to_string()),
             DataType::Process(_) => Literal::Null,
+            DataType::Tuple(v) => Literal::Tuple(v.iter().map(|d| d.default()).collect()),
         }
     }
     pub fn from_str(value: &str) -> Self {
@@ -47,14 +49,15 @@ impl DataType {
         }
     } */
 
-    pub fn as_str(&self) -> &str {
+    pub fn to_string(&self) -> String {
         match self {
-            DataType::Void => "void",
-            DataType::Boolean => "bool",
-            DataType::Integer => "int",
-            DataType::Float => "float",
-            DataType::String => "string",
-            DataType::Process(n) => n,
+            DataType::Void => "void".to_string(),
+            DataType::Boolean => "bool".to_string(),
+            DataType::Integer => "int".to_string(),
+            DataType::Float => "float".to_string(),
+            DataType::String => "string".to_string(),
+            DataType::Process(n) => format!("program({})", n),
+            DataType::Tuple(t) => format!("({})", t.iter().map(|d| d.to_string()).collect::<Vec<String>>().join(", ")),
         }
     }
 
@@ -93,30 +96,8 @@ impl NodeBuilder for DataType {
     }
 }
 
-impl DataType {
-    pub fn get_literal(&self) -> Literal {
-        match self {
-            DataType::Void => Literal::Null,
-            DataType::Boolean => Literal::Bool(false),
-            DataType::Integer => Literal::Int(0),
-            DataType::Float => Literal::Float(0.0),
-            DataType::String => Literal::String("".to_string()),
-            DataType::Process(_) => Literal::Null,
-        }
-    }
-}
-
 impl fmt::Display for DataType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let datatype = match self {
-            DataType::Void => "void",
-            DataType::Boolean => "bool",
-            DataType::Integer => "int",
-            DataType::Float => "float",
-            DataType::String => "string",
-            DataType::Process(n) => { write!(f, "process({})", n)?; "" },
-        };
-
-        write!(f, "{}", datatype)
+        write!(f, "{}", self.to_string())
     }
 }

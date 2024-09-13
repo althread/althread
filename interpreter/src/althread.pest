@@ -51,9 +51,9 @@ run_statement         = _{ run_call ~ ";" }
 send_statement         = _{ send_call ~ ";" }
 channel_declaration_statement = _{ channel_declaration ~ ";" }
 
-fn_call  = { identifier ~ arg_list }
-run_call = { RUN_KW ~ identifier ~ arg_list }
-send_call = { SEND_KW ~ object_identifier ~ arg_list }
+fn_call  = { identifier ~ tuple_expression }
+run_call = { RUN_KW ~ identifier ~ tuple_expression }
+send_call = { SEND_KW ~ object_identifier ~ tuple_expression }
 channel_declaration = { 
     CHANNEL_KW ~ 
     object_identifier ~ 
@@ -62,7 +62,6 @@ channel_declaration = {
     ">"? ~
     object_identifier }
 
-arg_list = { "(" ~ ")" | "(" ~ expression ~ ("," ~ expression)* ~ ")" }
 type_list = { "(" ~ datatype ~ ("," ~ datatype)* ~ ")" }
 pattern_list = { "(" ~ pattern ~ ("," ~ pattern)* ~ ")" }
 
@@ -95,6 +94,10 @@ expression = {
     binary_expression
   | unary_expression
   | primary_expression
+}
+
+tuple_expression = {
+ "()" | ("(" ~ expression ~ ("," ~ expression)* ~ ")")
 }
 
 primary_expression = _{ literal | identifier | "(" ~ expression ~ ")" }

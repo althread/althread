@@ -97,18 +97,20 @@ pub fn run_command(cli_args: &RunCommand) {
             err.report(&source);
             exit(1);
         });
-        for inst in info.instructions.iter() {
-            println!("  #{}:{}: {}", info.prog_id, match inst.pos { Some(p) => p.line, None => 0}, inst);
-        }
-        match vm.running_programs.iter()
-            .find(|(id, _)| **id == info.prog_id) {
-            Some((_, p)) => match p
-                .current_instruction() {
-                Some(i) => println!("{}_{}: stopped at {}", info.prog_name, info.prog_id, i),
-                None => println!("{}_{}: stopped at ?", info.prog_name, info.prog_id),
-            },
-            None => {
-                println!("Program {} stopped", info.prog_id);
+        if cli_args.verbose {
+            for inst in info.instructions.iter() {
+                println!("  #{}:{}: {}", info.prog_id, match inst.pos { Some(p) => p.line, None => 0}, inst);
+            }
+            match vm.running_programs.iter()
+                .find(|(id, _)| **id == info.prog_id) {
+                Some((_, p)) => match p
+                    .current_instruction() {
+                    Some(i) => println!("{}_{}: stopped at {}", info.prog_name, info.prog_id, i),
+                    None => println!("{}_{}: stopped at ?", info.prog_name, info.prog_id),
+                },
+                None => {
+                    println!("Program {} stopped", info.prog_id);
+                }
             }
         }
     }

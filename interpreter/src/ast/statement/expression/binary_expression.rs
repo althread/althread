@@ -4,8 +4,8 @@ use pest::iterators::Pair;
 
 use crate::{
     ast::{
-        display::{AstDisplay, Prefix}, node::Node, statement::waiting_case::WaitDependency, token::{binary_operator::BinaryOperator, datatype::DataType}
-    }, compiler::{CompilerState, Variable}, error::{AlthreadResult, Pos}, parser::Rule
+        display::{AstDisplay, Prefix}, node::Node, statement::waiting_case::WaitDependency, token::{binary_operator::BinaryOperator, datatype::DataType, literal::Literal}
+    }, compiler::{CompilerState, Variable}, error::{AlthreadResult, Pos}, parser::Rule, vm::Memory
 };
 
 use super::{Expression, LocalExpressionNode};
@@ -98,6 +98,27 @@ impl LocalBinaryExpressionNode {
             } else {
                 Err("boolean operations can only be performed between boolean values".to_string())
             },
+        }
+    }
+
+    pub fn eval(&self, mem: &Memory) -> Result<Literal, String> {
+        let left = self.left.eval(mem)?;
+        let right = self.right.eval(mem)?;
+
+        match self.operator {
+            BinaryOperator::Add => left.add(&right),
+            BinaryOperator::Subtract => left.subtract(&right),
+            BinaryOperator::Multiply => left.multiply(&right),
+            BinaryOperator::Divide => left.divide(&right),
+            BinaryOperator::Modulo => left.modulo(&right),
+            BinaryOperator::Equals => left.equals(&right),
+            BinaryOperator::NotEquals => left.not_equals(&right),
+            BinaryOperator::LessThan => left.less_than(&right),
+            BinaryOperator::LessThanOrEqual => left.less_than_or_equal(&right),
+            BinaryOperator::GreaterThan => left.greater_than(&right),
+            BinaryOperator::GreaterThanOrEqual => right.greater_than_or_equal(&right),
+            BinaryOperator::And => left.and(&right),
+            BinaryOperator::Or => left.or(&right),
         }
     }
 }

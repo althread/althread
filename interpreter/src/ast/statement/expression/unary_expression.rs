@@ -4,8 +4,8 @@ use pest::iterators::Pair;
 
 use crate::{
     ast::{
-        display::{AstDisplay, Prefix}, node::Node, statement::waiting_case::WaitDependency, token::{datatype::DataType, unary_operator::UnaryOperator}
-    }, compiler::{CompilerState, Variable}, error::{AlthreadResult, Pos}, parser::Rule
+        display::{AstDisplay, Prefix}, node::Node, statement::waiting_case::WaitDependency, token::{datatype::DataType, literal::Literal, unary_operator::UnaryOperator}
+    }, compiler::{CompilerState, Variable}, error::{AlthreadResult, Pos}, parser::Rule, vm::Memory
 };
 
 use super::{Expression, LocalExpressionNode};
@@ -65,6 +65,14 @@ impl LocalUnaryExpressionNode {
             UnaryOperator::Not =>  if operand_type.is_boolean() {
                 Ok(operand_type)
             } else { Err("Can only apply operator '!' on a boolean".to_string()) },
+        }
+    }
+    pub fn eval(&self, mem: &Memory) -> Result<Literal, String> {
+        let operand = self.operand.eval(mem)?;
+        match self.operator {
+            UnaryOperator::Positive => operand.positive(),
+            UnaryOperator::Negative => operand.negative(),
+            UnaryOperator::Not => operand.not(),
         }
     }
 }

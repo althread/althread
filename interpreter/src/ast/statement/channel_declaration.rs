@@ -6,7 +6,7 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
-        token::{datatype::DataType, literal::Literal},
+        token::datatype::DataType,
     }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, parser::Rule, vm::instruction::{ConnectionControl, Instruction, InstructionType}
 };
 
@@ -27,9 +27,13 @@ impl NodeBuilder for ChannelDeclaration {
         let left_prog = String::from(left_pairs.next().unwrap().as_str());
         let left_name = String::from(left_pairs.next().unwrap().as_str());
 
-        // TODO parse types
-        pairs.next();
-        let datatypes: Vec<DataType> = vec![DataType::Integer];
+        let mut datatypes: Vec<DataType> = Vec::new();
+
+        let types_pair = pairs.next();
+        for pair in types_pair.unwrap().into_inner() {
+            let datatype = DataType::from_str(pair.as_str());
+            datatypes.push(datatype);
+        }
 
         let mut right_pairs = pairs.next().unwrap().into_inner();
         let right_prog = String::from(right_pairs.next().unwrap().as_str());

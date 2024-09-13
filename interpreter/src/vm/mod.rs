@@ -11,8 +11,8 @@ pub mod instruction;
 pub mod channels;
 
 
-type Memory = Vec<Literal>;
-type GlobalMemory = HashMap<String, Literal>;
+pub type Memory = Vec<Literal>;
+pub type GlobalMemory = HashMap<String, Literal>;
 
 #[derive(Debug)]
 pub struct ExecutionStepInfo {
@@ -181,17 +181,14 @@ impl<'a> RunningProgramState<'a> {
             InstructionType::Empty => 1,
             InstructionType::FnCall(f) => {
                 // currently, only the print function is implemented
-                if f.name != "print" && f.name != "println" {
+                if f.name != "print" {
                     panic!("implement a proper function call in the VM");
                 }
                 let lit = self.memory.last().expect("Panic: stack is empty, cannot perform function call").clone();
                 for _ in 0..f.unstack_len { self.memory.pop(); }
 
-                if f.name == "print" {
-                    print!("{}", lit);
-                } else {
-                    println!("{}", lit);
-                }
+                let str = lit.into_tuple().unwrap().iter().map(|lit| lit.to_string()).collect::<Vec<_>>().join(",");
+                println!("{}", str);
                 1
             }
             InstructionType::WaitStart(_) => { // this instruction is not executed, it is used to create a dependency in case of a wait
@@ -211,20 +208,25 @@ impl<'a> RunningProgramState<'a> {
                     wait_ctrl.jump
                 }
             }
+            InstructionType::Destruct(_) => {
+                // The values are in a tuple on the top of the stack
+                let tuple = self.memory.pop().expect("Panic: stack is empty, cannot destruct").into_tuple().expect("Panic: cannot convert to tuple");
+                for val in tuple.into_iter() {
+                    self.memory.push(val);
+                };
+                1
+            }
             InstructionType::Push(literal) => {
                 self.memory.push(literal.clone());
                 1
             }
             InstructionType::Send(send_ctrl) => {
 
-                let nb_values = send_ctrl.nb_values;
-                let mut values = Vec::new();
-                for i in 0..nb_values {
-                    values.push(self.memory.get(self.memory.len() - 1 - i).expect("Panic: stack is empty, cannot send value").clone());
-                }
+                let value = self.memory.last().expect("Panic: stack is empty, cannot send").clone();
+                
                 for _ in 0..send_ctrl.unstack_len { self.memory.pop(); }
                 
-                let receiver = channels.send(self.id, send_ctrl.channel_name.clone(), values);
+                let receiver = channels.send(self.id, send_ctrl.channel_name.clone(), value);
 
                 action = GlobalAction::Send(send_ctrl.channel_name.clone(), receiver);
                 1
@@ -232,10 +234,8 @@ impl<'a> RunningProgramState<'a> {
             InstructionType::ChannelPeek(channel_name) => {
                 let values = channels.peek(self.id, channel_name.clone());
                 match values {
-                    Some(values) => {
-                        for val in values.iter() {
-                            self.memory.push(val.clone());
-                        }
+                    Some(value) => {
+                        self.memory.push(value.clone());
                         self.memory.push(Literal::Bool(true));
                     }
                     None => {
