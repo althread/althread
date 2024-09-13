@@ -10,7 +10,7 @@ pub struct Channels {
     waiting_proc: HashMap<usize, (String, Literal)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ReceiverInfo {
     pub program_id: usize,
     pub channel_name: String,

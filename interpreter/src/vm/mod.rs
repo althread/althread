@@ -42,10 +42,8 @@ fn str_to_expr_error(pos: Option<Pos>) -> impl Fn(String) -> AlthreadError {
     )
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum GlobalAction {
-    Nothing,
-    Pause,
     StartProgram(String, usize),
     Write(String),
     Send(String, Option<ReceiverInfo>),
@@ -54,13 +52,11 @@ pub enum GlobalAction {
     Wait,
     Exit,
 }
-impl GlobalAction {
-    pub fn is_local(&self) -> bool {
-        match self {
-            Self::Nothing => true,
-            _ => false,
-        }
-    }
+
+
+pub struct GlobalActions {
+    pub actions: Vec<GlobalAction>,
+    pub wait: bool,
 }
 
 impl<'a> RunningProgramState<'a> {
@@ -79,21 +75,35 @@ impl<'a> RunningProgramState<'a> {
     pub fn current_instruction(&self) -> Option<&Instruction> {
         self.code.instructions.get(self.instruction_pointer)
     }
-    fn next_global(&mut self, globals: &mut GlobalMemory, channels: &mut Channels, next_pid: usize, global_state_id: u64) -> AlthreadResult<(GlobalAction, Vec<Instruction>)> {
+    fn next_global(&mut self, globals: &mut GlobalMemory, channels: &mut Channels, next_pid: &mut usize, global_state_id: u64) -> AlthreadResult<(GlobalActions, Vec<Instruction>)> {
 
         let mut instructions = Vec::new();
+        let mut actions = Vec::new();
+        let mut wait = false;
         loop {
             if let Some(inst) = self.current_instruction() { instructions.push(inst.clone()); }
             
             let action = self.next(globals, channels, next_pid, global_state_id)?;
             
-            if !action.is_local() {
-                return Ok((action, instructions));
+            if let Some(action) = action {
+                if action == GlobalAction::Wait {
+                    wait = true;
+                    break;
+                }
+                actions.push(action);
+            }
+            if self.is_next_instruction_global() {
+                break;
             }
         }
+        Ok((GlobalActions { actions, wait }, instructions))
     }
 
-    fn next(&mut self, globals: &mut GlobalMemory, channels: &mut Channels, mut next_pid: usize, global_state_id: u64) -> AlthreadResult<GlobalAction> {
+    fn is_next_instruction_global(&mut self) -> bool {
+        self.current_instruction().map_or(true, |inst| !inst.control.is_local())
+    }
+
+    fn next(&mut self, globals: &mut GlobalMemory, channels: &mut Channels, next_pid: &mut usize, global_state_id: u64) -> AlthreadResult<Option<GlobalAction>> {
         let cur_inst = self.code.instructions.get(self.instruction_pointer).ok_or(AlthreadError::new(
             ErrorType::InstructionNotAllowed,
             None,
@@ -102,11 +112,8 @@ impl<'a> RunningProgramState<'a> {
 
         //println!("{} running instruction {}", self.id, self.current_instruction().unwrap());
 
-        let mut action = if cur_inst.control.is_local() {
-            GlobalAction::Nothing
-        } else {
-            GlobalAction::Pause
-        };
+        let mut action = None;
+
         let pos_inc = match &cur_inst.control {
             InstructionType::JumpIf(c) => {
                 let cond = self.memory.last().unwrap().is_true();
@@ -143,7 +150,7 @@ impl<'a> RunningProgramState<'a> {
                     .map_err(str_to_expr_error(cur_inst.pos))?;
 
                 globals.insert(global_asgm.identifier.clone(), lit);
-                action = GlobalAction::Write(global_asgm.identifier.clone());
+                action = Some(GlobalAction::Write(global_asgm.identifier.clone()));
                 1
             },
             InstructionType::LocalAssignment(local_asgm) => {
@@ -169,13 +176,13 @@ impl<'a> RunningProgramState<'a> {
                 1
             },
             InstructionType::RunCall(call) => {
-                self.memory.push(Literal::Process(call.name.clone(), next_pid));
-                action = GlobalAction::StartProgram(call.name.clone(), next_pid);
-                next_pid += 1; // TODO: will be used when several global actions are implemented
+                self.memory.push(Literal::Process(call.name.clone(), *next_pid));
+                action = Some(GlobalAction::StartProgram(call.name.clone(), *next_pid));
+                *next_pid += 1;
                 1
             }
             InstructionType::EndProgram => {
-                action = GlobalAction::EndProgram;
+                action = Some(GlobalAction::EndProgram);
                 1
             }
             InstructionType::Empty => 1,
@@ -202,7 +209,7 @@ impl<'a> RunningProgramState<'a> {
                     1
                 } else {
                     if global_state_id == self.global_state_stack.pop().expect("Panic: global_state_stack is empty, cannot pop") {
-                        action = GlobalAction::Wait;
+                        action = Some(GlobalAction::Wait);
                     }
                     // otherwise we do not wait since the state has changed
                     wait_ctrl.jump
@@ -228,7 +235,7 @@ impl<'a> RunningProgramState<'a> {
                 
                 let receiver = channels.send(self.id, send_ctrl.channel_name.clone(), value);
 
-                action = GlobalAction::Send(send_ctrl.channel_name.clone(), receiver);
+                action = Some(GlobalAction::Send(send_ctrl.channel_name.clone(), receiver));
                 1
             }
             InstructionType::ChannelPeek(channel_name) => {
@@ -264,7 +271,7 @@ impl<'a> RunningProgramState<'a> {
                     msg
                 ))?;
                 if let Some(sender_info) = sender_info {
-                    action = GlobalAction::Connect(sender_info.0, sender_info.1);
+                    action = Some(GlobalAction::Connect(sender_info.0, sender_info.1));
                 }
                 1
             }
@@ -316,21 +323,22 @@ impl<'a> VM<'a> {
         }
     }
 
-    fn run_program(&mut self, program_name: &str) {
-        self.running_programs.insert(self.next_program_id,
+    fn run_program(&mut self, program_name: &str, pid: usize) {
+        assert!(self.running_programs.get(&pid).is_none(), "program with id {} already exists", pid);
+        self.running_programs.insert(pid,
             RunningProgramState::new(
-                self.next_program_id,
+                pid,
                 program_name.to_string(), 
                 &self.programs_code[program_name]
             ));
-        self.executable_programs.insert(self.next_program_id);
-        self.next_program_id += 1;
+        self.executable_programs.insert(pid);
     }
 
     pub fn start(&mut self, seed: u64) {
         self.rng = Rng::with_seed(seed);
         self.global_state_id = 0;
-        self.run_program("main");
+        self.next_program_id = 1;
+        self.run_program("main", 0);
     }
 
     pub fn next(&mut self) -> AlthreadResult<ExecutionStepInfo> {
@@ -354,106 +362,113 @@ impl<'a> VM<'a> {
         ))?;
         
         let program = self.running_programs.get_mut(program).expect("program is executable but not found in running programs");
+        let program_id = program.id;
         
         let mut exec_info = ExecutionStepInfo {
             prog_name: program.name.clone(),
-            prog_id: program.id,
+            prog_id: program_id,
             instructions: Vec::new(),
         };
 
-        let (action, executed_instructions) = program.next_global(&mut self.globals, &mut self.channels, self.next_program_id, self.global_state_id)?;
+        let (actions, executed_instructions) = program.next_global(&mut self.globals, &mut self.channels, &mut self.next_program_id, self.global_state_id)?;
 
-        match action {
-            GlobalAction::Nothing => {unreachable!("next_global should not pause on a local instruction")}
-            GlobalAction::Pause => {},
-            GlobalAction::Send(sender_channel, receiver_info) => {
-                self.global_state_id += 1;
-                if let Some(receiver_info) = receiver_info {
-                    if let Some(dependency) = self.waiting_programs.get(&receiver_info.program_id) {
-                        if dependency.channels_state.contains(&receiver_info.channel_name) {
-                            self.waiting_programs.remove(&receiver_info.program_id);
-                            self.executable_programs.insert(receiver_info.program_id);
-                        }
-                    }
-                } else {
-                    // the current process is waiting
-                    self.executable_programs.remove(&program.id);
-                    let dep = self.waiting_programs.entry(program.id).or_insert(WaitDependency::new());
-                    dep.channels_connection.insert(sender_channel);
-                }
-            }
-            GlobalAction::Connect(sender_id, sender_channel) => {
-                self.global_state_id += 1;
-                if let Some(dependency) = self.waiting_programs.get(&sender_id) {
-                    if dependency.channels_connection.contains(&sender_channel) {
-                        self.waiting_programs.remove(&sender_id);
-                        self.executable_programs.insert(sender_id);
-                    }
-                    else {
-                        unreachable!("the sender program must be waiting for a connection, otherwise the channel connection is not a global action");
-                    }
-                } else {
-                    unreachable!("the sender program must be waiting, otherwise the channel connection is not a global action");
-                }
-            }
-            GlobalAction::Write(var_name) => {
-                self.global_state_id += 1;
-                //println!("program {} writes {}", program.id, var_name);
-                // Check if the variable appears in the conditions of a waiting program
-                self.waiting_programs.retain(|prog_id, dependencies| {
-                    if dependencies.variables.contains(&var_name) {
-                        self.executable_programs.insert(*prog_id);
-                        return false;
-                    }
-                    true
-                });
 
-                for (dependencies, read, expr, pos) in self.always_conditions.iter() {
-                    if dependencies.contains(&var_name) {
-                        // Check if the condition is true
-                        // create a small memory stack with the value of the variables
-                        let mut memory = Vec::new();
-                        for var_name in read.variables.iter() {
-                            memory.push(self.globals.get(var_name).expect(format!("global variable '{}' not found", var_name).as_str()).clone());
+        for action in actions.actions {
+            match action {
+                GlobalAction::Wait => {
+                    unreachable!("wait action should not be in the list of actions");
+                }
+                GlobalAction::Send(sender_channel, receiver_info) => {
+                    self.global_state_id += 1;
+                    if let Some(receiver_info) = receiver_info {
+                        if let Some(dependency) = self.waiting_programs.get(&receiver_info.program_id) {
+                            if dependency.channels_state.contains(&receiver_info.channel_name) {
+                                self.waiting_programs.remove(&receiver_info.program_id);
+                                self.executable_programs.insert(receiver_info.program_id);
+                            }
                         }
-                        let cond = expr.root.eval(&memory).map_err(|msg| AlthreadError::new(
-                            ErrorType::ExpressionError,
-                            Some(*pos),
-                            msg
-                        ))?;
-                        if !cond.is_true() {
-                            return Err(AlthreadError::new(
-                                ErrorType::RuntimeError,
+                    } else {
+                        // the current process is waiting
+                        self.executable_programs.remove(&program_id);
+                        let dep = self.waiting_programs.entry(program_id).or_insert(WaitDependency::new());
+                        dep.channels_connection.insert(sender_channel);
+                    }
+                }
+                GlobalAction::Connect(sender_id, sender_channel) => {
+                    self.global_state_id += 1;
+                    if let Some(dependency) = self.waiting_programs.get(&sender_id) {
+                        if dependency.channels_connection.contains(&sender_channel) {
+                            self.waiting_programs.remove(&sender_id);
+                            self.executable_programs.insert(sender_id);
+                        }
+                        else {
+                            unreachable!("the sender program must be waiting for a connection, otherwise the channel connection is not a global action");
+                        }
+                    } else {
+                        unreachable!("the sender program must be waiting, otherwise the channel connection is not a global action");
+                    }
+                }
+                GlobalAction::Write(var_name) => {
+                    self.global_state_id += 1;
+                    //println!("program {} writes {}", program_id, var_name);
+                    // Check if the variable appears in the conditions of a waiting program
+                    self.waiting_programs.retain(|prog_id, dependencies| {
+                        if dependencies.variables.contains(&var_name) {
+                            self.executable_programs.insert(*prog_id);
+                            return false;
+                        }
+                        true
+                    });
+
+                    for (dependencies, read, expr, pos) in self.always_conditions.iter() {
+                        if dependencies.contains(&var_name) {
+                            // Check if the condition is true
+                            // create a small memory stack with the value of the variables
+                            let mut memory = Vec::new();
+                            for var_name in read.variables.iter() {
+                                memory.push(self.globals.get(var_name).expect(format!("global variable '{}' not found", var_name).as_str()).clone());
+                            }
+                            let cond = expr.root.eval(&memory).map_err(|msg| AlthreadError::new(
+                                ErrorType::ExpressionError,
                                 Some(*pos),
-                                format!("the condition is false")
-                            ));
+                                msg
+                            ))?;
+                            if !cond.is_true() {
+                                return Err(AlthreadError::new(
+                                    ErrorType::RuntimeError,
+                                    Some(*pos),
+                                    format!("the condition is false")
+                                ));
+                            }
                         }
                     }
                 }
-            }
-            GlobalAction::StartProgram(name, next_pid) => {
-                self.global_state_id += 1;
-                assert!(next_pid == self.next_program_id);
-                self.run_program(&name);
-            }
-            GlobalAction::EndProgram => {
-                let remove_id = program.id;
-                self.running_programs.remove(&remove_id);
-                self.executable_programs.remove(&remove_id);
-            }
-            GlobalAction::Wait => {
-                match &program.current_instruction().expect("waiting on no instruction").control {
-                    InstructionType::WaitStart(ctrl) => {
-                        self.executable_programs.remove(&program.id);
-                        self.waiting_programs.insert(program.id, ctrl.dependencies.clone());
-                    }
-                    _ => unreachable!("waiting on an instruction that is not a WaitStart instruction")
+                GlobalAction::StartProgram(name, pid) => {
+                    self.global_state_id += 1;
+                    self.run_program(&name, pid);
                 }
-            }
-            GlobalAction::Exit => {
-                self.running_programs.clear()
+                GlobalAction::EndProgram => {
+                    let remove_id = program_id;
+                    self.running_programs.remove(&remove_id);
+                    self.executable_programs.remove(&remove_id);
+                }
+                GlobalAction::Exit => {
+                    self.running_programs.clear()
+                }
             }
         }
+
+        if actions.wait {
+            let program = self.running_programs.get_mut(&program_id).expect("program is waiting but not found in running programs");
+            match &program.current_instruction().expect("waiting on no instruction").control {
+                InstructionType::WaitStart(ctrl) => {
+                    self.executable_programs.remove(&program_id);
+                    self.waiting_programs.insert(program_id, ctrl.dependencies.clone());
+                }
+                _ => unreachable!("waiting on an instruction that is not a WaitStart instruction")
+            }
+        }
+
         exec_info.instructions = executed_instructions;
 
 

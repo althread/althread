@@ -64,15 +64,28 @@ impl fmt::Display for InstructionType {
 impl InstructionType {
     pub fn is_local(&self) -> bool {
         match self {
-            Self::GlobalAssignment(_)
+              Self::GlobalAssignment(_)
             | Self::Send(_)
-            | Self::RunCall(_)
             | Self::ChannelPop(_)
             | Self::GlobalReads(_) => false,
+            
+            // This should be checked. I think the following are not global because
+            // they do not write or read any global variable or channel
+            // Indeed, starting a process do not write anything. The process itself is the one that will write
+            // Similarly, connected a channel that was waiting to send or receive is not a global operation
+            // because the processes that wait are different and their operation are global so they will 
+            // not be done atomically
+            // They are global actions but that do not require the process to pause
+            
+            // Channel peek is a little bit different because it might not be followed in the case the read is not completed (if the guard was false for instance)
+            // In that case, I am not sure that the peek should be considered as a local operation
+            // Anyway, it is hard to know in advance (in the case we want to stop *before* global 
+            // instructions instead of after)
 
             Self::Connect(_) // connect is global only if a process was waiting
             | Self::Wait(_) // wait is global only if the condition is false
-            | Self::ChannelPeek(_) // This is a local peek that should be directly followed by a pop is the read occurs
+            | Self::ChannelPeek(_) // This is a local peek that should be directly followed by a pop if the read occurs
+            | Self::RunCall(_)
             | Self::WaitStart(_)
             | Self::Empty
             | Self::Expression(_)
