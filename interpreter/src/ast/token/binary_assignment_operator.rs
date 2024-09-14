@@ -17,8 +17,8 @@ pub enum BinaryAssignmentOperator {
     OrAssign,
 }
 
-impl BinaryAssignmentOperator { 
-    pub fn apply(&self, left: &Literal, right: &Literal) -> Result<Literal,String> {
+impl BinaryAssignmentOperator {
+    pub fn apply(&self, left: &Literal, right: &Literal) -> Result<Literal, String> {
         match self {
             Self::Assign => Ok(right.clone()),
             Self::AddAssign => left.add(right),

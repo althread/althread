@@ -22,9 +22,9 @@ impl DataType {
         match self {
             DataType::Void => Literal::Null,
             DataType::Boolean => Literal::Bool(false),
-            DataType::Integer =>  Literal::Int(0),
-            DataType::Float =>  Literal::Float(0.0),
-            DataType::String =>  Literal::String("".to_string()),
+            DataType::Integer => Literal::Int(0),
+            DataType::Float => Literal::Float(0.0),
+            DataType::String => Literal::String("".to_string()),
             DataType::Process(_) => Literal::Null,
             DataType::Tuple(v) => Literal::Tuple(v.iter().map(|d| d.default()).collect()),
         }
@@ -57,7 +57,13 @@ impl DataType {
             DataType::Float => "float".to_string(),
             DataType::String => "string".to_string(),
             DataType::Process(n) => format!("program({})", n),
-            DataType::Tuple(t) => format!("({})", t.iter().map(|d| d.to_string()).collect::<Vec<String>>().join(", ")),
+            DataType::Tuple(t) => format!(
+                "({})",
+                t.iter()
+                    .map(|d| d.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
         }
     }
 
@@ -79,8 +85,7 @@ impl DataType {
             _ => false,
         }
     }
-
-} 
+}
 
 impl NodeBuilder for DataType {
     fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {

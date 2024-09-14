@@ -1,12 +1,15 @@
 pub mod binary_expression;
 pub mod primary_expression;
-pub mod unary_expression;
 pub mod tuple_expression;
+pub mod unary_expression;
 
 use std::{collections::HashSet, fmt};
 
 use binary_expression::{BinaryExpression, LocalBinaryExpressionNode};
-use pest::{iterators::{Pair, Pairs}, pratt_parser::PrattParser};
+use pest::{
+    iterators::{Pair, Pairs},
+    pratt_parser::PrattParser,
+};
 use primary_expression::{LocalPrimaryExpressionNode, PrimaryExpression};
 use tuple_expression::{LocalTupleExpressionNode, TupleExpression};
 use unary_expression::{LocalUnaryExpressionNode, UnaryExpression};
@@ -16,7 +19,15 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
         token::{datatype::DataType, literal::Literal},
-    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, no_rule, parser::Rule, vm::{instruction::{ExpressionControl, GlobalReadsControl, Instruction, InstructionType}, Memory}
+    },
+    compiler::{CompilerState, Variable},
+    error::{AlthreadError, AlthreadResult, ErrorType, Pos},
+    no_rule,
+    parser::Rule,
+    vm::{
+        instruction::{ExpressionControl, GlobalReadsControl, Instruction, InstructionType},
+        Memory,
+    },
 };
 
 use super::{run_call::RunCall, waiting_case::WaitDependency};
@@ -72,8 +83,6 @@ impl AstDisplay for SideEffectExpression {
     }
 }
 
-
-
 #[derive(Debug, Clone)]
 pub enum Expression {
     Binary(Node<BinaryExpression>),
@@ -86,7 +95,6 @@ pub enum Expression {
 pub struct LocalExpression {
     pub root: LocalExpressionNode,
 }
-
 
 #[derive(Debug, Clone)]
 pub enum LocalExpressionNode {
@@ -173,77 +181,67 @@ impl Expression {
                     pos,
                     value: Expression::Tuple(Node {
                         pos,
-                        value: TupleExpression {
-                            values
-                        }
-                    })
+                        value: TupleExpression { values },
+                    }),
                 })
-            },
+            }
             _ => Err(no_rule!(pair, "Expression::build_top_level")),
         }
     }
 }
 
-
 impl LocalExpressionNode {
-    pub fn from_expression(expression: &Expression, program_stack: &Vec<Variable>) -> AlthreadResult<Self> {
+    pub fn from_expression(
+        expression: &Expression,
+        program_stack: &Vec<Variable>,
+    ) -> AlthreadResult<Self> {
         let root = match expression {
-            Expression::Binary(node) =>    
-                LocalExpressionNode::Binary(LocalBinaryExpressionNode::from_binary(&node.value, program_stack)?),
-            Expression::Unary(node) =>
-                LocalExpressionNode::Unary(LocalUnaryExpressionNode::from_unary(&node.value, program_stack)?),
-            Expression::Primary(node) =>
-                LocalExpressionNode::Primary(LocalPrimaryExpressionNode::from_primary(&node.value, program_stack)?),
-            Expression::Tuple(node) =>
-                LocalExpressionNode::Tuple(LocalTupleExpressionNode::from_tuple(&node.value, program_stack)?),
+            Expression::Binary(node) => LocalExpressionNode::Binary(
+                LocalBinaryExpressionNode::from_binary(&node.value, program_stack)?,
+            ),
+            Expression::Unary(node) => LocalExpressionNode::Unary(
+                LocalUnaryExpressionNode::from_unary(&node.value, program_stack)?,
+            ),
+            Expression::Primary(node) => LocalExpressionNode::Primary(
+                LocalPrimaryExpressionNode::from_primary(&node.value, program_stack)?,
+            ),
+            Expression::Tuple(node) => LocalExpressionNode::Tuple(
+                LocalTupleExpressionNode::from_tuple(&node.value, program_stack)?,
+            ),
         };
         Ok(root)
     }
     pub fn datatype(&self, state: &CompilerState) -> Result<DataType, String> {
         match self {
-            Self::Binary(node) =>node.datatype(state),
+            Self::Binary(node) => node.datatype(state),
             Self::Unary(node) => node.datatype(state),
-            Self::Primary(node) =>
-                node.datatype(state),
+            Self::Primary(node) => node.datatype(state),
             Self::Tuple(node) => node.datatype(state),
         }
     }
     pub fn eval(&self, mem: &Memory) -> Result<Literal, String> {
         match self {
-            LocalExpressionNode::Binary(binary_exp) => {
-                binary_exp.eval(mem)
-            },
-            LocalExpressionNode::Unary(unary_exp) => {
-                unary_exp.eval(mem)
-            },
-            LocalExpressionNode::Primary(primary_exp) => {
-                match primary_exp {
-                    LocalPrimaryExpressionNode::Literal(literal) => {
-                        Ok(literal.value.clone())
-                    },
-                    LocalPrimaryExpressionNode::Var(local_var) => {
-                        let lit = mem.get(mem.len() - 1 - local_var.index).ok_or("local variable index does not exist in memory".to_string())?;
-                        Ok(lit.clone())
-                    },
-                    LocalPrimaryExpressionNode::Expression(expr) => {
-                        expr.as_ref().eval(mem)
-                    },
+            LocalExpressionNode::Binary(binary_exp) => binary_exp.eval(mem),
+            LocalExpressionNode::Unary(unary_exp) => unary_exp.eval(mem),
+            LocalExpressionNode::Primary(primary_exp) => match primary_exp {
+                LocalPrimaryExpressionNode::Literal(literal) => Ok(literal.value.clone()),
+                LocalPrimaryExpressionNode::Var(local_var) => {
+                    let lit = mem
+                        .get(mem.len() - 1 - local_var.index)
+                        .ok_or("local variable index does not exist in memory".to_string())?;
+                    Ok(lit.clone())
                 }
+                LocalPrimaryExpressionNode::Expression(expr) => expr.as_ref().eval(mem),
             },
-            LocalExpressionNode::Tuple(tuple_exp) => {
-                tuple_exp.eval(mem)
-            },
+            LocalExpressionNode::Tuple(tuple_exp) => tuple_exp.eval(mem),
         }
     }
 }
-
-
 
 // we build directly the traits on the node
 // because we need line/column information
 impl InstructionBuilder for Node<Expression> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
-
         let mut instructions = Vec::new();
 
         let mut vars = HashSet::new();
@@ -252,7 +250,10 @@ impl InstructionBuilder for Node<Expression> {
         vars.retain(|var| state.global_table.contains_key(var));
 
         for var in vars.iter() {
-            let global_var = state.global_table.get(var).expect(&format!("Error: Variable '{}' not found in global table", var));
+            let global_var = state.global_table.get(var).expect(&format!(
+                "Error: Variable '{}' not found in global table",
+                var
+            ));
             state.program_stack.push(Variable {
                 name: var.clone(),
                 depth: state.current_stack_depth,
@@ -269,19 +270,19 @@ impl InstructionBuilder for Node<Expression> {
                 }),
             });
         }
-        
+
         let local_expr = LocalExpressionNode::from_expression(&self.value, &state.program_stack)?;
-        let restult_type = local_expr.datatype(state).map_err(|err| AlthreadError::new(
-            ErrorType::ExpressionError,
-            Some(self.pos),
-            format!("Type of expression is not well-defined: {}", err)
-        ))?;
+        let restult_type = local_expr.datatype(state).map_err(|err| {
+            AlthreadError::new(
+                ErrorType::ExpressionError,
+                Some(self.pos),
+                format!("Type of expression is not well-defined: {}", err),
+            )
+        })?;
 
         instructions.push(Instruction {
             pos: Some(self.pos),
-            control: InstructionType::Expression(ExpressionControl {
-                root: local_expr,
-            })
+            control: InstructionType::Expression(ExpressionControl { root: local_expr }),
         });
 
         state.program_stack.push(Variable {
@@ -291,11 +292,10 @@ impl InstructionBuilder for Node<Expression> {
             datatype: restult_type,
             declare_pos: None,
         });
-        
+
         Ok(instructions)
     }
 }
-
 
 impl Expression {
     pub fn add_dependencies(&self, dependencies: &mut WaitDependency) {

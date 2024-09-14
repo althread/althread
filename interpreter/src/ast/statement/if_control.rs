@@ -4,8 +4,15 @@ use pest::iterators::Pairs;
 
 use crate::{
     ast::{
-        block::Block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, token::datatype::DataType
-    }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl}
+        block::Block,
+        display::{AstDisplay, Prefix},
+        node::{InstructionBuilder, Node, NodeBuilder},
+        token::datatype::DataType,
+    },
+    compiler::CompilerState,
+    error::{AlthreadError, AlthreadResult, ErrorType},
+    parser::Rule,
+    vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl},
 };
 
 use super::expression::Expression;
@@ -36,21 +43,24 @@ impl NodeBuilder for IfControl {
     }
 }
 
-
-
 impl InstructionBuilder for IfControl {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
-        
         let mut instructions = Vec::new();
         state.current_stack_depth += 1;
 
         let condition = self.condition.compile(state)?;
         // Check if the top of the stack is a boolean
-        if state.program_stack.last().expect("stack should contain a value after an expression is compiled").datatype != DataType::Boolean {
+        if state
+            .program_stack
+            .last()
+            .expect("stack should contain a value after an expression is compiled")
+            .datatype
+            != DataType::Boolean
+        {
             return Err(AlthreadError::new(
                 ErrorType::TypeError,
                 Some(self.condition.pos),
-                "if condition must be a boolean".to_string()
+                "if condition must be a boolean".to_string(),
             ));
         }
         // pop all variables from the stack at the given depth
@@ -60,23 +70,22 @@ impl InstructionBuilder for IfControl {
 
         let else_block = match self.else_block.as_ref() {
             Some(block) => block.compile(state)?,
-            None => Vec::new()
+            None => Vec::new(),
         };
-
 
         instructions.extend(condition);
         instructions.push(Instruction {
             pos: Some(self.condition.pos),
-            control: InstructionType::JumpIf(JumpIfControl { 
-                jump_false: (then_block.len()+1) as i64,
-                unstack_len
+            control: InstructionType::JumpIf(JumpIfControl {
+                jump_false: (then_block.len() + 1) as i64,
+                unstack_len,
             }),
         });
         instructions.extend(then_block);
         if let Some(else_node) = &self.else_block {
             instructions.push(Instruction {
                 pos: Some(else_node.pos),
-                control: InstructionType::Jump(JumpControl { 
+                control: InstructionType::Jump(JumpControl {
                     jump: (else_block.len() + 1) as i64,
                 }),
             });

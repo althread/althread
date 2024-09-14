@@ -6,7 +6,6 @@ use clap::Parser;
 
 use althread::ast::Ast;
 
-
 fn main() {
     let cli_args = CliArguments::parse();
 
@@ -15,10 +14,7 @@ fn main() {
         Command::Run(command) => run_command(&command.clone()),
         Command::RandomSearch(command) => random_search_command(&command.clone()),
     }
-
 }
-
-
 
 pub fn compile_command(cli_args: &CompileCommand) {
     // Read file
@@ -27,11 +23,8 @@ pub fn compile_command(cli_args: &CompileCommand) {
             let mut buf = Vec::new();
             let _ = std::io::stdin().read_to_end(&mut buf);
             String::from_utf8(buf).expect("Could not read stdin")
-        },
-        args::Input::Path(path) => {
-            fs::read_to_string(&path).expect("Could not read file")
-        },
-        
+        }
+        args::Input::Path(path) => fs::read_to_string(&path).expect("Could not read file"),
     };
 
     // parse code with pest
@@ -53,7 +46,6 @@ pub fn compile_command(cli_args: &CompileCommand) {
     });
 
     println!("{}", compiled_project);
-
 }
 
 pub fn run_command(cli_args: &RunCommand) {
@@ -63,11 +55,8 @@ pub fn run_command(cli_args: &RunCommand) {
             let mut buf = Vec::new();
             let _ = std::io::stdin().read_to_end(&mut buf);
             String::from_utf8(buf).expect("Could not read stdin")
-        },
-        args::Input::Path(path) => {
-            fs::read_to_string(&path).expect("Could not read file")
-        },
-        
+        }
+        args::Input::Path(path) => fs::read_to_string(&path).expect("Could not read file"),
     };
 
     // parse code with pest
@@ -99,12 +88,22 @@ pub fn run_command(cli_args: &RunCommand) {
         });
         if cli_args.verbose {
             for inst in info.instructions.iter() {
-                println!("  #{}:{}: {}", info.prog_id, match inst.pos { Some(p) => p.line, None => 0}, inst);
+                println!(
+                    "  #{}:{}: {}",
+                    info.prog_id,
+                    match inst.pos {
+                        Some(p) => p.line,
+                        None => 0,
+                    },
+                    inst
+                );
             }
-            match vm.running_programs.iter()
-                .find(|(id, _)| **id == info.prog_id) {
-                Some((_, p)) => match p
-                    .current_instruction() {
+            match vm
+                .running_programs
+                .iter()
+                .find(|(id, _)| **id == info.prog_id)
+            {
+                Some((_, p)) => match p.current_instruction() {
                     Some(i) => println!("{}_{}: stopped at {}", info.prog_name, info.prog_id, i),
                     None => println!("{}_{}: stopped at ?", info.prog_name, info.prog_id),
                 },
@@ -114,9 +113,7 @@ pub fn run_command(cli_args: &RunCommand) {
             }
         }
     }
-
 }
-
 
 pub fn random_search_command(cli_args: &RandomSearchCommand) {
     // Read file
@@ -125,11 +122,8 @@ pub fn random_search_command(cli_args: &RandomSearchCommand) {
             let mut buf = Vec::new();
             let _ = std::io::stdin().read_to_end(&mut buf);
             String::from_utf8(buf).expect("Could not read stdin")
-        },
-        args::Input::Path(path) => {
-            fs::read_to_string(&path).expect("Could not read file")
-        },
-        
+        }
+        args::Input::Path(path) => fs::read_to_string(&path).expect("Could not read file"),
     };
 
     // parse code with pest
@@ -172,5 +166,4 @@ pub fn random_search_command(cli_args: &RandomSearchCommand) {
             }*/
         }
     }
-
 }

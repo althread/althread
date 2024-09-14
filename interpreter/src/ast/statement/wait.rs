@@ -4,12 +4,24 @@ use pest::iterators::Pairs;
 
 use crate::{
     ast::{
-        display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, token::{binary_assignment_operator::BinaryAssignmentOperator, datatype::DataType, literal::Literal}
-    }, compiler::{CompilerState, Variable}, error::AlthreadResult, no_rule, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl, LocalAssignmentControl, WaitControl, WaitStartControl}
+        display::{AstDisplay, Prefix},
+        node::{InstructionBuilder, Node, NodeBuilder},
+        token::{
+            binary_assignment_operator::BinaryAssignmentOperator, datatype::DataType,
+            literal::Literal,
+        },
+    },
+    compiler::{CompilerState, Variable},
+    error::AlthreadResult,
+    no_rule,
+    parser::Rule,
+    vm::instruction::{
+        Instruction, InstructionType, JumpControl, JumpIfControl, LocalAssignmentControl,
+        WaitControl, WaitStartControl,
+    },
 };
 
-use super::waiting_case::{WaitingBlockCase, WaitDependency};
-
+use super::waiting_case::{WaitDependency, WaitingBlockCase};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum WaitingBlockKind {
@@ -27,7 +39,7 @@ impl NodeBuilder for Wait {
     fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
         let pair = pairs.next().unwrap();
         let mut block_kind = WaitingBlockKind::First;
-        
+
         let waiting_cases = match pair.as_rule() {
             Rule::waiting_block => {
                 let mut pair = pair.into_inner();
@@ -42,12 +54,14 @@ impl NodeBuilder for Wait {
                     children.push(node);
                 }
                 children
-            },
+            }
             Rule::waiting_block_case => {
                 let node: Node<WaitingBlockCase> = Node::build(pair)?;
                 vec![node]
-            },
-            _ => { return Err(no_rule!(pair, "Wait"));  },
+            }
+            _ => {
+                return Err(no_rule!(pair, "Wait"));
+            }
         };
 
         Ok(Self {
@@ -57,12 +71,9 @@ impl NodeBuilder for Wait {
     }
 }
 
-
 impl InstructionBuilder for Node<Wait> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
-
         let mut instructions = Vec::new();
-
 
         let mut dependencies = WaitDependency::new();
         for wc in self.value.waiting_cases.iter() {
@@ -71,9 +82,7 @@ impl InstructionBuilder for Node<Wait> {
 
         instructions.push(Instruction {
             pos: Some(self.pos),
-            control: InstructionType::WaitStart(WaitStartControl {
-                dependencies,
-            }),
+            control: InstructionType::WaitStart(WaitStartControl { dependencies }),
         });
 
         state.program_stack.push(Variable {
@@ -83,10 +92,10 @@ impl InstructionBuilder for Node<Wait> {
             depth: state.current_stack_depth,
             declare_pos: None,
         });
-        
+
         instructions.push(Instruction {
             pos: Some(self.pos),
-            control: InstructionType::Push(Literal::Bool(false))
+            control: InstructionType::Push(Literal::Bool(false)),
         });
 
         let jump_if_offset = if self.value.block_kind == WaitingBlockKind::First {
@@ -96,7 +105,6 @@ impl InstructionBuilder for Node<Wait> {
         };
         let mut jump_index = Vec::new();
         for case in &self.value.waiting_cases {
-            
             state.current_stack_depth += 1;
             let mut case_condition = case.value.rule.compile(state)?;
             let unstack_len = state.unstack_current_depth();
@@ -106,21 +114,20 @@ impl InstructionBuilder for Node<Wait> {
                 None => vec![],
             };
 
-            
             case_statement.push(Instruction {
                 pos: Some(case.pos),
-                control: InstructionType::Push(Literal::Bool(true))
+                control: InstructionType::Push(Literal::Bool(true)),
             });
             case_statement.push(Instruction {
                 pos: Some(case.pos),
-                control: InstructionType::LocalAssignment(LocalAssignmentControl{
+                control: InstructionType::LocalAssignment(LocalAssignmentControl {
                     index: 0,
                     operator: BinaryAssignmentOperator::OrAssign,
-                    unstack_len:1,
-                })
+                    unstack_len: 1,
+                }),
             });
 
-            // the offset is because a jump will be added after the statement            
+            // the offset is because a jump will be added after the statement
             case_condition.push(Instruction {
                 pos: Some(case.pos),
                 control: InstructionType::JumpIf(JumpIfControl {
@@ -135,12 +142,15 @@ impl InstructionBuilder for Node<Wait> {
 
         if self.value.block_kind == WaitingBlockKind::First {
             for index in jump_index.iter().rev() {
-                instructions.insert(*index, Instruction {
-                    pos: Some(self.pos),
-                    control: InstructionType::Jump(JumpControl {
-                        jump: (instructions.len() - index + 1) as i64,
-                    }),
-                });
+                instructions.insert(
+                    *index,
+                    Instruction {
+                        pos: Some(self.pos),
+                        control: InstructionType::Jump(JumpControl {
+                            jump: (instructions.len() - index + 1) as i64,
+                        }),
+                    },
+                );
             }
         }
 
@@ -152,36 +162,34 @@ impl InstructionBuilder for Node<Wait> {
             }),
         });
         state.program_stack.pop();
-/*
-        state.current_stack_depth += 1;
-        let cond_ins = self.value.condition.compile(state)?;
-        // Check if the top of the stack is a boolean
-        if state.program_stack.last().expect("stack should contain a value after an expression is compiled").datatype != DataType::Boolean {
-            return Err(AlthreadError::new(
-                ErrorType::TypeError,
-                Some(self.value.condition.pos),
-                "condition must be a boolean".to_string()
-            ));
-        }
-        // pop all variables from the stack at the given depth
-        let unstack_len = state.unstack_current_depth();
+        /*
+                state.current_stack_depth += 1;
+                let cond_ins = self.value.condition.compile(state)?;
+                // Check if the top of the stack is a boolean
+                if state.program_stack.last().expect("stack should contain a value after an expression is compiled").datatype != DataType::Boolean {
+                    return Err(AlthreadError::new(
+                        ErrorType::TypeError,
+                        Some(self.value.condition.pos),
+                        "condition must be a boolean".to_string()
+                    ));
+                }
+                // pop all variables from the stack at the given depth
+                let unstack_len = state.unstack_current_depth();
 
-        instructions.extend(cond_ins);
+                instructions.extend(cond_ins);
 
-        instructions.push(Instruction {
-            pos: Some(self.pos),
-            control: InstructionType::Wait(WaitControl { 
-                jump: -(instructions.len() as i64),
-                unstack_len,
-            }),
-        });
-*/
+                instructions.push(Instruction {
+                    pos: Some(self.pos),
+                    control: InstructionType::Wait(WaitControl {
+                        jump: -(instructions.len() as i64),
+                        unstack_len,
+                    }),
+                });
+        */
 
         Ok(instructions)
     }
 }
-
-
 
 impl AstDisplay for Wait {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
@@ -191,7 +199,6 @@ impl AstDisplay for Wait {
                 case.ast_fmt(f, &prefix.add_branch())?;
             }
         }
-
 
         Ok(())
     }

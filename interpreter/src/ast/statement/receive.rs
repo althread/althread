@@ -5,12 +5,19 @@ use pest::iterators::Pairs;
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder}, token::{datatype::DataType, literal::Literal},
-    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpIfControl, UnstackControl}
+        node::{InstructionBuilder, Node, NodeBuilder},
+        token::{datatype::DataType, literal::Literal},
+    },
+    compiler::{CompilerState, Variable},
+    error::{AlthreadError, AlthreadResult, ErrorType},
+    no_rule,
+    parser::Rule,
+    vm::instruction::{Instruction, InstructionType, JumpIfControl, UnstackControl},
 };
 
-use super::{expression::tuple_expression::TupleExpression, waiting_case::WaitDependency, Statement};
-
+use super::{
+    expression::tuple_expression::TupleExpression, waiting_case::WaitDependency, Statement,
+};
 
 #[derive(Debug, Clone)]
 pub struct ReceiveStatement {
@@ -21,7 +28,6 @@ pub struct ReceiveStatement {
 
 impl NodeBuilder for ReceiveStatement {
     fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
-        
         let mut pair = pairs.next().unwrap();
 
         let mut channel = "".to_string();
@@ -32,7 +38,7 @@ impl NodeBuilder for ReceiveStatement {
         }
 
         if pair.as_rule() != Rule::pattern_list {
-            return Err(no_rule!(pair, "ReceiveStatement"))
+            return Err(no_rule!(pair, "ReceiveStatement"));
         }
 
         let mut variables = Vec::new();
@@ -41,14 +47,16 @@ impl NodeBuilder for ReceiveStatement {
             variables.push(String::from(pair.as_str()));
         }
 
-
         let statement = match pairs.next() {
             Some(p) => Some(Node::build(p)?),
             None => None,
         };
 
-
-        Ok(Self { channel, variables, statement })
+        Ok(Self {
+            channel,
+            variables,
+            statement,
+        })
     }
 }
 
@@ -61,10 +69,9 @@ impl ReceiveStatement {
 
 impl InstructionBuilder for Node<ReceiveStatement> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
-
-        // The goal is to simulate a boolean expression so that, if it is false, then the stack contains only 
+        // The goal is to simulate a boolean expression so that, if it is false, then the stack contains only
         // a false value, and if it is true, then the stack contains all the read variables from the channel and a true value.
-        let channel_name =  self.value.channel.clone();
+        let channel_name = self.value.channel.clone();
 
         // first check that the correct number of variables are supplied
         // retreive the variable from the declared channel:
@@ -78,14 +85,19 @@ impl InstructionBuilder for Node<ReceiveStatement> {
             return Err(AlthreadError::new(
                 ErrorType::TypeError,
                 Some(self.pos),
-                format!("Channel {}, bound at line {}, expects {} values, but {} variables are given", 
-                self.value.channel, pos.line, channel_types.len(), self.value.variables.len())
-            ))
+                format!(
+                    "Channel {}, bound at line {}, expects {} values, but {} variables are given",
+                    self.value.channel,
+                    pos.line,
+                    channel_types.len(),
+                    self.value.variables.len()
+                ),
+            ));
         }
 
         let mut instructions = Vec::new();
 
-        instructions.push(Instruction{ 
+        instructions.push(Instruction {
             control: InstructionType::ChannelPeek(channel_name.clone()),
             pos: Some(self.pos),
         }); // Peek has the effect of adding an anonymous tuple to the stack
@@ -97,20 +109,24 @@ impl InstructionBuilder for Node<ReceiveStatement> {
             declare_pos: Some(self.pos),
         });
 
-
         // Channel peek either push all the values and a true value, or just a false value
         // here add all the variables to the stack and remove them only in the branch where the boolean is true
 
-        let destruct_instruction = TupleExpression::destruct_tuple(&self.value.variables, &channel_types, state, self.pos)?;
+        let destruct_instruction = TupleExpression::destruct_tuple(
+            &self.value.variables,
+            &channel_types,
+            state,
+            self.pos,
+        )?;
         // destructing remove the top of the stack and replace it with n values
 
-
         // Here we could add a boolean to the stack but if you look at the instructions below, we will remove it anyway
-        let guard_instructions = vec![Instruction{ 
+        let guard_instructions = vec![Instruction {
             control: InstructionType::Push(Literal::Bool(true)), //to be replaced by the evaluation of the guard condition
             pos: Some(self.pos),
         }];
-        state.program_stack.push(Variable { // to be removed when the guard is implemented
+        state.program_stack.push(Variable {
+            // to be removed when the guard is implemented
             mutable: false,
             name: "".to_string(),
             datatype: DataType::Boolean,
@@ -119,11 +135,17 @@ impl InstructionBuilder for Node<ReceiveStatement> {
         });
 
         // check if the top of the stack is a boolean
-        if state.program_stack.last().expect("stack should contain a value after an expression is compiled").datatype != DataType::Boolean {
+        if state
+            .program_stack
+            .last()
+            .expect("stack should contain a value after an expression is compiled")
+            .datatype
+            != DataType::Boolean
+        {
             return Err(AlthreadError::new(
                 ErrorType::TypeError,
                 Some(self.pos),
-                "guard condition must be a boolean".to_string()
+                "guard condition must be a boolean".to_string(),
             ));
         }
         state.program_stack.pop();
@@ -133,9 +155,7 @@ impl InstructionBuilder for Node<ReceiveStatement> {
             None => Vec::new(),
         };
 
-
-
-        instructions.push(Instruction{ 
+        instructions.push(Instruction {
             control: InstructionType::JumpIf(JumpIfControl {
                 jump_false: 8 + (guard_instructions.len() + statement_instructions.len()) as i64, // If the channel is empty, jump to the end
                 unstack_len: 0, // we keep the false value on the stack
@@ -143,7 +163,7 @@ impl InstructionBuilder for Node<ReceiveStatement> {
             pos: Some(self.pos),
         });
 
-        instructions.push(Instruction{ 
+        instructions.push(Instruction {
             control: InstructionType::Unstack(UnstackControl {
                 unstack_len: 1, // we remove the true value on the stack (it will be replaced by the next expression
             }),
@@ -151,10 +171,10 @@ impl InstructionBuilder for Node<ReceiveStatement> {
         });
 
         instructions.push(destruct_instruction);
-        
+
         instructions.extend(guard_instructions);
 
-        instructions.push(Instruction{ 
+        instructions.push(Instruction {
             control: InstructionType::JumpIf(JumpIfControl {
                 jump_false: 5 + statement_instructions.len() as i64, // If the guard is false, jump to the end
                 unstack_len: 0, // keep the boolean of the guard on the stack
@@ -162,32 +182,34 @@ impl InstructionBuilder for Node<ReceiveStatement> {
             pos: Some(self.pos),
         });
 
-        instructions.push(Instruction{ 
+        instructions.push(Instruction {
             control: InstructionType::Unstack(UnstackControl {
                 unstack_len: 1, // remove the boolean of the guard from the stack (but keep the variables used in the statement)
             }),
             pos: Some(self.pos),
         });
-        instructions.push(Instruction{ 
+        instructions.push(Instruction {
             control: InstructionType::ChannelPop(channel_name.clone()), // actually do pop the channel
             pos: Some(self.pos),
         });
         instructions.extend(statement_instructions);
 
-        instructions.push(Instruction{ 
+        instructions.push(Instruction {
             control: InstructionType::Unstack(UnstackControl {
                 unstack_len: self.value.variables.len(), // remove the variables from the stack
             }),
             pos: Some(self.pos),
-        }); 
+        });
 
         // removing the variables from the compiler stack (added in the destruct_tuple function)
-        for _ in 0..self.value.variables.len() { state.program_stack.pop(); }
+        for _ in 0..self.value.variables.len() {
+            state.program_stack.pop();
+        }
 
-        instructions.push(Instruction{ 
+        instructions.push(Instruction {
             control: InstructionType::Push(Literal::Bool(true)), // the statement is finished, the global condition is a success
             pos: Some(self.pos),
-        }); 
+        });
 
         // In all the branches above, a boolean is pushed on the stack:
         state.program_stack.push(Variable {
@@ -199,11 +221,9 @@ impl InstructionBuilder for Node<ReceiveStatement> {
         });
         // The next instruction will likely be a wait or an if based on the current stack top.
 
-        
         Ok(instructions)
     }
 }
-
 
 impl AstDisplay for ReceiveStatement {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
@@ -211,7 +231,15 @@ impl AstDisplay for ReceiveStatement {
         let pref = prefix.add_branch();
         writeln!(f, "{pref} channel '{}'", self.channel)?;
         let pref = prefix.add_branch();
-        writeln!(f, "{pref} patterns ({})", self.variables.iter().map(|v| v.clone()).collect::<Vec<String>>().join(","))?;
+        writeln!(
+            f,
+            "{pref} patterns ({})",
+            self.variables
+                .iter()
+                .map(|v| v.clone())
+                .collect::<Vec<String>>()
+                .join(",")
+        )?;
 
         Ok(())
     }

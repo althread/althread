@@ -4,8 +4,15 @@ use pest::iterators::Pairs;
 
 use crate::{
     ast::{
-        block::Block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, token::datatype::DataType
-    }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl}
+        block::Block,
+        display::{AstDisplay, Prefix},
+        node::{InstructionBuilder, Node, NodeBuilder},
+        token::datatype::DataType,
+    },
+    compiler::CompilerState,
+    error::{AlthreadError, AlthreadResult, ErrorType},
+    parser::Rule,
+    vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl},
 };
 
 use super::expression::Expression;
@@ -28,20 +35,24 @@ impl NodeBuilder for WhileControl {
     }
 }
 
-
 impl InstructionBuilder for Node<WhileControl> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
-
         let mut instructions = Vec::new();
 
         state.current_stack_depth += 1;
         let cond_ins = self.value.condition.compile(state)?;
         // Check if the top of the stack is a boolean
-        if state.program_stack.last().expect("stack should contain a value after an expression is compiled").datatype != DataType::Boolean {
+        if state
+            .program_stack
+            .last()
+            .expect("stack should contain a value after an expression is compiled")
+            .datatype
+            != DataType::Boolean
+        {
             return Err(AlthreadError::new(
                 ErrorType::TypeError,
                 Some(self.value.condition.pos),
-                "condition must be a boolean".to_string()
+                "condition must be a boolean".to_string(),
             ));
         }
         // pop all variables from the stack at the given depth
@@ -53,26 +64,23 @@ impl InstructionBuilder for Node<WhileControl> {
         instructions.extend(cond_ins);
         instructions.push(Instruction {
             pos: Some(self.value.condition.pos),
-            control: InstructionType::JumpIf(JumpIfControl { 
+            control: InstructionType::JumpIf(JumpIfControl {
                 jump_false: (block_len + 2) as i64,
-                unstack_len
+                unstack_len,
             }),
         });
         instructions.extend(block_ins);
 
         instructions.push(Instruction {
             pos: Some(self.pos),
-            control: InstructionType::Jump(JumpControl { 
+            control: InstructionType::Jump(JumpControl {
                 jump: -(instructions.len() as i64),
             }),
         });
 
-
         Ok(instructions)
     }
 }
-
-
 
 impl AstDisplay for WhileControl {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {

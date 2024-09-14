@@ -7,10 +7,14 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
         statement::expression::SideEffectExpression,
-        token::{
-            binary_assignment_operator::BinaryAssignmentOperator, identifier::Identifier,
-        },
-    }, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType}, parser::Rule, vm::instruction::{GlobalAssignmentControl, Instruction, InstructionType, LocalAssignmentControl}
+        token::{binary_assignment_operator::BinaryAssignmentOperator, identifier::Identifier},
+    },
+    compiler::CompilerState,
+    error::{AlthreadError, AlthreadResult, ErrorType},
+    parser::Rule,
+    vm::instruction::{
+        GlobalAssignmentControl, Instruction, InstructionType, LocalAssignmentControl,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -34,15 +38,18 @@ impl NodeBuilder for BinaryAssignment {
     }
 }
 
-
-
 impl InstructionBuilder for Node<BinaryAssignment> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
         let mut instructions = Vec::new();
-        
+
         state.current_stack_depth += 1;
         instructions.append(&mut self.value.value.compile(state)?);
-        let rdatatype = state.program_stack.last().expect("empty stack after expression").datatype.clone();
+        let rdatatype = state
+            .program_stack
+            .last()
+            .expect("empty stack after expression")
+            .datatype
+            .clone();
         let unstack_len = state.unstack_current_depth();
 
         if let Some(g_val) = state.global_table.get(&self.value.identifier.value.value) {
@@ -50,23 +57,29 @@ impl InstructionBuilder for Node<BinaryAssignment> {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
                     Some(self.pos),
-                    format!("Cannot assign value of type {} to variable of type {}", rdatatype, g_val.datatype)
-                ))
+                    format!(
+                        "Cannot assign value of type {} to variable of type {}",
+                        rdatatype, g_val.datatype
+                    ),
+                ));
             }
             if !g_val.mutable {
                 return Err(AlthreadError::new(
                     ErrorType::VariableError,
                     Some(self.pos),
-                    format!("Cannot assign value to the immutable global variable {}", self.value.identifier.value.value)
-                ))
+                    format!(
+                        "Cannot assign value to the immutable global variable {}",
+                        self.value.identifier.value.value
+                    ),
+                ));
             }
             instructions.push(Instruction {
                 pos: Some(self.value.identifier.pos),
-                control: InstructionType::GlobalAssignment(GlobalAssignmentControl{
+                control: InstructionType::GlobalAssignment(GlobalAssignmentControl {
                     identifier: self.value.identifier.value.value.clone(),
                     operator: self.value.operator.value.clone(),
-                    unstack_len
-                })
+                    unstack_len,
+                }),
             });
         } else {
             let mut var_idx = 0;
@@ -82,41 +95,47 @@ impl InstructionBuilder for Node<BinaryAssignment> {
                 return Err(AlthreadError::new(
                     ErrorType::VariableError,
                     Some(self.pos),
-                    format!("Variable '{}' is undefined", self.value.identifier.value.value)
-                )) 
+                    format!(
+                        "Variable '{}' is undefined",
+                        self.value.identifier.value.value
+                    ),
+                ));
             }
             let l_var = l_var.unwrap();
             if l_var.datatype != rdatatype {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
                     Some(self.pos),
-                    format!("Cannot assign value of type {} to variable of type {}", rdatatype, l_var.datatype)
-                ))
+                    format!(
+                        "Cannot assign value of type {} to variable of type {}",
+                        rdatatype, l_var.datatype
+                    ),
+                ));
             }
             if !l_var.mutable {
                 return Err(AlthreadError::new(
                     ErrorType::VariableError,
                     Some(self.pos),
-                    format!("Cannot assign value to the immutable local variable {}", self.value.identifier.value.value)
-                ))
+                    format!(
+                        "Cannot assign value to the immutable local variable {}",
+                        self.value.identifier.value.value
+                    ),
+                ));
             }
 
             instructions.push(Instruction {
                 pos: Some(self.value.identifier.pos),
-                control: InstructionType::LocalAssignment(LocalAssignmentControl{
+                control: InstructionType::LocalAssignment(LocalAssignmentControl {
                     index: var_idx,
                     operator: self.value.operator.value.clone(),
-                    unstack_len
-                })
+                    unstack_len,
+                }),
             });
         }
 
         Ok(instructions)
     }
 }
-
-
-
 
 impl AstDisplay for BinaryAssignment {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {

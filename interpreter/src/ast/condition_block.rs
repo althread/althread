@@ -42,9 +42,7 @@ impl InstructionBuilder for ConditionBlock {
         let unstack_len = state.unstack_current_depth();
         if unstack_len > 0 {
             instructions.push(Instruction {
-                control: InstructionType::Unstack(UnstackControl {
-                    unstack_len
-                }),
+                control: InstructionType::Unstack(UnstackControl { unstack_len }),
                 pos: None,
             });
         }

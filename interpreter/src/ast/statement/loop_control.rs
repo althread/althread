@@ -4,8 +4,13 @@ use pest::iterators::Pairs;
 
 use crate::{
     ast::{
-        display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, 
-    }, compiler::CompilerState, error::AlthreadResult, parser::Rule, vm::instruction::{Instruction, InstructionType, JumpControl}
+        display::{AstDisplay, Prefix},
+        node::{InstructionBuilder, Node, NodeBuilder},
+    },
+    compiler::CompilerState,
+    error::AlthreadResult,
+    parser::Rule,
+    vm::instruction::{Instruction, InstructionType, JumpControl},
 };
 
 use super::Statement;
@@ -19,21 +24,17 @@ impl NodeBuilder for LoopControl {
     fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
         let statement = Box::new(Node::build(pairs.next().unwrap())?);
 
-        Ok(Self {
-            statement
-        })
+        Ok(Self { statement })
     }
 }
 
-
 impl InstructionBuilder for Node<LoopControl> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
-
         let mut instructions = self.value.statement.as_ref().compile(state)?;
- 
+
         instructions.push(Instruction {
             pos: Some(self.value.statement.as_ref().pos),
-            control: InstructionType::Jump(JumpControl { 
+            control: InstructionType::Jump(JumpControl {
                 jump: -(instructions.len() as i64),
             }),
         });
@@ -41,8 +42,6 @@ impl InstructionBuilder for Node<LoopControl> {
         Ok(instructions)
     }
 }
-
-
 
 impl AstDisplay for LoopControl {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {

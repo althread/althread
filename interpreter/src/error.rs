@@ -1,8 +1,7 @@
+use serde::{Deserialize, Serialize};
 use std::fmt;
-use serde::{Serialize, Deserialize};
 
-
-#[derive(Debug,Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct Pos {
     pub line: usize,
     pub col: usize,
@@ -10,7 +9,7 @@ pub struct Pos {
     pub end: usize,
 }
 
-#[derive(Debug,Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AlthreadError {
     pos: Option<Pos>,
     message: String,
@@ -19,13 +18,12 @@ pub struct AlthreadError {
 
 pub type AlthreadResult<T> = Result<T, AlthreadError>;
 
-
 #[macro_export]
 macro_rules! no_rule {
     ($pair:expr, $loc:expr) => {
         $crate::error::AlthreadError::new(
             $crate::error::ErrorType::SyntaxError,
-            Some($crate::error::Pos { 
+            Some($crate::error::Pos {
                 line: $pair.line_col().0,
                 col: $pair.line_col().1,
                 start: $pair.as_span().start(),
@@ -36,8 +34,7 @@ macro_rules! no_rule {
     };
 }
 
-
-#[derive(Debug,Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum ErrorType {
     SyntaxError,
     TypeError,
@@ -86,8 +83,10 @@ impl AlthreadError {
             Some(pos) => {
                 eprintln!("Error at {}:{}", pos.line, pos.col);
                 self.print_err_line(input);
-            },
-            None => {eprintln!("Runtime Error:");},
+            }
+            None => {
+                eprintln!("Runtime Error:");
+            }
         };
         eprintln!("{}: {}", self.error_type, self.message);
     }

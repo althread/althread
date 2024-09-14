@@ -1,35 +1,43 @@
 pub mod assignment;
+pub mod channel_declaration;
 pub mod declaration;
 pub mod expression;
-pub mod if_control;
 pub mod fn_call;
-pub mod run_call;
-pub mod while_control;
+pub mod if_control;
 pub mod loop_control;
+pub mod receive;
+pub mod run_call;
+pub mod send;
 pub mod wait;
 pub mod waiting_case;
-pub mod channel_declaration;
-pub mod send;
-pub mod receive;
+pub mod while_control;
 
 use std::fmt;
 
 use assignment::Assignment;
 use channel_declaration::ChannelDeclaration;
 use declaration::Declaration;
+use fn_call::FnCall;
 use if_control::IfControl;
 use loop_control::LoopControl;
 use pest::iterators::Pairs;
-use fn_call::FnCall;
 use run_call::RunCall;
 use send::SendStatement;
 use wait::Wait;
 use while_control::WhileControl;
 
-use crate::{compiler::CompilerState, error::AlthreadResult, no_rule, parser::Rule, vm::instruction::{ Instruction, InstructionType, UnstackControl}};
+use crate::{
+    compiler::CompilerState,
+    error::AlthreadResult,
+    no_rule,
+    parser::Rule,
+    vm::instruction::{Instruction, InstructionType, UnstackControl},
+};
 
 use super::{
-    block::Block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}
+    block::Block,
+    display::{AstDisplay, Prefix},
+    node::{InstructionBuilder, Node, NodeBuilder},
 };
 
 #[derive(Debug, Clone)]
@@ -52,22 +60,21 @@ impl NodeBuilder for Statement {
         let pair = pairs.next().unwrap();
 
         match pair.as_rule() {
-            Rule::assignment     => Ok(Self::Assignment(Node::build(pair)?)),
-            Rule::declaration    => Ok(Self::Declaration(Node::build(pair)?)),
+            Rule::assignment => Ok(Self::Assignment(Node::build(pair)?)),
+            Rule::declaration => Ok(Self::Declaration(Node::build(pair)?)),
             Rule::wait_statement => Ok(Self::Wait(Node::build(pair)?)),
-            Rule::fn_call        => Ok(Self::FnCall(Node::build(pair)?)),
-            Rule::run_call       => Ok(Self::Run(Node::build(pair)?)),
-            Rule::if_control     => Ok(Self::If(Node::build(pair)?)),
-            Rule::while_control  => Ok(Self::While(Node::build(pair)?)),
-            Rule::loop_control   => Ok(Self::Loop(Node::build(pair)?)),
-            Rule::code_block     => Ok(Self::Block(Node::build(pair)?)),
-            Rule::send_call      => Ok(Self::Send(Node::build(pair)?)),
+            Rule::fn_call => Ok(Self::FnCall(Node::build(pair)?)),
+            Rule::run_call => Ok(Self::Run(Node::build(pair)?)),
+            Rule::if_control => Ok(Self::If(Node::build(pair)?)),
+            Rule::while_control => Ok(Self::While(Node::build(pair)?)),
+            Rule::loop_control => Ok(Self::Loop(Node::build(pair)?)),
+            Rule::code_block => Ok(Self::Block(Node::build(pair)?)),
+            Rule::send_call => Ok(Self::Send(Node::build(pair)?)),
             Rule::channel_declaration => Ok(Self::ChannelDeclaration(Node::build(pair)?)),
             _ => Err(no_rule!(pair, "Statement")),
         }
     }
 }
-
 
 impl InstructionBuilder for Statement {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
@@ -82,19 +89,17 @@ impl InstructionBuilder for Statement {
             Self::Wait(node) => node.compile(state),
             Self::Block(node) => node.compile(state),
             Self::Send(node) => node.compile(state),
-            Self::Run(node)  => {
+            Self::Run(node) => {
                 // a run call returns a value, so we have to ustack it
                 let mut instructions = node.compile(state)?;
                 instructions.push(Instruction {
                     pos: Some(node.pos),
-                    control: InstructionType::Unstack(UnstackControl {
-                        unstack_len: 1,
-                    }),
+                    control: InstructionType::Unstack(UnstackControl { unstack_len: 1 }),
                 });
                 state.program_stack.pop();
                 Ok(instructions)
-            },
-            Self::FnCall(node)  => node.compile(state),
+            }
+            Self::FnCall(node) => node.compile(state),
         }
     }
 }
@@ -102,10 +107,7 @@ impl InstructionBuilder for Statement {
 impl Statement {
     pub fn is_atomic(&self) -> bool {
         match self {
-            Self::Assignment(_)
-            | Self::Declaration(_)
-            | Self::FnCall(_)
-            | Self::Run(_) => true,
+            Self::Assignment(_) | Self::Declaration(_) | Self::FnCall(_) | Self::Run(_) => true,
             _ => false,
         }
     }

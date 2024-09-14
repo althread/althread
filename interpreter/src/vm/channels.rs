@@ -2,8 +2,6 @@ use std::collections::HashMap;
 
 use crate::ast::token::literal::Literal;
 
-
-
 pub struct Channels {
     states: HashMap<(usize, String), Vec<Literal>>,
     connections: HashMap<(usize, String), (usize, String)>,
@@ -28,13 +26,24 @@ impl Channels {
     /**
      * Send values to a channel. If the channel is not connected, the values are stored and the proc is waiting
      */
-    pub fn send(&mut self, program_id: usize, channel_name: String, value: Literal) -> Option<ReceiverInfo> {
-        if let Some((to_program_id, to_channel_name)) = self.connections.get(&(program_id, channel_name.clone())) {
+    pub fn send(
+        &mut self,
+        program_id: usize,
+        channel_name: String,
+        value: Literal,
+    ) -> Option<ReceiverInfo> {
+        if let Some((to_program_id, to_channel_name)) =
+            self.connections.get(&(program_id, channel_name.clone()))
+        {
             // get the state of the channel (create it if it doesn't exist)
-            if let Some(state) = self.states.get_mut(&(*to_program_id, to_channel_name.clone())) {
+            if let Some(state) = self
+                .states
+                .get_mut(&(*to_program_id, to_channel_name.clone()))
+            {
                 state.push(value);
             } else {
-                self.states.insert((*to_program_id, to_channel_name.clone()), vec![value]);
+                self.states
+                    .insert((*to_program_id, to_channel_name.clone()), vec![value]);
             }
             return Some(ReceiverInfo {
                 program_id: *to_program_id,
@@ -42,10 +51,13 @@ impl Channels {
             });
         }
 
-        assert!(self.waiting_proc.get(&program_id).is_none(), "A proc can only wait on one channel");
-        self.waiting_proc.insert(program_id, (channel_name.clone(), value));
+        assert!(
+            self.waiting_proc.get(&program_id).is_none(),
+            "A proc can only wait on one channel"
+        );
+        self.waiting_proc
+            .insert(program_id, (channel_name.clone(), value));
         None
-
     }
 
     /**
@@ -59,11 +71,23 @@ impl Channels {
      * Connect a proc to another proc
      * If the sender proc was waiting to send on the channel, it will send the values
      */
-    pub fn connect(&mut self, program_id: usize, channel_name: String, to_program_id: usize, to_channel_name: String) -> Result<Option<(usize, String)>, String> {
-        if self.connections.contains_key(&(program_id, channel_name.clone())) {
+    pub fn connect(
+        &mut self,
+        program_id: usize,
+        channel_name: String,
+        to_program_id: usize,
+        to_channel_name: String,
+    ) -> Result<Option<(usize, String)>, String> {
+        if self
+            .connections
+            .contains_key(&(program_id, channel_name.clone()))
+        {
             return Err("This channel name is already used as a source on this process".into());
         }
-        self.connections.insert((program_id, channel_name.clone()), (to_program_id, to_channel_name.clone()));
+        self.connections.insert(
+            (program_id, channel_name.clone()),
+            (to_program_id, to_channel_name.clone()),
+        );
 
         if let Some((channel_waiting, _)) = self.waiting_proc.get(&program_id) {
             if channel_waiting == &channel_name {
@@ -93,7 +117,7 @@ impl Channels {
             Some(state) => {
                 let value = state.remove(0);
                 Some(value)
-            },
+            }
             None => None,
         }
     }

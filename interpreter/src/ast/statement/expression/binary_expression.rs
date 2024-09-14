@@ -4,8 +4,15 @@ use pest::iterators::Pair;
 
 use crate::{
     ast::{
-        display::{AstDisplay, Prefix}, node::Node, statement::waiting_case::WaitDependency, token::{binary_operator::BinaryOperator, datatype::DataType, literal::Literal}
-    }, compiler::{CompilerState, Variable}, error::{AlthreadResult, Pos}, parser::Rule, vm::Memory
+        display::{AstDisplay, Prefix},
+        node::Node,
+        statement::waiting_case::WaitDependency,
+        token::{binary_operator::BinaryOperator, datatype::DataType, literal::Literal},
+    },
+    compiler::{CompilerState, Variable},
+    error::{AlthreadResult, Pos},
+    parser::Rule,
+    vm::Memory,
 };
 
 use super::{Expression, LocalExpressionNode};
@@ -52,13 +59,21 @@ impl BinaryExpression {
 }
 
 impl LocalBinaryExpressionNode {
-    
-    pub fn from_binary(bin_expression: &BinaryExpression, program_stack: &Vec<Variable>) -> AlthreadResult<Self> {
+    pub fn from_binary(
+        bin_expression: &BinaryExpression,
+        program_stack: &Vec<Variable>,
+    ) -> AlthreadResult<Self> {
         Ok(Self {
-            left: Box::new(LocalExpressionNode::from_expression(&bin_expression.left.value, program_stack)?),
+            left: Box::new(LocalExpressionNode::from_expression(
+                &bin_expression.left.value,
+                program_stack,
+            )?),
             operator: bin_expression.operator.value.clone(),
-            right: Box::new(LocalExpressionNode::from_expression(&bin_expression.right.value, program_stack)?),
-        })    
+            right: Box::new(LocalExpressionNode::from_expression(
+                &bin_expression.right.value,
+                program_stack,
+            )?),
+        })
     }
 
     pub fn datatype(&self, state: &CompilerState) -> Result<DataType, String> {
@@ -68,36 +83,47 @@ impl LocalBinaryExpressionNode {
             BinaryOperator::Add
             | BinaryOperator::Subtract
             | BinaryOperator::Multiply
-            | BinaryOperator::Divide => if left_type.is_a_number() && left_type == right_type {
-                Ok(left_type)
-            } else {
-                Err(format!("arithmetic operation can only be performed between two number types that are exactly the same (found {} {} {})", left_type, self.operator, right_type))
-            },
-            BinaryOperator::Modulo => if left_type.is_a_number() && right_type == DataType::Integer {
-                Ok(left_type)
-            } else {
-                Err("modulo can only be performed between a number and an integer".to_string())
-            },
-            BinaryOperator::Equals
-            | BinaryOperator::NotEquals => if left_type == right_type {
-                Ok(DataType::Boolean)
-            } else {
-                Err(format!("equality check can only be performed between values that have exaclty the same type (found {} {} {})", left_type, self.operator, right_type))
-            },
+            | BinaryOperator::Divide => {
+                if left_type.is_a_number() && left_type == right_type {
+                    Ok(left_type)
+                } else {
+                    Err(format!("arithmetic operation can only be performed between two number types that are exactly the same (found {} {} {})", left_type, self.operator, right_type))
+                }
+            }
+            BinaryOperator::Modulo => {
+                if left_type.is_a_number() && right_type == DataType::Integer {
+                    Ok(left_type)
+                } else {
+                    Err("modulo can only be performed between a number and an integer".to_string())
+                }
+            }
+            BinaryOperator::Equals | BinaryOperator::NotEquals => {
+                if left_type == right_type {
+                    Ok(DataType::Boolean)
+                } else {
+                    Err(format!("equality check can only be performed between values that have exaclty the same type (found {} {} {})", left_type, self.operator, right_type))
+                }
+            }
             BinaryOperator::LessThan
             | BinaryOperator::LessThanOrEqual
             | BinaryOperator::GreaterThan
-            | BinaryOperator::GreaterThanOrEqual => if left_type.is_a_number() && left_type == right_type {
-                Ok(DataType::Boolean)
-            } else {
-                Err("arithmetic comparison can only be performed between two number types that are exactly the same".to_string())
-            },
-            BinaryOperator::And
-            | BinaryOperator::Or => if left_type.is_boolean() && right_type.is_boolean() {
-                Ok(DataType::Boolean)
-            } else {
-                Err("boolean operations can only be performed between boolean values".to_string())
-            },
+            | BinaryOperator::GreaterThanOrEqual => {
+                if left_type.is_a_number() && left_type == right_type {
+                    Ok(DataType::Boolean)
+                } else {
+                    Err("arithmetic comparison can only be performed between two number types that are exactly the same".to_string())
+                }
+            }
+            BinaryOperator::And | BinaryOperator::Or => {
+                if left_type.is_boolean() && right_type.is_boolean() {
+                    Ok(DataType::Boolean)
+                } else {
+                    Err(
+                        "boolean operations can only be performed between boolean values"
+                            .to_string(),
+                    )
+                }
+            }
         }
     }
 
@@ -122,7 +148,6 @@ impl LocalBinaryExpressionNode {
         }
     }
 }
-
 
 impl BinaryExpression {
     pub fn add_dependencies(&self, dependencies: &mut WaitDependency) {

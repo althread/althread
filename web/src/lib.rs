@@ -1,5 +1,5 @@
-use wasm_bindgen::prelude::*;
 use fastrand;
+use wasm_bindgen::prelude::*;
 
 use althread::{ast::Ast, error::AlthreadError};
 
@@ -7,10 +7,8 @@ fn error_to_js(err: AlthreadError) -> JsValue {
     serde_wasm_bindgen::to_value(&err).unwrap()
 }
 
-
 #[wasm_bindgen]
-pub fn compile(source: &str) -> Result<String,JsValue> {
-    
+pub fn compile(source: &str) -> Result<String, JsValue> {
     // parse code with pest
     let pairs = althread::parser::parse(&source).map_err(error_to_js)?;
 
@@ -24,8 +22,7 @@ pub fn compile(source: &str) -> Result<String,JsValue> {
 }
 
 #[wasm_bindgen]
-pub fn run(source: &str) -> Result<String,JsValue> {
-    
+pub fn run(source: &str) -> Result<String, JsValue> {
     // parse code with pest
     let pairs = althread::parser::parse(&source).map_err(error_to_js)?;
 
@@ -37,8 +34,8 @@ pub fn run(source: &str) -> Result<String,JsValue> {
 
     let mut vm = althread::vm::VM::new(&compiled_project);
 
-    vm.start(fastrand::u64(0..(1<<32)));
-    
+    vm.start(fastrand::u64(0..(1 << 32)));
+
     let mut result = String::new();
 
     for _ in 0..100000 {

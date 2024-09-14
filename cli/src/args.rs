@@ -1,6 +1,5 @@
 use std::{ffi::OsStr, path::PathBuf};
 
-
 use clap::builder::TypedValueParser;
 use clap::{Args, Parser, Subcommand, ValueHint};
 
@@ -13,12 +12,10 @@ pub enum Input {
     Path(PathBuf),
 }
 
-
 /// The Typst compiler.
 #[derive(Debug, Clone, Parser)]
 #[clap(name = "althread")]
 pub struct CliArguments {
-
     /// Turn debugging information on
     #[arg(short, long, action = clap::ArgAction::Count)]
     pub debug: u8,
@@ -42,7 +39,6 @@ pub enum Command {
     /// Compiles an input file into a supported output format
     #[command()]
     RandomSearch(RandomSearchCommand),
-
 }
 
 /// Compiles an input file into a supported output format
@@ -51,7 +47,6 @@ pub struct CompileCommand {
     /// Shared arguments
     #[clap(flatten)]
     pub common: SharedArgs,
-
 }
 
 /// Compiles an input file into a supported output format
@@ -76,7 +71,6 @@ pub struct RandomSearchCommand {
     /// Shared arguments
     #[clap(flatten)]
     pub common: SharedArgs,
-
 }
 
 /// Common arguments of compile, watch, and query.
@@ -85,9 +79,7 @@ pub struct SharedArgs {
     /// Path to input Typst file. Use `-` to read input from stdin
     #[clap(value_parser = make_input_value_parser(), value_hint = ValueHint::FilePath)]
     pub input: Input,
-
 }
-
 
 /// The clap value parser used by `SharedArgs.input`
 fn make_input_value_parser() -> impl TypedValueParser<Value = Input> {
@@ -100,7 +92,12 @@ fn make_input_value_parser() -> impl TypedValueParser<Value = Input> {
             let path = PathBuf::from(value.clone());
             if path.extension() != Some(OsStr::new("alt")) {
                 let mut err = clap::Error::new(clap::error::ErrorKind::ValueValidation);
-                err.insert(clap::error::ContextKind::InvalidValue, clap::error::ContextValue::String("Input file must have .alt extension".to_owned()));
+                err.insert(
+                    clap::error::ContextKind::InvalidValue,
+                    clap::error::ContextValue::String(
+                        "Input file must have .alt extension".to_owned(),
+                    ),
+                );
                 return Err(err);
             }
             Ok(Input::Path(value.into()))

@@ -1,13 +1,23 @@
-use std::{collections::HashSet, fmt::{self, Debug}};
+use std::{
+    collections::HashSet,
+    fmt::{self, Debug},
+};
 
 use pest::iterators::Pair;
 
+use super::{Expression, LocalExpressionNode};
 use crate::{
     ast::{
-        display::AstDisplay, node::Node, statement::waiting_case::WaitDependency, token::{datatype::DataType, identifier::Identifier, literal::Literal}
-    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, no_rule, parser::Rule
+        display::AstDisplay,
+        node::Node,
+        statement::waiting_case::WaitDependency,
+        token::{datatype::DataType, identifier::Identifier, literal::Literal},
+    },
+    compiler::{CompilerState, Variable},
+    error::{AlthreadError, AlthreadResult, ErrorType, Pos},
+    no_rule,
+    parser::Rule,
 };
-use super::{Expression, LocalExpressionNode};
 
 #[derive(Debug, Clone)]
 pub enum PrimaryExpression {
@@ -39,14 +49,18 @@ impl PrimaryExpression {
     pub fn add_dependencies(&self, dependencies: &mut WaitDependency) {
         match self {
             Self::Literal(_) => (),
-            Self::Identifier(node) => { dependencies.variables.insert(node.value.value.clone()); },
+            Self::Identifier(node) => {
+                dependencies.variables.insert(node.value.value.clone());
+            }
             Self::Expression(node) => node.value.add_dependencies(dependencies),
         }
     }
     pub fn get_vars(&self, vars: &mut HashSet<String>) {
         match self {
             Self::Literal(_) => (),
-            Self::Identifier(node) => { vars.insert(node.value.value.clone()); },
+            Self::Identifier(node) => {
+                vars.insert(node.value.value.clone());
+            }
             Self::Expression(node) => node.value.get_vars(vars),
         }
     }
@@ -78,18 +92,22 @@ impl fmt::Display for LocalPrimaryExpressionNode {
     }
 }
 
-
 impl LocalPrimaryExpressionNode {
-    pub fn from_primary(primary: &PrimaryExpression, program_stack: &Vec<Variable>) -> AlthreadResult<Self> {
+    pub fn from_primary(
+        primary: &PrimaryExpression,
+        program_stack: &Vec<Variable>,
+    ) -> AlthreadResult<Self> {
         Ok(match primary {
-            PrimaryExpression::Literal(node) => 
-                LocalPrimaryExpressionNode::Literal(LocalLiteralNode::from_literal(node)?),
-            PrimaryExpression::Identifier(node) => 
-                LocalPrimaryExpressionNode::Var(LocalVarNode::from_identifier(node, program_stack)?),
+            PrimaryExpression::Literal(node) => {
+                LocalPrimaryExpressionNode::Literal(LocalLiteralNode::from_literal(node)?)
+            }
+            PrimaryExpression::Identifier(node) => {
+                LocalPrimaryExpressionNode::Var(LocalVarNode::from_identifier(node, program_stack)?)
+            }
             PrimaryExpression::Expression(node) => {
                 let e = LocalExpressionNode::from_expression(&node.as_ref().value, program_stack)?;
                 LocalPrimaryExpressionNode::Expression(Box::new(e))
-            },
+            }
         })
     }
 
@@ -100,7 +118,12 @@ impl LocalPrimaryExpressionNode {
             Self::Var(v) => {
                 let mem_len = state.program_stack.len();
                 //println!("   var {}:{}", v.index, state.program_stack.get(v.index).expect("variable index does not exists").datatype);
-                Ok(state.program_stack.get(mem_len - 1 - v.index).expect("variable index does not exists").datatype.clone())
+                Ok(state
+                    .program_stack
+                    .get(mem_len - 1 - v.index)
+                    .expect("variable index does not exists")
+                    .datatype
+                    .clone())
             }
         }
     }
@@ -114,17 +137,21 @@ impl LocalLiteralNode {
     }
 }
 impl LocalVarNode {
-    pub fn from_identifier(ident: &Node<Identifier>, program_stack: &Vec<Variable>) -> AlthreadResult<Self> {
-        let index = program_stack.iter().rev().position(|var| var.name == ident.value.value).ok_or(AlthreadError::new(
-            ErrorType::VariableError,
-            Some(ident.pos),
-            format!("Variable '{}' not found", ident.value.value)
-        ))?;
-        Ok(LocalVarNode {
-            index
-        })
+    pub fn from_identifier(
+        ident: &Node<Identifier>,
+        program_stack: &Vec<Variable>,
+    ) -> AlthreadResult<Self> {
+        let index = program_stack
+            .iter()
+            .rev()
+            .position(|var| var.name == ident.value.value)
+            .ok_or(AlthreadError::new(
+                ErrorType::VariableError,
+                Some(ident.pos),
+                format!("Variable '{}' not found", ident.value.value),
+            ))?;
+        Ok(LocalVarNode { index })
     }
-    
 }
 
 impl AstDisplay for PrimaryExpression {

@@ -8,7 +8,6 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::NodeBuilder,
     },
-    
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
     no_rule,
     parser::Rule,
@@ -38,7 +37,7 @@ impl NodeBuilder for Literal {
                     Some(Pos {
                         start: pair.as_span().start(),
                         end: pair.as_span().end(),
-                        line:pair.line_col().0,
+                        line: pair.line_col().0,
                         col: pair.line_col().1,
                     }),
                     format!("Cannot parse {}", pair.as_str()),
@@ -57,9 +56,7 @@ impl NodeBuilder for Literal {
     }
 }
 
-
 impl Literal {
-
     pub fn get_datatype(&self) -> DataType {
         match self {
             Self::Null => DataType::Void,
@@ -67,7 +64,7 @@ impl Literal {
             Self::Int(_) => DataType::Integer,
             Self::Float(_) => DataType::Float,
             Self::String(_) => DataType::String,
-            Self::Process(n,_) => DataType::Process(n.to_string()),
+            Self::Process(n, _) => DataType::Process(n.to_string()),
             Self::Tuple(t) => DataType::Tuple(t.iter().map(|l| l.get_datatype()).collect()),
         }
     }

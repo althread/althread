@@ -9,12 +9,12 @@ use crate::error::AlthreadResult;
 use crate::parser::Rule;
 use crate::vm::instruction::Instruction;
 
-use super::expression::Expression;
 use super::super::{
     display::{AstDisplay, Prefix},
     node::{Node, NodeBuilder},
     statement::Statement,
 };
+use super::expression::Expression;
 use super::receive::ReceiveStatement;
 
 #[derive(Debug, Clone)]
@@ -33,7 +33,6 @@ impl WaitDependency {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub enum WaitingBlockCaseRule {
     Expression(Node<Expression>),
@@ -48,7 +47,6 @@ pub struct WaitingBlockCase {
 
 impl NodeBuilder for WaitingBlockCase {
     fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
-
         let pair = pairs.next().unwrap();
 
         let rule = match pair.as_rule() {
@@ -64,13 +62,9 @@ impl NodeBuilder for WaitingBlockCase {
             None => None,
         };
 
-        Ok(Self {
-            rule,
-            statement,
-        })
+        Ok(Self { rule, statement })
     }
 }
-
 
 impl AstDisplay for WaitingBlockCase {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
@@ -86,11 +80,9 @@ impl AstDisplay for WaitingBlockCase {
             statement.ast_fmt(f, &prefix.add_leaf())?;
         }
 
-
         Ok(())
     }
 }
-
 
 impl WaitingBlockCaseRule {
     pub fn add_dependencies(&self, dependencies: &mut WaitDependency) {

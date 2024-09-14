@@ -10,13 +10,17 @@ use crate::compiler::Variable;
 use crate::error::{AlthreadError, ErrorType, Pos};
 use crate::vm::instruction::InstructionType;
 use crate::vm::Memory;
-use crate::{compiler::CompilerState, error::AlthreadResult, parser::Rule, vm::instruction::Instruction};
+use crate::{
+    compiler::CompilerState, error::AlthreadResult, parser::Rule, vm::instruction::Instruction,
+};
 
-use crate::ast::{display::{AstDisplay, Prefix}, node::{Node, NodeBuilder}, statement::expression::Expression};
+use crate::ast::{
+    display::{AstDisplay, Prefix},
+    node::{Node, NodeBuilder},
+    statement::expression::Expression,
+};
 
 use super::LocalExpressionNode;
-
-
 
 #[derive(Debug, Clone)]
 pub struct TupleExpression {
@@ -30,12 +34,17 @@ pub struct LocalTupleExpressionNode {
 
 impl fmt::Display for LocalTupleExpressionNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({})", self.values.iter().map(|v| v.to_string()).collect::<Vec<String>>().join(", "))
+        write!(
+            f,
+            "({})",
+            self.values
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<String>>()
+                .join(", ")
+        )
     }
 }
-
-
-
 
 impl NodeBuilder for TupleExpression {
     fn build(pairs: Pairs<Rule>) -> AlthreadResult<Self> {
@@ -49,31 +58,36 @@ impl NodeBuilder for TupleExpression {
 }
 
 impl LocalTupleExpressionNode {
-    
-    pub fn from_tuple(tuple: &TupleExpression, program_stack: &Vec<Variable>) -> AlthreadResult<Self> {
+    pub fn from_tuple(
+        tuple: &TupleExpression,
+        program_stack: &Vec<Variable>,
+    ) -> AlthreadResult<Self> {
         let mut values = Vec::new();
         for value in &tuple.values {
-            values.push(LocalExpressionNode::from_expression(&value.value, program_stack)?);
+            values.push(LocalExpressionNode::from_expression(
+                &value.value,
+                program_stack,
+            )?);
         }
-        Ok(Self {
-            values,
-        })    
+        Ok(Self { values })
     }
 
     pub fn datatype(&self, state: &CompilerState) -> Result<DataType, String> {
         Ok(DataType::Tuple(
-            self.values.iter().map(
-                |v| 
-                v.datatype(state)
-            ).collect::<Result<Vec<DataType>, String>>()?))
+            self.values
+                .iter()
+                .map(|v| v.datatype(state))
+                .collect::<Result<Vec<DataType>, String>>()?,
+        ))
     }
 
     pub fn eval(&self, mem: &Memory) -> Result<Literal, String> {
         Ok(Literal::Tuple(
-            self.values.iter().map(
-                |v| 
-                v.eval(mem)
-            ).collect::<Result<Vec<Literal>, String>>()?))
+            self.values
+                .iter()
+                .map(|v| v.eval(mem))
+                .collect::<Result<Vec<Literal>, String>>()?,
+        ))
     }
 }
 
@@ -88,13 +102,22 @@ impl TupleExpression {
             value.value.get_vars(vars);
         }
     }
-    pub fn destruct_tuple(variable_names: &Vec<String>, types: &Vec<DataType>, state: &mut CompilerState, pos: Pos) -> AlthreadResult<Instruction> {
+    pub fn destruct_tuple(
+        variable_names: &Vec<String>,
+        types: &Vec<DataType>,
+        state: &mut CompilerState,
+        pos: Pos,
+    ) -> AlthreadResult<Instruction> {
         if types.len() != variable_names.len() {
             return Err(AlthreadError::new(
                 ErrorType::TypeError,
                 Some(pos),
-                format!("Tuple has {} values, but {} were expected", variable_names.len(), types.len())
-            ))
+                format!(
+                    "Tuple has {} values, but {} were expected",
+                    variable_names.len(),
+                    types.len()
+                ),
+            ));
         }
         // remove the top of the stack and checking that the types are correct
         let top = state.program_stack.pop().expect("empty stack");
@@ -102,8 +125,11 @@ impl TupleExpression {
             return Err(AlthreadError::new(
                 ErrorType::TypeError,
                 Some(pos),
-                format!("Expected tuple of types {:?}, but found {:?}", types, top.datatype)
-            ))
+                format!(
+                    "Expected tuple of types {:?}, but found {:?}",
+                    types, top.datatype
+                ),
+            ));
         }
 
         for (i, variable) in variable_names.iter().enumerate() {
@@ -115,7 +141,7 @@ impl TupleExpression {
                 declare_pos: Some(pos),
             })
         }
-        Ok(Instruction{
+        Ok(Instruction {
             control: InstructionType::Destruct(types.len()),
             pos: Some(pos),
         })

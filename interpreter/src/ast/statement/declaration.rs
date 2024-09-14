@@ -9,7 +9,12 @@ use crate::{
         token::{
             datatype::DataType, declaration_keyword::DeclarationKeyword, identifier::Identifier,
         },
-    }, compiler::{CompilerState, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule, vm::instruction::{DeclarationControl, Instruction, InstructionType}
+    },
+    compiler::{CompilerState, Variable},
+    error::{AlthreadError, AlthreadResult, ErrorType},
+    no_rule,
+    parser::Rule,
+    vm::instruction::{DeclarationControl, Instruction, InstructionType},
 };
 
 use super::expression::SideEffectExpression;
@@ -50,21 +55,31 @@ impl NodeBuilder for Declaration {
     }
 }
 
-
 impl InstructionBuilder for Declaration {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
         let mut instructions = Vec::new();
         let mut datatype = None;
 
-        if state.global_table.contains_key(&self.identifier.value.value) {
+        if state
+            .global_table
+            .contains_key(&self.identifier.value.value)
+        {
             return Err(AlthreadError::new(
                 ErrorType::VariableError,
                 Some(self.identifier.pos),
-                format!("Variable {} already declared", self.identifier.value.value)
+                format!("Variable {} already declared", self.identifier.value.value),
             ));
         }
         // if the variable start with a capital letter, return an error because it is reserved for shared variables
-        if self.identifier.value.value.chars().next().unwrap().is_uppercase() {
+        if self
+            .identifier
+            .value
+            .value
+            .chars()
+            .next()
+            .unwrap()
+            .is_uppercase()
+        {
             if !state.is_shared {
                 return Err(AlthreadError::new(
                     ErrorType::VariableError,
@@ -89,7 +104,12 @@ impl InstructionBuilder for Declaration {
         if let Some(value) = &self.value {
             state.current_stack_depth += 1;
             instructions.extend(value.compile(state)?);
-            let computed_datatype = state.program_stack.last().expect("Error: Program stack is empty after compiling an expression").datatype.clone();
+            let computed_datatype = state
+                .program_stack
+                .last()
+                .expect("Error: Program stack is empty after compiling an expression")
+                .datatype
+                .clone();
             let unstack_len = state.unstack_current_depth();
 
             if let Some(datatype) = datatype {
@@ -97,16 +117,17 @@ impl InstructionBuilder for Declaration {
                     return Err(AlthreadError::new(
                         ErrorType::TypeError,
                         Some(self.datatype.as_ref().unwrap().pos),
-                        format!("Declared type and assignment do not match (found :{} = {})", datatype, computed_datatype)
-                    ))
+                        format!(
+                            "Declared type and assignment do not match (found :{} = {})",
+                            datatype, computed_datatype
+                        ),
+                    ));
                 }
             }
             datatype = Some(computed_datatype);
 
             instructions.push(Instruction {
-                control: InstructionType::Declaration(DeclarationControl{
-                    unstack_len
-                }),
+                control: InstructionType::Declaration(DeclarationControl { unstack_len }),
                 pos: Some(self.keyword.pos),
             });
         } else {
@@ -114,17 +135,17 @@ impl InstructionBuilder for Declaration {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
                     Some(self.identifier.pos),
-                    "Declaration must have a datatype or a value".to_string()
+                    "Declaration must have a datatype or a value".to_string(),
                 ));
             }
             instructions.push(Instruction {
                 control: InstructionType::Push(datatype.as_ref().unwrap().default()),
                 pos: Some(self.keyword.pos),
             });
-        } 
+        }
 
         let datatype = datatype.unwrap();
-        
+
         state.program_stack.push(Variable {
             mutable: self.keyword.value == DeclarationKeyword::Let,
             name: self.identifier.value.value.clone(),

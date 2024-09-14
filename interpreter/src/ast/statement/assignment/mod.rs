@@ -9,7 +9,12 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
-    }, compiler::CompilerState, error::AlthreadResult, no_rule, parser::Rule, vm::instruction::Instruction
+    },
+    compiler::CompilerState,
+    error::AlthreadResult,
+    no_rule,
+    parser::Rule,
+    vm::instruction::Instruction,
 };
 
 #[derive(Debug, Clone)]
@@ -28,7 +33,6 @@ impl NodeBuilder for Assignment {
     }
 }
 
-
 impl InstructionBuilder for Assignment {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
         match self {
@@ -36,7 +40,6 @@ impl InstructionBuilder for Assignment {
         }
     }
 }
-
 
 impl AstDisplay for Assignment {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {

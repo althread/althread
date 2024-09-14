@@ -1,18 +1,25 @@
-use std::{collections::{BTreeSet, HashMap, HashSet}, fmt};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    fmt,
+};
 
 use channels::{Channels, ReceiverInfo};
 use fastrand::Rng;
 
-use instruction::{ExpressionControl, GlobalReadsControl, Instruction, InstructionType, ProgramCode};
+use instruction::{
+    ExpressionControl, GlobalReadsControl, Instruction, InstructionType, ProgramCode,
+};
 use running_program::RunningProgramState;
 
-use crate::{ast::{statement::waiting_case::WaitDependency, token::literal::Literal}, compiler::CompiledProject, error::{AlthreadError, AlthreadResult, ErrorType, Pos}};
+use crate::{
+    ast::{statement::waiting_case::WaitDependency, token::literal::Literal},
+    compiler::CompiledProject,
+    error::{AlthreadError, AlthreadResult, ErrorType, Pos},
+};
 
-
-pub mod instruction;
 pub mod channels;
+pub mod instruction;
 pub mod running_program;
-
 
 pub type Memory = Vec<Literal>;
 pub type GlobalMemory = HashMap<String, Literal>;
@@ -24,13 +31,8 @@ pub struct ExecutionStepInfo {
     pub instructions: Vec<Instruction>,
 }
 
-
 fn str_to_expr_error(pos: Option<Pos>) -> impl Fn(String) -> AlthreadError {
-    return move |msg| AlthreadError::new(
-        ErrorType::ExpressionError,
-        pos,
-        msg
-    )
+    return move |msg| AlthreadError::new(ErrorType::ExpressionError, pos, msg);
 }
 
 #[derive(Debug, PartialEq)]
@@ -38,18 +40,16 @@ pub enum GlobalAction {
     StartProgram(String, usize),
     Write(String),
     Send(String, Option<ReceiverInfo>),
-    Connect(usize,String),
+    Connect(usize, String),
     EndProgram,
     Wait,
     Exit,
 }
 
-
 pub struct GlobalActions {
     pub actions: Vec<GlobalAction>,
     pub wait: bool,
 }
-
 
 pub struct VM<'a> {
     pub globals: GlobalMemory,
@@ -84,13 +84,19 @@ impl<'a> VM<'a> {
     }
 
     fn run_program(&mut self, program_name: &str, pid: usize) {
-        assert!(self.running_programs.get(&pid).is_none(), "program with id {} already exists", pid);
-        self.running_programs.insert(pid,
+        assert!(
+            self.running_programs.get(&pid).is_none(),
+            "program with id {} already exists",
+            pid
+        );
+        self.running_programs.insert(
+            pid,
             RunningProgramState::new(
                 pid,
-                program_name.to_string(), 
-                &self.programs_code[program_name]
-            ));
+                program_name.to_string(),
+                &self.programs_code[program_name],
+            ),
+        );
         self.executable_programs.insert(pid);
     }
 
@@ -106,32 +112,57 @@ impl<'a> VM<'a> {
             return Err(AlthreadError::new(
                 ErrorType::RuntimeError,
                 None,
-                "no program is running".to_string()
+                "no program is running".to_string(),
             ));
         }
 
-        let program = self.rng.choice(self.executable_programs.iter()).ok_or(AlthreadError::new(
-            ErrorType::RuntimeError,
-            None,
-            format!("All programs are waiting, deadlock:\n{}", self.waiting_programs.iter().map(|(id, dep)| 
-            format!("-{}#{} at line {}: {:?}", 
-                self.running_programs.get(id).unwrap().name,
-                id, 
-                self.running_programs.get(id).unwrap().current_instruction().unwrap().pos.unwrap().line,
-                dep)).collect::<Vec<_>>().join("\n"))
-        ))?;
-        
-        let program = self.running_programs.get_mut(program).expect("program is executable but not found in running programs");
+        let program =
+            self.rng
+                .choice(self.executable_programs.iter())
+                .ok_or(AlthreadError::new(
+                    ErrorType::RuntimeError,
+                    None,
+                    format!(
+                        "All programs are waiting, deadlock:\n{}",
+                        self.waiting_programs
+                            .iter()
+                            .map(|(id, dep)| format!(
+                                "-{}#{} at line {}: {:?}",
+                                self.running_programs.get(id).unwrap().name,
+                                id,
+                                self.running_programs
+                                    .get(id)
+                                    .unwrap()
+                                    .current_instruction()
+                                    .unwrap()
+                                    .pos
+                                    .unwrap()
+                                    .line,
+                                dep
+                            ))
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    ),
+                ))?;
+
+        let program = self
+            .running_programs
+            .get_mut(program)
+            .expect("program is executable but not found in running programs");
         let program_id = program.id;
-        
+
         let mut exec_info = ExecutionStepInfo {
             prog_name: program.name.clone(),
             prog_id: program_id,
             instructions: Vec::new(),
         };
 
-        let (actions, executed_instructions) = program.next_global(&mut self.globals, &mut self.channels, &mut self.next_program_id, self.global_state_id)?;
-
+        let (actions, executed_instructions) = program.next_global(
+            &mut self.globals,
+            &mut self.channels,
+            &mut self.next_program_id,
+            self.global_state_id,
+        )?;
 
         for action in actions.actions {
             match action {
@@ -141,8 +172,13 @@ impl<'a> VM<'a> {
                 GlobalAction::Send(sender_channel, receiver_info) => {
                     self.global_state_id += 1;
                     if let Some(receiver_info) = receiver_info {
-                        if let Some(dependency) = self.waiting_programs.get(&receiver_info.program_id) {
-                            if dependency.channels_state.contains(&receiver_info.channel_name) {
+                        if let Some(dependency) =
+                            self.waiting_programs.get(&receiver_info.program_id)
+                        {
+                            if dependency
+                                .channels_state
+                                .contains(&receiver_info.channel_name)
+                            {
                                 self.waiting_programs.remove(&receiver_info.program_id);
                                 self.executable_programs.insert(receiver_info.program_id);
                             }
@@ -150,7 +186,10 @@ impl<'a> VM<'a> {
                     } else {
                         // the current process is waiting
                         self.executable_programs.remove(&program_id);
-                        let dep = self.waiting_programs.entry(program_id).or_insert(WaitDependency::new());
+                        let dep = self
+                            .waiting_programs
+                            .entry(program_id)
+                            .or_insert(WaitDependency::new());
                         dep.channels_connection.insert(sender_channel);
                     }
                 }
@@ -160,8 +199,7 @@ impl<'a> VM<'a> {
                         if dependency.channels_connection.contains(&sender_channel) {
                             self.waiting_programs.remove(&sender_id);
                             self.executable_programs.insert(sender_id);
-                        }
-                        else {
+                        } else {
                             unreachable!("the sender program must be waiting for a connection, otherwise the channel connection is not a global action");
                         }
                     } else {
@@ -186,18 +224,24 @@ impl<'a> VM<'a> {
                             // create a small memory stack with the value of the variables
                             let mut memory = Vec::new();
                             for var_name in read.variables.iter() {
-                                memory.push(self.globals.get(var_name).expect(format!("global variable '{}' not found", var_name).as_str()).clone());
+                                memory.push(
+                                    self.globals
+                                        .get(var_name)
+                                        .expect(
+                                            format!("global variable '{}' not found", var_name)
+                                                .as_str(),
+                                        )
+                                        .clone(),
+                                );
                             }
-                            let cond = expr.root.eval(&memory).map_err(|msg| AlthreadError::new(
-                                ErrorType::ExpressionError,
-                                Some(*pos),
-                                msg
-                            ))?;
+                            let cond = expr.root.eval(&memory).map_err(|msg| {
+                                AlthreadError::new(ErrorType::ExpressionError, Some(*pos), msg)
+                            })?;
                             if !cond.is_true() {
                                 return Err(AlthreadError::new(
                                     ErrorType::RuntimeError,
                                     Some(*pos),
-                                    format!("the condition is false")
+                                    format!("the condition is false"),
                                 ));
                             }
                         }
@@ -212,27 +256,31 @@ impl<'a> VM<'a> {
                     self.running_programs.remove(&remove_id);
                     self.executable_programs.remove(&remove_id);
                 }
-                GlobalAction::Exit => {
-                    self.running_programs.clear()
-                }
+                GlobalAction::Exit => self.running_programs.clear(),
             }
         }
 
         if actions.wait {
-            let program = self.running_programs.get_mut(&program_id).expect("program is waiting but not found in running programs");
-            match &program.current_instruction().expect("waiting on no instruction").control {
+            let program = self
+                .running_programs
+                .get_mut(&program_id)
+                .expect("program is waiting but not found in running programs");
+            match &program
+                .current_instruction()
+                .expect("waiting on no instruction")
+                .control
+            {
                 InstructionType::WaitStart(ctrl) => {
                     self.executable_programs.remove(&program_id);
-                    self.waiting_programs.insert(program_id, ctrl.dependencies.clone());
+                    self.waiting_programs
+                        .insert(program_id, ctrl.dependencies.clone());
                 }
-                _ => unreachable!("waiting on an instruction that is not a WaitStart instruction")
+                _ => unreachable!("waiting on an instruction that is not a WaitStart instruction"),
             }
         }
 
         exec_info.instructions = executed_instructions;
 
-
-        
         Ok(exec_info)
     }
 
@@ -245,15 +293,13 @@ impl<'a> VM<'a> {
     }
 }
 
-
-
 impl<'a> fmt::Display for VM<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f,"Globals:")?;
+        writeln!(f, "Globals:")?;
         for (name, val) in self.globals.iter() {
-            writeln!(f,"  {}: {}", name, val)?;
+            writeln!(f, "  {}: {}", name, val)?;
         }
-        writeln!(f,"'main' stack:")?;
+        writeln!(f, "'main' stack:")?;
         /*for val in self.running_programs.get(&0).expect("no program is not running, cannot print the VM").memory.iter() {
             writeln!(f," - {}", val)?;
         }*/

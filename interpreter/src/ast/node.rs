@@ -3,7 +3,9 @@ use std::fmt;
 use pest::iterators::{Pair, Pairs};
 
 use crate::error::Pos;
-use crate::{compiler::CompilerState, vm::instruction::Instruction, error::AlthreadResult, parser::Rule};
+use crate::{
+    compiler::CompilerState, error::AlthreadResult, parser::Rule, vm::instruction::Instruction,
+};
 
 use super::display::{AstDisplay, Prefix};
 
@@ -21,7 +23,6 @@ pub trait InstructionBuilder: Sized {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>>;
 }
 
-
 impl<T: NodeBuilder> Node<T> {
     pub fn build(pair: Pair<Rule>) -> AlthreadResult<Self> {
         let (line, col) = pair.line_col();
@@ -36,7 +37,6 @@ impl<T: NodeBuilder> Node<T> {
         })
     }
 }
-
 
 impl<T: AstDisplay> AstDisplay for Node<T> {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
@@ -60,7 +60,7 @@ impl<T: InstructionBuilder> Node<T> {
 impl Node<Expression> {
     pub fn compile(&self, state: &mut State) -> Vec<Instruction> {
         let mut local_ast = self.clone();
-        let mut global_read: HashMap<&String,usize>  = HashMap::new(); 
+        let mut global_read: HashMap<&String,usize>  = HashMap::new();
 
         // retrieve first the list of used global variables
 

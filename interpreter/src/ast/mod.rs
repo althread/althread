@@ -20,7 +20,14 @@ use statement::Statement;
 use token::condition_keyword::ConditionKeyword;
 
 use crate::{
-    compiler::{CompiledProject, CompilerState}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule, vm::{instruction::{Instruction, InstructionType, ProgramCode}, VM}
+    compiler::{CompiledProject, CompilerState},
+    error::{AlthreadError, AlthreadResult, ErrorType},
+    no_rule,
+    parser::Rule,
+    vm::{
+        instruction::{Instruction, InstructionType, ProgramCode},
+        VM,
+    },
 };
 
 #[derive(Debug)]
@@ -84,15 +91,14 @@ impl Ast {
     }
 
     pub fn compile(&self) -> AlthreadResult<CompiledProject> {
-
-        // "compile" the "shared" block to retrieve the set of 
+        // "compile" the "shared" block to retrieve the set of
         // shared variables
         let mut state = CompilerState::new();
         let mut global_memory = HashMap::new();
         let mut global_table = HashMap::new();
         state.current_stack_depth = 1;
         state.is_shared = true;
-         match self.global_block.as_ref() {
+        match self.global_block.as_ref() {
             Some(global) => {
                 let mut memory = VM::new_memory();
                 for node in global.value.children.iter() {
@@ -102,38 +108,42 @@ impl Ast {
                             for gi in node.compile(&mut state)? {
                                 match gi.control {
                                     InstructionType::Expression(exp) => {
-                                        literal = Some(exp.root.eval(&memory).or_else(|err| Err(AlthreadError::new(
-                                            ErrorType::ExpressionError, 
-                                            gi.pos,
-                                            err
-                                            )))?);
-                                    },
+                                        literal = Some(exp.root.eval(&memory).or_else(|err| {
+                                            Err(AlthreadError::new(
+                                                ErrorType::ExpressionError,
+                                                gi.pos,
+                                                err,
+                                            ))
+                                        })?);
+                                    }
                                     InstructionType::Declaration(dec) => {
                                         // do nothing
                                         assert!(dec.unstack_len == 1)
                                     }
-                                    InstructionType::Push(literal) => {
-                                        memory.push(literal.clone())
-                                    }
+                                    InstructionType::Push(literal) => memory.push(literal.clone()),
                                     _ => {
                                         panic!("unexpected instruction in compiled declaration statement")
                                     }
                                 }
                             }
-                            let literal = literal.expect("declaration did not compiled to expression nor PushNull");
+                            let literal = literal
+                                .expect("declaration did not compiled to expression nor PushNull");
                             memory.push(literal);
 
                             let var_name = &decl.value.identifier.value.value;
-                            global_table.insert(var_name.clone(), state.program_stack.last().unwrap().clone());
+                            global_table.insert(
+                                var_name.clone(),
+                                state.program_stack.last().unwrap().clone(),
+                            );
                             global_memory.insert(var_name.clone(), memory.last().unwrap().clone());
-                        },
+                        }
                         _ => return Err(AlthreadError::new(
-                            ErrorType::InstructionNotAllowed, 
+                            ErrorType::InstructionNotAllowed,
                             Some(node.pos),
-                            "The 'shared' block can only contains assignment from an expression".to_string()
-                            )),
+                            "The 'shared' block can only contains assignment from an expression"
+                                .to_string(),
+                        )),
                     }
-                    
                 }
             }
             None => (),
@@ -144,7 +154,6 @@ impl Ast {
         state.unstack_current_depth();
         assert!(state.current_stack_depth == 0);
 
-        
         state.is_shared = false;
         let mut programs_code = HashMap::new();
         // start with the main program
@@ -167,7 +176,10 @@ impl Ast {
             return Err(AlthreadError::new(
                 ErrorType::UndefinedChannel,
                 Some(pos.clone()),
-                format!("Channel '{}' used in program '{}' at line {} has not been declared", channel_name.1, channel_name.0, pos.line)
+                format!(
+                    "Channel '{}' used in program '{}' at line {} has not been declared",
+                    channel_name.1, channel_name.0, pos.line
+                ),
             ));
         }
 
@@ -175,38 +187,42 @@ impl Ast {
         for (name, condition_block) in self.condition_blocks.iter() {
             match name {
                 ConditionKeyword::Always => {
-                    for condition in condition_block.value.children.iter() { 
+                    for condition in condition_block.value.children.iter() {
                         let compiled = condition.compile(&mut state)?;
                         if compiled.len() == 1 {
                             return Err(AlthreadError::new(
                                 ErrorType::InstructionNotAllowed,
                                 Some(condition.pos),
-                                "The condition must depend on shared variable(s)".to_string()
+                                "The condition must depend on shared variable(s)".to_string(),
                             ));
                         }
                         if compiled.len() != 2 {
                             return Err(AlthreadError::new(
                                 ErrorType::InstructionNotAllowed,
                                 Some(condition.pos),
-                                "The condition must be a single expression".to_string()
+                                "The condition must be a single expression".to_string(),
                             ));
                         }
                         if let InstructionType::GlobalReads(g_read) = &compiled[0].control {
                             if let InstructionType::Expression(exp) = &compiled[1].control {
-                                always_conditions.push((g_read.variables.iter().map(|s| s.clone()).collect(), g_read.clone(),exp.clone(), condition.pos));
-                            } 
-                            else {
+                                always_conditions.push((
+                                    g_read.variables.iter().map(|s| s.clone()).collect(),
+                                    g_read.clone(),
+                                    exp.clone(),
+                                    condition.pos,
+                                ));
+                            } else {
                                 return Err(AlthreadError::new(
                                     ErrorType::InstructionNotAllowed,
                                     Some(condition.pos),
-                                    "The condition must be a single expression".to_string()
+                                    "The condition must be a single expression".to_string(),
                                 ));
                             }
                         } else {
                             return Err(AlthreadError::new(
                                 ErrorType::InstructionNotAllowed,
                                 Some(condition.pos),
-                                "The condition must depend on shared variable(s)".to_string()
+                                "The condition must depend on shared variable(s)".to_string(),
                             ));
                         }
                     }
@@ -221,13 +237,19 @@ impl Ast {
             always_conditions,
         })
     }
-    fn compile_program(&self, name: &str, state: &mut CompilerState) -> AlthreadResult<ProgramCode> {
-
+    fn compile_program(
+        &self,
+        name: &str,
+        state: &mut CompilerState,
+    ) -> AlthreadResult<ProgramCode> {
         let mut process_code = ProgramCode {
             instructions: Vec::new(),
             name: name.to_string(),
         };
-        let prog = self.process_blocks.get(name).expect("trying to compile a non-existant program");
+        let prog = self
+            .process_blocks
+            .get(name)
+            .expect("trying to compile a non-existant program");
         state.current_program_name = name.to_string();
         process_code.instructions = prog.compile(state)?;
         process_code.instructions.push(Instruction {
@@ -236,7 +258,6 @@ impl Ast {
         });
         Ok(process_code)
     }
-
 }
 
 impl fmt::Display for Ast {

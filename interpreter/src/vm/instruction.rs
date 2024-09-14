@@ -1,8 +1,12 @@
 use std::fmt;
 
-use crate::{ast::{statement::{expression::LocalExpressionNode, waiting_case::WaitDependency}, token::{binary_assignment_operator::BinaryAssignmentOperator, literal::Literal}}, error::Pos};
-
-
+use crate::{
+    ast::{
+        statement::{expression::LocalExpressionNode, waiting_case::WaitDependency},
+        token::{binary_assignment_operator::BinaryAssignmentOperator, literal::Literal},
+    },
+    error::Pos,
+};
 
 #[derive(Debug, Clone)]
 pub enum InstructionType {
@@ -35,29 +39,29 @@ pub enum InstructionType {
 impl fmt::Display for InstructionType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Empty => {write!(f, "EMPTY")?},
-            Self::Expression(a) => {write!(f, "{}", a)?},
-            Self::GlobalReads(a) => {write!(f, "{}", a)?},
-            Self::GlobalAssignment(a) => {write!(f, "{}", a)?},
-            Self::LocalAssignment(a) => {write!(f, "{}", a)?},
-            Self::JumpIf(a) => {write!(f, "{}", a)?},
-            Self::Jump(a) => {write!(f, "{}", a)?},
-            Self::Unstack(a) => {write!(f, "{}", a)?},
-            Self::Destruct(d) => {write!(f, "destruct {}", d)?},
-            Self::RunCall(a) => {write!(f, "{}", a)?},
-            Self::EndProgram => {write!(f, "end program")?},
-            Self::FnCall(a) => {write!(f, "{}", a)?},
-            Self::Exit => {write!(f, "exit")?},
-            Self::Declaration(d) => {write!(f, "{}", d)?},
-            Self::Push(l) => {write!(f, "push ({})", l)?},
-            Self::WaitStart(w) => {write!(f, "{}", w)?},
-            Self::Wait(w) => {write!(f, "{}", w)?},
-            Self::Send(s) => {write!(f, "{}", s)?},
-            Self::ChannelPeek(s) => {write!(f, "peek '{}'", s)?},
-            Self::ChannelPop(s) => {write!(f, "pop '{}'", s)?},
-            Self::Connect(c) => {write!(f, "{}", c)?},
-            Self::AtomicStart => {write!(f, "atomic start")?},
-            Self::AtomicEnd => {write!(f, "atomic end")?},
+            Self::Empty => write!(f, "EMPTY")?,
+            Self::Expression(a) => write!(f, "{}", a)?,
+            Self::GlobalReads(a) => write!(f, "{}", a)?,
+            Self::GlobalAssignment(a) => write!(f, "{}", a)?,
+            Self::LocalAssignment(a) => write!(f, "{}", a)?,
+            Self::JumpIf(a) => write!(f, "{}", a)?,
+            Self::Jump(a) => write!(f, "{}", a)?,
+            Self::Unstack(a) => write!(f, "{}", a)?,
+            Self::Destruct(d) => write!(f, "destruct {}", d)?,
+            Self::RunCall(a) => write!(f, "{}", a)?,
+            Self::EndProgram => write!(f, "end program")?,
+            Self::FnCall(a) => write!(f, "{}", a)?,
+            Self::Exit => write!(f, "exit")?,
+            Self::Declaration(d) => write!(f, "{}", d)?,
+            Self::Push(l) => write!(f, "push ({})", l)?,
+            Self::WaitStart(w) => write!(f, "{}", w)?,
+            Self::Wait(w) => write!(f, "{}", w)?,
+            Self::Send(s) => write!(f, "{}", s)?,
+            Self::ChannelPeek(s) => write!(f, "peek '{}'", s)?,
+            Self::ChannelPop(s) => write!(f, "pop '{}'", s)?,
+            Self::Connect(c) => write!(f, "{}", c)?,
+            Self::AtomicStart => write!(f, "atomic start")?,
+            Self::AtomicEnd => write!(f, "atomic end")?,
         }
         Ok(())
     }
@@ -117,13 +121,12 @@ impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.pos {
             Some(pos) => write!(f, "{}", pos.line)?,
-            None => { },
+            None => {}
         };
         write!(f, ": {}", self.control)?;
         Ok(())
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct JumpIfControl {
@@ -132,7 +135,11 @@ pub struct JumpIfControl {
 }
 impl fmt::Display for JumpIfControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "jumpIf {} (unstack {})", self.jump_false, self.unstack_len)?;
+        write!(
+            f,
+            "jumpIf {} (unstack {})",
+            self.jump_false, self.unstack_len
+        )?;
         Ok(())
     }
 }
@@ -147,7 +154,6 @@ impl fmt::Display for JumpControl {
         Ok(())
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct WaitControl {
@@ -172,7 +178,6 @@ impl fmt::Display for WaitStartControl {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub struct ExpressionControl {
     pub root: LocalExpressionNode,
@@ -184,7 +189,6 @@ impl fmt::Display for ExpressionControl {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub struct GlobalReadsControl {
     pub variables: Vec<String>,
@@ -195,7 +199,6 @@ impl fmt::Display for GlobalReadsControl {
         Ok(())
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct UnstackControl {
@@ -226,7 +229,11 @@ pub struct SendControl {
 }
 impl fmt::Display for SendControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "send to {} (unstack {})", self.channel_name, self.unstack_len)?;
+        write!(
+            f,
+            "send to {} (unstack {})",
+            self.channel_name, self.unstack_len
+        )?;
         Ok(())
     }
 }
@@ -242,15 +249,25 @@ pub struct ConnectionControl {
 }
 impl fmt::Display for ConnectionControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "connect [&{}] {}->{} [&{}]", 
-        if self.sender_idx.is_none() { "self".to_string() } else { self.sender_idx.unwrap().to_string() }, 
-        self.sender_channel, self.receiver_channel, 
-        if self.receiver_idx.is_none() { "self".to_string() } else { self.receiver_idx.unwrap().to_string() }, 
-    )?;
+        write!(
+            f,
+            "connect [&{}] {}->{} [&{}]",
+            if self.sender_idx.is_none() {
+                "self".to_string()
+            } else {
+                self.sender_idx.unwrap().to_string()
+            },
+            self.sender_channel,
+            self.receiver_channel,
+            if self.receiver_idx.is_none() {
+                "self".to_string()
+            } else {
+                self.receiver_idx.unwrap().to_string()
+            },
+        )?;
         Ok(())
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct GlobalAssignmentControl {
@@ -260,11 +277,14 @@ pub struct GlobalAssignmentControl {
 }
 impl fmt::Display for GlobalAssignmentControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} {} (unstack {})", self.identifier, self.operator, self.unstack_len)?;
+        write!(
+            f,
+            "{} {} (unstack {})",
+            self.identifier, self.operator, self.unstack_len
+        )?;
         Ok(())
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct LocalAssignmentControl {
@@ -274,14 +294,18 @@ pub struct LocalAssignmentControl {
 }
 impl fmt::Display for LocalAssignmentControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "[{}] {}  (unstack {})", self.index, self.operator, self.unstack_len)?;
+        write!(
+            f,
+            "[{}] {}  (unstack {})",
+            self.index, self.operator, self.unstack_len
+        )?;
         Ok(())
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct RunCallControl {
-    pub name: String
+    pub name: String,
 }
 impl fmt::Display for RunCallControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -302,7 +326,6 @@ impl fmt::Display for FnCallControl {
     }
 }
 
-
 #[derive(Debug)]
 pub struct ProgramCode {
     pub name: String,
@@ -319,4 +342,3 @@ impl fmt::Display for ProgramCode {
         Ok(())
     }
 }
-

@@ -7,7 +7,6 @@ use crate::{
     parser::Rule,
 };
 
-
 pub type Identifier = Node<String>;
 
 impl NodeBuilder for Identifier {
@@ -27,4 +26,3 @@ impl NodeBuilder for Identifier {
         }
     }
 }
-
