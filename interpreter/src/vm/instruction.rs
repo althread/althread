@@ -1,13 +1,12 @@
 use std::fmt;
 
-use crate::{ast::{node::Node, statement::{expression::LocalExpressionNode, waiting_case::WaitDependency, Statement}, token::{binary_assignment_operator::BinaryAssignmentOperator, literal::Literal}}, error::Pos};
+use crate::{ast::{statement::{expression::LocalExpressionNode, waiting_case::WaitDependency}, token::{binary_assignment_operator::BinaryAssignmentOperator, literal::Literal}}, error::Pos};
 
 
 
 #[derive(Debug, Clone)]
 pub enum InstructionType {
     Empty,
-    Atomic(AtomicControl),
     Expression(ExpressionControl),
     GlobalReads(GlobalReadsControl),
     GlobalAssignment(GlobalAssignmentControl),
@@ -28,6 +27,8 @@ pub enum InstructionType {
     Wait(WaitControl),
     Send(SendControl),
     Connect(ConnectionControl),
+    AtomicStart,
+    AtomicEnd,
     //Receive,
     //Any
 }
@@ -35,7 +36,6 @@ impl fmt::Display for InstructionType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Empty => {write!(f, "EMPTY")?},
-            Self::Atomic(a) => {write!(f, "{}", a)?},
             Self::Expression(a) => {write!(f, "{}", a)?},
             Self::GlobalReads(a) => {write!(f, "{}", a)?},
             Self::GlobalAssignment(a) => {write!(f, "{}", a)?},
@@ -56,6 +56,8 @@ impl fmt::Display for InstructionType {
             Self::ChannelPeek(s) => {write!(f, "peek '{}'", s)?},
             Self::ChannelPop(s) => {write!(f, "pop '{}'", s)?},
             Self::Connect(c) => {write!(f, "{}", c)?},
+            Self::AtomicStart => {write!(f, "atomic start")?},
+            Self::AtomicEnd => {write!(f, "atomic end")?},
         }
         Ok(())
     }
@@ -98,9 +100,9 @@ impl InstructionType {
             | Self::FnCall(_)
             | Self::Declaration(_)
             | Self::Exit
+            | Self::AtomicStart
+            | Self::AtomicEnd
             | Self::Push(_) => true,
-
-            Self::Atomic(_) => todo!(),
 
         }
     }
@@ -122,16 +124,6 @@ impl fmt::Display for Instruction {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct AtomicControl {
-    pub node: Node<Statement>,
-}
-impl fmt::Display for AtomicControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "atomic")?;
-        Ok(())
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct JumpIfControl {
