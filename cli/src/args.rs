@@ -56,7 +56,11 @@ pub struct RunCommand {
     #[clap(flatten)]
     pub common: SharedArgs,
 
-    /// seed
+    /// debug
+    #[clap(long)]
+    pub debug: bool,
+
+    /// verbose
     #[clap(long)]
     pub verbose: bool,
 

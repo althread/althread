@@ -33,8 +33,12 @@ impl<'a> RunningProgramState<'a> {
         }
     }
 
-    pub fn current_instruction(&self) -> Option<&Instruction> {
-        self.code.instructions.get(self.instruction_pointer)
+    pub fn current_instruction(&self) -> AlthreadResult<&Instruction> {
+        self.code.instructions.get(self.instruction_pointer).ok_or(AlthreadError::new(
+            ErrorType::InstructionNotAllowed,
+            None,
+            "the current instruction pointer points to no instruction".to_string(),
+        ))
     }
     pub fn next_global(
         &mut self,
@@ -47,19 +51,16 @@ impl<'a> RunningProgramState<'a> {
         let mut actions = Vec::new();
         let mut wait = false;
         loop {
-            if let Some(inst) = self.current_instruction() {
-                instructions.push(inst.clone());
+
+            let (at_actions, at_instructions)  = self.next_atomic(globals, channels, next_pid, global_state_id)?;
+
+            actions.extend(at_actions.actions);
+            instructions.extend(at_instructions);
+            
+            if at_actions.wait {
+                break;
             }
 
-            let action = self.next(globals, channels, next_pid, global_state_id)?;
-
-            if let Some(action) = action {
-                if action == GlobalAction::Wait {
-                    wait = true;
-                    break;
-                }
-                actions.push(action);
-            }
             if self.is_next_instruction_global() {
                 break;
             }
@@ -70,6 +71,49 @@ impl<'a> RunningProgramState<'a> {
     pub fn is_next_instruction_global(&mut self) -> bool {
         self.current_instruction()
             .map_or(true, |inst| !inst.control.is_local())
+    }
+
+    pub fn next_atomic(
+        &mut self,
+        globals: &mut GlobalMemory,
+        channels: &mut Channels,
+        next_pid: &mut usize,
+        global_state_id: u64,
+    ) -> AlthreadResult<(GlobalActions, Vec<Instruction>)> {
+        let mut instructions = Vec::new();
+        
+        let mut result = GlobalActions { 
+            actions: Vec::new(),
+            wait: false 
+        };
+        // if the next instruction is not the start of an atomic block, we execute the next instruction
+        if !self.current_instruction()?.is_atomic_start() {
+            instructions.push(self.current_instruction()?.clone());
+            let action = self.next(globals, channels, next_pid, global_state_id)?;
+            if let Some(action) = action {
+                if action == GlobalAction::Wait {
+                    result.wait = true;
+                }
+                result.actions.push(action);
+            }
+            return Ok((result, instructions));
+        }
+        // else we execute all the instructions until the end of the atomic block
+        loop {
+            
+            instructions.push(self.current_instruction()?.clone());
+            let action = self.next(globals, channels, next_pid, global_state_id)?;
+            if let Some(action) = action {
+                if action == GlobalAction::Wait {
+                    result.wait = true;
+                }
+                result.actions.push(action);
+            }
+            if self.current_instruction()?.is_atomic_end() {
+                break;
+            }
+        }
+        Ok((result, instructions))
     }
 
     fn next(
@@ -94,6 +138,9 @@ impl<'a> RunningProgramState<'a> {
         let mut action = None;
 
         let pos_inc = match &cur_inst.control {
+            InstructionType::Empty => 1,
+            InstructionType::AtomicStart => 1,
+            InstructionType::AtomicEnd => 1,
             InstructionType::JumpIf(c) => {
                 let cond = self.memory.last().unwrap().is_true();
                 for _ in 0..c.unstack_len {
@@ -196,7 +243,6 @@ impl<'a> RunningProgramState<'a> {
                 action = Some(GlobalAction::EndProgram);
                 1
             }
-            InstructionType::Empty => 1,
             InstructionType::FnCall(f) => {
                 // currently, only the print function is implemented
                 if f.name != "print" {

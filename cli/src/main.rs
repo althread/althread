@@ -3,6 +3,7 @@ use std::{fs, io::Read, process::exit};
 mod args;
 use args::{CliArguments, Command, CompileCommand, RandomSearchCommand, RunCommand};
 use clap::Parser;
+use owo_colors::{OwoColorize, Style};
 
 use althread::ast::Ast;
 
@@ -48,6 +49,20 @@ pub fn compile_command(cli_args: &CompileCommand) {
     println!("{}", compiled_project);
 }
 
+
+
+const MAIN_STYLE: Style = Style::new()
+    .red()
+    .on_bright_black();
+const PROCESS_PALETTE: [Style; 6] = [
+    Style::new().green(),
+    Style::new().yellow(),
+    Style::new().blue(),
+    Style::new().magenta(),
+    Style::new().cyan(),
+    Style::new().red(),
+];
+
 pub fn run_command(cli_args: &RunCommand) {
     // Read file
     let source = match cli_args.common.input.clone() {
@@ -86,17 +101,26 @@ pub fn run_command(cli_args: &RunCommand) {
             err.report(&source);
             exit(1);
         });
-        if cli_args.verbose {
+        if cli_args.verbose || cli_args.debug {
+            let mut prev_line = 0;
             for inst in info.instructions.iter() {
-                println!(
-                    "  #{}:{}: {}",
-                    info.prog_id,
-                    match inst.pos {
-                        Some(p) => p.line,
-                        None => 0,
-                    },
-                    inst
-                );
+                if inst.pos.unwrap_or_default().line != 0 && prev_line != inst.pos.unwrap_or_default().line {
+                    println!("#{}:{} {}", 
+                        info.prog_id, 
+                        inst.pos.unwrap_or_default().line,
+                        source.lines().nth(inst.pos.unwrap_or_default().line - 1).unwrap_or_default().style(if info.prog_id == 0 { MAIN_STYLE } else {
+                            PROCESS_PALETTE[((info.prog_id - 1) as usize) % PROCESS_PALETTE.len()]
+                        })
+                    );
+                    prev_line = inst.pos.unwrap_or_default().line;
+                }
+                if cli_args.verbose {
+                    println!(
+                        "\t\t\t#{}:{}",
+                        info.prog_id,
+                        inst
+                    );
+                }
             }
             match vm
                 .running_programs
@@ -104,8 +128,8 @@ pub fn run_command(cli_args: &RunCommand) {
                 .find(|(id, _)| **id == info.prog_id)
             {
                 Some((_, p)) => match p.current_instruction() {
-                    Some(i) => println!("{}_{}: stopped at {}", info.prog_name, info.prog_id, i),
-                    None => println!("{}_{}: stopped at ?", info.prog_name, info.prog_id),
+                    Ok(i) => println!("{}_{}: stopped at {}", info.prog_name, info.prog_id, i),
+                    _ => println!("{}_{}: stopped at ?", info.prog_name, info.prog_id),
                 },
                 None => {
                     println!("Program {} stopped", info.prog_id);

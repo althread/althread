@@ -72,7 +72,8 @@ impl InstructionType {
         match self {
               Self::GlobalAssignment(_)
             | Self::Send(_)
-            | Self::ChannelPop(_)
+            | Self::ChannelPeek(_)
+            | Self::AtomicStart // starts a block that surely contains a global operation
             | Self::GlobalReads(_) => false,
             
             // This should be checked. I think the following are not global because
@@ -90,8 +91,8 @@ impl InstructionType {
 
             Self::Connect(_) // connect is global only if a process was waiting
             | Self::Wait(_) // wait is global only if the condition is false
-            | Self::ChannelPeek(_) // This is a local peek that should be directly followed by a pop if the read occurs
             | Self::RunCall(_)
+            | Self::ChannelPop(_) // This is a local because it follows a peek
             | Self::WaitStart(_)
             | Self::Empty
             | Self::Expression(_)
@@ -104,10 +105,22 @@ impl InstructionType {
             | Self::FnCall(_)
             | Self::Declaration(_)
             | Self::Exit
-            | Self::AtomicStart
             | Self::AtomicEnd
             | Self::Push(_) => true,
 
+        }
+    }
+
+    pub fn is_atomic_start(&self) -> bool {
+        match self {
+            Self::AtomicStart => true,
+            _ => false,
+        }
+    }
+    pub fn is_atomic_end(&self) -> bool {
+        match self {
+            Self::AtomicEnd => true,
+            _ => false,
         }
     }
 }
@@ -117,6 +130,17 @@ pub struct Instruction {
     pub pos: Option<Pos>,
     pub control: InstructionType,
 }
+
+impl Instruction {
+
+    pub fn is_atomic_start(&self) -> bool {
+        self.control.is_atomic_start()
+    }
+    pub fn is_atomic_end(&self) -> bool {
+        self.control.is_atomic_end()
+    }
+}
+
 impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.pos {

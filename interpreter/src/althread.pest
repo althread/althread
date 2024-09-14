@@ -34,6 +34,7 @@ statement = {
   | run_statement
   | send_statement
   | wait_statement
+  | atomic_statement
   | if_control
   | loop_control
   | while_control
@@ -46,6 +47,7 @@ declaration_statement = _{ declaration ~ ";" }
 wait_statement        =  { WAIT_KW ~ (
       waiting_block 
     | waiting_block_case) }
+atomic_statement        =  { (ATOMIC_KW | "!") ~ statement }
 call_statement        = _{ fn_call ~ ";" }
 run_statement         = _{ run_call ~ ";" }
 send_statement         = _{ send_call ~ ";" }
@@ -178,6 +180,8 @@ CHANNEL_KW = _{ "channel" }
 TRUE_KW  = _{ "true" }
 FALSE_KW = _{ "false" }
 NULL_KW  = _{ "null" }
+
+ATOMIC_KW = _{ "atomic" }
 
 /// ### Operators
 /// Operators are used for arithmetic, logical operations, and assignments.

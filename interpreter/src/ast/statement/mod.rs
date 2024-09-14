@@ -11,6 +11,7 @@ pub mod send;
 pub mod wait;
 pub mod waiting_case;
 pub mod while_control;
+pub mod atomic;
 
 use std::fmt;
 
@@ -51,6 +52,7 @@ pub enum Statement {
     If(Node<IfControl>),
     While(Node<WhileControl>),
     Loop(Node<LoopControl>),
+    Atomic(Node<atomic::Atomic>),
     Wait(Node<Wait>),
     Block(Node<Block>),
 }
@@ -67,6 +69,7 @@ impl NodeBuilder for Statement {
             Rule::run_call => Ok(Self::Run(Node::build(pair)?)),
             Rule::if_control => Ok(Self::If(Node::build(pair)?)),
             Rule::while_control => Ok(Self::While(Node::build(pair)?)),
+            Rule::atomic_statement => Ok(Self::Atomic(Node::build(pair)?)),
             Rule::loop_control => Ok(Self::Loop(Node::build(pair)?)),
             Rule::code_block => Ok(Self::Block(Node::build(pair)?)),
             Rule::send_call => Ok(Self::Send(Node::build(pair)?)),
@@ -86,6 +89,7 @@ impl InstructionBuilder for Statement {
             Self::ChannelDeclaration(node) => node.compile(state),
             Self::While(node) => node.compile(state),
             Self::Loop(node) => node.compile(state),
+            Self::Atomic(node) => node.compile(state),
             Self::Wait(node) => node.compile(state),
             Self::Block(node) => node.compile(state),
             Self::Send(node) => node.compile(state),
@@ -106,8 +110,9 @@ impl InstructionBuilder for Statement {
 
 impl Statement {
     pub fn is_atomic(&self) -> bool {
+        todo!("Check this implementation");
         match self {
-            Self::Assignment(_) | Self::Declaration(_) | Self::FnCall(_) | Self::Run(_) => true,
+            Self::Assignment(_) | Self::Declaration(_) | Self::FnCall(_) | Self::Run(_) | Self::Atomic(_) => true,
             _ => false,
         }
     }
@@ -126,6 +131,7 @@ impl AstDisplay for Statement {
             Statement::If(node) => node.ast_fmt(f, prefix),
             Statement::While(node) => node.ast_fmt(f, prefix),
             Statement::Loop(node) => node.ast_fmt(f, prefix),
+            Statement::Atomic(node) => node.ast_fmt(f, prefix),
             Statement::Block(node) => node.ast_fmt(f, prefix),
         }
     }

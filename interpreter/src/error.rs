@@ -8,6 +8,17 @@ pub struct Pos {
     pub start: usize,
     pub end: usize,
 }
+// implement default:
+impl Default for Pos {
+    fn default() -> Self {
+        Self {
+            line: 0,
+            col: 0,
+            start: 0,
+            end: 0,
+        }
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AlthreadError {
