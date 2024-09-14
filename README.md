@@ -10,10 +10,10 @@ Althread is an open source Promela alternative for modeling and verifying multi-
 
 ## Roadmap
 
-[] array
-[] dictionnary
-[] regex
-[] visual representation of the global state
+- array
+- dictionnary
+- regex
+- visual representation of the global state
 
 
 ## Installation
