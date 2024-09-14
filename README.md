@@ -8,6 +8,14 @@ Althread is an open source Promela alternative for modeling and verifying multi-
 - Advanced debugging tools.
 - Easy-to-learn syntax for beginners.
 
+## Roadmap
+
+- array
+- dictionnary
+- regex
+- visual representation of the global state
+
+
 ## Installation
 1. Clone the repository: 
    ```
