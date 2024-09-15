@@ -136,6 +136,10 @@ pub fn run_command(cli_args: &RunCommand) {
                 }
             }
         }
+        if info.invariant_error.is_err() {
+            info.invariant_error.unwrap_err().report(&source);
+            break;
+        }
     }
 }
 

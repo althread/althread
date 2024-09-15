@@ -29,6 +29,7 @@ pub struct ExecutionStepInfo {
     pub prog_name: String,
     pub prog_id: usize,
     pub instructions: Vec<Instruction>,
+    pub invariant_error: AlthreadResult<()>,
 }
 
 fn str_to_expr_error(pos: Option<Pos>) -> impl Fn(String) -> AlthreadError {
@@ -115,7 +116,7 @@ impl<'a> VM<'a> {
                 "no program is running".to_string(),
             ));
         }
-
+        
         let program =
             self.rng
                 .choice(self.executable_programs.iter())
@@ -155,6 +156,7 @@ impl<'a> VM<'a> {
             prog_name: program.name.clone(),
             prog_id: program_id,
             instructions: Vec::new(),
+            invariant_error: Ok(()),
         };
 
         let (actions, executed_instructions) = program.next_global(
@@ -163,6 +165,8 @@ impl<'a> VM<'a> {
             &mut self.next_program_id,
             self.global_state_id,
         )?;
+
+        let mut need_to_check_invariants = false;
 
         for action in actions.actions {
             match action {
@@ -184,13 +188,7 @@ impl<'a> VM<'a> {
                             }
                         }
                     } else {
-                        // the current process is waiting
-                        self.executable_programs.remove(&program_id);
-                        let dep = self
-                            .waiting_programs
-                            .entry(program_id)
-                            .or_insert(WaitDependency::new());
-                        dep.channels_connection.insert(sender_channel);
+                        // the current process is waiting but this  will be catched up by the wait instruction
                     }
                 }
                 GlobalAction::Connect(sender_id, sender_channel) => {
@@ -217,35 +215,8 @@ impl<'a> VM<'a> {
                         }
                         true
                     });
-
-                    for (dependencies, read, expr, pos) in self.always_conditions.iter() {
-                        if dependencies.contains(&var_name) {
-                            // Check if the condition is true
-                            // create a small memory stack with the value of the variables
-                            let mut memory = Vec::new();
-                            for var_name in read.variables.iter() {
-                                memory.push(
-                                    self.globals
-                                        .get(var_name)
-                                        .expect(
-                                            format!("global variable '{}' not found", var_name)
-                                                .as_str(),
-                                        )
-                                        .clone(),
-                                );
-                            }
-                            let cond = expr.root.eval(&memory).map_err(|msg| {
-                                AlthreadError::new(ErrorType::ExpressionError, Some(*pos), msg)
-                            })?;
-                            if !cond.is_true() {
-                                return Err(AlthreadError::new(
-                                    ErrorType::RuntimeError,
-                                    Some(*pos),
-                                    format!("the condition is false"),
-                                ));
-                            }
-                        }
-                    }
+                    
+                    need_to_check_invariants = true;
                 }
                 GlobalAction::StartProgram(name, pid) => {
                     self.global_state_id += 1;
@@ -255,6 +226,7 @@ impl<'a> VM<'a> {
                     let remove_id = program_id;
                     self.running_programs.remove(&remove_id);
                     self.executable_programs.remove(&remove_id);
+                    self.waiting_programs.remove(&remove_id);
                 }
                 GlobalAction::Exit => self.running_programs.clear(),
             }
@@ -279,6 +251,10 @@ impl<'a> VM<'a> {
             }
         }
 
+        if need_to_check_invariants {
+            exec_info.invariant_error = self.check_invariants();
+        }
+
         exec_info.instructions = executed_instructions;
 
         Ok(exec_info)
@@ -291,6 +267,48 @@ impl<'a> VM<'a> {
     pub fn new_memory() -> Memory {
         Vec::<Literal>::new()
     }
+
+    fn check_invariants(&self) -> AlthreadResult<()> {
+        for (_deps, read, expr, pos) in self.always_conditions.iter() {
+            //if _deps.contains(&var_name) { //TODO improve by checking if the variable is in the dependencies
+                // Check if the condition is true
+                // create a small memory stack with the value of the variables
+                let mut memory = Vec::new();
+                for var_name in read.variables.iter() {
+                    memory.push(
+                        self.globals
+                            .get(var_name)
+                            .expect(
+                                format!("global variable '{}' not found", var_name)
+                                    .as_str(),
+                            )
+                            .clone(),
+                    );
+                }
+                match expr.root.eval(&memory) {
+                    Ok(cond) => {
+                        if !cond.is_true() {
+                            return Err(AlthreadError::new(
+                                ErrorType::InvariantError,
+                                Some(*pos),
+                                "The invariant is not respected".to_string()));
+                        }
+                    }
+                    Err(e) => {
+                        return Err(AlthreadError::new(
+                            ErrorType::ExpressionError,
+                            Some(*pos),
+                            e)
+                        );
+                    }
+                }
+                
+            //}
+        }
+
+        Ok(())
+    }
+
 }
 
 impl<'a> fmt::Display for VM<'a> {

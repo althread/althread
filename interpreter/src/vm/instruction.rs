@@ -30,6 +30,7 @@ pub enum InstructionType {
     WaitStart(WaitStartControl),
     Wait(WaitControl),
     Send(SendControl),
+    SendWaiting,
     Connect(ConnectionControl),
     AtomicStart,
     AtomicEnd,
@@ -57,6 +58,7 @@ impl fmt::Display for InstructionType {
             Self::WaitStart(w) => write!(f, "{}", w)?,
             Self::Wait(w) => write!(f, "{}", w)?,
             Self::Send(s) => write!(f, "{}", s)?,
+            Self::SendWaiting => write!(f, "send waiting?")?,
             Self::ChannelPeek(s) => write!(f, "peek '{}'", s)?,
             Self::ChannelPop(s) => write!(f, "pop '{}'", s)?,
             Self::Connect(c) => write!(f, "{}", c)?,
@@ -106,6 +108,7 @@ impl InstructionType {
             | Self::Declaration(_)
             | Self::Exit
             | Self::AtomicEnd
+            | Self::SendWaiting
             | Self::Push(_) => true,
 
         }

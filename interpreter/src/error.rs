@@ -56,6 +56,7 @@ pub enum ErrorType {
     ProcessError,
     InstructionNotAllowed,
     ExpressionError,
+    InvariantError,
     NotImplemented,
     UndefinedFunction,
     UndefinedChannel,
@@ -76,6 +77,7 @@ impl fmt::Display for ErrorType {
             ErrorType::NotImplemented => write!(f, "Not Implemented"),
             ErrorType::UndefinedFunction => write!(f, "Undefined Function"),
             ErrorType::UndefinedChannel => write!(f, "Undefined Channel"),
+            ErrorType::InvariantError => write!(f, "Invariant Error"),
         }
     }
 }

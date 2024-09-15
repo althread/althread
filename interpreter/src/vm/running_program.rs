@@ -58,6 +58,7 @@ impl<'a> RunningProgramState<'a> {
             instructions.extend(at_instructions);
             
             if at_actions.wait {
+                wait = true;
                 break;
             }
 
@@ -94,7 +95,9 @@ impl<'a> RunningProgramState<'a> {
                 if action == GlobalAction::Wait {
                     result.wait = true;
                 }
-                result.actions.push(action);
+                else {
+                    result.actions.push(action);
+                }
             }
             return Ok((result, instructions));
         }
@@ -105,9 +108,12 @@ impl<'a> RunningProgramState<'a> {
             let action = self.next(globals, channels, next_pid, global_state_id)?;
             if let Some(action) = action {
                 if action == GlobalAction::Wait {
+                    todo!("implement wait in atomic block");
                     result.wait = true;
                 }
-                result.actions.push(action);
+                else {
+                    result.actions.push(action);
+                }
             }
             if self.current_instruction()?.is_atomic_end() {
                 break;
@@ -323,6 +329,10 @@ impl<'a> RunningProgramState<'a> {
                 let receiver = channels.send(self.id, send_ctrl.channel_name.clone(), value);
 
                 action = Some(GlobalAction::Send(send_ctrl.channel_name.clone(), receiver));
+                1
+            }
+            InstructionType::SendWaiting => {
+                self.memory.push(Literal::Bool(!channels.is_waiting(self.id)));
                 1
             }
             InstructionType::ChannelPeek(channel_name) => {

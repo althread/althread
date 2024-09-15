@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{collections::HashSet, fmt};
 
 use pest::iterators::Pairs;
 
@@ -11,10 +11,10 @@ use crate::{
     compiler::CompilerState,
     error::{AlthreadError, AlthreadResult, ErrorType},
     parser::Rule,
-    vm::instruction::{Instruction, InstructionType, SendControl},
+    vm::instruction::{Instruction, InstructionType, SendControl, WaitControl, WaitStartControl},
 };
 
-use super::expression::Expression;
+use super::{expression::Expression, waiting_case::WaitDependency};
 
 #[derive(Debug, Clone)]
 pub struct SendStatement {
@@ -112,8 +112,31 @@ impl InstructionBuilder for Node<SendStatement> {
 
         instructions.push(Instruction {
             control: InstructionType::Send(SendControl {
-                channel_name,
+                channel_name: channel_name.clone(),
                 unstack_len,
+            }),
+            pos: Some(self.pos),
+        });
+        instructions.push(Instruction {
+            control: InstructionType::WaitStart(WaitStartControl {
+                dependencies: WaitDependency{
+                    variables: HashSet::new(),
+                    channels_state: HashSet::new(),
+                    channels_connection: { let mut h = HashSet::new(); h.insert(channel_name); h },
+                },
+            }),
+            pos: Some(self.pos),
+        });
+        
+        instructions.push(Instruction {
+            control: InstructionType::SendWaiting,
+            pos: Some(self.pos),
+        });
+
+        instructions.push(Instruction {
+            control: InstructionType::Wait(WaitControl {
+                jump: -2,
+                unstack_len: 1,
             }),
             pos: Some(self.pos),
         });
