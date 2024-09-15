@@ -47,6 +47,8 @@ statement {
   WhileStatement |
   IfStatement |
   run_statement |
+  LoopStatement |
+  AtomicStatement |
   send_statement |
   wait_statement |
   code_block |
@@ -83,6 +85,19 @@ ChannelDeclarationStatement {
 WhileStatement {
   kw<"while"> expression code_block
 }
+
+//!LoopStatement
+
+LoopStatement {
+  kw<"loop"> statement
+}
+
+//!AtomicStatement
+
+AtomicStatement {
+  (kw<"atomic"> | LogicOp<"!">) statement
+}
+
 
 //!ifstatement
 
@@ -144,7 +159,6 @@ expression[@isGroup=Expression] {
   RegExp |
   UnaryExpression |
   ParenthesizedExpression |
-  MemberExpression |
   BinaryExpression
 }
 
@@ -153,16 +167,6 @@ expression[@isGroup=Expression] {
 ParenthesizedExpression { "(" expression ")" }
 
 ArgList { "(" commaSep<"..."? expression> ")" }
-
-//!property
-
-propName { PropertyName | "[" expression "]" | Number | String }
-
-Property {
-  (propKw<"get"> | propKw<"set">)? propName ParamList Block |
-  propName ~destructure (":" expression)? |
-  "..." expression
-}
 
 //!operators
 
@@ -177,9 +181,6 @@ BinaryExpression {
   expression !rel CompareOp expression
 }
 
-MemberExpression {
-  expression !member ("." PropertyName | "[" expression "]")
-}
 
 //!commaSep
 
