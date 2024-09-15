@@ -108,8 +108,8 @@ impl<'a> RunningProgramState<'a> {
             let action = self.next(globals, channels, next_pid, global_state_id)?;
             if let Some(action) = action {
                 if action == GlobalAction::Wait {
-                    todo!("implement wait in atomic block");
                     result.wait = true;
+                    break;
                 }
                 else {
                     result.actions.push(action);

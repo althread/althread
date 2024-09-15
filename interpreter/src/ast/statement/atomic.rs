@@ -4,8 +4,7 @@ use pest::iterators::Pairs;
 
 use crate::{
     ast::{
-        display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
+        block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}
     },
     compiler::CompilerState,
     error::{AlthreadError, AlthreadResult, ErrorType},
@@ -13,29 +12,55 @@ use crate::{
     vm::instruction::{Instruction, InstructionType, JumpControl},
 };
 
-use super::Statement;
+use super::{send, Statement};
 
 #[derive(Debug, Clone)]
 pub struct Atomic {
     pub statement: Box<Node<Statement>>,
+    pub delegated: bool,
 }
 
 impl NodeBuilder for Atomic {
     fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
-        let statement = Box::new(Node::build(pairs.next().unwrap())?);
+        let mut statement: Box<Node<Statement>> = Box::new(Node::build(pairs.next().unwrap())?);
+        let mut delegated = false;
+        
+        let mut first_statement = statement.as_mut();
 
-        Ok(Self { statement })
+        let start_atomic_lambda = |s: &mut Statement| {
+            // if the statement is a wait block then tell it so
+            match s {
+                Statement::Wait(wait) => { wait.value.start_atomic = true; true },
+                Statement::Send(send) => { send.value.start_atomic = true; true},
+                _ => false,
+            }
+        };
+        
+        if start_atomic_lambda(&mut first_statement.value) {
+            delegated = true;
+            println!("delegated at level 0");
+        } else {
+            while let Statement::Block(block) = &mut first_statement.value {
+                if let Some(child) = block.value.children.first_mut() {
+                    first_statement = child;
+                    if start_atomic_lambda(&mut first_statement.value) {
+                        delegated = true;
+                        println!("delegated at level *");
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+
+        Ok(Self { statement, delegated })
     }
 }
 
 impl InstructionBuilder for Node<Atomic> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
-        let mut instructions= Vec::new();
         
-        instructions.push(Instruction {
-            pos: Some(self.value.statement.as_ref().pos),
-            control: InstructionType::AtomicStart,
-        });
         if state.is_atomic {
             return Err(AlthreadError::new(
                 ErrorType::InstructionNotAllowed,
@@ -43,7 +68,16 @@ impl InstructionBuilder for Node<Atomic> {
                 "Atomic blocks cannot be nested".to_string(),
             ));
         }
-        state.is_atomic = true;
+
+        let mut instructions= Vec::new();
+
+        if !self.value.delegated {
+            instructions.push(Instruction {
+                pos: Some(self.value.statement.as_ref().pos),
+                control: InstructionType::AtomicStart,
+            });
+            state.is_atomic = true;
+        }
 
         instructions.extend(self.value.statement.as_ref().compile(state)?);
 

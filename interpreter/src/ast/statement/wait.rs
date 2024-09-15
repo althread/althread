@@ -12,7 +12,7 @@ use crate::{
         },
     },
     compiler::{CompilerState, Variable},
-    error::AlthreadResult,
+    error::{AlthreadError, AlthreadResult, ErrorType},
     no_rule,
     parser::Rule,
     vm::instruction::{
@@ -33,6 +33,7 @@ pub enum WaitingBlockKind {
 pub struct Wait {
     pub block_kind: WaitingBlockKind,
     pub waiting_cases: Vec<Node<WaitingBlockCase>>,
+    pub start_atomic: bool,
 }
 
 impl NodeBuilder for Wait {
@@ -67,12 +68,25 @@ impl NodeBuilder for Wait {
         Ok(Self {
             block_kind,
             waiting_cases,
+            start_atomic: false,
         })
     }
 }
 
 impl InstructionBuilder for Node<Wait> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+
+        if state.is_atomic {
+            return Err(AlthreadError::new(
+                ErrorType::InstructionNotAllowed,
+                Some(self.pos),
+                "Wait blocks cannot be inside an atomic block (except if it is the first instruction)".to_string(),
+            ));
+        }
+        if self.value.start_atomic {
+            state.is_atomic = true;
+        }
+
         let mut instructions = Vec::new();
 
         let mut dependencies = WaitDependency::new();
@@ -82,7 +96,10 @@ impl InstructionBuilder for Node<Wait> {
 
         instructions.push(Instruction {
             pos: Some(self.pos),
-            control: InstructionType::WaitStart(WaitStartControl { dependencies }),
+            control: InstructionType::WaitStart(WaitStartControl { 
+                dependencies, 
+                start_atomic: self.value.start_atomic,
+            }),
         });
 
         state.program_stack.push(Variable {

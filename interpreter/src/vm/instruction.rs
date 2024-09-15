@@ -117,6 +117,7 @@ impl InstructionType {
     pub fn is_atomic_start(&self) -> bool {
         match self {
             Self::AtomicStart => true,
+            Self::WaitStart(a) => a.start_atomic,
             _ => false,
         }
     }
@@ -197,10 +198,14 @@ impl fmt::Display for WaitControl {
 #[derive(Debug, Clone)]
 pub struct WaitStartControl {
     pub dependencies: WaitDependency,
+    pub start_atomic: bool,
 }
 impl fmt::Display for WaitStartControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "wait start")?;
+        if self.start_atomic {
+            write!(f, " atomic")?;
+        }
         Ok(())
     }
 }
