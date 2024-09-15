@@ -178,11 +178,16 @@ pub fn random_search_command(cli_args: &RandomSearchCommand) {
             if vm.is_finished() {
                 break;
             }
-            let _info = vm.next().unwrap_or_else(|err| {
+            let info = vm.next().unwrap_or_else(|err| {
                 println!("Error with seed {}:", s);
                 err.report(&source);
                 exit(1);
             });
+            if info.invariant_error.is_err() {
+                println!("Error with seed {}:", s);
+                info.invariant_error.unwrap_err().report(&source);
+                exit(1);
+            }
             /*match vm.running_programs.iter()
                 .find(|(id, _)| **id == info.prog_id) {
                 Some((_, p)) => match p

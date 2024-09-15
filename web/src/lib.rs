@@ -46,6 +46,11 @@ pub fn run(source: &str) -> Result<String, JsValue> {
         for inst in info.instructions.iter() {
             result.push_str(&format!("#{}: {}\n", info.prog_id, inst));
         }
+        if info.invariant_error.is_err() {
+            let err = info.invariant_error.unwrap_err();
+            result.push_str(&format!("Invariant error at line {}: {}\n", err.pos.unwrap().line, err.message));
+            break;
+        }
     }
     Ok(result)
 }

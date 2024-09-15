@@ -22,9 +22,9 @@ impl Default for Pos {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AlthreadError {
-    pos: Option<Pos>,
-    message: String,
-    error_type: ErrorType,
+    pub pos: Option<Pos>,
+    pub message: String,
+    pub error_type: ErrorType,
 }
 
 pub type AlthreadResult<T> = Result<T, AlthreadError>;
