@@ -28,7 +28,7 @@ use wait::Wait;
 use while_control::WhileControl;
 
 use crate::{
-    compiler::CompilerState,
+    compiler::{CompilerState, InstructionBuilderOk},
     error::AlthreadResult,
     no_rule,
     parser::Rule,
@@ -80,7 +80,7 @@ impl NodeBuilder for Statement {
 }
 
 impl InstructionBuilder for Statement {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         match self {
             //Self::FnCall(node) => node.compile(process_code, env),
             Self::If(node) => node.compile(state),
@@ -95,13 +95,13 @@ impl InstructionBuilder for Statement {
             Self::Send(node) => node.compile(state),
             Self::Run(node) => {
                 // a run call returns a value, so we have to ustack it
-                let mut instructions = node.compile(state)?;
-                instructions.push(Instruction {
+                let mut builder = node.compile(state)?;
+                builder.instructions.push(Instruction {
                     pos: Some(node.pos),
                     control: InstructionType::Unstack(UnstackControl { unstack_len: 1 }),
                 });
                 state.program_stack.pop();
-                Ok(instructions)
+                Ok(builder)
             }
             Self::FnCall(node) => node.compile(state),
         }

@@ -105,7 +105,8 @@ impl Ast {
                     match &node.value {
                         Statement::Declaration(decl) => {
                             let mut literal = None;
-                            for gi in node.compile(&mut state)? {
+                            let node_compiled = node.compile(&mut state)?;
+                            for gi in node_compiled.instructions {
                                 match gi.control {
                                     InstructionType::Expression(exp) => {
                                         literal = Some(exp.root.eval(&memory).or_else(|err| {
@@ -188,7 +189,7 @@ impl Ast {
             match name {
                 ConditionKeyword::Always => {
                     for condition in condition_block.value.children.iter() {
-                        let compiled = condition.compile(&mut state)?;
+                        let compiled = condition.compile(&mut state)?.instructions;
                         if compiled.len() == 1 {
                             return Err(AlthreadError::new(
                                 ErrorType::InstructionNotAllowed,
@@ -251,7 +252,11 @@ impl Ast {
             .get(name)
             .expect("trying to compile a non-existant program");
         state.current_program_name = name.to_string();
-        process_code.instructions = prog.compile(state)?;
+        let compiled = prog.compile(state)?;        
+        if compiled.contains_jump() {
+            unimplemented!("breaks or return statements in programs are not yet implemented");
+        }
+        process_code.instructions = compiled.instructions;
         process_code.instructions.push(Instruction {
             control: InstructionType::EndProgram,
             pos: Some(prog.pos),

@@ -8,7 +8,7 @@ use crate::{
         node::{InstructionBuilder, Node, NodeBuilder},
         token::{datatype::DataType, literal::Literal},
     },
-    compiler::{CompilerState, Variable},
+    compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
     no_rule,
     parser::Rule,
@@ -68,7 +68,7 @@ impl ReceiveStatement {
 }
 
 impl InstructionBuilder for Node<ReceiveStatement> {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         // The goal is to simulate a boolean expression so that, if it is false, then the stack contains only
         // a false value, and if it is true, then the stack contains all the read variables from the channel and a true value.
         let channel_name = self.value.channel.clone();
@@ -95,9 +95,9 @@ impl InstructionBuilder for Node<ReceiveStatement> {
             ));
         }
 
-        let mut instructions = Vec::new();
+        let mut builder = InstructionBuilderOk::new();
 
-        instructions.push(Instruction {
+        builder.instructions.push(Instruction {
             control: InstructionType::ChannelPeek(channel_name.clone()),
             pos: Some(self.pos),
         }); // Peek has the effect of adding an anonymous tuple to the stack
@@ -150,51 +150,51 @@ impl InstructionBuilder for Node<ReceiveStatement> {
         }
         state.program_stack.pop();
 
-        let statement_instructions = match &self.value.statement {
+        let statement_builder = match &self.value.statement {
             Some(statement) => statement.compile(state)?,
-            None => Vec::new(),
+            None => InstructionBuilderOk::new(),
         };
 
-        instructions.push(Instruction {
+        builder.instructions.push(Instruction {
             control: InstructionType::JumpIf(JumpIfControl {
-                jump_false: 8 + (guard_instructions.len() + statement_instructions.len()) as i64, // If the channel is empty, jump to the end
+                jump_false: 8 + (guard_instructions.len() + statement_builder.instructions.len()) as i64, // If the channel is empty, jump to the end
                 unstack_len: 0, // we keep the false value on the stack
             }),
             pos: Some(self.pos),
         });
 
-        instructions.push(Instruction {
+        builder.instructions.push(Instruction {
             control: InstructionType::Unstack(UnstackControl {
                 unstack_len: 1, // we remove the true value on the stack (it will be replaced by the next expression
             }),
             pos: Some(self.pos),
         });
 
-        instructions.push(destruct_instruction);
+        builder.instructions.push(destruct_instruction);
 
-        instructions.extend(guard_instructions);
+        builder.instructions.extend(guard_instructions);
 
-        instructions.push(Instruction {
+        builder.instructions.push(Instruction {
             control: InstructionType::JumpIf(JumpIfControl {
-                jump_false: 5 + statement_instructions.len() as i64, // If the guard is false, jump to the end
+                jump_false: 5 + statement_builder.instructions.len() as i64, // If the guard is false, jump to the end
                 unstack_len: 0, // keep the boolean of the guard on the stack
             }),
             pos: Some(self.pos),
         });
 
-        instructions.push(Instruction {
+        builder.instructions.push(Instruction {
             control: InstructionType::Unstack(UnstackControl {
                 unstack_len: 1, // remove the boolean of the guard from the stack (but keep the variables used in the statement)
             }),
             pos: Some(self.pos),
         });
-        instructions.push(Instruction {
+        builder.instructions.push(Instruction {
             control: InstructionType::ChannelPop(channel_name.clone()), // actually do pop the channel
             pos: Some(self.pos),
         });
-        instructions.extend(statement_instructions);
+        builder.extend(statement_builder);
 
-        instructions.push(Instruction {
+        builder.instructions.push(Instruction {
             control: InstructionType::Unstack(UnstackControl {
                 unstack_len: self.value.variables.len(), // remove the variables from the stack
             }),
@@ -206,7 +206,7 @@ impl InstructionBuilder for Node<ReceiveStatement> {
             state.program_stack.pop();
         }
 
-        instructions.push(Instruction {
+        builder.instructions.push(Instruction {
             control: InstructionType::Push(Literal::Bool(true)), // the statement is finished, the global condition is a success
             pos: Some(self.pos),
         });
@@ -220,8 +220,10 @@ impl InstructionBuilder for Node<ReceiveStatement> {
             declare_pos: None,
         });
         // The next instruction will likely be a wait or an if based on the current stack top.
-
-        Ok(instructions)
+        if builder.contains_jump() {
+            todo!("breaking inside a receive statement is not yet implemented");
+        }
+        Ok(builder)
     }
 }
 

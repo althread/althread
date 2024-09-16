@@ -8,7 +8,7 @@ use crate::{
         node::{InstructionBuilder, Node, NodeBuilder},
         token::datatype::DataType,
     },
-    compiler::{CompilerState, Variable},
+    compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadResult, Pos},
     parser::Rule,
     vm::instruction::{Instruction, InstructionType, RunCallControl},
@@ -37,7 +37,7 @@ impl NodeBuilder for RunCall {
 }
 
 impl InstructionBuilder for Node<RunCall> {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         state.program_stack.push(Variable {
             name: "".to_string(),
             depth: state.current_stack_depth,
@@ -46,12 +46,12 @@ impl InstructionBuilder for Node<RunCall> {
             declare_pos: Some(self.pos),
         });
 
-        Ok(vec![Instruction {
+        Ok(InstructionBuilderOk::from_instructions(vec![Instruction {
             control: InstructionType::RunCall(RunCallControl {
                 name: self.value.identifier.value.clone(),
             }),
             pos: Some(self.pos),
-        }])
+        }]))
     }
 }
 

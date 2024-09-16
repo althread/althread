@@ -8,7 +8,7 @@ use crate::{
         node::{InstructionBuilder, Node, NodeBuilder},
         token::identifier::Identifier,
     },
-    compiler::CompilerState,
+    compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
     parser::Rule,
     vm::instruction::{FnCallControl, Instruction, InstructionType},
@@ -33,7 +33,7 @@ impl NodeBuilder for FnCall {
 }
 
 impl InstructionBuilder for Node<FnCall> {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         let name = self.value.fn_name.value.value.clone();
         if name != "print" {
             return Err(AlthreadError::new(
@@ -43,16 +43,16 @@ impl InstructionBuilder for Node<FnCall> {
             ));
         }
 
-        let mut instructions = Vec::new();
+        let mut builder = InstructionBuilderOk::new();
 
         state.current_stack_depth += 1;
-        instructions.append(&mut self.value.values.compile(state)?);
+        builder.extend(self.value.values.compile(state)?);
         let unstack_len = state.unstack_current_depth();
-        instructions.push(Instruction {
+        builder.instructions.push(Instruction {
             control: InstructionType::FnCall(FnCallControl { name, unstack_len }),
             pos: Some(self.pos),
         });
-        Ok(instructions)
+        Ok(builder)
     }
 }
 

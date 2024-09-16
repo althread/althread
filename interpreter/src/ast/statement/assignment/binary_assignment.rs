@@ -9,7 +9,7 @@ use crate::{
         statement::expression::SideEffectExpression,
         token::{binary_assignment_operator::BinaryAssignmentOperator, identifier::Identifier},
     },
-    compiler::CompilerState,
+    compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
     parser::Rule,
     vm::instruction::{
@@ -39,11 +39,11 @@ impl NodeBuilder for BinaryAssignment {
 }
 
 impl InstructionBuilder for Node<BinaryAssignment> {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
-        let mut instructions = Vec::new();
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
+        let mut builder = InstructionBuilderOk::new();
 
         state.current_stack_depth += 1;
-        instructions.append(&mut self.value.value.compile(state)?);
+        builder.extend(self.value.value.compile(state)?);
         let rdatatype = state
             .program_stack
             .last()
@@ -73,7 +73,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
                     ),
                 ));
             }
-            instructions.push(Instruction {
+            builder.instructions.push(Instruction {
                 pos: Some(self.value.identifier.pos),
                 control: InstructionType::GlobalAssignment(GlobalAssignmentControl {
                     identifier: self.value.identifier.value.value.clone(),
@@ -123,7 +123,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
                 ));
             }
 
-            instructions.push(Instruction {
+            builder.instructions.push(Instruction {
                 pos: Some(self.value.identifier.pos),
                 control: InstructionType::LocalAssignment(LocalAssignmentControl {
                     index: var_idx,
@@ -133,7 +133,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
             });
         }
 
-        Ok(instructions)
+        Ok(builder)
     }
 }
 

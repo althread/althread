@@ -3,7 +3,7 @@ use std::fmt;
 
 use pest::iterators::Pairs;
 
-use crate::ast::node::InstructionBuilder;
+use crate::{ast::node::InstructionBuilder, compiler::InstructionBuilderOk};
 use crate::compiler::CompilerState;
 use crate::error::AlthreadResult;
 use crate::parser::Rule;
@@ -93,7 +93,7 @@ impl WaitingBlockCaseRule {
     }
 }
 impl InstructionBuilder for WaitingBlockCaseRule {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         match self {
             WaitingBlockCaseRule::Expression(expr) => expr.compile(state),
             WaitingBlockCaseRule::Receive(receive) => receive.compile(state),

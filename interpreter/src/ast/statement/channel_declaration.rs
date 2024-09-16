@@ -8,7 +8,7 @@ use crate::{
         node::{InstructionBuilder, Node, NodeBuilder},
         token::datatype::DataType,
     },
-    compiler::CompilerState,
+    compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
     parser::Rule,
     vm::instruction::{ConnectionControl, Instruction, InstructionType},
@@ -92,7 +92,7 @@ fn get_prog_name(var_name: &str, state: &mut CompilerState, pos: &Pos) -> Althre
 }
 
 impl InstructionBuilder for Node<ChannelDeclaration> {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         let dec = &self.value;
 
         let left_prog = get_prog_name(&dec.ch_left_prog, state, &self.pos)?;
@@ -171,7 +171,7 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
                 .insert(right_key, (dec.datatypes.clone(), self.pos.clone()));
         }
 
-        Ok(vec![Instruction {
+        Ok(InstructionBuilderOk::from_instructions(vec![Instruction {
             control: InstructionType::Connect(ConnectionControl {
                 sender_idx: get_var_id(&dec.ch_left_prog, state, &self.pos)?,
                 receiver_idx: get_var_id(&dec.ch_right_prog, state, &self.pos)?,
@@ -179,7 +179,7 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
                 receiver_channel: dec.ch_right_name.clone(),
             }),
             pos: Some(self.pos),
-        }])
+        }]))
     }
 }
 

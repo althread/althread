@@ -8,7 +8,7 @@ use crate::{
         node::{InstructionBuilder, Node, NodeBuilder},
         token::datatype::DataType,
     },
-    compiler::CompilerState,
+    compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
     parser::Rule,
     vm::instruction::{Instruction, InstructionType, SendControl, WaitControl, WaitStartControl},
@@ -42,10 +42,10 @@ impl NodeBuilder for SendStatement {
 }
 
 impl InstructionBuilder for Node<SendStatement> {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         let channel_name = self.value.channel.clone();
 
-        let mut instructions = Vec::new();
+        let mut builder = InstructionBuilderOk::new();
 
         let tuple = match &self.value.values.value {
             Expression::Tuple(t) => &t.value,
@@ -59,7 +59,7 @@ impl InstructionBuilder for Node<SendStatement> {
         };
 
         state.current_stack_depth += 1;
-        instructions.append(&mut self.value.values.compile(state)?);
+        builder.extend(self.value.values.compile(state)?);
         let rdatatype = state
             .program_stack
             .last()
@@ -111,7 +111,7 @@ impl InstructionBuilder for Node<SendStatement> {
             }
         }
 
-        instructions.push(Instruction {
+        builder.instructions.push(Instruction {
             control: InstructionType::Send(SendControl {
                 channel_name: channel_name.clone(),
                 unstack_len,
@@ -130,7 +130,7 @@ impl InstructionBuilder for Node<SendStatement> {
             state.is_atomic = true;
         }
 
-        instructions.push(Instruction {
+        builder.instructions.push(Instruction {
             control: InstructionType::WaitStart(WaitStartControl {
                 dependencies: WaitDependency{
                     variables: HashSet::new(),
@@ -142,19 +142,19 @@ impl InstructionBuilder for Node<SendStatement> {
             pos: Some(self.pos),
         });
         
-        instructions.push(Instruction {
+        builder.instructions.push(Instruction {
             control: InstructionType::SendWaiting,
             pos: Some(self.pos),
         });
 
-        instructions.push(Instruction {
+        builder.instructions.push(Instruction {
             control: InstructionType::Wait(WaitControl {
                 jump: -2,
                 unstack_len: 1,
             }),
             pos: Some(self.pos),
         });
-        Ok(instructions)
+        Ok(builder)
     }
 }
 

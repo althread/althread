@@ -20,7 +20,7 @@ use crate::{
         node::{InstructionBuilder, Node, NodeBuilder},
         token::{datatype::DataType, literal::Literal},
     },
-    compiler::{CompilerState, Variable},
+    compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
     no_rule,
     parser::Rule,
@@ -66,7 +66,7 @@ impl NodeBuilder for SideEffectExpression {
 }
 
 impl InstructionBuilder for SideEffectExpression {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         match self {
             Self::Expression(node) => node.compile(state),
             Self::RunCall(node) => node.compile(state),
@@ -241,7 +241,7 @@ impl LocalExpressionNode {
 // we build directly the traits on the node
 // because we need line/column information
 impl InstructionBuilder for Node<Expression> {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         let mut instructions = Vec::new();
 
         let mut vars = HashSet::new();
@@ -293,7 +293,7 @@ impl InstructionBuilder for Node<Expression> {
             declare_pos: None,
         });
 
-        Ok(instructions)
+        Ok(InstructionBuilderOk::from_instructions(instructions))
     }
 }
 

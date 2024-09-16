@@ -10,7 +10,7 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
     },
-    compiler::CompilerState,
+    compiler::{CompilerState, InstructionBuilderOk},
     error::AlthreadResult,
     no_rule,
     parser::Rule,
@@ -34,7 +34,7 @@ impl NodeBuilder for Assignment {
 }
 
 impl InstructionBuilder for Assignment {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         match self {
             Self::Binary(node) => node.compile(state),
         }

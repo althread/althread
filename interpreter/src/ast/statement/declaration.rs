@@ -10,7 +10,7 @@ use crate::{
             datatype::DataType, declaration_keyword::DeclarationKeyword, identifier::Identifier,
         },
     },
-    compiler::{CompilerState, Variable},
+    compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
     no_rule,
     parser::Rule,
@@ -56,8 +56,8 @@ impl NodeBuilder for Declaration {
 }
 
 impl InstructionBuilder for Declaration {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
-        let mut instructions = Vec::new();
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
+        let mut builder = InstructionBuilderOk::new();
         let mut datatype = None;
 
         if state
@@ -103,7 +103,7 @@ impl InstructionBuilder for Declaration {
 
         if let Some(value) = &self.value {
             state.current_stack_depth += 1;
-            instructions.extend(value.compile(state)?);
+            builder.extend(value.compile(state)?);
             let computed_datatype = state
                 .program_stack
                 .last()
@@ -126,7 +126,7 @@ impl InstructionBuilder for Declaration {
             }
             datatype = Some(computed_datatype);
 
-            instructions.push(Instruction {
+            builder.instructions.push(Instruction {
                 control: InstructionType::Declaration(DeclarationControl { unstack_len }),
                 pos: Some(self.keyword.pos),
             });
@@ -138,7 +138,7 @@ impl InstructionBuilder for Declaration {
                     "Declaration must have a datatype or a value".to_string(),
                 ));
             }
-            instructions.push(Instruction {
+            builder.instructions.push(Instruction {
                 control: InstructionType::Push(datatype.as_ref().unwrap().default()),
                 pos: Some(self.keyword.pos),
             });
@@ -154,7 +154,7 @@ impl InstructionBuilder for Declaration {
             declare_pos: Some(self.identifier.pos),
         });
 
-        Ok(instructions)
+        Ok(builder)
     }
 }
 

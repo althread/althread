@@ -6,7 +6,7 @@ use crate::{
     ast::{
         block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}
     },
-    compiler::CompilerState,
+    compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
     parser::Rule,
     vm::instruction::{Instruction, InstructionType, JumpControl},
@@ -59,7 +59,7 @@ impl NodeBuilder for Atomic {
 }
 
 impl InstructionBuilder for Node<Atomic> {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         
         if state.is_atomic {
             return Err(AlthreadError::new(
@@ -69,25 +69,27 @@ impl InstructionBuilder for Node<Atomic> {
             ));
         }
 
-        let mut instructions= Vec::new();
+        let mut builder = InstructionBuilderOk::new();
 
         if !self.value.delegated {
-            instructions.push(Instruction {
+            builder.instructions.push(Instruction {
                 pos: Some(self.value.statement.as_ref().pos),
                 control: InstructionType::AtomicStart,
             });
             state.is_atomic = true;
         }
 
-        instructions.extend(self.value.statement.as_ref().compile(state)?);
+        builder.extend(self.value.statement.as_ref().compile(state)?);
 
         state.is_atomic = false;
-        instructions.push(Instruction {
+        builder.instructions.push(Instruction {
             pos: Some(self.value.statement.as_ref().pos),
             control: InstructionType::AtomicEnd,
         });
-
-        Ok(instructions)
+        if builder.contains_jump() {
+            todo!("Jumping out of atomic block not implemented");
+        }
+        Ok(builder)
     }
 }
 

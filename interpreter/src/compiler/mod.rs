@@ -2,11 +2,63 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use crate::error::Pos;
-use crate::vm::instruction::{ExpressionControl, GlobalReadsControl};
+use crate::vm::instruction::{ExpressionControl, GlobalReadsControl, Instruction};
 use crate::{
     ast::token::{datatype::DataType, literal::Literal},
     vm::instruction::ProgramCode,
 };
+
+pub struct InstructionBuilderOk {
+    pub instructions: Vec<Instruction>,
+
+    /// The indexes of the break instructions
+    /// the key is the label of the loop to break
+    pub break_indexes: HashMap<String, Vec<usize>>,
+
+    /// The indexes of the continue instructions
+    /// the key is the label of the loop to continue
+    pub continue_indexes: HashMap<String, Vec<usize>>,
+
+    /// The indexes of the return instructions
+    pub return_indexes: Vec<usize>,
+}
+
+impl InstructionBuilderOk {
+    pub fn new() -> Self {
+        Self {
+            instructions: Vec::new(),
+            break_indexes: HashMap::new(),
+            continue_indexes: HashMap::new(),
+            return_indexes: Vec::new(),
+        }
+    }
+    pub fn from_instructions(instructions: Vec<Instruction>) -> Self {
+        Self {
+            instructions,
+            break_indexes: HashMap::new(),
+            continue_indexes: HashMap::new(),
+            return_indexes: Vec::new(),
+        }
+    }
+    pub fn extend(&mut self, other: Self) {
+        let off_set = self.instructions.len();
+        self.instructions.extend(other.instructions);
+
+        for (k, v) in other.break_indexes.iter() {
+            self.break_indexes.entry(k.clone()).or_insert_with(Vec::new).extend(v.iter().map(|x| x + off_set));
+        }
+
+        for (k, v) in other.continue_indexes.iter() {
+            self.continue_indexes.entry(k.clone()).or_insert_with(Vec::new).extend(v.iter().map(|x| x + off_set));
+        }
+
+        self.return_indexes.extend(other.return_indexes.iter().map(|x| x + off_set));
+    }
+    pub fn contains_jump(&self) -> bool {
+        self.break_indexes.len() > 0 || self.continue_indexes.len() > 0 || self.return_indexes.len() > 0
+    }
+}
+
 
 #[derive(Debug, Clone)]
 pub struct Variable {

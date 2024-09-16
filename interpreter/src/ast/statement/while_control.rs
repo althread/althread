@@ -9,7 +9,7 @@ use crate::{
         node::{InstructionBuilder, Node, NodeBuilder},
         token::datatype::DataType,
     },
-    compiler::CompilerState,
+    compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
     parser::Rule,
     vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl},
@@ -36,11 +36,11 @@ impl NodeBuilder for WhileControl {
 }
 
 impl InstructionBuilder for Node<WhileControl> {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
-        let mut instructions = Vec::new();
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
+        let mut builder = InstructionBuilderOk::new();
 
         state.current_stack_depth += 1;
-        let cond_ins = self.value.condition.compile(state)?;
+        let cond_builder = self.value.condition.compile(state)?;
         // Check if the top of the stack is a boolean
         if state
             .program_stack
@@ -58,27 +58,29 @@ impl InstructionBuilder for Node<WhileControl> {
         // pop all variables from the stack at the given depth
         let unstack_len = state.unstack_current_depth();
 
-        let block_ins = self.value.then_block.compile(state)?;
-        let block_len = block_ins.len();
+        let block_builder = self.value.then_block.compile(state)?;
+        let block_len = block_builder.instructions.len();
 
-        instructions.extend(cond_ins);
-        instructions.push(Instruction {
+        builder.extend(cond_builder);
+        builder.instructions.push(Instruction {
             pos: Some(self.value.condition.pos),
             control: InstructionType::JumpIf(JumpIfControl {
                 jump_false: (block_len + 2) as i64,
                 unstack_len,
             }),
         });
-        instructions.extend(block_ins);
+        builder.extend(block_builder);
 
-        instructions.push(Instruction {
+        builder.instructions.push(Instruction {
             pos: Some(self.pos),
             control: InstructionType::Jump(JumpControl {
-                jump: -(instructions.len() as i64),
+                jump: -(builder.instructions.len() as i64),
             }),
         });
-
-        Ok(instructions)
+        if builder.contains_jump() {
+            unimplemented!("breaks in while blocks are not yet implemented (yeah, I know, its weird)");
+        }
+        Ok(builder)
     }
 }
 

@@ -11,7 +11,7 @@ use crate::{
             literal::Literal,
         },
     },
-    compiler::{CompilerState, Variable},
+    compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
     no_rule,
     parser::Rule,
@@ -74,7 +74,7 @@ impl NodeBuilder for Wait {
 }
 
 impl InstructionBuilder for Node<Wait> {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
 
         if state.is_atomic {
             return Err(AlthreadError::new(
@@ -87,14 +87,14 @@ impl InstructionBuilder for Node<Wait> {
             state.is_atomic = true;
         }
 
-        let mut instructions = Vec::new();
+        let mut builder = InstructionBuilderOk::new();
 
         let mut dependencies = WaitDependency::new();
         for wc in self.value.waiting_cases.iter() {
             wc.value.rule.add_dependencies(&mut dependencies);
         }
 
-        instructions.push(Instruction {
+        builder.instructions.push(Instruction {
             pos: Some(self.pos),
             control: InstructionType::WaitStart(WaitStartControl { 
                 dependencies, 
@@ -110,7 +110,7 @@ impl InstructionBuilder for Node<Wait> {
             declare_pos: None,
         });
 
-        instructions.push(Instruction {
+        builder.instructions.push(Instruction {
             pos: Some(self.pos),
             control: InstructionType::Push(Literal::Bool(false)),
         });
@@ -128,14 +128,14 @@ impl InstructionBuilder for Node<Wait> {
 
             let mut case_statement = match &case.value.statement {
                 Some(s) => s.compile(state)?,
-                None => vec![],
+                None => InstructionBuilderOk::new(),
             };
 
-            case_statement.push(Instruction {
+            case_statement.instructions.push(Instruction {
                 pos: Some(case.pos),
                 control: InstructionType::Push(Literal::Bool(true)),
             });
-            case_statement.push(Instruction {
+            case_statement.instructions.push(Instruction {
                 pos: Some(case.pos),
                 control: InstructionType::LocalAssignment(LocalAssignmentControl {
                     index: 0,
@@ -145,36 +145,36 @@ impl InstructionBuilder for Node<Wait> {
             });
 
             // the offset is because a jump will be added after the statement
-            case_condition.push(Instruction {
+            case_condition.instructions.push(Instruction {
                 pos: Some(case.pos),
                 control: InstructionType::JumpIf(JumpIfControl {
-                    jump_false: (case_statement.len() + 1 + jump_if_offset) as i64,
+                    jump_false: (case_statement.instructions.len() + 1 + jump_if_offset) as i64,
                     unstack_len,
                 }),
             });
-            instructions.extend(case_condition);
-            instructions.extend(case_statement);
-            jump_index.push(instructions.len());
+            builder.extend(case_condition);
+            builder.extend(case_statement);
+            jump_index.push(builder.instructions.len());
         }
 
         if self.value.block_kind == WaitingBlockKind::First {
             for index in jump_index.iter().rev() {
-                instructions.insert(
+                builder.instructions.insert(
                     *index,
                     Instruction {
                         pos: Some(self.pos),
                         control: InstructionType::Jump(JumpControl {
-                            jump: (instructions.len() - index + 1) as i64,
+                            jump: (builder.instructions.len() - index + 1) as i64,
                         }),
                     },
                 );
             }
         }
 
-        instructions.push(Instruction {
+        builder.instructions.push(Instruction {
             pos: Some(self.pos),
             control: InstructionType::Wait(WaitControl {
-                jump: -(instructions.len() as i64),
+                jump: -(builder.instructions.len() as i64),
                 unstack_len: 1,
             }),
         });
@@ -203,8 +203,10 @@ impl InstructionBuilder for Node<Wait> {
                     }),
                 });
         */
-
-        Ok(instructions)
+        if builder.contains_jump() {
+            unimplemented!("breaks in wait blocks are not yet implemented");
+        }
+        Ok(builder)
     }
 }
 

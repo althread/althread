@@ -9,7 +9,7 @@ use crate::{
         node::{InstructionBuilder, Node, NodeBuilder},
         token::datatype::DataType,
     },
-    compiler::CompilerState,
+    compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
     parser::Rule,
     vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl},
@@ -44,8 +44,8 @@ impl NodeBuilder for IfControl {
 }
 
 impl InstructionBuilder for IfControl {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
-        let mut instructions = Vec::new();
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
+        let mut builder = InstructionBuilderOk::new();
         state.current_stack_depth += 1;
 
         let condition = self.condition.compile(state)?;
@@ -70,34 +70,34 @@ impl InstructionBuilder for IfControl {
 
         let else_block = match self.else_block.as_ref() {
             Some(block) => block.compile(state)?,
-            None => Vec::new(),
+            None => InstructionBuilderOk::new(),
         };
 
-        instructions.extend(condition);
-        instructions.push(Instruction {
+        builder.extend(condition);
+        builder.instructions.push(Instruction {
             pos: Some(self.condition.pos),
             control: InstructionType::JumpIf(JumpIfControl {
-                jump_false: (then_block.len() + 2) as i64,
+                jump_false: (then_block.instructions.len() + 2) as i64,
                 unstack_len,
             }),
         });
-        instructions.extend(then_block);
+        builder.extend(then_block);
         if let Some(else_node) = &self.else_block {
-            instructions.push(Instruction {
+            builder.instructions.push(Instruction {
                 pos: Some(else_node.pos),
                 control: InstructionType::Jump(JumpControl {
-                    jump: (else_block.len() + 1) as i64,
+                    jump: (else_block.instructions.len() + 1) as i64,
                 }),
             });
-            instructions.extend(else_block);
+            builder.extend(else_block);
         } else {
-            instructions.push(Instruction {
+            builder.instructions.push(Instruction {
                 pos: Some(self.then_block.pos),
                 control: InstructionType::Empty,
             });
         }
 
-        Ok(instructions)
+        Ok(builder)
     }
 }
 

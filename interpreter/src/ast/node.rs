@@ -2,6 +2,7 @@ use std::fmt;
 
 use pest::iterators::{Pair, Pairs};
 
+use crate::compiler::InstructionBuilderOk;
 use crate::error::Pos;
 use crate::{
     compiler::CompilerState, error::AlthreadResult, parser::Rule, vm::instruction::Instruction,
@@ -20,7 +21,7 @@ pub trait NodeBuilder: Sized {
 }
 
 pub trait InstructionBuilder: Sized {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>>;
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk>;
 }
 
 impl<T: NodeBuilder> Node<T> {
@@ -51,7 +52,7 @@ impl<T: fmt::Display> fmt::Display for Node<T> {
 }
 
 impl<T: InstructionBuilder> Node<T> {
-    pub fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
+    pub fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         self.value.compile(state)
     }
 }

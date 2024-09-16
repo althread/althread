@@ -2,7 +2,7 @@ use std::fmt;
 
 use pest::iterators::Pairs;
 
-use crate::compiler::CompilerState;
+use crate::compiler::{CompilerState, InstructionBuilderOk};
 use crate::error::AlthreadResult;
 use crate::parser::Rule;
 use crate::vm::instruction::{Instruction, InstructionType, UnstackControl};
@@ -32,21 +32,21 @@ impl NodeBuilder for Block {
 }
 
 impl InstructionBuilder for Block {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
-        let mut instructions = Vec::new();
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
+        let mut builder = InstructionBuilderOk::new();
         state.current_stack_depth += 1;
         for node in &self.children {
-            let n_ins = node.compile(state)?;
-            instructions.extend(n_ins);
+            let sub_b = node.compile(state)?;
+            builder.extend(sub_b);
         }
         let unstack_len = state.unstack_current_depth();
         if unstack_len > 0 {
-            instructions.push(Instruction {
+            builder.instructions.push(Instruction {
                 control: InstructionType::Unstack(UnstackControl { unstack_len }),
                 pos: None,
             });
         }
-        Ok(instructions)
+        Ok(builder)
     }
 }
 

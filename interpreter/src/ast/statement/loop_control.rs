@@ -7,7 +7,7 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
     },
-    compiler::CompilerState,
+    compiler::{CompilerState, InstructionBuilderOk},
     error::AlthreadResult,
     parser::Rule,
     vm::instruction::{Instruction, InstructionType, JumpControl},
@@ -29,17 +29,19 @@ impl NodeBuilder for LoopControl {
 }
 
 impl InstructionBuilder for Node<LoopControl> {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<Vec<Instruction>> {
-        let mut instructions = self.value.statement.as_ref().compile(state)?;
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
+        let mut builder = self.value.statement.as_ref().compile(state)?;
 
-        instructions.push(Instruction {
+        builder.instructions.push(Instruction {
             pos: Some(self.value.statement.as_ref().pos),
             control: InstructionType::Jump(JumpControl {
-                jump: -(instructions.len() as i64),
+                jump: -(builder.instructions.len() as i64),
             }),
         });
-
-        Ok(instructions)
+        if builder.contains_jump() {
+            unimplemented!("breaks in loops not implemented");
+        }
+        Ok(builder)
     }
 }
 
