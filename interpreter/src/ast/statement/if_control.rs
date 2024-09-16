@@ -77,7 +77,7 @@ impl InstructionBuilder for IfControl {
         instructions.push(Instruction {
             pos: Some(self.condition.pos),
             control: InstructionType::JumpIf(JumpIfControl {
-                jump_false: (then_block.len() + 1) as i64,
+                jump_false: (then_block.len() + 2) as i64,
                 unstack_len,
             }),
         });
@@ -90,6 +90,11 @@ impl InstructionBuilder for IfControl {
                 }),
             });
             instructions.extend(else_block);
+        } else {
+            instructions.push(Instruction {
+                pos: Some(self.then_block.pos),
+                control: InstructionType::Empty,
+            });
         }
 
         Ok(instructions)
