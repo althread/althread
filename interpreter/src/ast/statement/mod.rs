@@ -12,10 +12,12 @@ pub mod wait;
 pub mod waiting_case;
 pub mod while_control;
 pub mod atomic;
+pub mod break_loop;
 
 use std::fmt;
 
 use assignment::Assignment;
+use break_loop::BreakLoopControl;
 use channel_declaration::ChannelDeclaration;
 use declaration::Declaration;
 use fn_call::FnCall;
@@ -52,6 +54,7 @@ pub enum Statement {
     If(Node<IfControl>),
     While(Node<WhileControl>),
     Loop(Node<LoopControl>),
+    BreakLoop(Node<BreakLoopControl>),
     Atomic(Node<atomic::Atomic>),
     Wait(Node<Wait>),
     Block(Node<Block>),
@@ -71,6 +74,7 @@ impl NodeBuilder for Statement {
             Rule::while_control => Ok(Self::While(Node::build(pair)?)),
             Rule::atomic_statement => Ok(Self::Atomic(Node::build(pair)?)),
             Rule::loop_control => Ok(Self::Loop(Node::build(pair)?)),
+            Rule::break_loop_statement => Ok(Self::BreakLoop(Node::build(pair)?)),
             Rule::code_block => Ok(Self::Block(Node::build(pair)?)),
             Rule::send_call => Ok(Self::Send(Node::build(pair)?)),
             Rule::channel_declaration => Ok(Self::ChannelDeclaration(Node::build(pair)?)),
@@ -93,6 +97,7 @@ impl InstructionBuilder for Statement {
             Self::Wait(node) => node.compile(state),
             Self::Block(node) => node.compile(state),
             Self::Send(node) => node.compile(state),
+            Self::BreakLoop(node) => node.compile(state),
             Self::Run(node) => {
                 // a run call returns a value, so we have to ustack it
                 let mut builder = node.compile(state)?;
@@ -131,6 +136,7 @@ impl AstDisplay for Statement {
             Statement::If(node) => node.ast_fmt(f, prefix),
             Statement::While(node) => node.ast_fmt(f, prefix),
             Statement::Loop(node) => node.ast_fmt(f, prefix),
+            Statement::BreakLoop(node) => node.ast_fmt(f, prefix),
             Statement::Atomic(node) => node.ast_fmt(f, prefix),
             Statement::Block(node) => node.ast_fmt(f, prefix),
         }

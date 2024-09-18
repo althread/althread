@@ -10,10 +10,11 @@ use crate::{
     compiler::{CompilerState, InstructionBuilderOk},
     error::AlthreadResult,
     parser::Rule,
-    vm::instruction::{Instruction, InstructionType, JumpControl},
+    vm::instruction::{self, Instruction, InstructionType, JumpControl},
 };
 
 use super::Statement;
+
 
 #[derive(Debug, Clone)]
 pub struct LoopControl {
@@ -30,6 +31,8 @@ impl NodeBuilder for LoopControl {
 
 impl InstructionBuilder for Node<LoopControl> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
+        let stack_len = state.program_stack.len();
+
         let mut builder = self.value.statement.as_ref().compile(state)?;
 
         builder.instructions.push(Instruction {
@@ -39,7 +42,30 @@ impl InstructionBuilder for Node<LoopControl> {
             }),
         });
         if builder.contains_jump() {
-            unimplemented!("breaks in loops not implemented");
+            for idx in builder.break_indexes.get("").unwrap_or(&Vec::new()) {
+                if let InstructionType::Break(bc) =  &builder.instructions[*idx as usize].control {
+                    builder.instructions[*idx as usize].control = InstructionType::Break(instruction::BreakLoopControl {
+                        jump: (builder.instructions.len() - idx) as i64,
+                        unstack_len: bc.unstack_len - stack_len,
+                    });
+                }
+                else {
+                    panic!("Expected Break instruction");
+                }
+            }
+            builder.break_indexes.remove("");
+            for idx in builder.continue_indexes.get("").unwrap_or(&Vec::new()) {
+                if let InstructionType::Break(bc) =  &builder.instructions[*idx as usize].control {
+                    builder.instructions[*idx as usize].control = InstructionType::Break(instruction::BreakLoopControl {
+                        jump: -(*idx as i64),
+                        unstack_len: bc.unstack_len - stack_len,
+                    });
+                }
+                else {
+                    panic!("Expected Break instruction");
+                }
+            }
+            builder.continue_indexes.remove("");
         }
         Ok(builder)
     }

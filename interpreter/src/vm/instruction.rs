@@ -17,6 +17,7 @@ pub enum InstructionType {
     LocalAssignment(LocalAssignmentControl),
     JumpIf(JumpIfControl),
     Jump(JumpControl),
+    Break(BreakLoopControl),
     Unstack(UnstackControl),
     RunCall(RunCallControl),
     EndProgram,
@@ -50,6 +51,7 @@ impl fmt::Display for InstructionType {
             Self::Unstack(a) => write!(f, "{}", a)?,
             Self::Destruct(d) => write!(f, "destruct {}", d)?,
             Self::RunCall(a) => write!(f, "{}", a)?,
+            Self::Break(a) => write!(f, "{}", a)?,
             Self::EndProgram => write!(f, "end program")?,
             Self::FnCall(a) => write!(f, "{}", a)?,
             Self::Exit => write!(f, "exit")?,
@@ -101,6 +103,7 @@ impl InstructionType {
             | Self::LocalAssignment(_)
             | Self::JumpIf(_)
             | Self::Jump(_)
+            | Self::Break(_)
             | Self::Destruct(_)
             | Self::Unstack(_)
             | Self::EndProgram
@@ -117,7 +120,7 @@ impl InstructionType {
     pub fn is_atomic_start(&self) -> bool {
         match self {
             Self::AtomicStart => true,
-            Self::WaitStart(a) => a.start_atomic,
+            Self::WaitStart(_) => true,
             _ => false,
         }
     }
@@ -168,6 +171,18 @@ impl fmt::Display for JumpIfControl {
             "jumpIf {} (unstack {})",
             self.jump_false, self.unstack_len
         )?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BreakLoopControl {
+    pub jump: i64,
+    pub unstack_len: usize,
+}
+impl fmt::Display for BreakLoopControl {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "break (unstack {})", self.unstack_len)?;
         Ok(())
     }
 }

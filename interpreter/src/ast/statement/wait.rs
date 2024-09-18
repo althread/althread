@@ -115,11 +115,16 @@ impl InstructionBuilder for Node<Wait> {
             control: InstructionType::Push(Literal::Bool(false)),
         });
 
-        let jump_if_offset = if self.value.block_kind == WaitingBlockKind::First {
+        let mut jump_if_offset = if self.value.block_kind == WaitingBlockKind::First {
             1
         } else {
             0
         };
+        // the if offset also depends on whether the wait block is atomic or not
+        if !self.value.start_atomic {
+            jump_if_offset += 1;
+        }
+
         let mut jump_index = Vec::new();
         for case in &self.value.waiting_cases {
             state.current_stack_depth += 1;
@@ -153,22 +158,19 @@ impl InstructionBuilder for Node<Wait> {
                 }),
             });
             builder.extend(case_condition);
+            if !self.value.start_atomic {
+                // if the entire wait block is not atomic, stop the atomicity here
+                builder.instructions.push(Instruction {
+                    pos: Some(case.pos),
+                    control: InstructionType::AtomicEnd,
+                });
+            }
             builder.extend(case_statement);
             jump_index.push(builder.instructions.len());
-        }
-
-        if self.value.block_kind == WaitingBlockKind::First {
-            for index in jump_index.iter().rev() {
-                builder.instructions.insert(
-                    *index,
-                    Instruction {
-                        pos: Some(self.pos),
-                        control: InstructionType::Jump(JumpControl {
-                            jump: (builder.instructions.len() - index + 1) as i64,
-                        }),
-                    },
-                );
-            }
+            builder.instructions.push(Instruction {
+                pos: Some(case.pos),
+                control: InstructionType::Empty, // placeholder for the jump if the keyword "first" is used
+            });
         }
 
         builder.instructions.push(Instruction {
@@ -179,6 +181,17 @@ impl InstructionBuilder for Node<Wait> {
             }),
         });
         state.program_stack.pop();
+
+
+        if self.value.block_kind == WaitingBlockKind::First {
+            for index in jump_index.iter() {
+                builder.instructions[*index].control = InstructionType::Jump(JumpControl {
+                    jump: (builder.instructions.len() - index - 1) as i64,
+                });
+            }
+        }
+
+
         /*
                 state.current_stack_depth += 1;
                 let cond_ins = self.value.condition.compile(state)?;
@@ -203,9 +216,10 @@ impl InstructionBuilder for Node<Wait> {
                     }),
                 });
         */
-        if builder.contains_jump() {
-            unimplemented!("breaks in wait blocks are not yet implemented");
-        }
+        // It should work!
+        //if builder.contains_jump() {
+        //    unimplemented!("breaks in wait blocks are not yet implemented");
+        //}
         Ok(builder)
     }
 }

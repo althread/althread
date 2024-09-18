@@ -40,8 +40,10 @@ statement = {
   | while_control
   | call_statement
   | code_block
+  | break_loop_statement
 }
 
+break_loop_statement = { (BREAK_KW | CONTINUE_KW) ~ identifier? ~ ";" }
 assignment_statement  = _{ assignment ~ ";" }
 declaration_statement = _{ declaration ~ ";" }
 wait_statement        =  { WAIT_KW ~ (
@@ -172,6 +174,8 @@ IF_KW    = _{ "if" }
 ELSE_KW  = _{ "else" }
 WHILE_KW = _{ "while" }
 LOOP_KW = _{ "loop" }
+BREAK_KW = { "break" }
+CONTINUE_KW = { "continue" }
 
 SEND_KW = _{ "send" }
 RECEIVE_KW = _{ "receive" }

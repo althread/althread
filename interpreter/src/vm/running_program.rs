@@ -147,6 +147,12 @@ impl<'a> RunningProgramState<'a> {
             InstructionType::Empty => 1,
             InstructionType::AtomicStart => 1,
             InstructionType::AtomicEnd => 1,
+            InstructionType::Break(c) => {
+                for _ in 0..c.unstack_len {
+                    self.memory.pop();
+                }
+                c.jump
+            }
             InstructionType::JumpIf(c) => {
                 let cond = self.memory.last().unwrap().is_true();
                 for _ in 0..c.unstack_len {
@@ -274,8 +280,6 @@ impl<'a> RunningProgramState<'a> {
                 1
             }
             InstructionType::WaitStart(_) => {
-                // this instruction is not executed, it is used to create a dependency in case of a wait
-                self.global_state_stack.push(global_state_id);
                 1
             }
             InstructionType::Wait(wait_ctrl) => {
@@ -286,15 +290,7 @@ impl<'a> RunningProgramState<'a> {
                 if cond {
                     1
                 } else {
-                    if global_state_id
-                        == self
-                            .global_state_stack
-                            .pop()
-                            .expect("Panic: global_state_stack is empty, cannot pop")
-                    {
-                        action = Some(GlobalAction::Wait);
-                    }
-                    // otherwise we do not wait since the state has changed
+                    action = Some(GlobalAction::Wait);
                     wait_ctrl.jump
                 }
             }
