@@ -38,14 +38,12 @@ impl NodeBuilder for Atomic {
         
         if start_atomic_lambda(&mut first_statement.value) {
             delegated = true;
-            println!("delegated at level 0");
         } else {
             while let Statement::Block(block) = &mut first_statement.value {
                 if let Some(child) = block.value.children.first_mut() {
                     first_statement = child;
                     if start_atomic_lambda(&mut first_statement.value) {
                         delegated = true;
-                        println!("delegated at level *");
                         break;
                     }
                 } else {
@@ -87,7 +85,24 @@ impl InstructionBuilder for Node<Atomic> {
             control: InstructionType::AtomicEnd,
         });
         if builder.contains_jump() {
-            todo!("Jumping out of atomic block not implemented");
+            
+            for idx in builder.break_indexes.get("").unwrap_or(&Vec::new()) {
+                if let InstructionType::Break(bc) =  &mut builder.instructions[*idx as usize].control {
+                    bc.stop_atomic = true;
+                }
+                else {
+                    panic!("Expected Break instruction");
+                }
+            }
+            for idx in builder.continue_indexes.get("").unwrap_or(&Vec::new()) {
+                if let InstructionType::Break(bc) =  &mut builder.instructions[*idx as usize].control {
+                    bc.stop_atomic = true;
+                }
+                else {
+                    panic!("Expected Break instruction");
+                }
+            }
+
         }
         Ok(builder)
     }

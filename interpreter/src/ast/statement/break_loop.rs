@@ -59,6 +59,7 @@ impl InstructionBuilder for BreakLoopControl {
             control: InstructionType::Break(instruction::BreakLoopControl {
                 jump: 0,
                 unstack_len: state.program_stack.len(),
+                stop_atomic: false,
             }),
         });
 

@@ -78,6 +78,7 @@ impl InstructionType {
             | Self::Send(_)
             | Self::ChannelPeek(_)
             | Self::AtomicStart // starts a block that surely contains a global operation
+            | Self::WaitStart(_) // wait starts an atomic block to evaluate the conditions
             | Self::GlobalReads(_) => false,
             
             // This should be checked. I think the following are not global because
@@ -94,10 +95,9 @@ impl InstructionType {
             // instructions instead of after)
 
             Self::Connect(_) // connect is global only if a process was waiting
-            | Self::Wait(_) // wait is global only if the condition is false
             | Self::RunCall(_)
             | Self::ChannelPop(_) // This is a local because it follows a peek
-            | Self::WaitStart(_)
+            | Self::Wait(_)
             | Self::Empty
             | Self::Expression(_)
             | Self::LocalAssignment(_)
@@ -127,6 +127,7 @@ impl InstructionType {
     pub fn is_atomic_end(&self) -> bool {
         match self {
             Self::AtomicEnd => true,
+            Self::Break(b) => b.stop_atomic,
             _ => false,
         }
     }
@@ -179,6 +180,7 @@ impl fmt::Display for JumpIfControl {
 pub struct BreakLoopControl {
     pub jump: i64,
     pub unstack_len: usize,
+    pub stop_atomic: bool,
 }
 impl fmt::Display for BreakLoopControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

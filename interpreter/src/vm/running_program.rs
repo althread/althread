@@ -16,8 +16,6 @@ pub struct RunningProgramState<'a> {
     memory: Memory,
     code: &'a ProgramCode,
     instruction_pointer: usize,
-    /// keeps track of the global state when the waitstart instruction was executed to see if it has changed when the wait instruction is executed
-    global_state_stack: Vec<u64>,
     pub id: usize,
 }
 
@@ -28,7 +26,6 @@ impl<'a> RunningProgramState<'a> {
             code,
             instruction_pointer: 0,
             name,
-            global_state_stack: Vec::new(),
             id,
         }
     }
@@ -61,7 +58,7 @@ impl<'a> RunningProgramState<'a> {
                 wait = true;
                 break;
             }
-
+            
             if self.is_next_instruction_global() {
                 break;
             }

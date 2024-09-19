@@ -41,13 +41,15 @@ impl InstructionBuilder for Node<LoopControl> {
                 jump: -(builder.instructions.len() as i64),
             }),
         });
+        
+        assert!(stack_len == state.program_stack.len());
+
         if builder.contains_jump() {
             for idx in builder.break_indexes.get("").unwrap_or(&Vec::new()) {
-                if let InstructionType::Break(bc) =  &builder.instructions[*idx as usize].control {
-                    builder.instructions[*idx as usize].control = InstructionType::Break(instruction::BreakLoopControl {
-                        jump: (builder.instructions.len() - idx) as i64,
-                        unstack_len: bc.unstack_len - stack_len,
-                    });
+                let builder_len = builder.instructions.len();
+                if let InstructionType::Break(bc) =  &mut builder.instructions[*idx as usize].control {
+                    bc.jump = (builder_len - idx) as i64;
+                    bc.unstack_len = bc.unstack_len - stack_len;
                 }
                 else {
                     panic!("Expected Break instruction");
@@ -55,11 +57,9 @@ impl InstructionBuilder for Node<LoopControl> {
             }
             builder.break_indexes.remove("");
             for idx in builder.continue_indexes.get("").unwrap_or(&Vec::new()) {
-                if let InstructionType::Break(bc) =  &builder.instructions[*idx as usize].control {
-                    builder.instructions[*idx as usize].control = InstructionType::Break(instruction::BreakLoopControl {
-                        jump: -(*idx as i64),
-                        unstack_len: bc.unstack_len - stack_len,
-                    });
+                if let InstructionType::Break(bc) =  &mut builder.instructions[*idx as usize].control {
+                    bc.jump = -(*idx as i64);
+                    bc.unstack_len = bc.unstack_len - stack_len;
                 }
                 else {
                     panic!("Expected Break instruction");
