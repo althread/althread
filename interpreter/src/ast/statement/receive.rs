@@ -220,9 +220,11 @@ impl InstructionBuilder for Node<ReceiveStatement> {
             declare_pos: None,
         });
         // The next instruction will likely be a wait or an if based on the current stack top.
-        if builder.contains_jump() {
-            todo!("breaking inside a receive statement is not yet implemented");
-        }
+
+        //if builder.contains_jump() {
+        //    todo!("breaking inside a receive statement is not yet implemented");
+        //}
+
         Ok(builder)
     }
 }

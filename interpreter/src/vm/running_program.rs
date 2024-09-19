@@ -34,7 +34,7 @@ impl<'a> RunningProgramState<'a> {
         self.code.instructions.get(self.instruction_pointer).ok_or(AlthreadError::new(
             ErrorType::InstructionNotAllowed,
             None,
-            "the current instruction pointer points to no instruction".to_string(),
+            format!("the current instruction pointer points to no instruction (pointer:{}, program:{})", self.instruction_pointer, self.name),
         ))
     }
     pub fn next_global(
@@ -47,6 +47,7 @@ impl<'a> RunningProgramState<'a> {
         let mut instructions = Vec::new();
         let mut actions = Vec::new();
         let mut wait = false;
+        let mut end = false;
         loop {
 
             let (at_actions, at_instructions)  = self.next_atomic(globals, channels, next_pid, global_state_id)?;
@@ -58,12 +59,15 @@ impl<'a> RunningProgramState<'a> {
                 wait = true;
                 break;
             }
-            
+            if at_actions.end {
+                end = true;
+                break;
+            }
             if self.is_next_instruction_global() {
                 break;
             }
         }
-        Ok((GlobalActions { actions, wait }, instructions))
+        Ok((GlobalActions { actions, wait, end }, instructions))
     }
 
     pub fn is_next_instruction_global(&mut self) -> bool {
@@ -82,7 +86,8 @@ impl<'a> RunningProgramState<'a> {
         
         let mut result = GlobalActions { 
             actions: Vec::new(),
-            wait: false 
+            wait: false,
+            end: false,
         };
         // if the next instruction is not the start of an atomic block, we execute the next instruction
         if !self.current_instruction()?.is_atomic_start() {
@@ -91,6 +96,9 @@ impl<'a> RunningProgramState<'a> {
             if let Some(action) = action {
                 if action == GlobalAction::Wait {
                     result.wait = true;
+                }
+                else if action == GlobalAction::EndProgram {
+                    result.end = true;
                 }
                 else {
                     result.actions.push(action);
@@ -133,7 +141,7 @@ impl<'a> RunningProgramState<'a> {
                 .ok_or(AlthreadError::new(
                     ErrorType::InstructionNotAllowed,
                     None,
-                    "the current instruction pointer points to no instruction".to_string(),
+                    format!("the current instruction pointer points to no instruction (pointer {}", self.instruction_pointer),
                 ))?;
 
         //println!("{} running instruction {}", self.id, self.current_instruction().unwrap());
@@ -250,7 +258,7 @@ impl<'a> RunningProgramState<'a> {
             }
             InstructionType::EndProgram => {
                 action = Some(GlobalAction::EndProgram);
-                1
+                0
             }
             InstructionType::FnCall(f) => {
                 // currently, only the print function is implemented

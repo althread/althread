@@ -128,6 +128,7 @@ impl InstructionType {
         match self {
             Self::AtomicEnd => true,
             Self::Break(b) => b.stop_atomic,
+            Self::EndProgram => true,
             _ => false,
         }
     }

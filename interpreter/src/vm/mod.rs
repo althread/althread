@@ -1,3 +1,4 @@
+use core::panic;
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fmt,
@@ -50,6 +51,7 @@ pub enum GlobalAction {
 pub struct GlobalActions {
     pub actions: Vec<GlobalAction>,
     pub wait: bool,
+    pub end: bool,
 }
 
 pub struct VM<'a> {
@@ -223,15 +225,17 @@ impl<'a> VM<'a> {
                     self.run_program(&name, pid);
                 }
                 GlobalAction::EndProgram => {
-                    let remove_id = program_id;
-                    self.running_programs.remove(&remove_id);
-                    self.executable_programs.remove(&remove_id);
-                    self.waiting_programs.remove(&remove_id);
+                    panic!("EndProgram action should not be in the list of actions");
                 }
                 GlobalAction::Exit => self.running_programs.clear(),
             }
         }
-
+        if actions.end {
+            let remove_id = program_id;
+            self.running_programs.remove(&remove_id);
+            self.executable_programs.remove(&remove_id);
+            self.waiting_programs.remove(&remove_id);
+        }
         if actions.wait {
             let program = self
                 .running_programs
