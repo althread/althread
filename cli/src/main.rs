@@ -124,10 +124,9 @@ pub fn run_command(cli_args: &RunCommand) {
             }
             match vm
                 .running_programs
-                .iter()
-                .find(|(id, _)| **id == info.prog_id)
+                .get(info.prog_id)
             {
-                Some((_, p)) => match p.current_instruction() {
+                Some(p) => match p.current_instruction() {
                     Ok(i) => println!("{}_{}: stopped at {}", info.prog_name, info.prog_id, i),
                     _ => println!("{}_{}: stopped at ?", info.prog_name, info.prog_id),
                 },

@@ -1,6 +1,6 @@
 use core::panic;
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt,
 };
 
@@ -57,7 +57,7 @@ pub struct GlobalActions {
 pub struct VM<'a> {
     pub globals: GlobalMemory,
     pub channels: Channels,
-    pub running_programs: HashMap<usize, RunningProgramState<'a>>,
+    pub running_programs: Vec<RunningProgramState<'a>>,
     pub programs_code: &'a HashMap<String, ProgramCode>,
     pub executable_programs: BTreeSet<usize>, // needs to be sorted to have a deterministic behavior
     pub always_conditions: &'a Vec<(HashSet<String>, GlobalReadsControl, ExpressionControl, Pos)>,
@@ -75,7 +75,7 @@ impl<'a> VM<'a> {
         Self {
             globals: compiled_project.global_memory.clone(),
             channels: Channels::new(),
-            running_programs: HashMap::new(),
+            running_programs: Vec::new(),
             executable_programs: BTreeSet::new(),
             programs_code: &compiled_project.programs_code,
             always_conditions: &compiled_project.always_conditions,
@@ -88,7 +88,7 @@ impl<'a> VM<'a> {
 
     fn run_program(&mut self, program_name: &str, pid: usize) {
         assert!(
-            self.running_programs.get(&pid).is_none(),
+            self.running_programs.get(pid).is_none(),
             "program with id {} already exists",
             pid
         );
@@ -131,10 +131,10 @@ impl<'a> VM<'a> {
                             .iter()
                             .map(|(id, dep)| format!(
                                 "-{}#{} at line {}: {:?}",
-                                self.running_programs.get(id).unwrap().name,
+                                self.running_programs.get(*id).unwrap().name,
                                 id,
                                 self.running_programs
-                                    .get(id)
+                                    .get(*id)
                                     .unwrap()
                                     .current_instruction()
                                     .unwrap()
@@ -150,7 +150,7 @@ impl<'a> VM<'a> {
 
         let program = self
             .running_programs
-            .get_mut(program)
+            .get_mut(*program)
             .expect("program is executable but not found in running programs");
         let program_id = program.id;
 
@@ -232,14 +232,13 @@ impl<'a> VM<'a> {
         }
         if actions.end {
             let remove_id = program_id;
-            self.running_programs.remove(&remove_id);
             self.executable_programs.remove(&remove_id);
             self.waiting_programs.remove(&remove_id);
         }
         if actions.wait {
             let program = self
                 .running_programs
-                .get_mut(&program_id)
+                .get_mut(program_id)
                 .expect("program is waiting but not found in running programs");
             match &program
                 .current_instruction()
@@ -261,15 +260,32 @@ impl<'a> VM<'a> {
 
         exec_info.instructions = executed_instructions;
 
+        println!("VM state after step");
+        let s = self.current_state();
+        println!("global: {:?}", s.0);
+        for (pid, local_state) in s.1.iter().enumerate() {
+            println!("{} ({}): {:?}", pid, local_state.1, local_state.0.iter().map(|v| format!("{}", v)).collect::<Vec<String>>().join(", "));
+        }
+
         Ok(exec_info)
     }
 
     pub fn is_finished(&self) -> bool {
-        self.running_programs.is_empty()
+        self.executable_programs.is_empty()
     }
 
     pub fn new_memory() -> Memory {
         Vec::<Literal>::new()
+    }
+
+    pub fn current_state(&self) -> (&GlobalMemory, Vec<(&Vec<Literal>,usize)>) {
+        let local_states = self
+            .running_programs
+            .iter()
+            .map(|prog| prog.current_state())
+            .collect();
+
+        (&self.globals, local_states)
     }
 
     fn check_invariants(&self) -> AlthreadResult<()> {

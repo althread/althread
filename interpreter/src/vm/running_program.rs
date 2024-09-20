@@ -30,6 +30,10 @@ impl<'a> RunningProgramState<'a> {
         }
     }
 
+    pub fn current_state(&self) -> (&Memory, usize) {
+        (&self.memory, self.instruction_pointer)
+    }
+
     pub fn current_instruction(&self) -> AlthreadResult<&Instruction> {
         self.code.instructions.get(self.instruction_pointer).ok_or(AlthreadError::new(
             ErrorType::InstructionNotAllowed,
