@@ -5,12 +5,12 @@ use pest::iterators::{Pair, Pairs};
 use crate::compiler::InstructionBuilderOk;
 use crate::error::Pos;
 use crate::{
-    compiler::CompilerState, error::AlthreadResult, parser::Rule, vm::instruction::Instruction,
+    compiler::CompilerState, error::AlthreadResult, parser::Rule,
 };
 
 use super::display::{AstDisplay, Prefix};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Node<T> {
     pub value: T,
     pub pos: Pos,

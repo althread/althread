@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 
 use crate::error::Pos;
@@ -115,7 +115,7 @@ impl CompilerState {
 #[derive(Debug)]
 pub struct CompiledProject {
     pub programs_code: HashMap<String, ProgramCode>,
-    pub global_memory: HashMap<String, Literal>,
+    pub global_memory: BTreeMap<String, Literal>,
 
     /// The conditions that should always be true
     /// The first element is the variables that are used in the condition

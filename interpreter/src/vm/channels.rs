@@ -1,14 +1,22 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::ast::token::literal::Literal;
 
+pub type ChannelsState = BTreeMap<(usize, String), Vec<Literal>>;
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct Channels {
-    states: HashMap<(usize, String), Vec<Literal>>,
+    /// states represent the input buffer of the channel
+    /// that a process can read from.
+    /// The key is a tuple of the program id and the channel name
+    /// The value is a vector of literals
+    /// the literals are tuples of the values that are sent
+    states: ChannelsState,
     connections: HashMap<(usize, String), (usize, String)>,
     waiting_proc: HashMap<usize, (String, Literal)>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ReceiverInfo {
     pub program_id: usize,
     pub channel_name: String,
@@ -17,7 +25,7 @@ pub struct ReceiverInfo {
 impl Channels {
     pub fn new() -> Self {
         Self {
-            states: HashMap::new(),
+            states: BTreeMap::new(),
             connections: HashMap::new(),
             waiting_proc: HashMap::new(),
         }
@@ -120,5 +128,10 @@ impl Channels {
             }
             None => None,
         }
+    }
+
+    /// the state of the object is the state of each channel
+    pub fn state(&self) -> &ChannelsState {
+        &self.states
     }
 }

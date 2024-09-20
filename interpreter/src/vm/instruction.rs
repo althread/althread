@@ -8,7 +8,7 @@ use crate::{
     error::Pos,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum InstructionType {
     Empty,
     Expression(ExpressionControl),
@@ -134,7 +134,7 @@ impl InstructionType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Instruction {
     pub pos: Option<Pos>,
     pub control: InstructionType,
@@ -161,7 +161,7 @@ impl fmt::Display for Instruction {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct JumpIfControl {
     pub jump_false: i64,
     pub unstack_len: usize,
@@ -177,7 +177,7 @@ impl fmt::Display for JumpIfControl {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct BreakLoopControl {
     pub jump: i64,
     pub unstack_len: usize,
@@ -190,7 +190,7 @@ impl fmt::Display for BreakLoopControl {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct JumpControl {
     pub jump: i64,
 }
@@ -201,7 +201,7 @@ impl fmt::Display for JumpControl {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct WaitControl {
     pub jump: i64,
     pub unstack_len: usize,
@@ -213,7 +213,7 @@ impl fmt::Display for WaitControl {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct WaitStartControl {
     pub dependencies: WaitDependency,
     pub start_atomic: bool,
@@ -228,7 +228,7 @@ impl fmt::Display for WaitStartControl {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ExpressionControl {
     pub root: LocalExpressionNode,
 }
@@ -239,7 +239,7 @@ impl fmt::Display for ExpressionControl {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct GlobalReadsControl {
     pub variables: Vec<String>,
 }
@@ -250,7 +250,7 @@ impl fmt::Display for GlobalReadsControl {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct UnstackControl {
     pub unstack_len: usize,
 }
@@ -261,7 +261,7 @@ impl fmt::Display for UnstackControl {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct DeclarationControl {
     pub unstack_len: usize,
 }
@@ -272,7 +272,7 @@ impl fmt::Display for DeclarationControl {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct SendControl {
     pub channel_name: String,
     pub unstack_len: usize,
@@ -288,7 +288,7 @@ impl fmt::Display for SendControl {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ConnectionControl {
     /// the index of the sender pid in the stack (none if the sender is the current process)
     pub sender_idx: Option<usize>,
@@ -319,7 +319,7 @@ impl fmt::Display for ConnectionControl {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct GlobalAssignmentControl {
     pub identifier: String,
     pub operator: BinaryAssignmentOperator,
@@ -336,7 +336,7 @@ impl fmt::Display for GlobalAssignmentControl {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct LocalAssignmentControl {
     pub index: usize,
     pub operator: BinaryAssignmentOperator,
@@ -353,7 +353,7 @@ impl fmt::Display for LocalAssignmentControl {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct RunCallControl {
     pub name: String,
 }
@@ -364,7 +364,7 @@ impl fmt::Display for RunCallControl {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct FnCallControl {
     pub name: String,
     pub unstack_len: usize,
@@ -376,7 +376,7 @@ impl fmt::Display for FnCallControl {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ProgramCode {
     pub name: String,
     pub instructions: Vec<Instruction>,

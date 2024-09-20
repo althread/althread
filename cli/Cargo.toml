@@ -8,6 +8,7 @@ clap = { workspace = true }
 althread = { workspace = true }
 fastrand = { workspace = true }
 owo-colors = "4.1.0"
+ordered-float.workspace = true
 
 [lints]
 workspace = true

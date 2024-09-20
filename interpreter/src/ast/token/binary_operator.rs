@@ -4,7 +4,7 @@ use pest::iterators::Pairs;
 
 use crate::{ast::node::NodeBuilder, error::AlthreadResult, no_rule, parser::Rule};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum BinaryOperator {
     Add,
     Subtract,

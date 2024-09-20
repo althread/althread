@@ -4,15 +4,15 @@ use pest::iterators::Pairs;
 
 use crate::{
     ast::{
-        block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}
+        display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}
     },
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
     parser::Rule,
-    vm::instruction::{Instruction, InstructionType, JumpControl},
+    vm::instruction::{Instruction, InstructionType},
 };
 
-use super::{send, Statement};
+use super::Statement;
 
 #[derive(Debug, Clone)]
 pub struct Atomic {

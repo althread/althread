@@ -1,7 +1,7 @@
 use std::fmt;
 
 use pest::iterators::Pairs;
-
+use ordered_float::OrderedFloat;
 use crate::{ast::node::NodeBuilder, error::AlthreadResult, no_rule, parser::Rule};
 
 use super::literal::Literal;
@@ -23,7 +23,7 @@ impl DataType {
             DataType::Void => Literal::Null,
             DataType::Boolean => Literal::Bool(false),
             DataType::Integer => Literal::Int(0),
-            DataType::Float => Literal::Float(0.0),
+            DataType::Float => Literal::Float(OrderedFloat(0.0)),
             DataType::String => Literal::String("".to_string()),
             DataType::Process(_) => Literal::Null,
             DataType::Tuple(v) => Literal::Tuple(v.iter().map(|d| d.default()).collect()),

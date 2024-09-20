@@ -4,7 +4,7 @@ use pest::iterators::Pairs;
 
 use crate::{ast::node::NodeBuilder, error::AlthreadResult, no_rule, parser::Rule};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum UnaryOperator {
     Positive,
     Negative,

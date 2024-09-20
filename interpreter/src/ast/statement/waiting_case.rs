@@ -7,7 +7,6 @@ use crate::{ast::node::InstructionBuilder, compiler::InstructionBuilderOk};
 use crate::compiler::CompilerState;
 use crate::error::AlthreadResult;
 use crate::parser::Rule;
-use crate::vm::instruction::Instruction;
 
 use super::super::{
     display::{AstDisplay, Prefix},
@@ -17,7 +16,7 @@ use super::super::{
 use super::expression::Expression;
 use super::receive::ReceiveStatement;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct WaitDependency {
     pub channels_state: HashSet<String>,
     pub channels_connection: HashSet<String>,

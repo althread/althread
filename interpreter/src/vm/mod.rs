@@ -2,9 +2,10 @@ use core::panic;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt,
+    hash::{Hash, Hasher}
 };
 
-use channels::{Channels, ReceiverInfo};
+use channels::{Channels, ChannelsState, ReceiverInfo};
 use fastrand::Rng;
 
 use instruction::{
@@ -23,7 +24,7 @@ pub mod instruction;
 pub mod running_program;
 
 pub type Memory = Vec<Literal>;
-pub type GlobalMemory = HashMap<String, Literal>;
+pub type GlobalMemory = BTreeMap<String, Literal>;
 
 #[derive(Debug)]
 pub struct ExecutionStepInfo {
@@ -37,7 +38,7 @@ fn str_to_expr_error(pos: Option<Pos>) -> impl Fn(String) -> AlthreadError {
     return move |msg| AlthreadError::new(ErrorType::ExpressionError, pos, msg);
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum GlobalAction {
     StartProgram(String, usize),
     Write(String),
@@ -48,12 +49,14 @@ pub enum GlobalAction {
     Exit,
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct GlobalActions {
     pub actions: Vec<GlobalAction>,
     pub wait: bool,
     pub end: bool,
 }
 
+#[derive(Debug, Clone)]
 pub struct VM<'a> {
     pub globals: GlobalMemory,
     pub channels: Channels,
@@ -66,7 +69,6 @@ pub struct VM<'a> {
     /// The condition depends on the global variables that are in the HashSet
     waiting_programs: HashMap<usize, WaitDependency>,
     next_program_id: usize,
-    global_state_id: u64,
     rng: Rng,
 }
 
@@ -82,7 +84,6 @@ impl<'a> VM<'a> {
             next_program_id: 0,
             waiting_programs: HashMap::new(),
             rng: Rng::new(),
-            global_state_id: 0,
         }
     }
 
@@ -105,7 +106,6 @@ impl<'a> VM<'a> {
 
     pub fn start(&mut self, seed: u64) {
         self.rng = Rng::with_seed(seed);
-        self.global_state_id = 0;
         self.next_program_id = 1;
         self.run_program("main", 0);
     }
@@ -164,9 +164,31 @@ impl<'a> VM<'a> {
         let (actions, executed_instructions) = program.next_global(
             &mut self.globals,
             &mut self.channels,
-            &mut self.next_program_id,
-            self.global_state_id,
+            &mut self.next_program_id
         )?;
+
+        // maybe should be replace to avoid recurrent calls
+        if actions.wait { // actually nothing happened
+            assert!(actions.actions.is_empty(), "a process returning wait should means that no actions have been performed..."); 
+
+            let program = self
+                .running_programs
+                .get_mut(program_id)
+                .expect("program is waiting but not found in running programs");
+            match &program
+                .current_instruction()
+                .expect("waiting on no instruction")
+                .control
+            {
+                InstructionType::WaitStart(ctrl) => {
+                    self.executable_programs.remove(&program_id);
+                    self.waiting_programs
+                        .insert(program_id, ctrl.dependencies.clone());
+                }
+                _ => unreachable!("waiting on an instruction that is not a WaitStart instruction"),
+            }
+            return self.next();
+        }
 
         let mut need_to_check_invariants = false;
 
@@ -175,8 +197,7 @@ impl<'a> VM<'a> {
                 GlobalAction::Wait => {
                     unreachable!("wait action should not be in the list of actions");
                 }
-                GlobalAction::Send(sender_channel, receiver_info) => {
-                    self.global_state_id += 1;
+                GlobalAction::Send(_sender_channel, receiver_info) => {
                     if let Some(receiver_info) = receiver_info {
                         if let Some(dependency) =
                             self.waiting_programs.get(&receiver_info.program_id)
@@ -194,7 +215,6 @@ impl<'a> VM<'a> {
                     }
                 }
                 GlobalAction::Connect(sender_id, sender_channel) => {
-                    self.global_state_id += 1;
                     if let Some(dependency) = self.waiting_programs.get(&sender_id) {
                         if dependency.channels_connection.contains(&sender_channel) {
                             self.waiting_programs.remove(&sender_id);
@@ -207,7 +227,6 @@ impl<'a> VM<'a> {
                     }
                 }
                 GlobalAction::Write(var_name) => {
-                    self.global_state_id += 1;
                     //println!("program {} writes {}", program_id, var_name);
                     // Check if the variable appears in the conditions of a waiting program
                     self.waiting_programs.retain(|prog_id, dependencies| {
@@ -221,7 +240,6 @@ impl<'a> VM<'a> {
                     need_to_check_invariants = true;
                 }
                 GlobalAction::StartProgram(name, pid) => {
-                    self.global_state_id += 1;
                     self.run_program(&name, pid);
                 }
                 GlobalAction::EndProgram => {
@@ -235,37 +253,12 @@ impl<'a> VM<'a> {
             self.executable_programs.remove(&remove_id);
             self.waiting_programs.remove(&remove_id);
         }
-        if actions.wait {
-            let program = self
-                .running_programs
-                .get_mut(program_id)
-                .expect("program is waiting but not found in running programs");
-            match &program
-                .current_instruction()
-                .expect("waiting on no instruction")
-                .control
-            {
-                InstructionType::WaitStart(ctrl) => {
-                    self.executable_programs.remove(&program_id);
-                    self.waiting_programs
-                        .insert(program_id, ctrl.dependencies.clone());
-                }
-                _ => unreachable!("waiting on an instruction that is not a WaitStart instruction"),
-            }
-        }
 
         if need_to_check_invariants {
             exec_info.invariant_error = self.check_invariants();
         }
 
         exec_info.instructions = executed_instructions;
-
-        println!("VM state after step");
-        let s = self.current_state();
-        println!("global: {:?}", s.0);
-        for (pid, local_state) in s.1.iter().enumerate() {
-            println!("{} ({}): {:?}", pid, local_state.1, local_state.0.iter().map(|v| format!("{}", v)).collect::<Vec<String>>().join(", "));
-        }
 
         Ok(exec_info)
     }
@@ -278,14 +271,14 @@ impl<'a> VM<'a> {
         Vec::<Literal>::new()
     }
 
-    pub fn current_state(&self) -> (&GlobalMemory, Vec<(&Vec<Literal>,usize)>) {
+    pub fn current_state(&self) -> (&GlobalMemory, &ChannelsState, Vec<(&Vec<Literal>,usize)>) {
         let local_states = self
             .running_programs
             .iter()
             .map(|prog| prog.current_state())
             .collect();
 
-        (&self.globals, local_states)
+        (&self.globals, self.channels.state(), local_states)
     }
 
     fn check_invariants(&self) -> AlthreadResult<()> {
@@ -343,4 +336,33 @@ impl<'a> fmt::Display for VM<'a> {
         }*/
         Ok(())
     }
+}
+
+impl<'a> Hash for VM<'a> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.globals.hash(state);
+        self.channels.state().hash(state);
+        self.running_programs.hash(state);
+    }
+    
+    fn hash_slice<H: Hasher>(data: &[Self], state: &mut H)
+    where
+        Self: Sized,
+    {
+        for piece in data {
+            piece.hash(state)
+        }
+    }
+}
+
+impl std::cmp::PartialEq for VM<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.globals == other.globals
+            && self.channels.state() == other.channels.state()
+            && self.running_programs == other.running_programs
+            && self.programs_code == other.programs_code
+    }
+}
+
+impl std::cmp::Eq for VM<'_> {
 }

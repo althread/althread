@@ -6,7 +6,7 @@ use crate::{ast::node::NodeBuilder, error::AlthreadResult, no_rule, parser::Rule
 
 use super::literal::Literal;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum BinaryAssignmentOperator {
     Assign,
     AddAssign,

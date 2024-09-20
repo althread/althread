@@ -1,6 +1,6 @@
 use core::fmt;
-use std::{fmt::Formatter, str::FromStr};
-
+use std::{fmt::Formatter, hash::{Hash, Hasher}, ops::Add, str::FromStr};
+use ordered_float::OrderedFloat;
 use pest::iterators::{Pair, Pairs};
 
 use crate::{
@@ -15,12 +15,12 @@ use crate::{
 
 use super::datatype::DataType;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub enum Literal {
     Null,
     Bool(bool),
     Int(i64),
-    Float(f64),
+    Float(OrderedFloat<f64>),
     String(String),
     Process(String, usize),
     Tuple(Vec<Literal>),
@@ -125,7 +125,7 @@ impl Literal {
     pub fn add(&self, other: &Self) -> Result<Self, String> {
         match (self, other) {
             (Self::Int(i), Self::Int(j)) => Ok(Self::Int(i + j)),
-            (Self::Float(i), Self::Float(j)) => Ok(Self::Float(i + j)),
+            (Self::Float(i), Self::Float(j)) => Ok(Self::Float(i + *j)),
             (Self::String(i), Self::String(j)) => Ok(Self::String(format!("{}{}", i, j))),
             (i, j) => Err(format!(
                 "Cannot add {} and {}",
@@ -138,7 +138,7 @@ impl Literal {
     pub fn subtract(&self, other: &Self) -> Result<Self, String> {
         match (self, other) {
             (Self::Int(i), Self::Int(j)) => Ok(Self::Int(i - j)),
-            (Self::Float(i), Self::Float(j)) => Ok(Self::Float(i - j)),
+            (Self::Float(i), Self::Float(j)) => Ok(Self::Float(i - *j)),
             (i, j) => Err(format!(
                 "Cannot subtract {} by {}",
                 i.get_datatype(),
@@ -150,7 +150,7 @@ impl Literal {
     pub fn multiply(&self, other: &Self) -> Result<Self, String> {
         match (self, other) {
             (Self::Int(i), Self::Int(j)) => Ok(Self::Int(i * j)),
-            (Self::Float(i), Self::Float(j)) => Ok(Self::Float(i * j)),
+            (Self::Float(i), Self::Float(j)) => Ok(Self::Float(i * *j)),
             (i, j) => Err(format!(
                 "Cannot multiply {} by {}",
                 i.get_datatype(),
@@ -161,9 +161,9 @@ impl Literal {
 
     pub fn divide(&self, other: &Self) -> Result<Self, String> {
         match (self, other) {
-            (_, Self::Int(0)) | (_, Self::Float(0.0)) => Err("Cannot divide by zero".to_string()),
+            (_, Self::Int(0)) | (_, Self::Float(OrderedFloat(0.0))) => Err("Cannot divide by zero".to_string()),
             (Self::Int(i), Self::Int(j)) => Ok(Self::Int(i / j)),
-            (Self::Float(i), Self::Float(j)) => Ok(Self::Float(i / j)),
+            (Self::Float(i), Self::Float(j)) => Ok(Self::Float(i / *j)),
             (i, j) => Err(format!(
                 "Cannot divide {} by {}",
                 i.get_datatype(),
@@ -175,7 +175,7 @@ impl Literal {
     pub fn modulo(&self, other: &Self) -> Result<Self, String> {
         match (self, other) {
             (Self::Int(i), Self::Int(j)) if *j != 0 => Ok(Self::Int(i % j)),
-            (Self::Float(i), Self::Float(j)) if *j != 0.0 => Ok(Self::Float(i % j)),
+            (Self::Float(i), Self::Float(j)) if *j != 0.0 => Ok(Self::Float(i % *j)),
             (i, j) => Err(format!(
                 "No modulo between {} and {}",
                 i.get_datatype(),

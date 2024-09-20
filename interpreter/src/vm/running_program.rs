@@ -1,3 +1,5 @@
+use std::hash::{Hash, Hasher};
+
 use crate::{
     ast::token::literal::Literal,
     error::{AlthreadError, AlthreadResult, ErrorType},
@@ -9,7 +11,7 @@ use super::{
     str_to_expr_error, GlobalAction, GlobalActions, GlobalMemory, Memory,
 };
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct RunningProgramState<'a> {
     pub name: String,
 
@@ -17,6 +19,13 @@ pub struct RunningProgramState<'a> {
     code: &'a ProgramCode,
     instruction_pointer: usize,
     pub id: usize,
+}
+
+impl Hash for RunningProgramState<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+        self.memory.hash(state);
+    }
 }
 
 impl<'a> RunningProgramState<'a> {
@@ -46,7 +55,6 @@ impl<'a> RunningProgramState<'a> {
         globals: &mut GlobalMemory,
         channels: &mut Channels,
         next_pid: &mut usize,
-        global_state_id: u64,
     ) -> AlthreadResult<(GlobalActions, Vec<Instruction>)> {
         let mut instructions = Vec::new();
         let mut actions = Vec::new();
@@ -54,7 +62,7 @@ impl<'a> RunningProgramState<'a> {
         let mut end = false;
         loop {
 
-            let (at_actions, at_instructions)  = self.next_atomic(globals, channels, next_pid, global_state_id)?;
+            let (at_actions, at_instructions)  = self.next_atomic(globals, channels, next_pid)?;
 
             actions.extend(at_actions.actions);
             instructions.extend(at_instructions);
@@ -84,7 +92,6 @@ impl<'a> RunningProgramState<'a> {
         globals: &mut GlobalMemory,
         channels: &mut Channels,
         next_pid: &mut usize,
-        global_state_id: u64,
     ) -> AlthreadResult<(GlobalActions, Vec<Instruction>)> {
         let mut instructions = Vec::new();
         
@@ -96,7 +103,7 @@ impl<'a> RunningProgramState<'a> {
         // if the next instruction is not the start of an atomic block, we execute the next instruction
         if !self.current_instruction()?.is_atomic_start() {
             instructions.push(self.current_instruction()?.clone());
-            let action = self.next(globals, channels, next_pid, global_state_id)?;
+            let action = self.next(globals, channels, next_pid)?;
             if let Some(action) = action {
                 if action == GlobalAction::Wait {
                     result.wait = true;
@@ -114,7 +121,7 @@ impl<'a> RunningProgramState<'a> {
         loop {
             
             instructions.push(self.current_instruction()?.clone());
-            let action = self.next(globals, channels, next_pid, global_state_id)?;
+            let action = self.next(globals, channels, next_pid)?;
             if let Some(action) = action {
                 if action == GlobalAction::Wait {
                     result.wait = true;
@@ -136,7 +143,6 @@ impl<'a> RunningProgramState<'a> {
         globals: &mut GlobalMemory,
         channels: &mut Channels,
         next_pid: &mut usize,
-        global_state_id: u64,
     ) -> AlthreadResult<Option<GlobalAction>> {
         let cur_inst =
             self.code

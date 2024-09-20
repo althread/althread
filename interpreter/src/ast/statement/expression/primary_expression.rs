@@ -19,7 +19,7 @@ use crate::{
     parser::Rule,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum PrimaryExpression {
     Literal(Node<Literal>),
     Identifier(Node<Identifier>),
@@ -66,16 +66,16 @@ impl PrimaryExpression {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct LocalLiteralNode {
     pub value: Literal,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct LocalVarNode {
     pub index: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum LocalPrimaryExpressionNode {
     Literal(LocalLiteralNode),
     Var(LocalVarNode),

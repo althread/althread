@@ -10,7 +10,7 @@ use crate::{
     compiler::{CompilerState, InstructionBuilderOk},
     error::AlthreadResult,
     parser::Rule,
-    vm::instruction::{self, Instruction, InstructionType, JumpControl},
+    vm::instruction::{Instruction, InstructionType, JumpControl},
 };
 
 use super::Statement;

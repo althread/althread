@@ -5,11 +5,10 @@ use pest::iterators::Pairs;
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
-    }, compiler::{CompilerState, InstructionBuilderOk}, error::AlthreadResult, no_rule, parser::Rule, vm::instruction::{self, Instruction, InstructionType, JumpControl}
+        node::{InstructionBuilder, NodeBuilder},
+    }, compiler::{CompilerState, InstructionBuilderOk}, error::AlthreadResult, no_rule, parser::Rule, vm::instruction::{self, Instruction, InstructionType}
 };
 
-use super::Statement;
 
 
 

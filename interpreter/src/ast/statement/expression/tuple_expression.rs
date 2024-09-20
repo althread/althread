@@ -22,12 +22,12 @@ use crate::ast::{
 
 use super::LocalExpressionNode;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct TupleExpression {
     pub values: Vec<Node<Expression>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct LocalTupleExpressionNode {
     pub values: Vec<LocalExpressionNode>,
 }

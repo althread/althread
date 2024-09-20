@@ -7,7 +7,7 @@ pub mod token;
 
 use core::panic;
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     fmt::{self, Formatter},
 };
 
@@ -94,7 +94,7 @@ impl Ast {
         // "compile" the "shared" block to retrieve the set of
         // shared variables
         let mut state = CompilerState::new();
-        let mut global_memory = HashMap::new();
+        let mut global_memory = BTreeMap::new();
         let mut global_table = HashMap::new();
         state.current_stack_depth = 1;
         state.is_shared = true;

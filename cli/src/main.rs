@@ -1,4 +1,4 @@
-use std::{fs, io::Read, process::exit};
+use std::{collections::HashSet, fs, io::Read, process::exit};
 
 mod args;
 use args::{CliArguments, Command, CompileCommand, RandomSearchCommand, RunCommand};
@@ -89,7 +89,8 @@ pub fn run_command(cli_args: &RunCommand) {
         e.report(&source);
         exit(1);
     });
-
+    let mut vm_execution: Vec<althread::vm::VM> = Vec::new();
+    let mut vm_set: HashSet<althread::vm::VM> = HashSet::new();
     let mut vm = althread::vm::VM::new(&compiled_project);
 
     vm.start(cli_args.seed.unwrap_or(fastrand::u64(0..(1 << 63))));
@@ -101,6 +102,7 @@ pub fn run_command(cli_args: &RunCommand) {
             err.report(&source);
             exit(1);
         });
+
         if cli_args.verbose || cli_args.debug {
             let mut prev_line = 0;
             for inst in info.instructions.iter() {
@@ -138,6 +140,31 @@ pub fn run_command(cli_args: &RunCommand) {
         if info.invariant_error.is_err() {
             info.invariant_error.unwrap_err().report(&source);
             break;
+        }
+
+        vm_execution.push(vm.clone());
+        if vm_set.contains(&vm) {
+            println!("===== Loop detected =====");
+            vm_set.insert(vm.clone());
+            break;
+        }
+        vm_set.insert(vm.clone());
+
+    }
+    if cli_args.verbose {
+        for v in vm_execution.iter() {
+            println!("======= VM step =======");
+            let s = v.current_state();
+            println!("global: {:?}", s.0);
+            for ((pid, cname), state) in s.1.iter() {
+                println!("channel {},{}", pid, cname);
+                for v in state.iter() {
+                    println!("  * {}", v);
+                }
+            }
+            for (pid, local_state) in s.2.iter().enumerate() {
+                println!("{} ({}): {:?}", pid, local_state.1, local_state.0.iter().map(|v| format!("{}", v)).collect::<Vec<String>>().join(", "));
+            }
         }
     }
 }

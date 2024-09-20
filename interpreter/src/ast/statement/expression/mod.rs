@@ -83,7 +83,7 @@ impl AstDisplay for SideEffectExpression {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
     Binary(Node<BinaryExpression>),
     Unary(Node<UnaryExpression>),
@@ -91,12 +91,12 @@ pub enum Expression {
     Tuple(Node<TupleExpression>),
 }
 
-#[derive(Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct LocalExpression {
     pub root: LocalExpressionNode,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum LocalExpressionNode {
     Binary(LocalBinaryExpressionNode),
     Unary(LocalUnaryExpressionNode),

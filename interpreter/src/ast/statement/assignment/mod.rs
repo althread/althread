@@ -14,7 +14,6 @@ use crate::{
     error::AlthreadResult,
     no_rule,
     parser::Rule,
-    vm::instruction::Instruction,
 };
 
 #[derive(Debug, Clone)]

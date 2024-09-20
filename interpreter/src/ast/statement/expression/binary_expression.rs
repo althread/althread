@@ -17,14 +17,14 @@ use crate::{
 
 use super::{Expression, LocalExpressionNode};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct BinaryExpression {
     pub left: Box<Node<Expression>>,
     pub operator: Node<BinaryOperator>,
     pub right: Box<Node<Expression>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct LocalBinaryExpressionNode {
     pub left: Box<LocalExpressionNode>,
     pub operator: BinaryOperator,
