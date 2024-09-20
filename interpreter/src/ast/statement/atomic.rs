@@ -31,7 +31,6 @@ impl NodeBuilder for Atomic {
             // if the statement is a wait block then tell it so
             match s {
                 Statement::Wait(wait) => { wait.value.start_atomic = true; true },
-                Statement::Send(send) => { send.value.start_atomic = true; true},
                 _ => false,
             }
         };

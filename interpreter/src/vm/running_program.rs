@@ -343,7 +343,8 @@ impl<'a> RunningProgramState<'a> {
                 1
             }
             InstructionType::SendWaiting => {
-                self.memory.push(Literal::Bool(!channels.is_waiting(self.id)));
+                unimplemented!("SendWaiting not implemented anymore");
+                //self.memory.push(Literal::Bool(!channels.is_waiting(self.id)));
                 1
             }
             InstructionType::ChannelPeek(channel_name) => {

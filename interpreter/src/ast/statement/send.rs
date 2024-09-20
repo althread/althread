@@ -20,7 +20,6 @@ use super::{expression::Expression, waiting_case::WaitDependency};
 pub struct SendStatement {
     pub channel: String,
     pub values: Node<Expression>,
-    pub start_atomic: bool,
 }
 
 impl NodeBuilder for SendStatement {
@@ -37,7 +36,7 @@ impl NodeBuilder for SendStatement {
             ));
         }
 
-        Ok(Self { channel, values, start_atomic: false })
+        Ok(Self { channel, values })
     }
 }
 
@@ -119,41 +118,6 @@ impl InstructionBuilder for Node<SendStatement> {
             pos: Some(self.pos),
         });
 
-        if state.is_atomic {
-            return Err(AlthreadError::new(
-                ErrorType::InstructionNotAllowed,
-                Some(self.pos),
-                "Wait blocks cannot be inside an atomic block (except if it is the first instruction)".to_string(),
-            ));
-        }
-        if self.value.start_atomic {
-            state.is_atomic = true;
-        }
-
-        builder.instructions.push(Instruction {
-            control: InstructionType::WaitStart(WaitStartControl {
-                dependencies: WaitDependency{
-                    variables: HashSet::new(),
-                    channels_state: HashSet::new(),
-                    channels_connection: { let mut h = HashSet::new(); h.insert(channel_name); h },
-                },
-                start_atomic: self.value.start_atomic,
-            }),
-            pos: Some(self.pos),
-        });
-        
-        builder.instructions.push(Instruction {
-            control: InstructionType::SendWaiting,
-            pos: Some(self.pos),
-        });
-
-        builder.instructions.push(Instruction {
-            control: InstructionType::Wait(WaitControl {
-                jump: -2,
-                unstack_len: 1,
-            }),
-            pos: Some(self.pos),
-        });
         Ok(builder)
     }
 }

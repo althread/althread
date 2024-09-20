@@ -13,7 +13,7 @@ pub struct Channels {
     /// the literals are tuples of the values that are sent
     states: ChannelsState,
     connections: HashMap<(usize, String), (usize, String)>,
-    waiting_proc: HashMap<usize, (String, Literal)>,
+    waiting_send: HashMap<(usize, String), Vec<Literal>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -27,7 +27,7 @@ impl Channels {
         Self {
             states: BTreeMap::new(),
             connections: HashMap::new(),
-            waiting_proc: HashMap::new(),
+            waiting_send: HashMap::new(),
         }
     }
 
@@ -59,21 +59,11 @@ impl Channels {
             });
         }
 
-        assert!(
-            self.waiting_proc.get(&program_id).is_none(),
-            "A proc can only wait on one channel"
-        );
-        self.waiting_proc
-            .insert(program_id, (channel_name.clone(), value));
+        self.waiting_send.entry((program_id, channel_name.clone())).or_insert(vec![]).push(value);
+
         None
     }
 
-    /**
-     * Check if the proc is currently waiting
-     */
-    pub fn is_waiting(&self, program_id: usize) -> bool {
-        self.waiting_proc.contains_key(&program_id)
-    }
 
     /**
      * Connect a proc to another proc
@@ -97,12 +87,9 @@ impl Channels {
             (to_program_id, to_channel_name.clone()),
         );
 
-        if let Some((channel_waiting, _)) = self.waiting_proc.get(&program_id) {
-            if channel_waiting == &channel_name {
-                let (_, values) = self.waiting_proc.remove(&program_id).unwrap();
-                self.send(program_id, channel_name.clone(), values);
-                return Ok(Some((program_id, channel_name)));
-            }
+        if let Some(values) = self.waiting_send.remove(&(program_id, channel_name.clone())) {
+            self.states.entry((to_program_id, to_channel_name.clone())).or_insert(vec![]).extend(values);
+            return Ok(Some((program_id, channel_name)));
         }
         Ok(None)
     }
