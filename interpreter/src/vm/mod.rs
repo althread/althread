@@ -14,7 +14,7 @@ use instruction::{
 use running_program::RunningProgramState;
 
 use crate::{
-    ast::{statement::waiting_case::WaitDependency, token::literal::Literal},
+    ast::{statement::waiting_case::WaitDependency, token::{datatype::DataType, literal::Literal}},
     compiler::CompiledProject,
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
 };
@@ -40,7 +40,7 @@ fn str_to_expr_error(pos: Option<Pos>) -> impl Fn(String) -> AlthreadError {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum GlobalAction {
-    StartProgram(String, usize),
+    StartProgram(String, usize, Literal),
     Write(String),
     Send(String, Option<ReceiverInfo>),
     Connect(usize, String),
@@ -87,7 +87,7 @@ impl<'a> VM<'a> {
         }
     }
 
-    fn run_program(&mut self, program_name: &str, pid: usize) {
+    fn run_program(&mut self, program_name: &str, pid: usize, args: Literal) {
         assert!(
             self.running_programs.get(pid).is_none(),
             "program with id {} already exists",
@@ -99,6 +99,7 @@ impl<'a> VM<'a> {
                 pid,
                 program_name.to_string(),
                 &self.programs_code[program_name],
+                args,
             ),
         );
         self.executable_programs.insert(pid);
@@ -107,17 +108,10 @@ impl<'a> VM<'a> {
     pub fn start(&mut self, seed: u64) {
         self.rng = Rng::with_seed(seed);
         self.next_program_id = 1;
-        self.run_program("main", 0);
+        self.run_program("main", 0, Literal::empty_tuple());
     }
 
-    pub fn next(&mut self) -> AlthreadResult<ExecutionStepInfo> {
-        if self.running_programs.len() == 0 {
-            return Err(AlthreadError::new(
-                ErrorType::RuntimeError,
-                None,
-                "no program is running".to_string(),
-            ));
-        }
+    pub fn next_random(&mut self) -> AlthreadResult<ExecutionStepInfo> {
         
         let program =
             self.rng
@@ -166,7 +160,6 @@ impl<'a> VM<'a> {
             &mut self.channels,
             &mut self.next_program_id
         )?;
-
         // maybe should be replace to avoid recurrent calls
         if actions.wait { // actually nothing happened
             assert!(actions.actions.is_empty(), "a process returning wait should means that no actions have been performed..."); 
@@ -187,7 +180,7 @@ impl<'a> VM<'a> {
                 }
                 _ => unreachable!("waiting on an instruction that is not a WaitStart instruction"),
             }
-            return self.next();
+            return self.next_random();
         }
 
         let mut need_to_check_invariants = false;
@@ -239,8 +232,8 @@ impl<'a> VM<'a> {
                     
                     need_to_check_invariants = true;
                 }
-                GlobalAction::StartProgram(name, pid) => {
-                    self.run_program(&name, pid);
+                GlobalAction::StartProgram(name, pid, args) => {
+                    self.run_program(&name, pid, args);
                 }
                 GlobalAction::EndProgram => {
                     panic!("EndProgram action should not be in the list of actions");
@@ -261,6 +254,157 @@ impl<'a> VM<'a> {
         exec_info.instructions = executed_instructions;
 
         Ok(exec_info)
+    }
+
+    pub fn next_step_pid(&mut self, pid: usize) -> AlthreadResult<Option<ExecutionStepInfo>> {
+        
+        let program = self
+            .running_programs
+            .get_mut(pid)
+            .expect("program is executable but not found in running programs");
+
+        let mut exec_info = ExecutionStepInfo {
+            prog_name: program.name.clone(),
+            prog_id: pid,
+            instructions: Vec::new(),
+            invariant_error: Ok(()),
+        };
+
+        let (actions, executed_instructions) = program.next_global(
+            &mut self.globals,
+            &mut self.channels,
+            &mut self.next_program_id
+        )?;
+        // maybe should be replace to avoid recurrent calls
+        if actions.wait { // actually nothing happened
+            assert!(actions.actions.is_empty(), "a process returning wait should means that no actions have been performed..."); 
+
+            let program = self
+                .running_programs
+                .get_mut(pid)
+                .expect("program is waiting but not found in running programs");
+            match &program
+                .current_instruction()
+                .expect("waiting on no instruction")
+                .control
+            {
+                InstructionType::WaitStart(ctrl) => {
+                    self.executable_programs.remove(&pid);
+                    self.waiting_programs
+                        .insert(pid, ctrl.dependencies.clone());
+                }
+                _ => unreachable!("waiting on an instruction that is not a WaitStart instruction"),
+            }
+            return Ok(None);
+        }
+
+        let mut need_to_check_invariants = false;
+
+        for action in actions.actions {
+            match action {
+                GlobalAction::Wait => {
+                    unreachable!("wait action should not be in the list of actions");
+                }
+                GlobalAction::Send(_sender_channel, receiver_info) => {
+                    if let Some(receiver_info) = receiver_info {
+                        if let Some(dependency) =
+                            self.waiting_programs.get(&receiver_info.program_id)
+                        {
+                            if dependency
+                                .channels_state
+                                .contains(&receiver_info.channel_name)
+                            {
+                                self.waiting_programs.remove(&receiver_info.program_id);
+                                self.executable_programs.insert(receiver_info.program_id);
+                            }
+                        }
+                    } else {
+                        // the current process is waiting but this  will be catched up by the wait instruction
+                    }
+                }
+                GlobalAction::Connect(sender_id, sender_channel) => {
+                    if let Some(dependency) = self.waiting_programs.get(&sender_id) {
+                        if dependency.channels_connection.contains(&sender_channel) {
+                            self.waiting_programs.remove(&sender_id);
+                            self.executable_programs.insert(sender_id);
+                        } else {
+                            unreachable!("the sender program must be waiting for a connection, otherwise the channel connection is not a global action");
+                        }
+                    } else {
+                        unreachable!("the sender program must be waiting, otherwise the channel connection is not a global action");
+                    }
+                }
+                GlobalAction::Write(var_name) => {
+                    //println!("program {} writes {}", program_id, var_name);
+                    // Check if the variable appears in the conditions of a waiting program
+                    self.waiting_programs.retain(|prog_id, dependencies| {
+                        if dependencies.variables.contains(&var_name) {
+                            self.executable_programs.insert(*prog_id);
+                            return false;
+                        }
+                        true
+                    });
+                    
+                    need_to_check_invariants = true;
+                }
+                GlobalAction::StartProgram(name, pid, args) => {
+                    self.run_program(&name, pid, args);
+                }
+                GlobalAction::EndProgram => {
+                    panic!("EndProgram action should not be in the list of actions");
+                }
+                GlobalAction::Exit => self.running_programs.clear(),
+            }
+        }
+        if actions.end {
+            let remove_id = pid;
+            self.executable_programs.remove(&remove_id);
+            self.waiting_programs.remove(&remove_id);
+        }
+
+        exec_info.instructions = executed_instructions;
+
+        Ok(Some(exec_info))
+    }
+
+    /**
+     * List all the next possible state of the VM
+     */
+    pub fn next(&mut self) -> AlthreadResult<Vec<(
+            String, 
+            usize, 
+            Pos,
+            VM<'a>,
+    )>> {
+        if self.running_programs.len() == 0 {
+            return Err(AlthreadError::new(
+                ErrorType::RuntimeError,
+                None,
+                "no program is running".to_string(),
+            ));
+        }
+
+        let mut next_states = Vec::new();
+
+        // for each non-waiting program, execute the next instruction and store the result
+        for program in self.running_programs.iter() {
+            if self.waiting_programs.contains_key(&program.id) {
+                continue;
+            }
+            
+            let mut vm = self.clone();
+            if let Some(result) = vm.next_step_pid(program.id)? {
+                next_states.push((
+                    program.name.clone(), 
+                    program.id, 
+                    program.current_instruction().unwrap().pos.unwrap_or_default(), 
+                    vm
+                ));
+            }
+        }
+
+        Ok(next_states)
+        
     }
 
     pub fn is_finished(&self) -> bool {

@@ -9,14 +9,17 @@ use crate::{
         token::datatype::DataType,
     },
     compiler::{CompilerState, InstructionBuilderOk, Variable},
-    error::{AlthreadResult, Pos},
+    error::{AlthreadError, AlthreadResult, ErrorType, Pos},
     parser::Rule,
     vm::instruction::{Instruction, InstructionType, RunCallControl},
 };
 
+use super::expression::Expression;
+
 #[derive(Debug, Clone)]
 pub struct RunCall {
     pub identifier: Node<String>,
+    pub args: Node<Expression>,
 }
 
 impl NodeBuilder for RunCall {
@@ -32,12 +35,72 @@ impl NodeBuilder for RunCall {
             value: pair.as_str().to_string(),
         };
 
-        Ok(Self { identifier })
+        let args: Node<Expression> = Expression::build_top_level(pairs.next().unwrap())?;
+
+        if !args.value.is_tuple() {
+            return Err(AlthreadError::new(
+                ErrorType::TypeError,
+                Some(args.pos),
+                "Run statement expects a tuple of arguments (possibly empty)".to_string(),
+            ));
+        }
+        println!("RunCall: {:?} {:?}", identifier, args);
+
+        Ok(Self { identifier, args })
     }
 }
 
 impl InstructionBuilder for Node<RunCall> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
+
+        let mut builder = InstructionBuilderOk::new();
+
+
+        // push the args to the stack
+        state.current_stack_depth += 1;
+        builder.extend(self.value.args.compile(state)?);
+        let call_datatype = state
+            .program_stack
+            .last()
+            .expect("empty stack after expression")
+            .datatype
+            .clone();
+        let unstack_len = state.unstack_current_depth();
+        let call_datatype = call_datatype.tuple_unwrap();
+
+        if let Some(prog_args) = state.program_arguments.get(&self.value.identifier.value) {
+            if prog_args.len() != call_datatype.len() {
+                return Err(AlthreadError::new(
+                    ErrorType::TypeError,
+                    Some(self.pos),
+                    format!(
+                        "Expected {} argument(s), got {}",
+                        prog_args.len(),
+                        call_datatype.len()
+                    ),
+                ));
+            }
+            for (i, arg) in prog_args.iter().enumerate() {
+                if arg != &call_datatype[i] {
+                    return Err(AlthreadError::new(
+                        ErrorType::TypeError,
+                        Some(self.pos),
+                        format!(
+                            "Expected argument {} to be of type {:?}, got {:?}",
+                            i+1, arg, call_datatype[i]
+                        ),
+                    ));
+                }
+            }
+        } else {
+            return Err(AlthreadError::new(
+                ErrorType::TypeError,
+                Some(self.pos),
+                format!("Program {} does not exist", self.value.identifier.value),
+            ));
+        }
+
+        // Then call the function (this will add to the stack the pid of the new process)
         state.program_stack.push(Variable {
             name: "".to_string(),
             depth: state.current_stack_depth,
@@ -46,12 +109,16 @@ impl InstructionBuilder for Node<RunCall> {
             declare_pos: Some(self.pos),
         });
 
-        Ok(InstructionBuilderOk::from_instructions(vec![Instruction {
+        builder.instructions.push(Instruction {
             control: InstructionType::RunCall(RunCallControl {
                 name: self.value.identifier.value.clone(),
+                unstack_len,
             }),
             pos: Some(self.pos),
-        }]))
+        });
+
+        Ok(builder)
+
     }
 }
 

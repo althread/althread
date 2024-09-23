@@ -17,10 +17,10 @@ use display::{AstDisplay, Prefix};
 use node::{InstructionBuilder, Node};
 use pest::iterators::Pairs;
 use statement::Statement;
-use token::condition_keyword::ConditionKeyword;
+use token::{args_list::{self, ArgsList}, condition_keyword::ConditionKeyword};
 
 use crate::{
-    compiler::{CompiledProject, CompilerState},
+    compiler::{CompiledProject, CompilerState, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
     no_rule,
     parser::Rule,
@@ -32,7 +32,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct Ast {
-    pub process_blocks: HashMap<String, Node<Block>>,
+    pub process_blocks: HashMap<String, (Node<ArgsList>, Node<Block>)>,
     pub condition_blocks: HashMap<ConditionKeyword, Node<ConditionBlock>>,
     pub global_block: Option<Node<Block>>,
 }
@@ -54,7 +54,7 @@ impl Ast {
                     let mut pairs = pair.into_inner();
 
                     let main_block = Node::build(pairs.next().unwrap())?;
-                    ast.process_blocks.insert("main".to_string(), main_block);
+                    ast.process_blocks.insert("main".to_string(), (Node::<ArgsList>::new(), main_block));
                 }
                 Rule::global_block => {
                     let mut pairs = pair.into_inner();
@@ -79,8 +79,9 @@ impl Ast {
                     let mut pairs = pair.into_inner();
 
                     let process_identifier = pairs.next().unwrap().as_str().to_string();
+                    let args_list: Node<token::args_list::ArgsList> = Node::build(pairs.next().unwrap())?;
                     let program_block = Node::build(pairs.next().unwrap())?;
-                    ast.process_blocks.insert(process_identifier, program_block);
+                    ast.process_blocks.insert(process_identifier, (args_list, program_block));
                 }
                 Rule::EOI => (),
                 _ => return Err(no_rule!(pair, "root ast")),
@@ -155,6 +156,19 @@ impl Ast {
         state.unstack_current_depth();
         assert!(state.current_stack_depth == 0);
 
+
+        // before compiling the programs, get the list of program names and their arguments
+        state.program_arguments = self
+            .process_blocks
+            .iter()
+            .map(|(name, (args, _))| (
+                name.clone(), 
+                args.value.datatypes.iter().map(|d| d.value.clone()).collect::<Vec<_>>()
+            ))
+            .collect();
+
+
+        // Compile all the programs
         state.is_shared = false;
         let mut programs_code = HashMap::new();
         // start with the main program
@@ -247,16 +261,33 @@ impl Ast {
             instructions: Vec::new(),
             name: name.to_string(),
         };
-        let prog = self
+        let (args,prog) = self
             .process_blocks
             .get(name)
             .expect("trying to compile a non-existant program");
         state.current_program_name = name.to_string();
+
+        for (i, var) in args.value.identifiers.iter().enumerate() {
+            state.program_stack.push(Variable {
+                name: var.value.value.clone(),
+                depth: state.current_stack_depth,
+                mutable: true,
+                datatype: args.value.datatypes[i].value.clone(),
+                declare_pos: Some(var.pos),
+            });
+        }
+
         let compiled = prog.compile(state)?;        
         if compiled.contains_jump() {
             unimplemented!("breaks or return statements in programs are not yet implemented");
         }
-        process_code.instructions = compiled.instructions;
+        if args.value.identifiers.len() > 0 {
+            process_code.instructions.push(Instruction {
+                control: InstructionType::Destruct(args.value.identifiers.len()),
+                pos: Some(args.pos),
+            });
+        }
+        process_code.instructions.extend(compiled.instructions);
         process_code.instructions.push(Instruction {
             control: InstructionType::EndProgram,
             pos: Some(prog.pos),
@@ -286,7 +317,7 @@ impl AstDisplay for Ast {
             writeln!(f, "")?;
         }
 
-        for (process_name, process_node) in &self.process_blocks {
+        for (process_name, (args, process_node)) in &self.process_blocks {
             writeln!(f, "{}{}", prefix, process_name)?;
             process_node.ast_fmt(f, &prefix.add_branch())?;
             writeln!(f, "")?;

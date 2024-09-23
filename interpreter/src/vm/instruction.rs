@@ -356,6 +356,7 @@ impl fmt::Display for LocalAssignmentControl {
 #[derive(Debug, PartialEq, Clone)]
 pub struct RunCallControl {
     pub name: String,
+    pub unstack_len: usize,
 }
 impl fmt::Display for RunCallControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

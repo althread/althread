@@ -29,9 +29,19 @@ impl Hash for RunningProgramState<'_> {
 }
 
 impl<'a> RunningProgramState<'a> {
-    pub fn new(id: usize, name: String, code: &'a ProgramCode) -> Self {
+    pub fn new(id: usize, name: String, code: &'a ProgramCode, args: Literal) -> Self {
+        let arg_len = if let Literal::Tuple(v) = &args {
+            v.len()
+        } else { panic!("args should be a tuple") };
+
+        let memory = if arg_len > 0  {
+                vec![args]
+            } else {
+                Vec::new()
+            };
+
         Self {
-            memory: Vec::new(),
+            memory,
             code,
             instruction_pointer: 0,
             name,
@@ -260,9 +270,13 @@ impl<'a> RunningProgramState<'a> {
                 1
             }
             InstructionType::RunCall(call) => {
+                let args = self.memory.last().expect("Panic: stack is empty, cannot run call").clone();
+                for _ in 0..call.unstack_len {
+                    self.memory.pop();
+                }
                 self.memory
                     .push(Literal::Process(call.name.clone(), *next_pid));
-                action = Some(GlobalAction::StartProgram(call.name.clone(), *next_pid));
+                action = Some(GlobalAction::StartProgram(call.name.clone(), *next_pid, args));
                 *next_pid += 1;
                 1
             }

@@ -69,6 +69,10 @@ impl Literal {
         }
     }
 
+    pub fn empty_tuple() -> Self {
+        Self::Tuple(Vec::new())
+    }
+
     pub fn to_pid(&self) -> Result<usize, String> {
         match self {
             Self::Process(_, pid) => Ok(*pid),

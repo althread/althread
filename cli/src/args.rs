@@ -64,6 +64,10 @@ pub struct RunCommand {
     #[clap(long)]
     pub verbose: bool,
 
+    /// interactive
+    #[clap(long)]
+    pub interactive: bool,
+
     /// seed
     #[clap(long)]
     pub seed: Option<u64>,

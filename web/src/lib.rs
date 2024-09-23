@@ -42,7 +42,7 @@ pub fn run(source: &str) -> Result<String, JsValue> {
         if vm.is_finished() {
             break;
         }
-        let info = vm.next().map_err(error_to_js)?;
+        let info = vm.next_random().map_err(error_to_js)?;
         for inst in info.instructions.iter() {
             result.push_str(&format!("#{}: {}\n", info.prog_id, inst));
         }

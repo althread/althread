@@ -52,7 +52,6 @@ impl NodeBuilder for TupleExpression {
         for pair in pairs {
             values.push(Node::build(pair)?);
         }
-        println!("TupleExpression values: {:?}", values);
         Ok(Self { values })
     }
 }

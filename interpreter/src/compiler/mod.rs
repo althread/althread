@@ -80,6 +80,9 @@ pub struct CompilerState {
     pub channels: HashMap<(String, String), (Vec<DataType>, Pos)>,
     pub undefined_channels: HashMap<(String, String), (Vec<DataType>, Pos)>,
 
+    // The names of the available programs and arguments
+    pub program_arguments: HashMap<String, Vec<DataType>>,
+
     pub current_program_name: String,
     pub is_atomic: bool,
     pub is_shared: bool,
@@ -94,6 +97,7 @@ impl CompilerState {
             channels: HashMap::new(),
             undefined_channels: HashMap::new(),
             current_program_name: String::new(),
+            program_arguments: HashMap::new(),
             is_atomic: false,
             is_shared: false,
         }

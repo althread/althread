@@ -85,6 +85,13 @@ impl DataType {
             _ => false,
         }
     }
+
+    pub fn tuple_unwrap(&self) -> Vec<DataType> {
+        match self {
+            Self::Tuple(v) => v.clone(),
+            _ => panic!("Call tuple_unwrap on a type that is not a tuple"),
+        }
+    }
 }
 
 impl NodeBuilder for DataType {

@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fs, io::Read, process::exit};
+use std::{collections::HashSet, fs, io::{stdin, Read}, process::exit};
 
 mod args;
 use args::{CliArguments, Command, CompileCommand, RandomSearchCommand, RunCommand};
@@ -63,6 +63,50 @@ const PROCESS_PALETTE: [Style; 6] = [
     Style::new().red(),
 ];
 
+pub fn run_interactive(source: String, compiled_project: althread::compiler::CompiledProject) {
+    
+    let mut vm = althread::vm::VM::new(&compiled_project);
+
+    vm.start(0); 
+
+    loop {
+        let next_states = vm.next().unwrap_or_else(|e| {
+            e.report(&source);
+            exit(1);
+        });
+        if next_states.is_empty() {
+            println!("No next state");
+            return;
+        }
+        for (name, pid, pos, nvm) in next_states.iter() {
+            println!("======= VM next =======");
+            println!("{}:{}:{}", name, pid, source.lines().nth(pos.line).unwrap_or_default());
+
+            let s = nvm.current_state();
+            println!("global: {:?}", s.0);
+            for ((pid, cname), state) in s.1.iter() {
+                println!("channel {},{}", pid, cname);
+                for v in state.iter() {
+                    println!("  * {}", v);
+                }
+            }
+            for (pid, local_state) in s.2.iter().enumerate() {
+                println!("{} ({}): {:?}", pid, local_state.1, local_state.0.iter().map(|v| format!("{}", v)).collect::<Vec<String>>().join(", "));
+            }
+        }
+        //read an integer from the user
+        let mut selected: i32 = -1;
+        while selected < 0 || selected >= next_states.len() as i32 {
+            println!("Enter an integer between 0 and {}:", next_states.len()-1);
+            let mut input = String::new();
+            stdin().read_line(&mut input).unwrap();
+            selected = input.trim().parse().unwrap();
+        }
+        let (_, _, _, nvm) = next_states.get(selected as usize).unwrap();
+        vm = nvm.clone();
+    }
+}
+
 pub fn run_command(cli_args: &RunCommand) {
     // Read file
     let source = match cli_args.common.input.clone() {
@@ -89,6 +133,12 @@ pub fn run_command(cli_args: &RunCommand) {
         e.report(&source);
         exit(1);
     });
+
+    if cli_args.interactive {
+        run_interactive(source, compiled_project);
+        return;
+    }
+
     let mut vm_execution: Vec<althread::vm::VM> = Vec::new();
     let mut vm_set: HashSet<althread::vm::VM> = HashSet::new();
     let mut vm = althread::vm::VM::new(&compiled_project);
@@ -98,7 +148,7 @@ pub fn run_command(cli_args: &RunCommand) {
         if vm.is_finished() {
             break;
         }
-        let info = vm.next().unwrap_or_else(|err| {
+        let info = vm.next_random().unwrap_or_else(|err| {
             err.report(&source);
             exit(1);
         });
@@ -204,7 +254,7 @@ pub fn random_search_command(cli_args: &RandomSearchCommand) {
             if vm.is_finished() {
                 break;
             }
-            let info = vm.next().unwrap_or_else(|err| {
+            let info = vm.next_random().unwrap_or_else(|err| {
                 println!("Error with seed {}:", s);
                 err.report(&source);
                 exit(1);
