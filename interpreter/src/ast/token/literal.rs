@@ -2,6 +2,7 @@ use core::fmt;
 use std::{fmt::Formatter, hash::{Hash, Hasher}, ops::Add, str::FromStr};
 use ordered_float::OrderedFloat;
 use pest::iterators::{Pair, Pairs};
+use serde::ser::{Serialize, Serializer, SerializeStruct};
 
 use crate::{
     ast::{
@@ -24,6 +25,33 @@ pub enum Literal {
     String(String),
     Process(String, usize),
     Tuple(Vec<Literal>),
+    List(DataType, Vec<Literal>),
+}
+
+impl<'a> Serialize for Literal {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("Literal", 1)?;
+        match self {
+            Self::Null => state.serialize_field("null", &true)?,
+            Self::Bool(value) => state.serialize_field("bool", value)?,
+            Self::Int(value) => state.serialize_field("int", value)?,
+            Self::Float(value) => state.serialize_field("float", value.as_ref())?,
+            Self::String(value) => state.serialize_field("string", value)?,
+            Self::Process(name, pid) => {
+                state.serialize_field("program", name)?;
+                state.serialize_field("pid", pid)?;
+            }
+            Self::Tuple(values) => state.serialize_field("tuple", values)?,
+            Self::List(datatype, values) => {
+                state.serialize_field("list_datatype", datatype)?;
+                state.serialize_field("list", values)?;
+            },
+        }
+        state.end()
+    }
 }
 
 impl NodeBuilder for Literal {
@@ -66,13 +94,19 @@ impl Literal {
             Self::String(_) => DataType::String,
             Self::Process(n, _) => DataType::Process(n.to_string()),
             Self::Tuple(t) => DataType::Tuple(t.iter().map(|l| l.get_datatype()).collect()),
+            Self::List(d, _) => DataType::List(Box::new(d.clone())),
         }
     }
 
     pub fn empty_tuple() -> Self {
         Self::Tuple(Vec::new())
     }
-
+    pub fn to_integer(&self) -> Result<i64, String> {
+        match self {
+            Self::Int(i) => Ok(*i),
+            i => Err(format!("Cannot convert {} to integer", i.get_datatype())),
+        }
+    }
     pub fn to_pid(&self) -> Result<usize, String> {
         match self {
             Self::Process(_, pid) => Ok(*pid),
@@ -312,6 +346,15 @@ impl fmt::Display for Literal {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
+            Self::List(datatype, values) => write!(
+                f,
+                "list({})",
+                values
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
         }
     }
 }
@@ -327,6 +370,13 @@ impl AstDisplay for Literal {
             Self::Process(name, pid) => write!(f, "{prefix}pid {} instance of {}", pid, name),
             Self::Tuple(values) => {
                 writeln!(f, "{prefix}tuple")?;
+                for value in values {
+                    value.ast_fmt(f, &prefix.add_leaf())?;
+                }
+                Ok(())
+            },
+            Self::List(datatype, values) => {
+                writeln!(f, "{prefix}list")?;
                 for value in values {
                     value.ast_fmt(f, &prefix.add_leaf())?;
                 }

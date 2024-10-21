@@ -1,7 +1,7 @@
 use fastrand;
 use wasm_bindgen::prelude::*;
 
-use althread::{ast::Ast, error::AlthreadError};
+use althread::{ast::Ast, checker, error::AlthreadError};
 
 fn error_to_js(err: AlthreadError) -> JsValue {
     serde_wasm_bindgen::to_value(&err).unwrap()
@@ -53,4 +53,24 @@ pub fn run(source: &str) -> Result<String, JsValue> {
         }
     }
     Ok(result)
+}
+
+
+
+#[wasm_bindgen]
+pub fn check(source: &str) -> Result<JsValue, JsValue> {
+    // parse code with pest
+    let pairs = althread::parser::parse(&source).map_err(error_to_js)?;
+
+    let ast = Ast::build(pairs).map_err(error_to_js)?;
+
+    println!("{}", &ast);
+
+    let compiled_project = ast.compile().map_err(error_to_js)?;
+
+
+    let checked = checker::check_program(&compiled_project).map_err(error_to_js)?;
+
+    Ok(serde_wasm_bindgen::to_value(&checked).unwrap())
+    
 }

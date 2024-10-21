@@ -39,6 +39,10 @@ pub enum Command {
     /// Compiles an input file into a supported output format
     #[command()]
     RandomSearch(RandomSearchCommand),
+
+    /// Check the input program
+    #[command()]
+    Check(CheckCommand),
 }
 
 /// Compiles an input file into a supported output format
@@ -48,6 +52,15 @@ pub struct CompileCommand {
     #[clap(flatten)]
     pub common: SharedArgs,
 }
+
+/// Compiles an input file into a supported output format
+#[derive(Debug, Clone, Parser)]
+pub struct CheckCommand {
+    /// Shared arguments
+    #[clap(flatten)]
+    pub common: SharedArgs,
+}
+
 
 /// Compiles an input file into a supported output format
 #[derive(Debug, Clone, Parser)]

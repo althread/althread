@@ -11,6 +11,7 @@ pub mod send;
 pub mod wait;
 pub mod waiting_case;
 pub mod while_control;
+pub mod for_control;
 pub mod atomic;
 pub mod break_loop;
 
@@ -21,6 +22,7 @@ use break_loop::BreakLoopControl;
 use channel_declaration::ChannelDeclaration;
 use declaration::Declaration;
 use fn_call::FnCall;
+use for_control::ForControl;
 use if_control::IfControl;
 use loop_control::LoopControl;
 use pest::iterators::Pairs;
@@ -54,6 +56,7 @@ pub enum Statement {
     If(Node<IfControl>),
     While(Node<WhileControl>),
     Loop(Node<LoopControl>),
+    For(Node<ForControl>),
     BreakLoop(Node<BreakLoopControl>),
     Atomic(Node<atomic::Atomic>),
     Wait(Node<Wait>),
@@ -74,6 +77,7 @@ impl NodeBuilder for Statement {
             Rule::while_control => Ok(Self::While(Node::build(pair)?)),
             Rule::atomic_statement => Ok(Self::Atomic(Node::build(pair)?)),
             Rule::loop_control => Ok(Self::Loop(Node::build(pair)?)),
+            Rule::for_control => Ok(Self::For(Node::build(pair)?)),
             Rule::break_loop_statement => Ok(Self::BreakLoop(Node::build(pair)?)),
             Rule::code_block => Ok(Self::Block(Node::build(pair)?)),
             Rule::send_call => Ok(Self::Send(Node::build(pair)?)),
@@ -93,6 +97,7 @@ impl InstructionBuilder for Statement {
             Self::ChannelDeclaration(node) => node.compile(state),
             Self::While(node) => node.compile(state),
             Self::Loop(node) => node.compile(state),
+            Self::For(node) => node.compile(state),
             Self::Atomic(node) => node.compile(state),
             Self::Wait(node) => node.compile(state),
             Self::Block(node) => node.compile(state),
@@ -108,7 +113,15 @@ impl InstructionBuilder for Statement {
                 state.program_stack.pop();
                 Ok(builder)
             }
-            Self::FnCall(node) => node.compile(state),
+            Self::FnCall(node) => {
+                let mut builder = node.compile(state)?;
+                builder.instructions.push(Instruction {
+                    pos: Some(node.pos),
+                    control: InstructionType::Unstack(UnstackControl { unstack_len: 1 }),
+                });
+                state.program_stack.pop();
+                Ok(builder)
+            },
         }
     }
 }
@@ -136,6 +149,7 @@ impl AstDisplay for Statement {
             Statement::If(node) => node.ast_fmt(f, prefix),
             Statement::While(node) => node.ast_fmt(f, prefix),
             Statement::Loop(node) => node.ast_fmt(f, prefix),
+            Statement::For(node) => node.ast_fmt(f, prefix),
             Statement::BreakLoop(node) => node.ast_fmt(f, prefix),
             Statement::Atomic(node) => node.ast_fmt(f, prefix),
             Statement::Block(node) => node.ast_fmt(f, prefix),

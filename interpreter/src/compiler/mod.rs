@@ -1,5 +1,8 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
+use std::rc::Rc;
+
+pub mod stdlib;
 
 use crate::error::Pos;
 use crate::vm::instruction::{ExpressionControl, GlobalReadsControl, Instruction};
@@ -69,7 +72,7 @@ pub struct Variable {
     pub declare_pos: Option<Pos>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct CompilerState {
     pub global_table: HashMap<String, Variable>,
     pub program_stack: Vec<Variable>,
@@ -82,6 +85,8 @@ pub struct CompilerState {
 
     // The names of the available programs and arguments
     pub program_arguments: HashMap<String, Vec<DataType>>,
+
+    pub stdlib: stdlib::Stdlib,
 
     pub current_program_name: String,
     pub is_atomic: bool,
@@ -100,6 +105,7 @@ impl CompilerState {
             program_arguments: HashMap::new(),
             is_atomic: false,
             is_shared: false,
+            stdlib: stdlib::Stdlib::new(),
         }
     }
 
@@ -126,6 +132,8 @@ pub struct CompiledProject {
     /// The second element is the two instructions that are used to check the condition
     /// (the first in struction is the read operation and the second is the expression)
     pub always_conditions: Vec<(HashSet<String>, GlobalReadsControl, ExpressionControl, Pos)>,
+
+    pub stdlib: Rc<stdlib::Stdlib>,
 }
 
 impl fmt::Display for CompiledProject {

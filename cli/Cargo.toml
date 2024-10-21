@@ -9,6 +9,7 @@ althread = { workspace = true }
 fastrand = { workspace = true }
 owo-colors = "4.1.0"
 ordered-float.workspace = true
+lazy_static.workspace = true
 
 [lints]
 workspace = true

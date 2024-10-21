@@ -5,7 +5,7 @@
     "start": "parcel --no-hmr",
     "build": "parcel build",
     "build-lezer": "lezer-generator lezer/althread.grammar -o lezer/parser.js",
-    "build-wasm": "wasm-pack build --target web && lezer-generator lezer/althread.grammar -o lezer/parser.js",
+    "build-wasm": "wasm-pack build --target web",
     "install-deps": "cargo install wasm-pack"
   },
   "dependencies": {
@@ -17,10 +17,15 @@
     "@codemirror/state": "^6.4.1",
     "@codemirror/theme-one-dark": "^6.1.2",
     "@codemirror/view": "^6.33.0",
+    "@corvu/resizable": "^0.2.3",
     "@lezer/highlight": "^1.2.1",
     "@lezer/lr": "^1.4.2",
+    "keycharm": "^0.4.0",
     "solid-codemirror": "^2.3.1",
-    "solid-js": "^1.8.22"
+    "solid-js": "^1.8.22",
+    "vis-data": "^7.1.9",
+    "vis-network": "^9.1.9",
+    "vis-util": "^5.0.7"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

@@ -1,11 +1,11 @@
 use std::{collections::HashSet, fs, io::{stdin, Read}, process::exit};
 
 mod args;
-use args::{CliArguments, Command, CompileCommand, RandomSearchCommand, RunCommand};
+use args::{CheckCommand, CliArguments, Command, CompileCommand, RandomSearchCommand, RunCommand};
 use clap::Parser;
 use owo_colors::{OwoColorize, Style};
 
-use althread::ast::Ast;
+use althread::{ast::Ast, checker};
 
 fn main() {
     let cli_args = CliArguments::parse();
@@ -14,6 +14,7 @@ fn main() {
         Command::Compile(command) => compile_command(&command.clone()),
         Command::Run(command) => run_command(&command.clone()),
         Command::RandomSearch(command) => random_search_command(&command.clone()),
+        Command::Check(command) => check_command(&command.clone()),
     }
 }
 
@@ -51,6 +52,50 @@ pub fn compile_command(cli_args: &CompileCommand) {
 
 
 
+pub fn check_command(cli_args: &CheckCommand) {
+    // Read file
+    let source = match cli_args.common.input.clone() {
+        args::Input::Stdin => {
+            let mut buf = Vec::new();
+            let _ = std::io::stdin().read_to_end(&mut buf);
+            String::from_utf8(buf).expect("Could not read stdin")
+        }
+        args::Input::Path(path) => fs::read_to_string(&path).expect("Could not read file"),
+    };
+
+    // parse code with pest
+    let pairs = althread::parser::parse(&source).unwrap_or_else(|e| {
+        e.report(&source);
+        exit(1);
+    });
+
+    let ast = Ast::build(pairs).unwrap_or_else(|e| {
+        e.report(&source);
+        exit(1);
+    });
+
+    let compiled_project = ast.compile().unwrap_or_else(|e| {
+        e.report(&source);
+        exit(1);
+    });
+
+    let checked = checker::check_program(&compiled_project).unwrap_or_else(|e| {
+        e.report(&source);
+        exit(1);
+    });
+
+    if checked.0.is_empty() {
+        println!("No invariant violated");
+        return;
+    } else {
+        println!("Invariant violated");
+        for vm in checked.0.iter() {
+            println!("========= {}#{:?}", vm.name, vm.pid);
+        }
+    }
+}
+
+
 const MAIN_STYLE: Style = Style::new()
     .red()
     .on_bright_black();
@@ -78,9 +123,9 @@ pub fn run_interactive(source: String, compiled_project: althread::compiler::Com
             println!("No next state");
             return;
         }
-        for (name, pid, pos, nvm) in next_states.iter() {
+        for (name, pid, insts, nvm) in next_states.iter() {
             println!("======= VM next =======");
-            println!("{}:{}:{}", name, pid, source.lines().nth(pos.line).unwrap_or_default());
+            println!("{}:{}:{}", name, pid, if insts[0].pos.is_some() { source.lines().nth(insts[0].pos.unwrap().line).unwrap_or_default() } else { "?" });
 
             let s = nvm.current_state();
             println!("global: {:?}", s.0);

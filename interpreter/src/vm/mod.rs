@@ -2,8 +2,9 @@ use core::panic;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt,
-    hash::{Hash, Hasher}
+    hash::{Hash, Hasher}, rc::Rc
 };
+use serde::ser::{Serialize, Serializer, SerializeStruct};
 
 use channels::{Channels, ChannelsState, ReceiverInfo};
 use fastrand::Rng;
@@ -15,7 +16,7 @@ use running_program::RunningProgramState;
 
 use crate::{
     ast::{statement::waiting_case::WaitDependency, token::{datatype::DataType, literal::Literal}},
-    compiler::CompiledProject,
+    compiler::{stdlib::Stdlib, CompiledProject},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
 };
 
@@ -70,6 +71,9 @@ pub struct VM<'a> {
     waiting_programs: HashMap<usize, WaitDependency>,
     next_program_id: usize,
     rng: Rng,
+
+
+    pub stdlib: Rc<Stdlib>,
 }
 
 impl<'a> VM<'a> {
@@ -84,6 +88,7 @@ impl<'a> VM<'a> {
             next_program_id: 0,
             waiting_programs: HashMap::new(),
             rng: Rng::new(),
+            stdlib: compiled_project.stdlib.clone(),
         }
     }
 
@@ -100,6 +105,7 @@ impl<'a> VM<'a> {
                 program_name.to_string(),
                 &self.programs_code[program_name],
                 args,
+                self.stdlib.clone(),
             ),
         );
         self.executable_programs.insert(pid);
@@ -263,6 +269,10 @@ impl<'a> VM<'a> {
             .get_mut(pid)
             .expect("program is executable but not found in running programs");
 
+        if program.has_terminated() {
+            return Ok(None);
+        }
+
         let mut exec_info = ExecutionStepInfo {
             prog_name: program.name.clone(),
             prog_id: pid,
@@ -367,27 +377,29 @@ impl<'a> VM<'a> {
         Ok(Some(exec_info))
     }
 
+    pub fn get_program(&self, pid: usize) -> &RunningProgramState {
+        self.running_programs.get(pid).expect("program not found")
+    }
+    
     /**
      * List all the next possible state of the VM
      */
-    pub fn next(&mut self) -> AlthreadResult<Vec<(
+    pub fn next(&self) -> AlthreadResult<Vec<(
             String, 
             usize, 
-            Pos,
+            Vec<Instruction>,
             VM<'a>,
     )>> {
         if self.running_programs.len() == 0 {
-            return Err(AlthreadError::new(
-                ErrorType::RuntimeError,
-                None,
-                "no program is running".to_string(),
-            ));
+            return Ok(Vec::new());
         }
 
         let mut next_states = Vec::new();
 
         // for each non-waiting program, execute the next instruction and store the result
-        for program in self.running_programs.iter() {
+        for program_id in self.executable_programs.iter() {
+            let program = self.running_programs.get(*program_id).unwrap();
+
             if self.waiting_programs.contains_key(&program.id) {
                 continue;
             }
@@ -397,7 +409,7 @@ impl<'a> VM<'a> {
                 next_states.push((
                     program.name.clone(), 
                     program.id, 
-                    program.current_instruction().unwrap().pos.unwrap_or_default(), 
+                    result.instructions, 
                     vm
                 ));
             }
@@ -425,7 +437,7 @@ impl<'a> VM<'a> {
         (&self.globals, self.channels.state(), local_states)
     }
 
-    fn check_invariants(&self) -> AlthreadResult<()> {
+    pub fn check_invariants(&self) -> AlthreadResult<()> {
         for (_deps, read, expr, pos) in self.always_conditions.iter() {
             //if _deps.contains(&var_name) { //TODO improve by checking if the variable is in the dependencies
                 // Check if the condition is true
@@ -509,4 +521,20 @@ impl std::cmp::PartialEq for VM<'_> {
 }
 
 impl std::cmp::Eq for VM<'_> {
+}
+
+
+impl<'a> Serialize for VM<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let (globals, channels, locals) = self.current_state();
+        // 3 is the number of fields in the struct.
+        let mut state = serializer.serialize_struct("VM", 3)?;
+        state.serialize_field("globals", globals)?;
+        state.serialize_field("channels", channels)?;
+        state.serialize_field("locals", &locals)?;
+        state.end()
+    }
 }

@@ -8,7 +8,7 @@ pub mod token;
 use core::panic;
 use std::{
     collections::{BTreeMap, HashMap},
-    fmt::{self, Formatter},
+    fmt::{self, Formatter}, rc::Rc,
 };
 
 use block::Block;
@@ -250,6 +250,7 @@ impl Ast {
             global_memory,
             programs_code,
             always_conditions,
+            stdlib: Rc::new(state.stdlib),
         })
     }
     fn compile_program(

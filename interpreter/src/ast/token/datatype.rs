@@ -2,11 +2,12 @@ use std::fmt;
 
 use pest::iterators::Pairs;
 use ordered_float::OrderedFloat;
+use serde::{Deserialize, Serialize};
 use crate::{ast::node::NodeBuilder, error::AlthreadResult, no_rule, parser::Rule};
 
 use super::literal::Literal;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
 pub enum DataType {
     Void,
     Boolean,
@@ -15,6 +16,7 @@ pub enum DataType {
     String,
     Process(String),
     Tuple(Vec<DataType>),
+    List(Box<DataType>),
 }
 
 impl DataType {
@@ -27,6 +29,7 @@ impl DataType {
             DataType::String => Literal::String("".to_string()),
             DataType::Process(_) => Literal::Null,
             DataType::Tuple(v) => Literal::Tuple(v.iter().map(|d| d.default()).collect()),
+            DataType::List(t) => Literal::List(t.as_ref().clone(), vec![]),
         }
     }
     pub fn from_str(value: &str) -> Self {
@@ -56,7 +59,7 @@ impl DataType {
             DataType::Integer => "int".to_string(),
             DataType::Float => "float".to_string(),
             DataType::String => "string".to_string(),
-            DataType::Process(n) => format!("program({})", n),
+            DataType::Process(n) => format!("proc({})", n),
             DataType::Tuple(t) => format!(
                 "({})",
                 t.iter()
@@ -64,12 +67,19 @@ impl DataType {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
+            DataType::List(t) => format!("list({})", t.to_string()),
         }
     }
 
     pub fn is_a_number(&self) -> bool {
         match self {
             Self::Integer | Self::Float => true,
+            _ => false,
+        }
+    }
+    pub fn is_integer(&self) -> bool {
+        match self {
+            Self::Integer => true,
             _ => false,
         }
     }
@@ -103,6 +113,12 @@ impl NodeBuilder for DataType {
             Rule::FLOAT_TYPE => Ok(Self::Float),
             Rule::STR_TYPE => Ok(Self::String),
             Rule::VOID_TYPE => Ok(Self::Void),
+            Rule::PROCESS_TYPE => Ok(Self::Process(pair.into_inner().next().unwrap().as_str().to_string())),
+            Rule::LIST_TYPE => {
+                let mut pairs = pair.into_inner();
+                let datatype = DataType::build(pairs.next().unwrap().into_inner())?;
+                Ok(Self::List(Box::new(datatype)))
+            }
             _ => Err(no_rule!(pair, "DataType")),
         }
     }

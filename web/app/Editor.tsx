@@ -90,56 +90,69 @@ const basicSetup: Extension = (() => [
 ])()
 
 
-const Editor =  (props) => {
-  const { editorView, ref: editorRef, createExtension } = createCodeMirror({
+const createEditor = (compile) => {
+  const editor = createCodeMirror({
     /**
      * The initial value of the editor
      */
     value: `
 
+
+
 shared {
-  let A: bool = false;
-  let B: bool = true;
-  let Done = 0;
+  let Done = false;
+  let Leader = 0;
 }
 
-program A() {
-  print("starting A");
-  A = false;
-  B = true;
-  Done += 1;
-  send out(42,true);
-}
+program A(my_id: int) {
 
-program B() {
-  print("starting B");
-  A = true;
-  B = false;
-  Done += 1;
+  let leader_id = my_id;
+
+  send out(my_id);
+
+  loop atomic wait receive in (x) => {
+    print("receive", x);
+      if x > leader_id {
+        leader_id = x;
+        send out(x);
+      } else {
+        if x == leader_id {
+          print("finished");
+          send out(x);
+          break;
+        }
+      }
+  };
+  
+  if my_id == leader_id {
+    print("I AM THE LEADER!!!");
+    ! {
+        Done = true;
+        Leader += 1;
+    }
+  }
 }
 
 always {
-  A || B;
+    !Done || (Leader == 1);
 }
 
 main {
-  let a = run A();
-  run B();
-  wait Done == 2;
+  let a = run A(1);
+  let b = run A(2);
 
-  channel a.out (int, bool)> self.in;
+  channel a.out (int)> b.in;
+  channel b.out (int)> a.in;
 
-  wait receive in(x,y) => {
-    print("Receive", x, y);
-  };
   print("DONE");
 }
+
     
     `,
     /**
      * Fired whenever the editor code value changes.
      */
-    onValueChange: (value) => props.onValueChange(value),
+    //onValueChange: (value) => props.onValueChange(value),
     /**
      * Fired whenever a change occurs to the document, every time the view updates.
      */
@@ -157,10 +170,10 @@ main {
       fontSize: '18px',
     },
   });
-  createExtension(baseTheme);
-  createExtension(basicSetup);
-  createExtension(keymap.of([indentWithTab]));
-  createExtension(editor_lang());
+  editor.createExtension(baseTheme);
+  editor.createExtension(basicSetup);
+  editor.createExtension(keymap.of([indentWithTab]));
+  editor.createExtension(editor_lang());
 
 
   const debugTheme = EditorView.theme({
@@ -192,7 +205,7 @@ main {
   );
   
   const debug = [debugTheme, syntaxHighlighting(debugHighlightStyle)];
-  //createExtension(debug);
+  //editor.createExtension(debug);
 
 
 
@@ -204,15 +217,15 @@ main {
     }
   }), syntaxHighlighting(highlightStyle)];
 
-  createExtension(modifiedTheme);
-  createExtension(oneDark);
+  editor.createExtension(modifiedTheme);
+  editor.createExtension(oneDark);
 
 
   const regexpLinter = linter(view => {
     console.log('linting');
     let diagnostics: Diagnostic[] = []
     try {
-        props.compile(view.state.doc.toString())
+        compile(view.state.doc.toString())
     } catch(e) {
         console.log(e);
         console.log(Object.keys(e));
@@ -225,8 +238,8 @@ main {
     }
     return diagnostics
   })
-  createExtension(regexpLinter);
-  createExtension(lintGutter());
+  editor.createExtension(regexpLinter);
+  editor.createExtension(lintGutter());
 
   // if we want to highlight specific tags
   //const myHighlightStyle = HighlightStyle.define([
@@ -234,24 +247,7 @@ main {
     //{tag: tags.comment, color: "#05d", fontStyle: "italic"}
   //]);
 
-  let [out, setOut] = createSignal("");
+  return editor;
+}
 
-  return <>
-  <div>
-    <button onClick={(e) => {
-      console.log(editorView)
-      try {
-        setOut(props.run(editorView().state.doc.toString()));
-      } catch(e) {
-        setOut("ERROR: "+(e.pos && ('line '+e.pos.line))+"\n"+e.message);
-      }
-    }}>Run</button>
-  </div>
-  <div ref={editorRef} />
-<pre>
-{out()}
-</pre>
-  </>;
-};
-
-export default Editor;
+export default createEditor;

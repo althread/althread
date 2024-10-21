@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fmt;
 
 use pest::iterators::Pairs;
+use serde::{Deserialize, Serialize};
 
 use crate::{ast::node::InstructionBuilder, compiler::InstructionBuilderOk};
 use crate::compiler::CompilerState;
@@ -16,7 +17,7 @@ use super::super::{
 use super::expression::Expression;
 use super::receive::ReceiveStatement;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WaitDependency {
     pub channels_state: HashSet<String>,
     pub channels_connection: HashSet<String>,

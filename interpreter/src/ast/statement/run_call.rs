@@ -44,8 +44,6 @@ impl NodeBuilder for RunCall {
                 "Run statement expects a tuple of arguments (possibly empty)".to_string(),
             ));
         }
-        println!("RunCall: {:?} {:?}", identifier, args);
-
         Ok(Self { identifier, args })
     }
 }

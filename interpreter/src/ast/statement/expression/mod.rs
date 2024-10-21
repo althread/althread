@@ -2,15 +2,18 @@ pub mod binary_expression;
 pub mod primary_expression;
 pub mod tuple_expression;
 pub mod unary_expression;
+pub mod list_expression;
 
 use std::{collections::HashSet, fmt};
 
 use binary_expression::{BinaryExpression, LocalBinaryExpressionNode};
+use list_expression::{ListExpression, LocalListExpressionNode, LocalRangeListExpressionNode, RangeListExpression};
 use pest::{
     iterators::{Pair, Pairs},
     pratt_parser::PrattParser,
 };
 use primary_expression::{LocalPrimaryExpressionNode, PrimaryExpression};
+use serde::{Deserialize, Serialize};
 use tuple_expression::{LocalTupleExpressionNode, TupleExpression};
 use unary_expression::{LocalUnaryExpressionNode, UnaryExpression};
 
@@ -30,7 +33,7 @@ use crate::{
     },
 };
 
-use super::{run_call::RunCall, waiting_case::WaitDependency};
+use super::{fn_call::FnCall, run_call::RunCall, waiting_case::WaitDependency};
 
 lazy_static::lazy_static! {
     static ref PRATT_PARSER: PrattParser<Rule> = {
@@ -51,6 +54,7 @@ lazy_static::lazy_static! {
 pub enum SideEffectExpression {
     Expression(Node<Expression>),
     RunCall(Node<RunCall>),
+    FnCall(Node<FnCall>),
 }
 
 impl NodeBuilder for SideEffectExpression {
@@ -60,6 +64,7 @@ impl NodeBuilder for SideEffectExpression {
         match pair.as_rule() {
             Rule::expression => Ok(Self::Expression(Node::build(pair)?)),
             Rule::run_call => Ok(Self::RunCall(Node::build(pair)?)),
+            Rule::fn_call => Ok(Self::FnCall(Node::build(pair)?)),
             _ => Err(no_rule!(pair, "SideEffectExpression")),
         }
     }
@@ -70,6 +75,7 @@ impl InstructionBuilder for SideEffectExpression {
         match self {
             Self::Expression(node) => node.compile(state),
             Self::RunCall(node) => node.compile(state),
+            Self::FnCall(node) => node.compile(state),
         }
     }
 }
@@ -79,6 +85,7 @@ impl AstDisplay for SideEffectExpression {
         match self {
             Self::Expression(node) => node.ast_fmt(f, prefix),
             Self::RunCall(node) => node.ast_fmt(f, prefix),
+            Self::FnCall(node) => node.ast_fmt(f, prefix),
         }
     }
 }
@@ -89,6 +96,7 @@ pub enum Expression {
     Unary(Node<UnaryExpression>),
     Primary(Node<PrimaryExpression>),
     Tuple(Node<TupleExpression>),
+    Range(Node<RangeListExpression>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -102,6 +110,7 @@ pub enum LocalExpressionNode {
     Unary(LocalUnaryExpressionNode),
     Primary(LocalPrimaryExpressionNode),
     Tuple(LocalTupleExpressionNode),
+    Range(LocalRangeListExpressionNode),
 }
 impl fmt::Display for LocalExpression {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -115,6 +124,7 @@ impl fmt::Display for LocalExpressionNode {
             Self::Unary(node) => write!(f, "{}", node),
             Self::Primary(node) => write!(f, "{}", node),
             Self::Tuple(node) => write!(f, "{}", node),
+            Self::Range(node) => write!(f, "{}", node),
         }
     }
 }
@@ -163,6 +173,32 @@ impl NodeBuilder for Expression {
     }
 }
 impl Expression {
+    pub fn build_list_expression(pair: Pair<Rule>) -> AlthreadResult<Node<Self>> {
+        let pos = Pos {
+            line: pair.line_col().0,
+            col: pair.line_col().1,
+            start: pair.as_span().start(),
+            end: pair.as_span().end(),
+        };
+        match pair.as_rule() {
+            Rule::range_expression => {
+                let mut pair = pair.into_inner();
+                let expression_start: Box<Node<Expression>> = Box::new(Node::build(pair.next().unwrap())?);
+                let expression_end: Box<Node<Expression>> = Box::new(Node::build(pair.next().unwrap())?);
+                Ok(Node {
+                    pos,
+                    value: Expression::Range(Node {
+                        pos,
+                        value: RangeListExpression { 
+                            expression_start,
+                            expression_end,
+                        },
+                    }),
+                })
+            }
+            _ => Err(no_rule!(pair, "list_expression")),
+        }
+    }
     pub fn build_top_level(pair: Pair<Rule>) -> AlthreadResult<Node<Self>> {
         let pos = Pos {
             line: pair.line_col().0,
@@ -208,6 +244,9 @@ impl LocalExpressionNode {
             Expression::Tuple(node) => LocalExpressionNode::Tuple(
                 LocalTupleExpressionNode::from_tuple(&node.value, program_stack)?,
             ),
+            Expression::Range(node) => LocalExpressionNode::Range(
+                LocalRangeListExpressionNode::from_range(&node.value, program_stack)?,
+            ),
         };
         Ok(root)
     }
@@ -217,6 +256,7 @@ impl LocalExpressionNode {
             Self::Unary(node) => node.datatype(state),
             Self::Primary(node) => node.datatype(state),
             Self::Tuple(node) => node.datatype(state),
+            Self::Range(node) => node.datatype(state),
         }
     }
     pub fn eval(&self, mem: &Memory) -> Result<Literal, String> {
@@ -234,6 +274,7 @@ impl LocalExpressionNode {
                 LocalPrimaryExpressionNode::Expression(expr) => expr.as_ref().eval(mem),
             },
             LocalExpressionNode::Tuple(tuple_exp) => tuple_exp.eval(mem),
+            LocalExpressionNode::Range(list_exp) => list_exp.eval(mem),
         }
     }
 }
@@ -266,6 +307,7 @@ impl InstructionBuilder for Node<Expression> {
             instructions.push(Instruction {
                 pos: Some(self.pos),
                 control: InstructionType::GlobalReads(GlobalReadsControl {
+                    only_const: vars.iter().all(|v| state.global_table[v].mutable == false),
                     variables: vars.into_iter().collect(),
                 }),
             });
@@ -304,6 +346,7 @@ impl Expression {
             Self::Unary(node) => node.value.add_dependencies(dependencies),
             Self::Primary(node) => node.value.add_dependencies(dependencies),
             Self::Tuple(node) => node.value.add_dependencies(dependencies),
+            Self::Range(node) => node.value.add_dependencies(dependencies),
         }
     }
     pub fn is_tuple(&self) -> bool {
@@ -321,6 +364,7 @@ impl Expression {
             Self::Unary(node) => node.value.get_vars(vars),
             Self::Primary(node) => node.value.get_vars(vars),
             Self::Tuple(node) => node.value.get_vars(vars),
+            Self::Range(node) => node.value.get_vars(vars),
         }
     }
 }
@@ -332,6 +376,7 @@ impl AstDisplay for Expression {
             Self::Unary(node) => node.ast_fmt(f, prefix),
             Self::Primary(node) => node.ast_fmt(f, prefix),
             Self::Tuple(node) => node.ast_fmt(f, prefix),
+            Self::Range(node) => node.ast_fmt(f, prefix),
         }
     }
 }

@@ -1,4 +1,5 @@
 use std::fmt;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     ast::{
@@ -78,8 +79,9 @@ impl InstructionType {
             | Self::Send(_)
             | Self::ChannelPeek(_)
             | Self::AtomicStart // starts a block that surely contains a global operation
-            | Self::WaitStart(_) // wait starts an atomic block to evaluate the conditions
-            | Self::GlobalReads(_) => false,
+            | Self::WaitStart(_) => false, // wait starts an atomic block to evaluate the conditions
+            
+            Self::GlobalReads(r) => r.only_const, // a global read is local only if it reads constant variables
             
             // This should be checked. I think the following are not global because
             // they do not write or read any global variable or channel
@@ -148,6 +150,12 @@ impl Instruction {
     pub fn is_atomic_end(&self) -> bool {
         self.control.is_atomic_end()
     }
+    pub fn is_end(&self) -> bool {
+        match self.control {
+            InstructionType::EndProgram => true,
+            _ => false,
+        }
+    }
 }
 
 impl fmt::Display for Instruction {
@@ -161,7 +169,7 @@ impl fmt::Display for Instruction {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct JumpIfControl {
     pub jump_false: i64,
     pub unstack_len: usize,
@@ -177,7 +185,7 @@ impl fmt::Display for JumpIfControl {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct BreakLoopControl {
     pub jump: i64,
     pub unstack_len: usize,
@@ -190,7 +198,7 @@ impl fmt::Display for BreakLoopControl {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct JumpControl {
     pub jump: i64,
 }
@@ -201,7 +209,7 @@ impl fmt::Display for JumpControl {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct WaitControl {
     pub jump: i64,
     pub unstack_len: usize,
@@ -213,7 +221,7 @@ impl fmt::Display for WaitControl {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct WaitStartControl {
     pub dependencies: WaitDependency,
     pub start_atomic: bool,
@@ -239,9 +247,10 @@ impl fmt::Display for ExpressionControl {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct GlobalReadsControl {
     pub variables: Vec<String>,
+    pub only_const: bool,
 }
 impl fmt::Display for GlobalReadsControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -250,7 +259,7 @@ impl fmt::Display for GlobalReadsControl {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct UnstackControl {
     pub unstack_len: usize,
 }
@@ -261,7 +270,7 @@ impl fmt::Display for UnstackControl {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct DeclarationControl {
     pub unstack_len: usize,
 }
@@ -272,7 +281,7 @@ impl fmt::Display for DeclarationControl {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct SendControl {
     pub channel_name: String,
     pub unstack_len: usize,
@@ -288,7 +297,7 @@ impl fmt::Display for SendControl {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct ConnectionControl {
     /// the index of the sender pid in the stack (none if the sender is the current process)
     pub sender_idx: Option<usize>,
@@ -353,7 +362,7 @@ impl fmt::Display for LocalAssignmentControl {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct RunCallControl {
     pub name: String,
     pub unstack_len: usize,
@@ -365,10 +374,12 @@ impl fmt::Display for RunCallControl {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct FnCallControl {
     pub name: String,
     pub unstack_len: usize,
+    pub variable_idx: Option<usize>,
+    pub arguments: Option<Vec<usize>>,
 }
 impl fmt::Display for FnCallControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

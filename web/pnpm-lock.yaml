@@ -10,15 +10,20 @@ specifiers:
   '@codemirror/state': ^6.4.1
   '@codemirror/theme-one-dark': ^6.1.2
   '@codemirror/view': ^6.33.0
+  '@corvu/resizable': ^0.2.3
   '@lezer/generator': ^1.7.1
   '@lezer/highlight': ^1.2.1
   '@lezer/lr': ^1.4.2
   babel-preset-solid: ^1.8.22
+  keycharm: ^0.4.0
   parcel: ^2.12.0
   process: ^0.11.10
   solid-codemirror: ^2.3.1
   solid-js: ^1.8.22
   solid-refresh: 0.7.5
+  vis-data: ^7.1.9
+  vis-network: ^9.1.9
+  vis-util: ^5.0.7
 
 dependencies:
   '@codemirror/autocomplete': 6.18.0_5oji3brm75i376tf2pas67gplu
@@ -29,10 +34,15 @@ dependencies:
   '@codemirror/state': 6.4.1
   '@codemirror/theme-one-dark': 6.1.2
   '@codemirror/view': 6.33.0
+  '@corvu/resizable': 0.2.3_solid-js@1.8.22
   '@lezer/highlight': 1.2.1
   '@lezer/lr': 1.4.2
+  keycharm: 0.4.0
   solid-codemirror: 2.3.1_d6mtfiplwvomebrk4dh6vwhk6a
   solid-js: 1.8.22
+  vis-data: 7.1.9_vis-util@5.0.7
+  vis-network: 9.1.9_zysfksoqfozeci6xxxp2qjogoq
+  vis-util: 5.0.7
 
 devDependencies:
   '@babel/core': 7.25.2
@@ -496,6 +506,41 @@ packages:
       '@codemirror/state': 6.4.1
       style-mod: 4.1.2
       w3c-keyname: 2.2.8
+    dev: false
+
+  /@corvu/resizable/0.2.3_solid-js@1.8.22:
+    resolution: {integrity: sha512-UwpObxqKlx1mc3G496Daz9NjK25Gx1V5fB8zIGazbq5tJs7aU8RjPW4png5OoNpMyxV7GQWjQtVc59zaAEVAJg==}
+    peerDependencies:
+      solid-js: ^1.8
+    dependencies:
+      '@corvu/utils': 0.4.2_solid-js@1.8.22
+      solid-js: 1.8.22
+    dev: false
+
+  /@corvu/utils/0.4.2_solid-js@1.8.22:
+    resolution: {integrity: sha512-Ox2kYyxy7NoXdKWdHeDEjZxClwzO4SKM8plAaVwmAJPxHMqA0rLOoAsa+hBDwRLpctf+ZRnAd/ykguuJidnaTA==}
+    peerDependencies:
+      solid-js: ^1.8
+    dependencies:
+      '@floating-ui/dom': 1.6.11
+      solid-js: 1.8.22
+    dev: false
+
+  /@floating-ui/core/1.6.8:
+    resolution: {integrity: sha512-7XJ9cPU+yI2QeLS+FCSlqNFZJq8arvswefkZrYI1yQBbftw6FyrZOxYSh+9S7z7TpeWlRt9zJ5IhM1WIL334jA==}
+    dependencies:
+      '@floating-ui/utils': 0.2.8
+    dev: false
+
+  /@floating-ui/dom/1.6.11:
+    resolution: {integrity: sha512-qkMCxSR24v2vGkhYDo/UzxfJN3D4syqSjyuTFz6C7XcpU1pASPRieNI0Kj5VP3/503mOfYiGY891ugBX1GlABQ==}
+    dependencies:
+      '@floating-ui/core': 1.6.8
+      '@floating-ui/utils': 0.2.8
+    dev: false
+
+  /@floating-ui/utils/0.2.8:
+    resolution: {integrity: sha512-kym7SodPp8/wloecOpcmSnWJsK7M0E5Wg8UcFA+uO4B9s5d0ywXOEro/8HM9x0rW+TljRzul/14UYz3TleT3ig==}
     dev: false
 
   /@jridgewell/gen-mapping/0.3.5:
@@ -2336,6 +2381,10 @@ packages:
       graceful-fs: 4.2.11
     dev: false
 
+  /keycharm/0.4.0:
+    resolution: {integrity: sha512-TyQTtsabOVv3MeOpR92sIKk/br9wxS+zGj4BG7CR8YbK4jM3tyIBaF0zhzeBUMx36/Q/iQLOKKOT+3jOQtemRQ==}
+    dev: false
+
   /lightningcss-darwin-arm64/1.26.0:
     resolution: {integrity: sha512-n4TIvHO1NY1ondKFYpL2ZX0bcC2y6yjXMD6JfyizgR8BCFNEeArINDzEaeqlfX9bXz73Bpz/Ow0nu+1qiDrBKg==}
     engines: {node: '>= 12.0.0'}
@@ -3007,6 +3056,38 @@ packages:
   /validate-html-nesting/1.2.2:
     resolution: {integrity: sha512-hGdgQozCsQJMyfK5urgFcWEqsSSrK63Awe0t/IMR0bZ0QMtnuaiHzThW81guu3qx9abLi99NEuiaN6P9gVYsNg==}
     dev: true
+
+  /vis-data/7.1.9_vis-util@5.0.7:
+    resolution: {integrity: sha512-COQsxlVrmcRIbZMMTYwD+C2bxYCFDNQ2EHESklPiInbD/Pk3JZ6qNL84Bp9wWjYjAzXfSlsNaFtRk+hO9yBPWA==}
+    peerDependencies:
+      uuid: ^3.4.0 || ^7.0.0 || ^8.0.0 || ^9.0.0
+      vis-util: ^5.0.1
+    dependencies:
+      vis-util: 5.0.7
+    dev: false
+
+  /vis-network/9.1.9_zysfksoqfozeci6xxxp2qjogoq:
+    resolution: {integrity: sha512-Ft+hLBVyiLstVYSb69Q1OIQeh3FeUxHJn0WdFcq+BFPqs+Vq1ibMi2sb//cxgq1CP7PH4yOXnHxEH/B2VzpZYA==}
+    peerDependencies:
+      '@egjs/hammerjs': ^2.0.0
+      component-emitter: ^1.3.0
+      keycharm: ^0.2.0 || ^0.3.0 || ^0.4.0
+      uuid: ^3.4.0 || ^7.0.0 || ^8.0.0 || ^9.0.0
+      vis-data: ^6.3.0 || ^7.0.0
+      vis-util: ^5.0.1
+    dependencies:
+      keycharm: 0.4.0
+      vis-data: 7.1.9_vis-util@5.0.7
+      vis-util: 5.0.7
+    dev: false
+
+  /vis-util/5.0.7:
+    resolution: {integrity: sha512-E3L03G3+trvc/X4LXvBfih3YIHcKS2WrP0XTdZefr6W6Qi/2nNCqZfe4JFfJU6DcQLm6Gxqj2Pfl+02859oL5A==}
+    engines: {node: '>=8'}
+    peerDependencies:
+      '@egjs/hammerjs': ^2.0.0
+      component-emitter: ^1.3.0 || ^2.0.0
+    dev: false
 
   /w3c-keyname/2.2.8:
     resolution: {integrity: sha512-dpojBhNsCNN7T82Tm7k26A6G9ML3NkhDsnw9n/eoxSRlVBB4CEtIQ/KTCLI2Fwf3ataSXRhYFkQi3SlnFwPvPQ==}

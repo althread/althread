@@ -1,10 +1,11 @@
 use std::fmt;
 
 use pest::iterators::Pairs;
+use serde::{Deserialize, Serialize};
 
 use crate::{ast::node::NodeBuilder, error::AlthreadResult, no_rule, parser::Rule};
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum BinaryOperator {
     Add,
     Subtract,

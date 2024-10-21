@@ -21,6 +21,7 @@ dependencies = [
  "althread",
  "clap",
  "fastrand",
+ "lazy_static",
  "ordered-float",
  "owo-colors",
 ]

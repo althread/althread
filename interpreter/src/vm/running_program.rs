@@ -1,8 +1,7 @@
-use std::hash::{Hash, Hasher};
+use std::{hash::{Hash, Hasher}, rc::Rc};
 
 use crate::{
-    ast::token::literal::Literal,
-    error::{AlthreadError, AlthreadResult, ErrorType},
+    ast::token::literal::Literal, compiler::stdlib::Stdlib, error::{AlthreadError, AlthreadResult, ErrorType}
 };
 
 use super::{
@@ -11,7 +10,7 @@ use super::{
     str_to_expr_error, GlobalAction, GlobalActions, GlobalMemory, Memory,
 };
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub struct RunningProgramState<'a> {
     pub name: String,
 
@@ -19,6 +18,15 @@ pub struct RunningProgramState<'a> {
     code: &'a ProgramCode,
     instruction_pointer: usize,
     pub id: usize,
+
+    pub stdlib: Rc<Stdlib>,
+}
+
+
+impl PartialEq for RunningProgramState<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id && self.memory == other.memory && self.name == other.name
+    }
 }
 
 impl Hash for RunningProgramState<'_> {
@@ -29,7 +37,7 @@ impl Hash for RunningProgramState<'_> {
 }
 
 impl<'a> RunningProgramState<'a> {
-    pub fn new(id: usize, name: String, code: &'a ProgramCode, args: Literal) -> Self {
+    pub fn new(id: usize, name: String, code: &'a ProgramCode, args: Literal, stdlib: Rc<Stdlib>) -> Self {
         let arg_len = if let Literal::Tuple(v) = &args {
             v.len()
         } else { panic!("args should be a tuple") };
@@ -46,6 +54,7 @@ impl<'a> RunningProgramState<'a> {
             instruction_pointer: 0,
             name,
             id,
+            stdlib,
         }
     }
 
@@ -60,6 +69,15 @@ impl<'a> RunningProgramState<'a> {
             format!("the current instruction pointer points to no instruction (pointer:{}, program:{})", self.instruction_pointer, self.name),
         ))
     }
+
+    pub fn has_terminated(&self) -> bool {
+        if let Some(inst) = self.current_instruction().ok() {
+            inst.is_end()
+        } else {
+            true
+        }
+    }
+
     pub fn next_global(
         &mut self,
         globals: &mut GlobalMemory,
@@ -164,6 +182,7 @@ impl<'a> RunningProgramState<'a> {
                     format!("the current instruction pointer points to no instruction (pointer {}", self.instruction_pointer),
                 ))?;
 
+        //println!("{} current memory:\n{}", self.id, self.memory.iter().map(|lit| format!("{:?}", lit)).collect::<Vec<_>>().join("\n"));
         //println!("{} running instruction {}", self.id, self.current_instruction().unwrap());
 
         let mut action = None;
@@ -285,28 +304,81 @@ impl<'a> RunningProgramState<'a> {
                 0
             }
             InstructionType::FnCall(f) => {
-                // currently, only the print function is implemented
-                if f.name != "print" {
-                    panic!("implement a proper function call in the VM");
-                }
-                let lit = self
-                    .memory
-                    .last()
-                    .expect("Panic: stack is empty, cannot perform function call")
-                    .clone();
-                for _ in 0..f.unstack_len {
-                    self.memory.pop();
-                }
+                if let Some(v_idx) = f.variable_idx {
+                    //println!("f: {:?} on v_idx {}", f.name, v_idx);
+                    //println!("current instruction: {:?}", cur_inst);
+                    let v_idx = self.memory.len() - 1 - v_idx;
+                    let mut lit = self
+                        .memory
+                        .get(v_idx)
+                        .expect("Panic: stack is empty, cannot perform function call")
+                        .clone();
 
-                let str = lit
-                    .into_tuple()
-                    .unwrap()
-                    .iter()
-                    .map(|lit| lit.to_string())
-                    .collect::<Vec<_>>()
-                    .join(",");
-                println!("{}", str);
-                1
+                    let interfaces = self.stdlib.get_interfaces(&lit.get_datatype()).ok_or(AlthreadError::new(
+                        ErrorType::UndefinedFunction,
+                        cur_inst.pos,
+                        format!("Type {:?} has no interface available", lit.get_datatype()),
+                    ))?;
+
+                    let fn_idx = interfaces.iter().position(|i| i.name == f.name);
+                    if fn_idx.is_none() {
+                        return Err(AlthreadError::new(
+                            ErrorType::UndefinedFunction,
+                            cur_inst.pos,
+                            format!("undefined function {}", f.name),
+                        ));
+                    }
+                    let fn_idx = fn_idx.unwrap();
+                    let interface = interfaces.get(fn_idx).unwrap();
+                    let mut args = match &f.arguments {
+                        None => self.memory.last().unwrap().clone(),
+                        Some(v) => {
+                            let mut args = Vec::new();
+                            for i in 0..v.len() {
+                                let idx = self.memory.len() - 1 - v[i];
+                                args.push(self.memory.get(idx).unwrap().clone());
+                            }
+                            Literal::Tuple(args)
+                        }
+                    };
+                    let ret = interface.f.as_ref()(&mut lit, &mut args);
+    
+                    //update the memory with object literal
+                    self.memory[v_idx] = lit;
+
+                    for _ in 0..f.unstack_len {
+                        self.memory.pop();
+                    }
+
+                    self.memory.push(ret);
+                    1
+                }
+                else {
+
+                    // currently, only the print function is implemented
+                    if f.name != "print" {
+                        panic!("implement a proper function call in the VM");
+                    }
+                    let lit = self
+                        .memory
+                        .last()
+                        .expect("Panic: stack is empty, cannot perform function call")
+                        .clone();
+                    for _ in 0..f.unstack_len {
+                        self.memory.pop();
+                    }
+
+                    let str = lit
+                        .into_tuple()
+                        .unwrap()
+                        .iter()
+                        .map(|lit| lit.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",");
+                    println!("{}", str);
+                    self.memory.push(Literal::Null);
+                    1
+                }
             }
             InstructionType::WaitStart(_) => {
                 1
