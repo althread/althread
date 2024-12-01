@@ -65,6 +65,12 @@ jobs:
 
       - name: Build Web Editor
         run: |
+          echo "ls ."
+          ls
+          echo "ls web"
+          ls web
+          echo "ls web/pkg"
+          ls web/pkg 
           cd web
           pnpm install
           pnpm build --public-url ./editor
