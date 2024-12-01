@@ -3,21 +3,71 @@
  * and scoped locally.
  */
 
-.heroBanner {
-  padding: 4rem 0;
-  text-align: center;
-  position: relative;
-  overflow: hidden;
-}
-
-@media screen and (max-width: 996px) {
-  .heroBanner {
-    padding: 2rem;
-  }
-}
-
-.buttons {
+.landing {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+  color: #e2e8f0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  min-height: 100vh;
+  text-align: center;
+}
+
+.landing h1 {
+  font-size: 3rem;
+  margin: 0.5rem 0;
+  background: linear-gradient(90deg, #ff7e5f, #feb47b);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.landing p {
+  font-size: 1.2rem;
+  margin: 0.5rem 0 2rem;
+  color: #cbd5e1;
+}
+
+.landing .buttons {
+  display: flex;
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+.landing .button {
+  display: inline-block;
+  padding: 1rem 2rem;
+  font-size: 1.2rem;
+  font-weight: 600;
+  text-decoration: none;
+  color: #1e293b;
+  background-color: #fbbf24;
+  border-radius: 8px;
+  transition: background-color 0.3s, transform 0.2s;
+}
+
+.landing .button:hover {
+  background-color: #f59e0b;
+  transform: translateY(-3px);
+}
+
+.landing .button:active {
+  transform: translateY(0);
+}
+
+.landing footer {
+  margin-top: 2rem;
+  font-size: 0.9rem;
+  color: #94a3b8;
+}
+
+footer a {
+  color: #38bdf8;
+  text-decoration: none;
+}
+
+footer a:hover {
+  text-decoration: underline;
 }

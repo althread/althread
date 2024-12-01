@@ -8,7 +8,7 @@ const config: Config = {
   favicon: "img/favicon.ico",
 
   url: "https://althread.github.io",
-  baseUrl: "/docs/",
+  baseUrl: "/",
 
   organizationName: "althread",
   projectName: "althread",
@@ -81,16 +81,16 @@ const config: Config = {
           title: "Documentation",
           items: [
             {
-              label: "(Guide)",
-              to: "/",
+              label: "Guide",
+              to: "/docs/guide/intro",
             },
             {
-              label: "(Références)",
-              to: "/",
+              label: "Références",
+              to: "/docs/api",
             },
             {
-              label: "(Exemples)",
-              to: "/",
+              label: "Exemples",
+              to: "/docs/examples",
             },
           ],
         },
@@ -102,6 +102,10 @@ const config: Config = {
               label: "GitHub",
               href: "https://github.com/althread/althread/",
             },
+            {
+              label: "Editeur",
+              href: "../editor/",
+            }
           ],
         },
       ],

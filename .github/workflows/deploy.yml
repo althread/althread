@@ -68,7 +68,7 @@ jobs:
         run: |
           cd web
           pnpm install
-          pnpm build --public-url ./editor
+          pnpm build --public-url /editor
           mv dist ../editor
 
       - name: Upload Built Web Editor
@@ -123,9 +123,8 @@ jobs:
           # Remove old files and copy new ones
           rm -rf deploy/*
           ls
-          cp -r doc/build deploy/docs 
+          cp -r doc/build deploy/
           cp -r editor deploy/editor
-          cp doc/index.html deploy/ # The landing page
           
           # Commit and push changes
           cd deploy
