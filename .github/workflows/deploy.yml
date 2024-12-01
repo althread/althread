@@ -39,7 +39,7 @@ jobs:
           ssh-add <(echo "${{ secrets.DEPLOY_KEY }}")
 
           # Clone the target repository (orgname.github.io)
-          git clone --branch=gh-pages git@github.com:orgname/orgname.github.io.git deploy
+          git clone --branch=gh-pages git@github.com:althread/althread.github.io.git deploy
 
           # Remove old files and copy new ones
           rm -rf deploy/*
