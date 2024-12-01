@@ -1,35 +1,49 @@
-on:
-    push:
-      branches:
-        - main
-  
-jobs:
-    deploy:
-      runs-on: ubuntu-latest
-  
-      steps:
-        - name: Checkout code
-          uses: actions/checkout@v4
+name: Deploy to GitHub Pages
 
-        - uses: pnpm/action-setup@v4
-          name: Install pnpm
-          with:
-            version: 9
-            run_install: false
+on:
+  push:
+    branches:
+      - main  # or your primary branch
+  workflow_dispatch:  # Allow manual runs
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          version: 9
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: pnpm --prefix ./doc install
+
+      - name: Build site
+        run: pnpm --prefix ./doc run build
   
-        - name: Setup Node.js
-          uses: actions/setup-node@v4
-          with:
-            node-version: 20
-  
-        - name: Install dependencies
-          run: pnpm --prefix ./doc install
-  
-        - name: Build site
-          run: pnpm --prefix ./doc run build
-  
-        - name: Deploy to GitHub Pages
-          uses: peaceiris/actions-gh-pages@v3
-          with:
-            github_token: ${{ secrets.GITHUB_TOKEN }}
-            publish_dir: ./doc/build
+      - name: Deploy to althread.github.io
+        run: |
+          # Clone the target repository (orgname.github.io)
+          git clone --branch=gh-pages https://github.com/althread/althread.github.io.git deploy
+
+          # Remove old files and copy new ones
+          rm -rf deploy/*
+          cp -r docs/build deploy/docs  # Replace 'build/' with your output directory
+
+          # Commit and push changes
+          cd deploy
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add .
+          git commit -m "Deploy site"
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/orgname/orgname.github.io gh-pages
+
