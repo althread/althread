@@ -51,6 +51,7 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: wasm-artifacts
+          path: web/pkg
 
       - uses: pnpm/action-setup@v4
         name: Install pnpm
