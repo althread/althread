@@ -65,7 +65,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-        pnpm install --store-dir .pnpm-store
+          pnpm install --store-dir .pnpm-store
 
       - name: Build Web Editor
         run: |
