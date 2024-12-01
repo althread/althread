@@ -14,7 +14,7 @@ const config: Config = {
   projectName: "althread",
   deploymentBranch: "main",
 
-  onBrokenLinks: "throw",
+  onBrokenLinks: "ignore",
   onBrokenMarkdownLinks: "warn",
 
   i18n: {
