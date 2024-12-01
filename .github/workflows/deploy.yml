@@ -37,7 +37,7 @@ jobs:
 
           # Remove old files and copy new ones
           rm -rf deploy/*
-          cp -r docs/build deploy/docs  # Replace 'build/' with your output directory
+          cp -r doc/build deploy/docs  # Replace 'build/' with your output directory
 
           # Commit and push changes
           cd deploy
