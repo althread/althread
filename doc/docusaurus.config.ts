@@ -7,10 +7,10 @@ const config: Config = {
   tagline: "Documentation officielle du langage de programmation Althread",
   favicon: "img/favicon.ico",
 
-  url: "https://romainbourdain.github.io",
-  baseUrl: "/althread/",
+  url: "https://althread.github.io",
+  baseUrl: "/docs/",
 
-  organizationName: "romainbourdain",
+  organizationName: "althread",
   projectName: "althread",
   deploymentBranch: "main",
 
@@ -28,7 +28,7 @@ const config: Config = {
       {
         docs: {
           sidebarPath: "./sidebars.ts",
-          editUrl: "https://github.com/romainbourdain/althread/tree/main/doc",
+          editUrl: "https://github.com/althread/althread/tree/main/doc",
         },
         theme: {
           customCss: "./src/css/custom.css",
@@ -64,7 +64,7 @@ const config: Config = {
           label: "Exemples",
         },
         {
-          href: "https://github.com/romainbourdain/althread/",
+          href: "https://github.com/althread/althread/",
           label: "GitHub",
           position: "right",
         },
@@ -100,7 +100,7 @@ const config: Config = {
           items: [
             {
               label: "GitHub",
-              href: "https://github.com/romainbourdain/althread/",
+              href: "https://github.com/althread/althread/",
             },
           ],
         },
