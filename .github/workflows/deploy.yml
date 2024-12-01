@@ -123,7 +123,7 @@ jobs:
           # Remove old files and copy new ones
           rm -rf deploy/*
           ls
-          cp -r doc/build deploy/
+          cp -r doc/build/* deploy/ 
           cp -r editor deploy/editor
           
           # Commit and push changes
