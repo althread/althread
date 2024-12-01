@@ -45,5 +45,5 @@ jobs:
           git config user.email "actions@github.com"
           git add .
           git commit -m "Deploy site"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/orgname/orgname.github.io gh-pages
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/althread/althread.github.io gh-pages
 
