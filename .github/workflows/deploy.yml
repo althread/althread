@@ -66,12 +66,6 @@ jobs:
 
       - name: Build Web Editor
         run: |
-          echo "ls ."
-          ls
-          echo "ls web"
-          ls web
-          echo "ls web/pkg"
-          ls web/pkg 
           cd web
           pnpm install
           pnpm build --public-url ./editor
@@ -96,6 +90,7 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: web-editor
+          path: editor
 
       - uses: pnpm/action-setup@v4
         name: Install pnpm
@@ -127,6 +122,7 @@ jobs:
 
           # Remove old files and copy new ones
           rm -rf deploy/*
+          ls
           cp -r doc/build deploy/docs 
           cp -r editor deploy/editor
           cp doc/index.html deploy/ # The landing page
