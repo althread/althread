@@ -63,13 +63,10 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Dependencies
-        run: |
-          pnpm install --store-dir .pnpm-store
-
       - name: Build Web Editor
         run: |
           cd web
+          pnpm install
           pnpm build --public-url ./editor
           mv dist ../editor
 
