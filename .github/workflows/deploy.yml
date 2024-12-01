@@ -30,8 +30,14 @@ jobs:
       - name: Build site
         run: pnpm --prefix ./doc run build
   
-      - name: Deploy to althread.github.io
+      - name: Deploy to althread.github.io 
+        env:
+          SSH_AUTH_SOCK: /tmp/ssh_agent.sock
         run: |
+          # Start SSH agent and add the deploy key
+          eval "$(ssh-agent -s)"
+          ssh-add <(echo "${{ secrets.DEPLOY_KEY }}")
+
           # Clone the target repository (orgname.github.io)
           git clone --branch=gh-pages https://github.com/althread/althread.github.io.git deploy
 
@@ -45,5 +51,5 @@ jobs:
           git config user.email "actions@github.com"
           git add .
           git commit -m "Deploy site"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/althread/althread.github.io gh-pages
+          git push origin gh-pages
 
