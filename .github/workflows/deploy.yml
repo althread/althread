@@ -7,11 +7,88 @@ on:
   workflow_dispatch:  # Allow manual runs
 
 jobs:
-  deploy:
+  build-rust:
+    name: Build Rust Backend
     runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Install Rust Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Build Rust Project
+        run: |
+          cargo build --verbose --release
+
+      - name: Build Web Assembly (Wasm)
+        run: |
+          cd web
+          cargo install wasm-pack
+          wasm-pack build --target web --release
+
+      - name: Upload Wasm Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: wasm-artifacts
+          path: web/pkg
+
+  build-web:
+    name: Build Web Editor
+    runs-on: ubuntu-latest
+    needs: build-rust
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Download Wasm Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: wasm-artifacts
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: 'pnpm'
+
+      - name: Install Dependencies
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest-9 --activate
+          pnpm install --store-dir .pnpm-store
+
+      - name: Build Web Editor
+        run: |
+          cd web
+          pnpm build --public-url ./editor
+          mv dist ../editor
+
+      - name: Upload Built Web Editor
+        uses: actions/upload-artifact@v3
+        with:
+          name: web-editor
+          path: editor
+
+
+  deploy:
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: build-web
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download Built Web Editor
+        uses: actions/download-artifact@v3
+        with:
+          name: web-editor
 
       - uses: pnpm/action-setup@v4
         name: Install pnpm
@@ -43,8 +120,10 @@ jobs:
 
           # Remove old files and copy new ones
           rm -rf deploy/*
-          cp -r doc/build deploy/docs  # Replace 'build/' with your output directory
-
+          cp -r doc/build deploy/docs 
+          cp -r editor deploy/editor
+          cp doc/index.html deploy/ # The landing page
+          
           # Commit and push changes
           cd deploy
           git config user.name "GitHub Actions"
