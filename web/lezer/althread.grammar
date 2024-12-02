@@ -12,6 +12,7 @@
   wait_block,
   forIn,
   else,
+  range @left
   statement @cut
 }
 
@@ -45,6 +46,7 @@ statement {
   VariableDeclaration |
   ChannelDeclarationStatement |
   WhileStatement |
+  ForStatement |
   IfStatement |
   run_statement |
   LoopStatement |
@@ -85,6 +87,17 @@ ChannelDeclarationStatement {
 WhileStatement {
   kw<"while"> expression code_block
 }
+//!ForStatement
+
+ForStatement {
+  kw<"for"> LocalVariableName kw<"in"> ListExpression code_block
+}
+
+ListExpression  { RangeExpression }
+RangeExpression  {
+	expression !range ("..") expression
+}
+
 
 //!LoopStatement
 
@@ -241,7 +254,7 @@ SharedVariableName { global_identifer }
   hex { @digit | $[a-fA-F] }
   
     Number {
-    (@digit ("_" | @digit)* ("." ("_" | @digit)*)? | "." @digit ("_" | @digit)*)
+    (@digit ("_" | @digit)* ("." ("_" | @digit))? | "." @digit ("_" | @digit)*)
       (("e" | "E") ("+" | "-")? ("_" | @digit)+)? |
     @digit ("_" | @digit)* "n" |
     "0x" (hex | "_")+ "n"? |

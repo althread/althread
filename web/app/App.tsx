@@ -42,7 +42,8 @@ export default function App() {
   let [nodes, setNodes] = createSignal([]);
   let [edges, setEdges] = createSignal([]);
 
-  let [out, setOut] = createSignal("Output will appear here");
+  let [stdout, setStdout] = createSignal("The console output will appear here");
+  let [out, setOut] = createSignal("The execution output will appear here");
   return (
     <>
       <div id="header">Althread Editor</div>
@@ -59,8 +60,8 @@ export default function App() {
           <button onClick={(e) => {
             try {
               let res = run(editor.editorView().state.doc.toString());
-              console.log('result:', res);
               setOut(res.debug);
+              setStdout(res.stdout.join('\n'));
             } catch(e) {
               setOut("ERROR: "+(e.pos && ('line '+e.pos.line))+"\n"+e.message);
             }
@@ -113,9 +114,18 @@ export default function App() {
               setOut("ERROR: "+(e.pos && ('line '+e.pos.line))+"\n"+e.message);
             }
           }}>Check</button>
-          <pre>
-          {out()}
-          </pre>
+          <div>
+            <div>Console</div>
+            <pre>
+            {stdout()}
+            </pre>
+          </div>
+          <div>
+            <div>Execution</div>
+            <pre>
+            {out()}
+            </pre>
+            </div>
           <Graph nodes={nodes()} edges={edges()} />
         </Resizable.Panel>
       </Resizable>

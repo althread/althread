@@ -3,7 +3,7 @@ import { ProgName } from "./parser.terms";
 
 export const althreadHighlight = styleTags({
   "atomic": t.modifier,
-  "while wait if else receive send run":
+  "while wait if else receive send run for loop in":
     t.controlKeyword,
   "instanceof": t.operatorKeyword,
   "let const channel": t.definitionKeyword,
