@@ -376,6 +376,7 @@ impl<'a> RunningProgramState<'a> {
                         .collect::<Vec<_>>()
                         .join(",");
                     println!("{}", str);
+                    action = Some(GlobalAction::Print(str));
                     self.memory.push(Literal::Null);
                     1
                 }

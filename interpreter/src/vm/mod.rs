@@ -33,6 +33,7 @@ pub struct ExecutionStepInfo {
     pub prog_id: usize,
     pub instructions: Vec<Instruction>,
     pub invariant_error: AlthreadResult<()>,
+    pub actions: Vec<GlobalAction>,
 }
 
 fn str_to_expr_error(pos: Option<Pos>) -> impl Fn(String) -> AlthreadError {
@@ -42,6 +43,7 @@ fn str_to_expr_error(pos: Option<Pos>) -> impl Fn(String) -> AlthreadError {
 #[derive(Debug, PartialEq, Clone)]
 pub enum GlobalAction {
     StartProgram(String, usize, Literal),
+    Print(String),
     Write(String),
     Send(String, Option<ReceiverInfo>),
     Connect(usize, String),
@@ -158,6 +160,7 @@ impl<'a> VM<'a> {
             prog_name: program.name.clone(),
             prog_id: program_id,
             instructions: Vec::new(),
+            actions: Vec::new(),
             invariant_error: Ok(()),
         };
 
@@ -191,7 +194,7 @@ impl<'a> VM<'a> {
 
         let mut need_to_check_invariants = false;
 
-        for action in actions.actions {
+        for action in actions.actions.iter() {
             match action {
                 GlobalAction::Wait => {
                     unreachable!("wait action should not be in the list of actions");
@@ -215,9 +218,9 @@ impl<'a> VM<'a> {
                 }
                 GlobalAction::Connect(sender_id, sender_channel) => {
                     if let Some(dependency) = self.waiting_programs.get(&sender_id) {
-                        if dependency.channels_connection.contains(&sender_channel) {
-                            self.waiting_programs.remove(&sender_id);
-                            self.executable_programs.insert(sender_id);
+                        if dependency.channels_connection.contains(sender_channel) {
+                            self.waiting_programs.remove(sender_id);
+                            self.executable_programs.insert(sender_id.clone());
                         } else {
                             unreachable!("the sender program must be waiting for a connection, otherwise the channel connection is not a global action");
                         }
@@ -229,7 +232,7 @@ impl<'a> VM<'a> {
                     //println!("program {} writes {}", program_id, var_name);
                     // Check if the variable appears in the conditions of a waiting program
                     self.waiting_programs.retain(|prog_id, dependencies| {
-                        if dependencies.variables.contains(&var_name) {
+                        if dependencies.variables.contains(var_name) {
                             self.executable_programs.insert(*prog_id);
                             return false;
                         }
@@ -239,12 +242,13 @@ impl<'a> VM<'a> {
                     need_to_check_invariants = true;
                 }
                 GlobalAction::StartProgram(name, pid, args) => {
-                    self.run_program(&name, pid, args);
+                    self.run_program(name, *pid, args.clone());
                 }
                 GlobalAction::EndProgram => {
                     panic!("EndProgram action should not be in the list of actions");
                 }
                 GlobalAction::Exit => self.running_programs.clear(),
+                GlobalAction::Print(_) => {} // do nothing, this is just a print action
             }
         }
         if actions.end {
@@ -258,6 +262,7 @@ impl<'a> VM<'a> {
         }
 
         exec_info.instructions = executed_instructions;
+        exec_info.actions = actions.actions;
 
         Ok(exec_info)
     }
@@ -277,6 +282,7 @@ impl<'a> VM<'a> {
             prog_name: program.name.clone(),
             prog_id: pid,
             instructions: Vec::new(),
+            actions: Vec::new(),
             invariant_error: Ok(()),
         };
 
@@ -364,6 +370,7 @@ impl<'a> VM<'a> {
                     panic!("EndProgram action should not be in the list of actions");
                 }
                 GlobalAction::Exit => self.running_programs.clear(),
+                GlobalAction::Print(_) => {} // do nothing, this is just a print action
             }
         }
         if actions.end {

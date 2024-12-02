@@ -58,7 +58,9 @@ export default function App() {
           minSize={0.2}>
           <button onClick={(e) => {
             try {
-              setOut(run(editor.editorView().state.doc.toString()));
+              let res = run(editor.editorView().state.doc.toString());
+              console.log('result:', res);
+              setOut(res.debug);
             } catch(e) {
               setOut("ERROR: "+(e.pos && ('line '+e.pos.line))+"\n"+e.message);
             }
