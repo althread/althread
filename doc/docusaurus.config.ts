@@ -2,6 +2,64 @@ import type * as Preset from "@docusaurus/preset-classic";
 import type { Config } from "@docusaurus/types";
 import { themes as prismThemes } from "prism-react-renderer";
 
+
+const customPrismTheme = prismThemes.github;
+customPrismTheme.styles.push({
+  types: ["system-block"],
+  style: {
+    color: "#b830ff",
+    fontWeight: "bold",
+  },
+});
+customPrismTheme.styles.push({
+  types: ["constant"],
+  style: {
+    color: "rgb(235 40 50)",
+    fontWeight: "normal",
+  },
+});
+customPrismTheme.styles.push({
+  types: ["variable"],
+  style: {
+    color: "rgb(68 70 70)",
+  },
+});
+customPrismTheme.styles.push({
+  types: ["function"],
+  style: {
+    color: "rgb(50, 147, 23)",
+  },
+});
+
+const customPrismThemeDark = prismThemes.dracula;
+customPrismThemeDark.styles.push({
+  types: ["system-block"],
+  style: {
+    color: "#b830ff",
+    fontWeight: "bold",
+  },
+});
+customPrismThemeDark.styles.push({
+  types: ["constant"],
+  style: {
+    color: "rgb(255 164 169)",
+    fontWeight: "normal",
+  },
+});
+customPrismThemeDark.styles.push({
+  types: ["variable"],
+  style: {
+    color: "rgb(197 197 197)",
+  },
+});
+customPrismThemeDark.styles.push({
+  types: ["bool", "int", "float", "number"],
+  style: {
+    color: "rgb(225 225 175)",
+  },
+});
+
+
 const config: Config = {
   title: "Althread",
   tagline: "Documentation officielle du langage de programmation Althread",
@@ -112,8 +170,20 @@ const config: Config = {
       copyright: `Copyright © ${new Date().getFullYear()} Romain Bourdain.`,
     },
     prism: {
-      theme: prismThemes.github,
-      darkTheme: prismThemes.dracula,
+      theme: customPrismTheme,
+      darkTheme: customPrismThemeDark,
+      magicComments: [
+        // Remember to extend the default highlight class name as well!
+        {
+          className: 'theme-code-block-highlighted-line',
+          line: 'highlight-next-line',
+          block: {start: 'highlight-start', end: 'highlight-end'},
+        },
+        {
+          className: 'code-block-error-line',
+          line: 'This will error',
+        },
+      ],
     },
   } satisfies Preset.ThemeConfig,
 };

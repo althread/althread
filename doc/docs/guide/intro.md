@@ -33,42 +33,47 @@ Le développement d'althread est motivé par les objectifs suivants :
 
 Voici la modélisation de l'exclusion mutuelle de Dekker en Althread :
 
-```
+```althread
+
 shared {
-    const A_TURN = false;
-    const B_TURN = true;
-    let x: bool;
-    let y: bool;
-    let t: bool;
-    let nbSC: int;
+    const A_TURN = 1;
+    const B_TURN = 2;
+    let X: bool = false;
+    let Y: bool = false;
+    let T: int = 0;
+    let NbSC = 0;
 }
 
-process A() {
-    x = true;
-    t = B_TURN;
-    wait(y == false || t == A_TURN);
-    nbSC++;
-    nbSC--;
-    x = false;
+program A() {
+    X = true;
+    T = B_TURN;
+    wait Y == false || T == A_TURN;
+
+    NbSC += 1;
+    //section critique
+    NbSC -= 1;
+
+    X = false;
 }
 
-process B() {
-    y = true;
-    t = A_TURN;
-    wait(x == false || t == B_TURN);
-    nbSC++;
-    nbSC--;
-    y = false;
+program B() {
+    Y = true;
+    T = A_TURN;
+    wait X == false || T == B_TURN;
+
+    NbSC += 1;
+    //section critique
+    NbSC -= 1;
+
+    Y = false;
 }
 
 always {
-    nbSC == 0 || nbSC == 1;
+    NbSC == 0 || NbSC == 1;
 }
 
 main {
-    atomic {
-        run A();
-        run B();
-    }
+    run A();
+    run B();
 }
 ```

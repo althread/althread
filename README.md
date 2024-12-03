@@ -4,7 +4,7 @@ Althread is an open source Promela alternative for modeling and verifying multi-
 
 ## Key Features
 - Simple modeling of concurrent systems.
-- Automatic detection of race conditions and deadblocks.
+- Automatic detection of race conditions and deadlocks.
 - Advanced debugging tools.
 - Easy-to-learn syntax for beginners.
 
