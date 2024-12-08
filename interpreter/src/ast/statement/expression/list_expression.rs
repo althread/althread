@@ -2,10 +2,21 @@ use std::{collections::HashSet, fmt, vec};
 
 use pest::iterators::Pairs;
 
-use crate::{ast::{display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, statement::waiting_case::WaitDependency, token::{datatype::DataType, literal::Literal}}, compiler::{CompilerState, InstructionBuilderOk, Variable}, error::AlthreadResult, no_rule, parser::Rule, vm::{instruction::Instruction, Memory}};
+use crate::{
+    ast::{
+        display::{AstDisplay, Prefix},
+        node::{InstructionBuilder, Node, NodeBuilder},
+        statement::waiting_case::WaitDependency,
+        token::{datatype::DataType, literal::Literal},
+    },
+    compiler::{CompilerState, InstructionBuilderOk, Variable},
+    error::AlthreadResult,
+    no_rule,
+    parser::Rule,
+    vm::{instruction::Instruction, Memory},
+};
 
 use super::{Expression, LocalExpressionNode};
-
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ListExpression {
@@ -13,13 +24,11 @@ pub enum ListExpression {
     Range(RangeListExpression),
 }
 
-
 #[derive(Debug, PartialEq, Clone)]
 pub struct RangeListExpression {
     pub expression_start: Box<Node<Expression>>,
     pub expression_end: Box<Node<Expression>>,
 }
-
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum LocalListExpressionNode {
@@ -33,7 +42,6 @@ pub struct LocalRangeListExpressionNode {
     pub expression_end: Box<LocalExpressionNode>,
 }
 
-
 impl NodeBuilder for RangeListExpression {
     fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
         let expression_start = Box::new(Node::build(pairs.next().unwrap())?);
@@ -44,32 +52,31 @@ impl NodeBuilder for RangeListExpression {
             expression_end,
         })
     }
-}/*
-impl InstructionBuilder for ListExpression {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
-        match self {
-            Self::Variable(v) => {
-                v.compile(state)
-            },
-            Self::Range(r) => {
+} /*
+  impl InstructionBuilder for ListExpression {
+      fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
+          match self {
+              Self::Variable(v) => {
+                  v.compile(state)
+              },
+              Self::Range(r) => {
 
-                let start = r.expression_start.compile(state);
-                let end 
-                return Ok(InstructionBuilderOk::from_instructions(vec![
-                    Instruction {
-                        pos: r.expression_start.pos,
-                        control: crate::vm::instruction::InstructionType::Push(
-                            LocalListExpressionNode::from_range_list
-                        )
-                    }
-                ]))
-            }
-        }
-    }
-}
- */
+                  let start = r.expression_start.compile(state);
+                  let end
+                  return Ok(InstructionBuilderOk::from_instructions(vec![
+                      Instruction {
+                          pos: r.expression_start.pos,
+                          control: crate::vm::instruction::InstructionType::Push(
+                              LocalListExpressionNode::from_range_list
+                          )
+                      }
+                  ]))
+              }
+          }
+      }
+  }
+   */
 impl RangeListExpression {
-
     pub fn add_dependencies(&self, dependencies: &mut WaitDependency) {
         self.expression_start.value.add_dependencies(dependencies);
         self.expression_end.value.add_dependencies(dependencies);
@@ -80,31 +87,45 @@ impl RangeListExpression {
     }
 }
 
-impl LocalRangeListExpressionNode { 
-    pub fn from_range(range: &RangeListExpression, program_stack: &Vec<Variable>) -> AlthreadResult<Self> {
+impl LocalRangeListExpressionNode {
+    pub fn from_range(
+        range: &RangeListExpression,
+        program_stack: &Vec<Variable>,
+    ) -> AlthreadResult<Self> {
         Ok(LocalRangeListExpressionNode {
-            expression_start: Box::new(LocalExpressionNode::from_expression(&range.expression_start.value, program_stack)?),
-            expression_end: Box::new(LocalExpressionNode::from_expression(&range.expression_end.value, program_stack)?),
+            expression_start: Box::new(LocalExpressionNode::from_expression(
+                &range.expression_start.value,
+                program_stack,
+            )?),
+            expression_end: Box::new(LocalExpressionNode::from_expression(
+                &range.expression_end.value,
+                program_stack,
+            )?),
         })
     }
 }
 
 impl LocalListExpressionNode {
-
-    pub fn from_list(list_expr: &ListExpression, program_stack: &Vec<Variable>) -> AlthreadResult<Self> {
+    pub fn from_list(
+        list_expr: &ListExpression,
+        program_stack: &Vec<Variable>,
+    ) -> AlthreadResult<Self> {
         match list_expr {
-            ListExpression::Variable(node) => {
-                Ok(Self::Variable(Box::new(LocalExpressionNode::from_expression(&node.value, program_stack)?)))
-            },
-            ListExpression::Range(node) => {
-                Ok(Self::Range(LocalRangeListExpressionNode {
-                    expression_start: Box::new(LocalExpressionNode::from_expression(&node.expression_start.value, program_stack)?),
-                    expression_end: Box::new(LocalExpressionNode::from_expression(&node.expression_end.value, program_stack)?),
-                }))
-            },
+            ListExpression::Variable(node) => Ok(Self::Variable(Box::new(
+                LocalExpressionNode::from_expression(&node.value, program_stack)?,
+            ))),
+            ListExpression::Range(node) => Ok(Self::Range(LocalRangeListExpressionNode {
+                expression_start: Box::new(LocalExpressionNode::from_expression(
+                    &node.expression_start.value,
+                    program_stack,
+                )?),
+                expression_end: Box::new(LocalExpressionNode::from_expression(
+                    &node.expression_end.value,
+                    program_stack,
+                )?),
+            })),
         }
     }
-
 }
 
 impl LocalRangeListExpressionNode {
@@ -114,17 +135,23 @@ impl LocalRangeListExpressionNode {
         if start.is_integer() && end.is_integer() {
             Ok(DataType::List(Box::new(DataType::Integer)))
         } else {
-            Err(format!("Range expression must be of type integer, found {} and {}", start, end))
+            Err(format!(
+                "Range expression must be of type integer, found {} and {}",
+                start, end
+            ))
         }
-        
     }
     pub fn eval(&self, mem: &Memory) -> Result<Literal, String> {
         let start = self.expression_start.eval(mem)?;
         let end = self.expression_end.eval(mem)?;
-        Ok(Literal::List(DataType::Integer, (start.to_integer()?..end.to_integer()?).map(|v| Literal::Int(v)).collect()))
+        Ok(Literal::List(
+            DataType::Integer,
+            (start.to_integer()?..end.to_integer()?)
+                .map(|v| Literal::Int(v))
+                .collect(),
+        ))
     }
 }
-
 
 impl AstDisplay for ListExpression {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {

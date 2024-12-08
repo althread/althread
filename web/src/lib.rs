@@ -1,6 +1,6 @@
 use fastrand;
+use serde::ser::{Serialize, SerializeStruct, Serializer};
 use wasm_bindgen::prelude::*;
-use serde::ser::{Serialize, Serializer, SerializeStruct};
 
 use althread::{ast::Ast, checker, error::AlthreadError, vm::GlobalAction};
 
@@ -73,17 +73,20 @@ pub fn run(source: &str) -> Result<JsValue, JsValue> {
         }
         if info.invariant_error.is_err() {
             let err = info.invariant_error.unwrap_err();
-            result.push_str(&format!("Invariant error at line {}: {}\n", err.pos.unwrap().line, err.message));
+            result.push_str(&format!(
+                "Invariant error at line {}: {}\n",
+                err.pos.unwrap().line,
+                err.message
+            ));
             break;
         }
     }
     Ok(serde_wasm_bindgen::to_value(&RunResult {
         debug: result,
         stdout,
-    }).unwrap())
+    })
+    .unwrap())
 }
-
-
 
 #[wasm_bindgen]
 pub fn check(source: &str) -> Result<JsValue, JsValue> {
@@ -96,9 +99,7 @@ pub fn check(source: &str) -> Result<JsValue, JsValue> {
 
     let compiled_project = ast.compile().map_err(error_to_js)?;
 
-
     let checked = checker::check_program(&compiled_project).map_err(error_to_js)?;
 
     Ok(serde_wasm_bindgen::to_value(&checked).unwrap())
-    
 }

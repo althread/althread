@@ -27,13 +27,13 @@ main {
 
 ## Structure d'un projet
 
-Un projet est structuré en plusieurs blocks, qui peuvent correspondre à 3 types d'éléments :
+Un projet est structuré en plusieurs blocs, qui peuvent correspondre à 3 types d'éléments :
 - **Déclaration de variables globales** : `shared { ... }`
 - **Vérification de conditions** : `always { ... }`, `never { ... }` ou `eventually { ... }`
 - **Définition de programme** : `program A() { ... }` ou `main { ... }`
 
 :::note
-Le block main est le progamme principal. Il est exécuté en premier et sert a exécuter les autres programmes.
+Le bloc main est le progamme principal. Il est exécuté en premier et sert a exécuter les autres programmes.
 :::
 
 ## Type de données

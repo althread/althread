@@ -1,9 +1,17 @@
-use std::{cell::{Cell, OnceCell}, collections::{HashMap, HashSet}, path, rc::Rc};
+use std::{
+    cell::{Cell, OnceCell},
+    collections::{HashMap, HashSet},
+    path,
+    rc::Rc,
+};
 
-use serde::ser::{Serialize, Serializer, SerializeStruct};
+use serde::ser::{Serialize, SerializeStruct, Serializer};
 
-use crate::{compiler::{stdlib::Stdlib, CompiledProject}, error::AlthreadResult, vm::{instruction::Instruction, VM}};
-
+use crate::{
+    compiler::{stdlib::Stdlib, CompiledProject},
+    error::AlthreadResult,
+    vm::{instruction::Instruction, VM},
+};
 
 #[derive(Debug, Clone)]
 pub struct StateLink<'a> {
@@ -64,17 +72,20 @@ impl<'a> Serialize for StateGraph<'a> {
         S: Serializer,
     {
         let mut state = serializer.serialize_struct("StateGraph", 1)?;
-        state.serialize_field("nodes", &self.nodes.iter().map(|(key, node)| 
-        (
-            key.as_ref(), 
-            node
-        )).collect::<Vec<(&VM, &GraphNode)>>())?;
+        state.serialize_field(
+            "nodes",
+            &self
+                .nodes
+                .iter()
+                .map(|(key, node)| (key.as_ref(), node))
+                .collect::<Vec<(&VM, &GraphNode)>>(),
+        )?;
         state.end()
     }
 }
 
 impl<'a> GraphNode<'a> {
-    pub fn new(predecessor: Option<Rc<VM<'a>>>, level:usize) -> Self {
+    pub fn new(predecessor: Option<Rc<VM<'a>>>, level: usize) -> Self {
         Self {
             level,
             predecessor,
@@ -84,18 +95,21 @@ impl<'a> GraphNode<'a> {
 }
 
 /// Checks a given project, returning a path from an initial state to the first state that violates an invariant. (return an empty vector if no invariant is violated)
-pub fn check_program<'a>(compiled_project: &'a CompiledProject) -> AlthreadResult<(Vec<StateLink>, StateGraph)> {
-
+pub fn check_program<'a>(
+    compiled_project: &'a CompiledProject,
+) -> AlthreadResult<(Vec<StateLink>, StateGraph)> {
     let mut state_graph = StateGraph {
         nodes: HashMap::new(),
     };
-    
+
     let mut initial_vm = VM::new(compiled_project);
     initial_vm.start(0);
     let initial_vm = Rc::new(initial_vm);
 
-    state_graph.nodes.insert(initial_vm.clone(), GraphNode::new(None, 0));
-    
+    state_graph
+        .nodes
+        .insert(initial_vm.clone(), GraphNode::new(None, 0));
+
     let mut next_nodes = Vec::new();
     next_nodes.push(initial_vm);
 
@@ -107,19 +121,31 @@ pub fn check_program<'a>(compiled_project: &'a CompiledProject) -> AlthreadResul
         for (name, pid, instructions, vm) in successors.into_iter() {
             let vm: Rc<VM<'_>> = Rc::new(vm);
 
-            let mut lines :Vec<usize> = instructions.iter().map(|x| x.pos.unwrap_or_default().line).filter(|l| *l > 0).collect();
+            let mut lines: Vec<usize> = instructions
+                .iter()
+                .map(|x| x.pos.unwrap_or_default().line)
+                .filter(|l| *l > 0)
+                .collect();
             lines.dedup();
 
-            state_graph.nodes.get_mut(&current_node).unwrap().successors.push(StateLink {
-                to: vm.clone(),
-                lines,
-                instructions,
-                pid,
-                name,
-            });
+            state_graph
+                .nodes
+                .get_mut(&current_node)
+                .unwrap()
+                .successors
+                .push(StateLink {
+                    to: vm.clone(),
+                    lines,
+                    instructions,
+                    pid,
+                    name,
+                });
 
             if !state_graph.nodes.contains_key(&vm.clone()) {
-                state_graph.nodes.insert(vm.clone(), GraphNode::new(Some(current_node.clone()), current_level + 1));
+                state_graph.nodes.insert(
+                    vm.clone(),
+                    GraphNode::new(Some(current_node.clone()), current_level + 1),
+                );
                 next_nodes.push(vm.clone());
             }
         }
@@ -127,8 +153,24 @@ pub fn check_program<'a>(compiled_project: &'a CompiledProject) -> AlthreadResul
             let mut path = Vec::new();
             let mut back_node = current_node.clone();
 
-            while let Some(pred) = state_graph.nodes.get(&back_node).unwrap().predecessor.clone() {
-                path.push(state_graph.nodes.get(&pred).unwrap().successors.iter().find(|x| x.to == back_node).unwrap().clone());
+            while let Some(pred) = state_graph
+                .nodes
+                .get(&back_node)
+                .unwrap()
+                .predecessor
+                .clone()
+            {
+                path.push(
+                    state_graph
+                        .nodes
+                        .get(&pred)
+                        .unwrap()
+                        .successors
+                        .iter()
+                        .find(|x| x.to == back_node)
+                        .unwrap()
+                        .clone(),
+                );
                 back_node = pred;
             }
 

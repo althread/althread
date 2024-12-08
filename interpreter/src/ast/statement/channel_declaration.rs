@@ -30,7 +30,6 @@ impl NodeBuilder for ChannelDeclaration {
         let left_prog = String::from(left_pairs.next().unwrap().as_str());
         let left_name = String::from(left_pairs.next().unwrap().as_str());
 
-
         let mut datatypes: Vec<DataType> = Vec::new();
 
         let types_pair = pairs.next();
@@ -84,7 +83,11 @@ fn get_prog_name(var_name: &str, state: &mut CompilerState, pos: &Pos) -> Althre
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
                     Some(*pos),
-                    format!("Variable '{}' is not a process (found {})", var_name, state.program_stack.get(var_idx).unwrap().datatype),
+                    format!(
+                        "Variable '{}' is not a process (found {})",
+                        var_name,
+                        state.program_stack.get(var_idx).unwrap().datatype
+                    ),
                 ))
             }
         }
@@ -99,8 +102,6 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
 
         let left_prog = get_prog_name(&dec.ch_left_prog, state, &self.pos)?;
         let right_prog = get_prog_name(&dec.ch_right_prog, state, &self.pos)?;
-
-
 
         // check if a channel with the same name already exists on this program
         let left_key = (left_prog.clone(), dec.ch_left_name.clone());

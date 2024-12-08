@@ -4,7 +4,8 @@ use pest::iterators::Pairs;
 
 use crate::{
     ast::{
-        display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}
+        display::{AstDisplay, Prefix},
+        node::{InstructionBuilder, Node, NodeBuilder},
     },
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
@@ -24,17 +25,20 @@ impl NodeBuilder for Atomic {
     fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
         let mut statement: Box<Node<Statement>> = Box::new(Node::build(pairs.next().unwrap())?);
         let mut delegated = false;
-        
+
         let mut first_statement = statement.as_mut();
 
         let start_atomic_lambda = |s: &mut Statement| {
             // if the statement is a wait block then tell it so
             match s {
-                Statement::Wait(wait) => { wait.value.start_atomic = true; true },
+                Statement::Wait(wait) => {
+                    wait.value.start_atomic = true;
+                    true
+                }
                 _ => false,
             }
         };
-        
+
         if start_atomic_lambda(&mut first_statement.value) {
             delegated = true;
         } else {
@@ -51,13 +55,15 @@ impl NodeBuilder for Atomic {
             }
         }
 
-        Ok(Self { statement, delegated })
+        Ok(Self {
+            statement,
+            delegated,
+        })
     }
 }
 
 impl InstructionBuilder for Node<Atomic> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
-        
         if state.is_atomic {
             return Err(AlthreadError::new(
                 ErrorType::InstructionNotAllowed,
@@ -84,24 +90,22 @@ impl InstructionBuilder for Node<Atomic> {
             control: InstructionType::AtomicEnd,
         });
         if builder.contains_jump() {
-            
             for idx in builder.break_indexes.get("").unwrap_or(&Vec::new()) {
-                if let InstructionType::Break(bc) =  &mut builder.instructions[*idx as usize].control {
+                if let InstructionType::Break(bc) = &mut builder.instructions[*idx as usize].control
+                {
                     bc.stop_atomic = true;
-                }
-                else {
+                } else {
                     panic!("Expected Break instruction");
                 }
             }
             for idx in builder.continue_indexes.get("").unwrap_or(&Vec::new()) {
-                if let InstructionType::Break(bc) =  &mut builder.instructions[*idx as usize].control {
+                if let InstructionType::Break(bc) = &mut builder.instructions[*idx as usize].control
+                {
                     bc.stop_atomic = true;
-                }
-                else {
+                } else {
                     panic!("Expected Break instruction");
                 }
             }
-
         }
         Ok(builder)
     }

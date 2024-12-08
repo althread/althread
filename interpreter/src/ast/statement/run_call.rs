@@ -50,9 +50,7 @@ impl NodeBuilder for RunCall {
 
 impl InstructionBuilder for Node<RunCall> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
-
         let mut builder = InstructionBuilderOk::new();
-
 
         // push the args to the stack
         state.current_stack_depth += 1;
@@ -85,7 +83,9 @@ impl InstructionBuilder for Node<RunCall> {
                         Some(self.pos),
                         format!(
                             "Expected argument {} to be of type {:?}, got {:?}",
-                            i+1, arg, call_datatype[i]
+                            i + 1,
+                            arg,
+                            call_datatype[i]
                         ),
                     ));
                 }
@@ -116,7 +116,6 @@ impl InstructionBuilder for Node<RunCall> {
         });
 
         Ok(builder)
-
     }
 }
 

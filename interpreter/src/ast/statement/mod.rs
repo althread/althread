@@ -1,8 +1,11 @@
 pub mod assignment;
+pub mod atomic;
+pub mod break_loop;
 pub mod channel_declaration;
 pub mod declaration;
 pub mod expression;
 pub mod fn_call;
+pub mod for_control;
 pub mod if_control;
 pub mod loop_control;
 pub mod receive;
@@ -11,9 +14,6 @@ pub mod send;
 pub mod wait;
 pub mod waiting_case;
 pub mod while_control;
-pub mod for_control;
-pub mod atomic;
-pub mod break_loop;
 
 use std::fmt;
 
@@ -121,7 +121,7 @@ impl InstructionBuilder for Statement {
                 });
                 state.program_stack.pop();
                 Ok(builder)
-            },
+            }
         }
     }
 }
@@ -130,7 +130,11 @@ impl Statement {
     pub fn is_atomic(&self) -> bool {
         todo!("Check this implementation");
         match self {
-            Self::Assignment(_) | Self::Declaration(_) | Self::FnCall(_) | Self::Run(_) | Self::Atomic(_) => true,
+            Self::Assignment(_)
+            | Self::Declaration(_)
+            | Self::FnCall(_)
+            | Self::Run(_)
+            | Self::Atomic(_) => true,
             _ => false,
         }
     }

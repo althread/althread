@@ -1,13 +1,15 @@
 pub mod binary_expression;
+pub mod list_expression;
 pub mod primary_expression;
 pub mod tuple_expression;
 pub mod unary_expression;
-pub mod list_expression;
 
 use std::{collections::HashSet, fmt};
 
 use binary_expression::{BinaryExpression, LocalBinaryExpressionNode};
-use list_expression::{ListExpression, LocalListExpressionNode, LocalRangeListExpressionNode, RangeListExpression};
+use list_expression::{
+    ListExpression, LocalListExpressionNode, LocalRangeListExpressionNode, RangeListExpression,
+};
 use pest::{
     iterators::{Pair, Pairs},
     pratt_parser::PrattParser,
@@ -183,13 +185,15 @@ impl Expression {
         match pair.as_rule() {
             Rule::range_expression => {
                 let mut pair = pair.into_inner();
-                let expression_start: Box<Node<Expression>> = Box::new(Node::build(pair.next().unwrap())?);
-                let expression_end: Box<Node<Expression>> = Box::new(Node::build(pair.next().unwrap())?);
+                let expression_start: Box<Node<Expression>> =
+                    Box::new(Node::build(pair.next().unwrap())?);
+                let expression_end: Box<Node<Expression>> =
+                    Box::new(Node::build(pair.next().unwrap())?);
                 Ok(Node {
                     pos,
                     value: Expression::Range(Node {
                         pos,
-                        value: RangeListExpression { 
+                        value: RangeListExpression {
                             expression_start,
                             expression_end,
                         },

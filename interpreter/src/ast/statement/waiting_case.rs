@@ -4,10 +4,10 @@ use std::fmt;
 use pest::iterators::Pairs;
 use serde::{Deserialize, Serialize};
 
-use crate::{ast::node::InstructionBuilder, compiler::InstructionBuilderOk};
 use crate::compiler::CompilerState;
 use crate::error::AlthreadResult;
 use crate::parser::Rule;
+use crate::{ast::node::InstructionBuilder, compiler::InstructionBuilderOk};
 
 use super::super::{
     display::{AstDisplay, Prefix},

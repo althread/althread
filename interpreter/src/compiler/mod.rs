@@ -48,20 +48,28 @@ impl InstructionBuilderOk {
         self.instructions.extend(other.instructions);
 
         for (k, v) in other.break_indexes.iter() {
-            self.break_indexes.entry(k.clone()).or_insert_with(Vec::new).extend(v.iter().map(|x| x + off_set));
+            self.break_indexes
+                .entry(k.clone())
+                .or_insert_with(Vec::new)
+                .extend(v.iter().map(|x| x + off_set));
         }
 
         for (k, v) in other.continue_indexes.iter() {
-            self.continue_indexes.entry(k.clone()).or_insert_with(Vec::new).extend(v.iter().map(|x| x + off_set));
+            self.continue_indexes
+                .entry(k.clone())
+                .or_insert_with(Vec::new)
+                .extend(v.iter().map(|x| x + off_set));
         }
 
-        self.return_indexes.extend(other.return_indexes.iter().map(|x| x + off_set));
+        self.return_indexes
+            .extend(other.return_indexes.iter().map(|x| x + off_set));
     }
     pub fn contains_jump(&self) -> bool {
-        self.break_indexes.len() > 0 || self.continue_indexes.len() > 0 || self.return_indexes.len() > 0
+        self.break_indexes.len() > 0
+            || self.continue_indexes.len() > 0
+            || self.return_indexes.len() > 0
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct Variable {

@@ -157,7 +157,8 @@ impl InstructionBuilder for Node<ReceiveStatement> {
 
         builder.instructions.push(Instruction {
             control: InstructionType::JumpIf(JumpIfControl {
-                jump_false: 8 + (guard_instructions.len() + statement_builder.instructions.len()) as i64, // If the channel is empty, jump to the end
+                jump_false: 8
+                    + (guard_instructions.len() + statement_builder.instructions.len()) as i64, // If the channel is empty, jump to the end
                 unstack_len: 0, // we keep the false value on the stack
             }),
             pos: Some(self.pos),

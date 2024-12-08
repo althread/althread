@@ -1,8 +1,13 @@
 use core::fmt;
-use std::{fmt::Formatter, hash::{Hash, Hasher}, ops::Add, str::FromStr};
 use ordered_float::OrderedFloat;
 use pest::iterators::{Pair, Pairs};
-use serde::ser::{Serialize, Serializer, SerializeStruct};
+use serde::ser::{Serialize, SerializeStruct, Serializer};
+use std::{
+    fmt::Formatter,
+    hash::{Hash, Hasher},
+    ops::Add,
+    str::FromStr,
+};
 
 use crate::{
     ast::{
@@ -48,7 +53,7 @@ impl<'a> Serialize for Literal {
             Self::List(datatype, values) => {
                 state.serialize_field("list_datatype", datatype)?;
                 state.serialize_field("list", values)?;
-            },
+            }
         }
         state.end()
     }
@@ -199,7 +204,9 @@ impl Literal {
 
     pub fn divide(&self, other: &Self) -> Result<Self, String> {
         match (self, other) {
-            (_, Self::Int(0)) | (_, Self::Float(OrderedFloat(0.0))) => Err("Cannot divide by zero".to_string()),
+            (_, Self::Int(0)) | (_, Self::Float(OrderedFloat(0.0))) => {
+                Err("Cannot divide by zero".to_string())
+            }
             (Self::Int(i), Self::Int(j)) => Ok(Self::Int(i / j)),
             (Self::Float(i), Self::Float(j)) => Ok(Self::Float(i / *j)),
             (i, j) => Err(format!(
@@ -374,7 +381,7 @@ impl AstDisplay for Literal {
                     value.ast_fmt(f, &prefix.add_leaf())?;
                 }
                 Ok(())
-            },
+            }
             Self::List(datatype, values) => {
                 writeln!(f, "{prefix}list")?;
                 for value in values {

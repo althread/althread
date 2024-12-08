@@ -1,4 +1,9 @@
-use std::{collections::HashSet, fs, io::{stdin, Read}, process::exit};
+use std::{
+    collections::HashSet,
+    fs,
+    io::{stdin, Read},
+    process::exit,
+};
 
 mod args;
 use args::{CheckCommand, CliArguments, Command, CompileCommand, RandomSearchCommand, RunCommand};
@@ -50,8 +55,6 @@ pub fn compile_command(cli_args: &CompileCommand) {
     println!("{}", compiled_project);
 }
 
-
-
 pub fn check_command(cli_args: &CheckCommand) {
     // Read file
     let source = match cli_args.common.input.clone() {
@@ -95,10 +98,7 @@ pub fn check_command(cli_args: &CheckCommand) {
     }
 }
 
-
-const MAIN_STYLE: Style = Style::new()
-    .red()
-    .on_bright_black();
+const MAIN_STYLE: Style = Style::new().red().on_bright_black();
 const PROCESS_PALETTE: [Style; 6] = [
     Style::new().green(),
     Style::new().yellow(),
@@ -109,10 +109,9 @@ const PROCESS_PALETTE: [Style; 6] = [
 ];
 
 pub fn run_interactive(source: String, compiled_project: althread::compiler::CompiledProject) {
-    
     let mut vm = althread::vm::VM::new(&compiled_project);
 
-    vm.start(0); 
+    vm.start(0);
 
     loop {
         let next_states = vm.next().unwrap_or_else(|e| {
@@ -125,7 +124,19 @@ pub fn run_interactive(source: String, compiled_project: althread::compiler::Com
         }
         for (name, pid, insts, nvm) in next_states.iter() {
             println!("======= VM next =======");
-            println!("{}:{}:{}", name, pid, if insts[0].pos.is_some() { source.lines().nth(insts[0].pos.unwrap().line).unwrap_or_default() } else { "?" });
+            println!(
+                "{}:{}:{}",
+                name,
+                pid,
+                if insts[0].pos.is_some() {
+                    source
+                        .lines()
+                        .nth(insts[0].pos.unwrap().line)
+                        .unwrap_or_default()
+                } else {
+                    "?"
+                }
+            );
 
             let s = nvm.current_state();
             println!("global: {:?}", s.0);
@@ -136,13 +147,23 @@ pub fn run_interactive(source: String, compiled_project: althread::compiler::Com
                 }
             }
             for (pid, local_state) in s.2.iter().enumerate() {
-                println!("{} ({}): {:?}", pid, local_state.1, local_state.0.iter().map(|v| format!("{}", v)).collect::<Vec<String>>().join(", "));
+                println!(
+                    "{} ({}): {:?}",
+                    pid,
+                    local_state.1,
+                    local_state
+                        .0
+                        .iter()
+                        .map(|v| format!("{}", v))
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                );
             }
         }
         //read an integer from the user
         let mut selected: i32 = -1;
         while selected < 0 || selected >= next_states.len() as i32 {
-            println!("Enter an integer between 0 and {}:", next_states.len()-1);
+            println!("Enter an integer between 0 and {}:", next_states.len() - 1);
             let mut input = String::new();
             stdin().read_line(&mut input).unwrap();
             selected = input.trim().parse().unwrap();
@@ -201,28 +222,31 @@ pub fn run_command(cli_args: &RunCommand) {
         if cli_args.verbose || cli_args.debug {
             let mut prev_line = 0;
             for inst in info.instructions.iter() {
-                if inst.pos.unwrap_or_default().line != 0 && prev_line != inst.pos.unwrap_or_default().line {
-                    println!("#{}:{} {}", 
-                        info.prog_id, 
+                if inst.pos.unwrap_or_default().line != 0
+                    && prev_line != inst.pos.unwrap_or_default().line
+                {
+                    println!(
+                        "#{}:{} {}",
+                        info.prog_id,
                         inst.pos.unwrap_or_default().line,
-                        source.lines().nth(inst.pos.unwrap_or_default().line - 1).unwrap_or_default().style(if info.prog_id == 0 { MAIN_STYLE } else {
-                            PROCESS_PALETTE[((info.prog_id - 1) as usize) % PROCESS_PALETTE.len()]
-                        })
+                        source
+                            .lines()
+                            .nth(inst.pos.unwrap_or_default().line - 1)
+                            .unwrap_or_default()
+                            .style(if info.prog_id == 0 {
+                                MAIN_STYLE
+                            } else {
+                                PROCESS_PALETTE
+                                    [((info.prog_id - 1) as usize) % PROCESS_PALETTE.len()]
+                            })
                     );
                     prev_line = inst.pos.unwrap_or_default().line;
                 }
                 if cli_args.verbose {
-                    println!(
-                        "\t\t\t#{}:{}",
-                        info.prog_id,
-                        inst
-                    );
+                    println!("\t\t\t#{}:{}", info.prog_id, inst);
                 }
             }
-            match vm
-                .running_programs
-                .get(info.prog_id)
-            {
+            match vm.running_programs.get(info.prog_id) {
                 Some(p) => match p.current_instruction() {
                     Ok(i) => println!("{}_{}: stopped at {}", info.prog_name, info.prog_id, i),
                     _ => println!("{}_{}: stopped at ?", info.prog_name, info.prog_id),
@@ -244,7 +268,6 @@ pub fn run_command(cli_args: &RunCommand) {
             break;
         }
         vm_set.insert(vm.clone());
-
     }
     if cli_args.verbose {
         for v in vm_execution.iter() {
@@ -258,7 +281,17 @@ pub fn run_command(cli_args: &RunCommand) {
                 }
             }
             for (pid, local_state) in s.2.iter().enumerate() {
-                println!("{} ({}): {:?}", pid, local_state.1, local_state.0.iter().map(|v| format!("{}", v)).collect::<Vec<String>>().join(", "));
+                println!(
+                    "{} ({}): {:?}",
+                    pid,
+                    local_state.1,
+                    local_state
+                        .0
+                        .iter()
+                        .map(|v| format!("{}", v))
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                );
             }
         }
     }

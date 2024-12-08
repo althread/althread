@@ -8,7 +8,8 @@ pub mod token;
 use core::panic;
 use std::{
     collections::{BTreeMap, HashMap},
-    fmt::{self, Formatter}, rc::Rc,
+    fmt::{self, Formatter},
+    rc::Rc,
 };
 
 use block::Block;
@@ -17,7 +18,10 @@ use display::{AstDisplay, Prefix};
 use node::{InstructionBuilder, Node};
 use pest::iterators::Pairs;
 use statement::Statement;
-use token::{args_list::{self, ArgsList}, condition_keyword::ConditionKeyword};
+use token::{
+    args_list::{self, ArgsList},
+    condition_keyword::ConditionKeyword,
+};
 
 use crate::{
     compiler::{CompiledProject, CompilerState, Variable},
@@ -54,7 +58,8 @@ impl Ast {
                     let mut pairs = pair.into_inner();
 
                     let main_block = Node::build(pairs.next().unwrap())?;
-                    ast.process_blocks.insert("main".to_string(), (Node::<ArgsList>::new(), main_block));
+                    ast.process_blocks
+                        .insert("main".to_string(), (Node::<ArgsList>::new(), main_block));
                 }
                 Rule::global_block => {
                     let mut pairs = pair.into_inner();
@@ -79,9 +84,11 @@ impl Ast {
                     let mut pairs = pair.into_inner();
 
                     let process_identifier = pairs.next().unwrap().as_str().to_string();
-                    let args_list: Node<token::args_list::ArgsList> = Node::build(pairs.next().unwrap())?;
+                    let args_list: Node<token::args_list::ArgsList> =
+                        Node::build(pairs.next().unwrap())?;
                     let program_block = Node::build(pairs.next().unwrap())?;
-                    ast.process_blocks.insert(process_identifier, (args_list, program_block));
+                    ast.process_blocks
+                        .insert(process_identifier, (args_list, program_block));
                 }
                 Rule::EOI => (),
                 _ => return Err(no_rule!(pair, "root ast")),
@@ -156,17 +163,21 @@ impl Ast {
         state.unstack_current_depth();
         assert!(state.current_stack_depth == 0);
 
-
         // before compiling the programs, get the list of program names and their arguments
         state.program_arguments = self
             .process_blocks
             .iter()
-            .map(|(name, (args, _))| (
-                name.clone(), 
-                args.value.datatypes.iter().map(|d| d.value.clone()).collect::<Vec<_>>()
-            ))
+            .map(|(name, (args, _))| {
+                (
+                    name.clone(),
+                    args.value
+                        .datatypes
+                        .iter()
+                        .map(|d| d.value.clone())
+                        .collect::<Vec<_>>(),
+                )
+            })
             .collect();
-
 
         // Compile all the programs
         state.is_shared = false;
@@ -262,7 +273,7 @@ impl Ast {
             instructions: Vec::new(),
             name: name.to_string(),
         };
-        let (args,prog) = self
+        let (args, prog) = self
             .process_blocks
             .get(name)
             .expect("trying to compile a non-existant program");
@@ -278,7 +289,7 @@ impl Ast {
             });
         }
 
-        let compiled = prog.compile(state)?;        
+        let compiled = prog.compile(state)?;
         if compiled.contains_jump() {
             unimplemented!("breaks or return statements in programs are not yet implemented");
         }

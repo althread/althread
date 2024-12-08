@@ -1,10 +1,11 @@
 use core::panic;
+use serde::ser::{Serialize, SerializeStruct, Serializer};
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt,
-    hash::{Hash, Hasher}, rc::Rc
+    hash::{Hash, Hasher},
+    rc::Rc,
 };
-use serde::ser::{Serialize, Serializer, SerializeStruct};
 
 use channels::{Channels, ChannelsState, ReceiverInfo};
 use fastrand::Rng;
@@ -15,7 +16,10 @@ use instruction::{
 use running_program::RunningProgramState;
 
 use crate::{
-    ast::{statement::waiting_case::WaitDependency, token::{datatype::DataType, literal::Literal}},
+    ast::{
+        statement::waiting_case::WaitDependency,
+        token::{datatype::DataType, literal::Literal},
+    },
     compiler::{stdlib::Stdlib, CompiledProject},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
 };
@@ -74,7 +78,6 @@ pub struct VM<'a> {
     next_program_id: usize,
     rng: Rng,
 
-
     pub stdlib: Rc<Stdlib>,
 }
 
@@ -120,7 +123,6 @@ impl<'a> VM<'a> {
     }
 
     pub fn next_random(&mut self) -> AlthreadResult<ExecutionStepInfo> {
-        
         let program =
             self.rng
                 .choice(self.executable_programs.iter())
@@ -167,11 +169,15 @@ impl<'a> VM<'a> {
         let (actions, executed_instructions) = program.next_global(
             &mut self.globals,
             &mut self.channels,
-            &mut self.next_program_id
+            &mut self.next_program_id,
         )?;
         // maybe should be replace to avoid recurrent calls
-        if actions.wait { // actually nothing happened
-            assert!(actions.actions.is_empty(), "a process returning wait should means that no actions have been performed..."); 
+        if actions.wait {
+            // actually nothing happened
+            assert!(
+                actions.actions.is_empty(),
+                "a process returning wait should means that no actions have been performed..."
+            );
 
             let program = self
                 .running_programs
@@ -238,7 +244,7 @@ impl<'a> VM<'a> {
                         }
                         true
                     });
-                    
+
                     need_to_check_invariants = true;
                 }
                 GlobalAction::StartProgram(name, pid, args) => {
@@ -268,7 +274,6 @@ impl<'a> VM<'a> {
     }
 
     pub fn next_step_pid(&mut self, pid: usize) -> AlthreadResult<Option<ExecutionStepInfo>> {
-        
         let program = self
             .running_programs
             .get_mut(pid)
@@ -289,11 +294,15 @@ impl<'a> VM<'a> {
         let (actions, executed_instructions) = program.next_global(
             &mut self.globals,
             &mut self.channels,
-            &mut self.next_program_id
+            &mut self.next_program_id,
         )?;
         // maybe should be replace to avoid recurrent calls
-        if actions.wait { // actually nothing happened
-            assert!(actions.actions.is_empty(), "a process returning wait should means that no actions have been performed..."); 
+        if actions.wait {
+            // actually nothing happened
+            assert!(
+                actions.actions.is_empty(),
+                "a process returning wait should means that no actions have been performed..."
+            );
 
             let program = self
                 .running_programs
@@ -306,8 +315,7 @@ impl<'a> VM<'a> {
             {
                 InstructionType::WaitStart(ctrl) => {
                     self.executable_programs.remove(&pid);
-                    self.waiting_programs
-                        .insert(pid, ctrl.dependencies.clone());
+                    self.waiting_programs.insert(pid, ctrl.dependencies.clone());
                 }
                 _ => unreachable!("waiting on an instruction that is not a WaitStart instruction"),
             }
@@ -360,7 +368,7 @@ impl<'a> VM<'a> {
                         }
                         true
                     });
-                    
+
                     need_to_check_invariants = true;
                 }
                 GlobalAction::StartProgram(name, pid, args) => {
@@ -387,16 +395,11 @@ impl<'a> VM<'a> {
     pub fn get_program(&self, pid: usize) -> &RunningProgramState {
         self.running_programs.get(pid).expect("program not found")
     }
-    
+
     /**
      * List all the next possible state of the VM
      */
-    pub fn next(&self) -> AlthreadResult<Vec<(
-            String, 
-            usize, 
-            Vec<Instruction>,
-            VM<'a>,
-    )>> {
+    pub fn next(&self) -> AlthreadResult<Vec<(String, usize, Vec<Instruction>, VM<'a>)>> {
         if self.running_programs.len() == 0 {
             return Ok(Vec::new());
         }
@@ -410,20 +413,14 @@ impl<'a> VM<'a> {
             if self.waiting_programs.contains_key(&program.id) {
                 continue;
             }
-            
+
             let mut vm = self.clone();
             if let Some(result) = vm.next_step_pid(program.id)? {
-                next_states.push((
-                    program.name.clone(), 
-                    program.id, 
-                    result.instructions, 
-                    vm
-                ));
+                next_states.push((program.name.clone(), program.id, result.instructions, vm));
             }
         }
 
         Ok(next_states)
-        
     }
 
     pub fn is_finished(&self) -> bool {
@@ -434,7 +431,7 @@ impl<'a> VM<'a> {
         Vec::<Literal>::new()
     }
 
-    pub fn current_state(&self) -> (&GlobalMemory, &ChannelsState, Vec<(&Vec<Literal>,usize)>) {
+    pub fn current_state(&self) -> (&GlobalMemory, &ChannelsState, Vec<(&Vec<Literal>, usize)>) {
         let local_states = self
             .running_programs
             .iter()
@@ -447,44 +444,41 @@ impl<'a> VM<'a> {
     pub fn check_invariants(&self) -> AlthreadResult<()> {
         for (_deps, read, expr, pos) in self.always_conditions.iter() {
             //if _deps.contains(&var_name) { //TODO improve by checking if the variable is in the dependencies
-                // Check if the condition is true
-                // create a small memory stack with the value of the variables
-                let mut memory = Vec::new();
-                for var_name in read.variables.iter() {
-                    memory.push(
-                        self.globals
-                            .get(var_name)
-                            .expect(
-                                format!("global variable '{}' not found", var_name)
-                                    .as_str(),
-                            )
-                            .clone(),
-                    );
-                }
-                match expr.root.eval(&memory) {
-                    Ok(cond) => {
-                        if !cond.is_true() {
-                            return Err(AlthreadError::new(
-                                ErrorType::InvariantError,
-                                Some(*pos),
-                                "The invariant is not respected".to_string()));
-                        }
-                    }
-                    Err(e) => {
+            // Check if the condition is true
+            // create a small memory stack with the value of the variables
+            let mut memory = Vec::new();
+            for var_name in read.variables.iter() {
+                memory.push(
+                    self.globals
+                        .get(var_name)
+                        .expect(format!("global variable '{}' not found", var_name).as_str())
+                        .clone(),
+                );
+            }
+            match expr.root.eval(&memory) {
+                Ok(cond) => {
+                    if !cond.is_true() {
                         return Err(AlthreadError::new(
-                            ErrorType::ExpressionError,
+                            ErrorType::InvariantError,
                             Some(*pos),
-                            e)
-                        );
+                            "The invariant is not respected".to_string(),
+                        ));
                     }
                 }
-                
+                Err(e) => {
+                    return Err(AlthreadError::new(
+                        ErrorType::ExpressionError,
+                        Some(*pos),
+                        e,
+                    ));
+                }
+            }
+
             //}
         }
 
         Ok(())
     }
-
 }
 
 impl<'a> fmt::Display for VM<'a> {
@@ -507,7 +501,7 @@ impl<'a> Hash for VM<'a> {
         self.channels.state().hash(state);
         self.running_programs.hash(state);
     }
-    
+
     fn hash_slice<H: Hasher>(data: &[Self], state: &mut H)
     where
         Self: Sized,
@@ -527,9 +521,7 @@ impl std::cmp::PartialEq for VM<'_> {
     }
 }
 
-impl std::cmp::Eq for VM<'_> {
-}
-
+impl std::cmp::Eq for VM<'_> {}
 
 impl<'a> Serialize for VM<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>

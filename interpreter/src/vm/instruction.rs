@@ -1,5 +1,5 @@
-use std::fmt;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 use crate::{
     ast::{
@@ -80,9 +80,9 @@ impl InstructionType {
             | Self::ChannelPeek(_)
             | Self::AtomicStart // starts a block that surely contains a global operation
             | Self::WaitStart(_) => false, // wait starts an atomic block to evaluate the conditions
-            
+
             Self::GlobalReads(r) => r.only_const, // a global read is local only if it reads constant variables
-            
+
             // This should be checked. I think the following are not global because
             // they do not write or read any global variable or channel
             // Indeed, starting a process do not write anything. The process itself is the one that will write
@@ -90,7 +90,7 @@ impl InstructionType {
             // because the processes that wait are different and their operation are global so they will 
             // not be done atomically
             // They are global actions but that do not require the process to pause
-            
+
             // Channel peek is a little bit different because it might not be followed in the case the read is not completed (if the guard was false for instance)
             // In that case, I am not sure that the peek should be considered as a local operation
             // Anyway, it is hard to know in advance (in the case we want to stop *before* global 
@@ -143,7 +143,6 @@ pub struct Instruction {
 }
 
 impl Instruction {
-
     pub fn is_atomic_start(&self) -> bool {
         self.control.is_atomic_start()
     }

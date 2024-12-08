@@ -6,12 +6,13 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, NodeBuilder},
-    }, compiler::{CompilerState, InstructionBuilderOk}, error::AlthreadResult, no_rule, parser::Rule, vm::instruction::{self, Instruction, InstructionType}
+    },
+    compiler::{CompilerState, InstructionBuilderOk},
+    error::AlthreadResult,
+    no_rule,
+    parser::Rule,
+    vm::instruction::{self, Instruction, InstructionType},
 };
-
-
-
-
 
 #[derive(Debug, Clone)]
 enum BreakLoopType {
@@ -24,7 +25,6 @@ pub struct BreakLoopControl {
     pub kind: BreakLoopType,
     pub label: Option<String>,
 }
-
 
 impl NodeBuilder for BreakLoopControl {
     fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
@@ -47,10 +47,14 @@ impl InstructionBuilder for BreakLoopControl {
 
         match self.kind {
             BreakLoopType::Break => {
-                builder.break_indexes.insert(self.label.clone().unwrap_or_default(), vec![0]);
+                builder
+                    .break_indexes
+                    .insert(self.label.clone().unwrap_or_default(), vec![0]);
             }
             BreakLoopType::Continue => {
-                builder.continue_indexes.insert(self.label.clone().unwrap_or_default(), vec![0]);
+                builder
+                    .continue_indexes
+                    .insert(self.label.clone().unwrap_or_default(), vec![0]);
             }
         }
         builder.instructions.push(Instruction {
@@ -68,10 +72,15 @@ impl InstructionBuilder for BreakLoopControl {
 
 impl AstDisplay for BreakLoopControl {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
-        writeln!(f, "{prefix}{kind}", prefix = prefix, kind = match self.kind {
-            BreakLoopType::Break => "break",
-            BreakLoopType::Continue => "continue",
-        })?;
+        writeln!(
+            f,
+            "{prefix}{kind}",
+            prefix = prefix,
+            kind = match self.kind {
+                BreakLoopType::Break => "break",
+                BreakLoopType::Continue => "continue",
+            }
+        )?;
 
         if let Some(label) = &self.label {
             let prefix = prefix.add_leaf();

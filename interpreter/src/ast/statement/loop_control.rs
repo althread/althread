@@ -15,7 +15,6 @@ use crate::{
 
 use super::Statement;
 
-
 #[derive(Debug, Clone)]
 pub struct LoopControl {
     pub statement: Box<Node<Statement>>,
@@ -41,27 +40,27 @@ impl InstructionBuilder for Node<LoopControl> {
                 jump: -(builder.instructions.len() as i64),
             }),
         });
-        
+
         assert!(stack_len == state.program_stack.len());
 
         if builder.contains_jump() {
             for idx in builder.break_indexes.get("").unwrap_or(&Vec::new()) {
                 let builder_len = builder.instructions.len();
-                if let InstructionType::Break(bc) =  &mut builder.instructions[*idx as usize].control {
+                if let InstructionType::Break(bc) = &mut builder.instructions[*idx as usize].control
+                {
                     bc.jump = (builder_len - idx) as i64;
                     bc.unstack_len = bc.unstack_len - stack_len;
-                }
-                else {
+                } else {
                     panic!("Expected Break instruction");
                 }
             }
             builder.break_indexes.remove("");
             for idx in builder.continue_indexes.get("").unwrap_or(&Vec::new()) {
-                if let InstructionType::Break(bc) =  &mut builder.instructions[*idx as usize].control {
+                if let InstructionType::Break(bc) = &mut builder.instructions[*idx as usize].control
+                {
                     bc.jump = -(*idx as i64);
                     bc.unstack_len = bc.unstack_len - stack_len;
-                }
-                else {
+                } else {
                     panic!("Expected Break instruction");
                 }
             }

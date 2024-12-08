@@ -61,7 +61,6 @@ pub struct CheckCommand {
     pub common: SharedArgs,
 }
 
-
 /// Compiles an input file into a supported output format
 #[derive(Debug, Clone, Parser)]
 pub struct RunCommand {

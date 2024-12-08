@@ -36,8 +36,7 @@ impl NodeBuilder for FnCall {
             pairs.next().unwrap();
             if let Some(p) = pairs.next() {
                 object_identifier = p;
-            }
-            else {
+            } else {
                 break;
             }
         }
@@ -50,7 +49,6 @@ impl NodeBuilder for FnCall {
 
 impl InstructionBuilder for Node<FnCall> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
-
         let mut builder = InstructionBuilderOk::new();
         state.current_stack_depth += 1;
         builder.extend(self.value.values.compile(state)?);
@@ -68,12 +66,12 @@ impl InstructionBuilder for Node<FnCall> {
                 ));
             }
             let unstack_len = state.unstack_current_depth();
-        
+
             builder.instructions.push(Instruction {
-                control: InstructionType::FnCall(FnCallControl { 
+                control: InstructionType::FnCall(FnCallControl {
                     name: basename.to_string(),
                     unstack_len,
-                    variable_idx: None, 
+                    variable_idx: None,
                     arguments: None, // use the top of the stack
                 }),
                 pos: Some(self.pos),
@@ -86,20 +84,20 @@ impl InstructionBuilder for Node<FnCall> {
                 depth: state.current_stack_depth,
                 declare_pos: None,
             });
-        }
-        else {
+        } else {
             // this is a method call
 
             //get the type of the variable in the stack with this name
-            let var_id = state.program_stack
-            .iter()
-            .rev()
-            .position(|var| var.name.eq(basename))
-            .ok_or(AlthreadError::new(
-                ErrorType::VariableError,
-                Some(self.pos),
-                format!("Variable '{}' not found", basename),
-            ))?;
+            let var_id = state
+                .program_stack
+                .iter()
+                .rev()
+                .position(|var| var.name.eq(basename))
+                .ok_or(AlthreadError::new(
+                    ErrorType::VariableError,
+                    Some(self.pos),
+                    format!("Variable '{}' not found", basename),
+                ))?;
             let var = &state.program_stack[state.program_stack.len() - var_id - 1];
 
             let interfaces = state.stdlib.interfaces(&var.datatype);
@@ -118,7 +116,7 @@ impl InstructionBuilder for Node<FnCall> {
             }
             let fn_idx = fn_idx.unwrap();
             let fn_info = &interfaces[fn_idx];
-            let ret_type= fn_info.ret.clone();
+            let ret_type = fn_info.ret.clone();
 
             let unstack_len = state.unstack_current_depth();
 
@@ -129,17 +127,16 @@ impl InstructionBuilder for Node<FnCall> {
                 depth: state.current_stack_depth,
                 declare_pos: None,
             });
-        
+
             builder.instructions.push(Instruction {
-                control: InstructionType::FnCall(FnCallControl { 
-                    name: fn_name, 
+                control: InstructionType::FnCall(FnCallControl {
+                    name: fn_name,
                     unstack_len,
                     variable_idx: Some(var_id),
                     arguments: None, // use the top of the stack
-                 }),
+                }),
                 pos: Some(self.pos),
             });
-
         }
 
         Ok(builder)

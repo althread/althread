@@ -59,11 +59,13 @@ impl Channels {
             });
         }
 
-        self.waiting_send.entry((program_id, channel_name.clone())).or_insert(vec![]).push(value);
+        self.waiting_send
+            .entry((program_id, channel_name.clone()))
+            .or_insert(vec![])
+            .push(value);
 
         None
     }
-
 
     /**
      * Connect a proc to another proc
@@ -87,8 +89,14 @@ impl Channels {
             (to_program_id, to_channel_name.clone()),
         );
 
-        if let Some(values) = self.waiting_send.remove(&(program_id, channel_name.clone())) {
-            self.states.entry((to_program_id, to_channel_name.clone())).or_insert(vec![]).extend(values);
+        if let Some(values) = self
+            .waiting_send
+            .remove(&(program_id, channel_name.clone()))
+        {
+            self.states
+                .entry((to_program_id, to_channel_name.clone()))
+                .or_insert(vec![])
+                .extend(values);
             return Ok(Some((program_id, channel_name)));
         }
         Ok(None)

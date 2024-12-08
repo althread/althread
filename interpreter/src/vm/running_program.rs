@@ -1,7 +1,12 @@
-use std::{hash::{Hash, Hasher}, rc::Rc};
+use std::{
+    hash::{Hash, Hasher},
+    rc::Rc,
+};
 
 use crate::{
-    ast::token::literal::Literal, compiler::stdlib::Stdlib, error::{AlthreadError, AlthreadResult, ErrorType}
+    ast::token::literal::Literal,
+    compiler::stdlib::Stdlib,
+    error::{AlthreadError, AlthreadResult, ErrorType},
 };
 
 use super::{
@@ -22,7 +27,6 @@ pub struct RunningProgramState<'a> {
     pub stdlib: Rc<Stdlib>,
 }
 
-
 impl PartialEq for RunningProgramState<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id && self.memory == other.memory && self.name == other.name
@@ -37,16 +41,20 @@ impl Hash for RunningProgramState<'_> {
 }
 
 impl<'a> RunningProgramState<'a> {
-    pub fn new(id: usize, name: String, code: &'a ProgramCode, args: Literal, stdlib: Rc<Stdlib>) -> Self {
+    pub fn new(
+        id: usize,
+        name: String,
+        code: &'a ProgramCode,
+        args: Literal,
+        stdlib: Rc<Stdlib>,
+    ) -> Self {
         let arg_len = if let Literal::Tuple(v) = &args {
             v.len()
-        } else { panic!("args should be a tuple") };
+        } else {
+            panic!("args should be a tuple")
+        };
 
-        let memory = if arg_len > 0  {
-                vec![args]
-            } else {
-                Vec::new()
-            };
+        let memory = if arg_len > 0 { vec![args] } else { Vec::new() };
 
         Self {
             memory,
@@ -63,11 +71,17 @@ impl<'a> RunningProgramState<'a> {
     }
 
     pub fn current_instruction(&self) -> AlthreadResult<&Instruction> {
-        self.code.instructions.get(self.instruction_pointer).ok_or(AlthreadError::new(
-            ErrorType::InstructionNotAllowed,
-            None,
-            format!("the current instruction pointer points to no instruction (pointer:{}, program:{})", self.instruction_pointer, self.name),
-        ))
+        self.code
+            .instructions
+            .get(self.instruction_pointer)
+            .ok_or(AlthreadError::new(
+                ErrorType::InstructionNotAllowed,
+                None,
+                format!(
+                "the current instruction pointer points to no instruction (pointer:{}, program:{})",
+                self.instruction_pointer, self.name
+            ),
+            ))
     }
 
     pub fn has_terminated(&self) -> bool {
@@ -89,12 +103,11 @@ impl<'a> RunningProgramState<'a> {
         let mut wait = false;
         let mut end = false;
         loop {
-
-            let (at_actions, at_instructions)  = self.next_atomic(globals, channels, next_pid)?;
+            let (at_actions, at_instructions) = self.next_atomic(globals, channels, next_pid)?;
 
             actions.extend(at_actions.actions);
             instructions.extend(at_instructions);
-            
+
             if at_actions.wait {
                 wait = true;
                 break;
@@ -122,8 +135,8 @@ impl<'a> RunningProgramState<'a> {
         next_pid: &mut usize,
     ) -> AlthreadResult<(GlobalActions, Vec<Instruction>)> {
         let mut instructions = Vec::new();
-        
-        let mut result = GlobalActions { 
+
+        let mut result = GlobalActions {
             actions: Vec::new(),
             wait: false,
             end: false,
@@ -135,11 +148,9 @@ impl<'a> RunningProgramState<'a> {
             if let Some(action) = action {
                 if action == GlobalAction::Wait {
                     result.wait = true;
-                }
-                else if action == GlobalAction::EndProgram {
+                } else if action == GlobalAction::EndProgram {
                     result.end = true;
-                }
-                else {
+                } else {
                     result.actions.push(action);
                 }
             }
@@ -147,15 +158,13 @@ impl<'a> RunningProgramState<'a> {
         }
         // else we execute all the instructions until the end of the atomic block
         loop {
-            
             instructions.push(self.current_instruction()?.clone());
             let action = self.next(globals, channels, next_pid)?;
             if let Some(action) = action {
                 if action == GlobalAction::Wait {
                     result.wait = true;
                     break;
-                }
-                else {
+                } else {
                     result.actions.push(action);
                 }
             }
@@ -179,7 +188,10 @@ impl<'a> RunningProgramState<'a> {
                 .ok_or(AlthreadError::new(
                     ErrorType::InstructionNotAllowed,
                     None,
-                    format!("the current instruction pointer points to no instruction (pointer {}", self.instruction_pointer),
+                    format!(
+                        "the current instruction pointer points to no instruction (pointer {}",
+                        self.instruction_pointer
+                    ),
                 ))?;
 
         //println!("{} current memory:\n{}", self.id, self.memory.iter().map(|lit| format!("{:?}", lit)).collect::<Vec<_>>().join("\n"));
@@ -289,13 +301,21 @@ impl<'a> RunningProgramState<'a> {
                 1
             }
             InstructionType::RunCall(call) => {
-                let args = self.memory.last().expect("Panic: stack is empty, cannot run call").clone();
+                let args = self
+                    .memory
+                    .last()
+                    .expect("Panic: stack is empty, cannot run call")
+                    .clone();
                 for _ in 0..call.unstack_len {
                     self.memory.pop();
                 }
                 self.memory
                     .push(Literal::Process(call.name.clone(), *next_pid));
-                action = Some(GlobalAction::StartProgram(call.name.clone(), *next_pid, args));
+                action = Some(GlobalAction::StartProgram(
+                    call.name.clone(),
+                    *next_pid,
+                    args,
+                ));
                 *next_pid += 1;
                 1
             }
@@ -314,11 +334,13 @@ impl<'a> RunningProgramState<'a> {
                         .expect("Panic: stack is empty, cannot perform function call")
                         .clone();
 
-                    let interfaces = self.stdlib.get_interfaces(&lit.get_datatype()).ok_or(AlthreadError::new(
-                        ErrorType::UndefinedFunction,
-                        cur_inst.pos,
-                        format!("Type {:?} has no interface available", lit.get_datatype()),
-                    ))?;
+                    let interfaces = self.stdlib.get_interfaces(&lit.get_datatype()).ok_or(
+                        AlthreadError::new(
+                            ErrorType::UndefinedFunction,
+                            cur_inst.pos,
+                            format!("Type {:?} has no interface available", lit.get_datatype()),
+                        ),
+                    )?;
 
                     let fn_idx = interfaces.iter().position(|i| i.name == f.name);
                     if fn_idx.is_none() {
@@ -342,7 +364,7 @@ impl<'a> RunningProgramState<'a> {
                         }
                     };
                     let ret = interface.f.as_ref()(&mut lit, &mut args);
-    
+
                     //update the memory with object literal
                     self.memory[v_idx] = lit;
 
@@ -352,9 +374,7 @@ impl<'a> RunningProgramState<'a> {
 
                     self.memory.push(ret);
                     1
-                }
-                else {
-
+                } else {
                     // currently, only the print function is implemented
                     if f.name != "print" {
                         panic!("implement a proper function call in the VM");
@@ -381,9 +401,7 @@ impl<'a> RunningProgramState<'a> {
                     1
                 }
             }
-            InstructionType::WaitStart(_) => {
-                1
-            }
+            InstructionType::WaitStart(_) => 1,
             InstructionType::Wait(wait_ctrl) => {
                 let cond = self.memory.last().unwrap().is_true();
                 for _ in 0..wait_ctrl.unstack_len {

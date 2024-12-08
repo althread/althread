@@ -75,7 +75,6 @@ impl NodeBuilder for Wait {
 
 impl InstructionBuilder for Node<Wait> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
-
         if state.is_atomic {
             return Err(AlthreadError::new(
                 ErrorType::InstructionNotAllowed,
@@ -96,8 +95,8 @@ impl InstructionBuilder for Node<Wait> {
 
         builder.instructions.push(Instruction {
             pos: Some(self.pos),
-            control: InstructionType::WaitStart(WaitStartControl { 
-                dependencies, 
+            control: InstructionType::WaitStart(WaitStartControl {
+                dependencies,
                 start_atomic: self.value.start_atomic,
             }),
         });
@@ -182,7 +181,6 @@ impl InstructionBuilder for Node<Wait> {
         });
         state.program_stack.pop();
 
-
         if self.value.block_kind == WaitingBlockKind::First {
             for index in jump_index.iter() {
                 builder.instructions[*index].control = InstructionType::Jump(JumpControl {
@@ -190,7 +188,6 @@ impl InstructionBuilder for Node<Wait> {
                 });
             }
         }
-
 
         /*
                 state.current_stack_depth += 1;

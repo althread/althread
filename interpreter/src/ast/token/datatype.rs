@@ -1,9 +1,9 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-use ordered_float::OrderedFloat;
-use serde::{Deserialize, Serialize};
 use crate::{ast::node::NodeBuilder, error::AlthreadResult, no_rule, parser::Rule};
+use ordered_float::OrderedFloat;
+use pest::iterators::Pairs;
+use serde::{Deserialize, Serialize};
 
 use super::literal::Literal;
 
@@ -113,7 +113,9 @@ impl NodeBuilder for DataType {
             Rule::FLOAT_TYPE => Ok(Self::Float),
             Rule::STR_TYPE => Ok(Self::String),
             Rule::VOID_TYPE => Ok(Self::Void),
-            Rule::PROCESS_TYPE => Ok(Self::Process(pair.into_inner().next().unwrap().as_str().to_string())),
+            Rule::PROCESS_TYPE => Ok(Self::Process(
+                pair.into_inner().next().unwrap().as_str().to_string(),
+            )),
             Rule::LIST_TYPE => {
                 let mut pairs = pair.into_inner();
                 let datatype = DataType::build(pairs.next().unwrap().into_inner())?;

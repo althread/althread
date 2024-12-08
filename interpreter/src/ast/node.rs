@@ -4,9 +4,7 @@ use pest::iterators::{Pair, Pairs};
 
 use crate::compiler::InstructionBuilderOk;
 use crate::error::Pos;
-use crate::{
-    compiler::CompilerState, error::AlthreadResult, parser::Rule,
-};
+use crate::{compiler::CompilerState, error::AlthreadResult, parser::Rule};
 
 use super::display::{AstDisplay, Prefix};
 

@@ -1,6 +1,11 @@
-use std::{cell::{Ref, RefCell}, collections::HashMap, fmt::{self, Debug}, rc::Rc};
 use lazy_static::lazy_static;
 use serde::de::value;
+use std::{
+    cell::{Ref, RefCell},
+    collections::HashMap,
+    fmt::{self, Debug},
+    rc::Rc,
+};
 
 use crate::ast::token::{datatype::DataType, literal::Literal};
 
@@ -21,10 +26,13 @@ pub struct Stdlib {
 
 impl Debug for Interface {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Interface: {} -> {:?} -> {:?}", self.name, self.args, self.ret)
+        write!(
+            f,
+            "Interface: {} -> {:?} -> {:?}",
+            self.name, self.args, self.ret
+        )
     }
 }
-
 
 impl Stdlib {
     pub fn new() -> Self {
@@ -36,24 +44,20 @@ impl Stdlib {
         self.interfaces.get(dtype)
     }
     pub fn interfaces(&mut self, dtype: &DataType) -> &Vec<Interface> {
-        if self.interfaces.contains_key(&dtype)
-        {
+        if self.interfaces.contains_key(&dtype) {
             return self.interfaces.get(&dtype).unwrap();
         }
 
         match dtype.clone() {
-
             DataType::List(t) => {
                 let mut interfaces = vec![];
                 interfaces.push(Interface {
                     name: "len".to_string(),
                     args: vec![],
                     ret: DataType::Integer,
-                    f: Box::new(|list, _| {
-                        match list {
-                            Literal::List(_, v) => Literal::Int(v.len() as i64),
-                            _ => panic!("Expected List"),
-                        }
+                    f: Box::new(|list, _| match list {
+                        Literal::List(_, v) => Literal::Int(v.len() as i64),
+                        _ => panic!("Expected List"),
                     }),
                 });
                 interfaces.push(Interface {
@@ -71,8 +75,9 @@ impl Stdlib {
                             }
                             list.push(v[0].clone());
                         }
-                        else 
-                        { panic!("Expected List") }
+                        else {
+                            panic!("Expected List") 
+                        }
                         Literal::Null
                     }),
                 });
@@ -87,9 +92,9 @@ impl Stdlib {
                                 panic!("Index out of bounds");
                             }
                             return list.remove(v as usize);
+                        } else {
+                            panic!("Expected List")
                         }
-                        else 
-                        { panic!("Expected List") }
                     }),
                 });
                 interfaces.push(Interface {
@@ -111,8 +116,9 @@ impl Stdlib {
                             }
                             list[idx] = v[1].clone();
                         }
-                        else 
-                        { panic!("Expected List") }
+                        else {
+                            panic!("Expected List")
+                        }
                         Literal::Null
                     }),
                 });
@@ -128,17 +134,17 @@ impl Stdlib {
                                 panic!("Index out of bounds: {}", v);
                             }
                             return list[v as usize].clone();
+                        } else {
+                            panic!("Expected List")
                         }
-                        else 
-                        { panic!("Expected List") }
                     }),
                 });
                 self.interfaces.insert(dtype.clone(), interfaces);
-            },
-            _ => { self.interfaces.insert(dtype.clone(), vec![]); }
+            }
+            _ => {
+                self.interfaces.insert(dtype.clone(), vec![]);
+            }
         }
         return self.interfaces.get(&dtype).unwrap();
     }
 }
-    
-
