@@ -1,19 +1,18 @@
-use std::{collections::HashSet, fmt, vec};
+use std::{collections::HashSet, fmt};
 
 use pest::iterators::Pairs;
 
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
+        node::{Node, NodeBuilder},
         statement::waiting_case::WaitDependency,
         token::{datatype::DataType, literal::Literal},
     },
-    compiler::{CompilerState, InstructionBuilderOk, Variable},
+    compiler::{CompilerState, Variable},
     error::AlthreadResult,
-    no_rule,
     parser::Rule,
-    vm::{instruction::Instruction, Memory},
+    vm::Memory,
 };
 
 use super::{Expression, LocalExpressionNode};

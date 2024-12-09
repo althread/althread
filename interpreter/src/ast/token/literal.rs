@@ -4,8 +4,7 @@ use pest::iterators::{Pair, Pairs};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use std::{
     fmt::Formatter,
-    hash::{Hash, Hasher},
-    ops::Add,
+    hash::Hash,
     str::FromStr,
 };
 

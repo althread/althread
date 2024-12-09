@@ -8,7 +8,6 @@ use crate::{
         node::{InstructionBuilder, Node, NodeBuilder},
         statement::expression::{
             binary_expression::LocalBinaryExpressionNode,
-            list_expression::RangeListExpression,
             primary_expression::{LocalPrimaryExpressionNode, LocalVarNode},
             LocalExpressionNode,
         },
@@ -28,7 +27,7 @@ use crate::{
 };
 
 use super::{
-    expression::{list_expression::ListExpression, Expression},
+    expression::Expression,
     Statement,
 };
 

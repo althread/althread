@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fmt};
+use std::fmt;
 
 use pest::iterators::Pairs;
 
@@ -11,10 +11,10 @@ use crate::{
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
     parser::Rule,
-    vm::instruction::{Instruction, InstructionType, SendControl, WaitControl, WaitStartControl},
+    vm::instruction::{Instruction, InstructionType, SendControl},
 };
 
-use super::{expression::Expression, waiting_case::WaitDependency};
+use super::expression::Expression;
 
 #[derive(Debug, Clone)]
 pub struct SendStatement {

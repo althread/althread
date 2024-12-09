@@ -18,7 +18,7 @@ use running_program::RunningProgramState;
 use crate::{
     ast::{
         statement::waiting_case::WaitDependency,
-        token::{datatype::DataType, literal::Literal},
+        token::literal::Literal,
     },
     compiler::{stdlib::Stdlib, CompiledProject},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},

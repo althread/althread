@@ -1,14 +1,12 @@
 use std::{
-    cell::{Cell, OnceCell},
-    collections::{HashMap, HashSet},
-    path,
+    collections::HashMap,
     rc::Rc,
 };
 
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 use crate::{
-    compiler::{stdlib::Stdlib, CompiledProject},
+    compiler::CompiledProject,
     error::AlthreadResult,
     vm::{instruction::Instruction, VM},
 };

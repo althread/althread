@@ -1,15 +1,10 @@
-use lazy_static::lazy_static;
-use serde::de::value;
 use std::{
-    cell::{Ref, RefCell},
     collections::HashMap,
     fmt::{self, Debug},
-    rc::Rc,
 };
 
 use crate::ast::token::{datatype::DataType, literal::Literal};
 
-use std::sync::Mutex;
 
 pub struct Interface {
     pub name: String,

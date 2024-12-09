@@ -19,7 +19,7 @@ use node::{InstructionBuilder, Node};
 use pest::iterators::Pairs;
 use statement::Statement;
 use token::{
-    args_list::{self, ArgsList},
+    args_list::{ArgsList},
     condition_keyword::ConditionKeyword,
 };
 

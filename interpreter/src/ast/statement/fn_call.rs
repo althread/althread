@@ -8,7 +8,7 @@ use crate::{
         node::{InstructionBuilder, Node, NodeBuilder},
         token::{datatype::DataType, identifier::Identifier},
     },
-    compiler::{stdlib::Interface, CompilerState, InstructionBuilderOk, Variable},
+    compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
     parser::Rule,
     vm::instruction::{FnCallControl, Instruction, InstructionType},
