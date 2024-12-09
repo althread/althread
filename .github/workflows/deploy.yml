@@ -22,6 +22,10 @@ jobs:
           profile: minimal
           override: true
 
+      - name: Test Rust Project
+        run: |
+          cargo test --all
+
       - name: Build Rust Project
         run: |
           cargo build --verbose --release
