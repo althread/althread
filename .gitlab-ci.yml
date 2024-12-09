@@ -1,6 +1,18 @@
 stages:
+  - test-rust
   - build-rust
   - build-web
+
+
+cache:
+  paths:
+    - target/
+
+test-rust:
+  stage: test-rust
+  image: rust:latest
+  script:
+    - cargo test --all
 
 build-rust:
   stage: build-rust
