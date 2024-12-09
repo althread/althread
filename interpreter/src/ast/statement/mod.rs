@@ -129,14 +129,6 @@ impl InstructionBuilder for Statement {
 impl Statement {
     pub fn is_atomic(&self) -> bool {
         todo!("Check this implementation");
-        match self {
-            Self::Assignment(_)
-            | Self::Declaration(_)
-            | Self::FnCall(_)
-            | Self::Run(_)
-            | Self::Atomic(_) => true,
-            _ => false,
-        }
     }
 }
 

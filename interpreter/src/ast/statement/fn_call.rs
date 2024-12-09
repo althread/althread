@@ -101,7 +101,6 @@ impl InstructionBuilder for Node<FnCall> {
             let var = &state.program_stack[state.program_stack.len() - var_id - 1];
 
             let interfaces = state.stdlib.interfaces(&var.datatype);
-            let interfaces = state.stdlib.get_interfaces(&var.datatype).unwrap();
 
             // retreive the name of the function
             let fn_name = self.value.fn_name.last().unwrap().value.value.clone();

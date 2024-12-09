@@ -353,7 +353,7 @@ impl fmt::Display for Literal {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
-            Self::List(datatype, values) => write!(
+            Self::List(_datatype, values) => write!(
                 f,
                 "list({})",
                 values
@@ -383,7 +383,7 @@ impl AstDisplay for Literal {
                 Ok(())
             }
             Self::List(datatype, values) => {
-                writeln!(f, "{prefix}list")?;
+                writeln!(f, "{prefix}list({datatype})")?;
                 for value in values {
                     value.ast_fmt(f, &prefix.add_leaf())?;
                 }

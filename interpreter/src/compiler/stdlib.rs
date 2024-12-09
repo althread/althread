@@ -87,7 +87,7 @@ impl Stdlib {
                     ret: t.as_ref().clone(),
                     f: Box::new(|list, v| {
                         let v = v.to_integer().unwrap();
-                        if let Literal::List(dtype, list) = list {
+                        if let Literal::List(_dtype, list) = list {
                             if v < 0 || v as usize >= list.len() {
                                 panic!("Index out of bounds");
                             }
@@ -129,7 +129,7 @@ impl Stdlib {
                     f: Box::new(|list, v| {
                         let v = v.to_tuple().unwrap();
                         let v = v.first().unwrap().to_integer().unwrap();
-                        if let Literal::List(dtype, list) = list {
+                        if let Literal::List(_dtype, list) = list {
                             if v < 0 || v as usize >= list.len() {
                                 panic!("Index out of bounds: {}", v);
                             }

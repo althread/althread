@@ -322,8 +322,6 @@ impl<'a> VM<'a> {
             return Ok(None);
         }
 
-        let mut need_to_check_invariants = false;
-
         for action in actions.actions {
             match action {
                 GlobalAction::Wait => {
@@ -368,8 +366,6 @@ impl<'a> VM<'a> {
                         }
                         true
                     });
-
-                    need_to_check_invariants = true;
                 }
                 GlobalAction::StartProgram(name, pid, args) => {
                     self.run_program(&name, pid, args);

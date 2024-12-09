@@ -329,7 +329,7 @@ impl AstDisplay for Ast {
             writeln!(f, "")?;
         }
 
-        for (process_name, (args, process_node)) in &self.process_blocks {
+        for (process_name, (_args, process_node)) in &self.process_blocks {
             writeln!(f, "{}{}", prefix, process_name)?;
             process_node.ast_fmt(f, &prefix.add_branch())?;
             writeln!(f, "")?;

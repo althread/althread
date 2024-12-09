@@ -15,7 +15,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-enum BreakLoopType {
+pub enum BreakLoopType {
     Break,
     Continue,
 }

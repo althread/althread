@@ -449,8 +449,6 @@ impl<'a> RunningProgramState<'a> {
             }
             InstructionType::SendWaiting => {
                 unimplemented!("SendWaiting not implemented anymore");
-                //self.memory.push(Literal::Bool(!channels.is_waiting(self.id)));
-                1
             }
             InstructionType::ChannelPeek(channel_name) => {
                 let values = channels.peek(self.id, channel_name.clone());
