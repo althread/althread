@@ -384,3 +384,105 @@ impl AstDisplay for Expression {
         }
     }
 }
+
+
+
+
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::token::{binary_operator::BinaryOperator, literal::Literal};
+
+    #[test]
+    fn test_literal_expression() {
+        let litteral_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+            },
+            value: Literal::Int(42),
+        };
+        let primary_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+            },
+            value: PrimaryExpression::Literal(litteral_node),
+        };
+        let litteral_expr = Expression::Primary(primary_node);
+        let local_expr = LocalExpressionNode::from_expression(&litteral_expr, &vec![]).unwrap();
+        assert_eq!(local_expr.eval(&Memory::new()).unwrap(), Literal::Int(42));
+    }
+    #[test]
+    fn test_binary_expression() {
+        let litteral_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+            },
+            value: Literal::Int(42),
+        };
+        let primary_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+            },
+            value: PrimaryExpression::Literal(litteral_node),
+        };
+
+        let litteral_expr = Expression::Primary(primary_node);
+        
+        
+        let binary_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+            },
+            value: BinaryExpression {
+                left: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                    },
+                    value: litteral_expr.clone(),
+                }),
+                right: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                    },
+                    value: litteral_expr.clone(),
+                }),
+                operator: Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                    },
+                    value: BinaryOperator::Add,
+                },
+            },
+        };
+        let binary_expr = Expression::Binary(binary_node);
+        let local_expr = LocalExpressionNode::from_expression(&binary_expr, &vec![]).unwrap();
+        assert_eq!(local_expr.eval(&Memory::new()).unwrap(), Literal::Int(42+42));
+    }
+}
