@@ -1,0 +1,23 @@
+
+main {
+  let s: list(list(int));
+  for i in 0..10 {
+    let a : list(int);
+    for j in 0..i+1 {
+      a.push(j);
+    }
+    s.push(a);
+  }
+
+  for i in s {
+    print(i);
+    for j in i {
+      print(j);
+    }
+  }
+
+  let v = s.at(3);
+  let v = v.at(1);
+  print("=========");
+  print(v);
+}
