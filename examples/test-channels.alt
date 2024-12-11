@@ -1,0 +1,24 @@
+
+shared {
+    let A = 1;
+    let B = 0;
+    let Start = false;
+}
+program A() {
+    wait Start;
+    wait receive in (x,y) => {
+        print("received ");
+    };
+}
+
+main {
+    let pa = run A();
+    let pb = run A();
+
+    channel self.out (int, bool)> pa.in;
+    channel self.out2 (int, bool)> pb.in;
+    Start = true;
+    send out (125, true);
+    send out2 (125, false);
+
+}

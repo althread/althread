@@ -10,7 +10,7 @@ use crate::{
 };
 
 use super::{
-    channels::Channels,
+    channels::{Channels, ReceiverInfo},
     instruction::{Instruction, InstructionType, ProgramCode},
     str_to_expr_error, GlobalAction, GlobalActions, GlobalMemory, Memory,
 };
@@ -29,7 +29,7 @@ pub struct RunningProgramState<'a> {
 
 impl PartialEq for RunningProgramState<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.id == other.id && self.memory == other.memory && self.name == other.name
+        self.id == other.id && self.memory == other.memory && self.name == other.name && self.instruction_pointer == other.instruction_pointer
     }
 }
 
@@ -37,6 +37,7 @@ impl Hash for RunningProgramState<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.id.hash(state);
         self.memory.hash(state);
+        self.instruction_pointer.hash(state);
     }
 }
 
@@ -489,7 +490,7 @@ impl<'a> RunningProgramState<'a> {
                         .expect("Panic: cannot convert to pid"),
                 };
 
-                let sender_info = channels
+                let is_data_waiting = channels
                     .connect(
                         sender_pid,
                         connect_ctrl.sender_channel.clone(),
@@ -499,8 +500,12 @@ impl<'a> RunningProgramState<'a> {
                     .map_err(|msg| {
                         AlthreadError::new(ErrorType::RuntimeError, cur_inst.pos, msg)
                     })?;
-                if let Some(sender_info) = sender_info {
-                    action = Some(GlobalAction::Connect(sender_info.0, sender_info.1));
+                // A connection has the same effect as a send globally, if some data was waiting to be sent
+                if is_data_waiting {
+                    action = Some(GlobalAction::Send(connect_ctrl.sender_channel.clone(), Some(ReceiverInfo {
+                        program_id: receiver_pid,
+                        channel_name: connect_ctrl.receiver_channel.clone(),
+                    })));
                 }
                 1
             }

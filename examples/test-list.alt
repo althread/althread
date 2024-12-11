@@ -1,0 +1,44 @@
+
+main {
+    let n = 6;
+    let p: list(proc(A));
+    for i in 0..n {
+        let pid = run A(i);
+        p.push(pid);
+    }
+    
+    //not yet supported
+    //let p = [run A(i) for i in 0..10];
+
+    for i in 0..(n-1) {
+        let n = p.len();
+        let at_i = p.at(i);
+        let at_i2 = p.at((i+1)%n);
+        print(at_i, "->", at_i2);
+        channel at_i.out (int)> at_i2.in;
+    }
+
+    let first = p.at(0);
+    channel self.out (int)> first.in;
+    let n = p.len();
+    let last = p.at(n-1);
+    channel last.out (int)> self.in;
+
+    send out(0);
+
+    wait receive in(i) => {
+        print("FINAL Received: ", i);
+    };
+}
+
+
+program A(id:int) {
+    print("Hello from A");
+    wait receive in (i) => {
+        id += i;
+        print("Received", i, " new value is ", id);
+    };
+    send out(id);
+}
+
+

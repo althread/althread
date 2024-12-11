@@ -77,7 +77,7 @@ impl Channels {
         channel_name: String,
         to_program_id: usize,
         to_channel_name: String,
-    ) -> Result<Option<(usize, String)>, String> {
+    ) -> Result<bool, String> {
         if self
             .connections
             .contains_key(&(program_id, channel_name.clone()))
@@ -97,9 +97,9 @@ impl Channels {
                 .entry((to_program_id, to_channel_name.clone()))
                 .or_insert(vec![])
                 .extend(values);
-            return Ok(Some((program_id, channel_name)));
+            return Ok(true);
         }
-        Ok(None)
+        Ok(false)
     }
 
     /**

@@ -1,0 +1,43 @@
+
+shared {
+  let A: bool = false;
+  let B: bool = true;
+  let Done = 0;
+}
+
+program A() {
+  print("starting A");
+  ! {
+    A = false;
+    B = true;
+  }
+  Done += 1;
+  send out(42,true);
+}
+
+program B() {
+  print("starting B");
+  ! {
+    A = true;
+    B = false;
+  }
+  Done += 1;
+}
+
+always {
+  A || B;
+}
+
+main {
+  let a = run A();
+  run B();
+  wait Done == 2;
+
+  channel a.out (int, bool)> self.in;
+
+  wait receive in(x,y) => {
+    print("Receive", x, y);
+  };
+  print("DONE");
+}
+    

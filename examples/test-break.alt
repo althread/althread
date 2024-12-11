@@ -1,0 +1,29 @@
+
+shared {
+    let A = false;
+}
+
+program A() {
+    let i = 0;
+    loop {
+        wait first {
+            A => {
+                print("A is true");
+                break;
+            }
+            !A => {
+                print("A is false");
+                break;
+            }
+        }
+    }
+}
+
+always {
+}
+
+main {
+    let a = run A();
+    print("started", a);
+    A = true;
+}

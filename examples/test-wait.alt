@@ -1,0 +1,86 @@
+
+shared {
+    let VA = 1;
+}
+
+main {
+
+    print("wait first");
+    //print "CASE 1" (because the keyword first is used)
+    wait first {
+        (VA == 0) => { print("CASE 0"); }
+        (VA == 1) => { print("CASE 1"); VA = 2; }
+        (VA == 2) => { print("CASE 2"); }
+    }
+    
+    print("wait seq");
+    VA = 1;
+    //print "CASE 1" and "CASE 2"
+    wait seq {
+        (VA == 0) => { print("CASE 0"); }
+        (VA == 1) => { print("CASE 1"); VA = 2; }
+        (VA == 2) => { print("CASE 2"); }
+    }
+    
+    
+    if VA == 0 {
+        print("if condition");
+    }
+
+    VA = 0; // comment to see a deadlock
+    
+    wait (VA == 0);
+    print("wait condition");
+}
+/**
+`condition` is a boolean expression
+`wait condition` is a statement that waits for the condition to be true
+
+```
+first { 
+    condition1 => block1,
+    condition2 => block2,
+}
+``` 
+is an boolean expression that is true if one of the conditions is true. Each condition is evaluated sequentially from top to bottom, if one condition is true, it executes only the first corresponding block and then goes to the first instruction outside the block, hence:
+```
+wait first {
+    condition1 => block1,
+    condition2 => block2,
+}
+```
+waits for one of the conditions to be true, then executes only the corresponding block, then continues with the rest of the program
+
+Similarly, 
+```
+seq { 
+    condition1 => block1,
+    condition2 => block2,
+}
+```
+is an boolean expression that evaluates to true if one of the conditions is true, however here, when the block corresponding to the first true condition is executed, the remaining conditions are also evaluated, and the blocks associated with all the true conditions are executed sequentially from top to bottom. Hence,
+```
+wait seq {
+    condition1 => block1,
+    condition2 => block2,
+}
+```
+waits for one of the conditions to be true, then executes the corresponding block, then evaluate the remaining conditions from this first true condition and execute all the blocks associated with true conditions. Then, the rest of the program continues.
+
+Since seq {} and first {} are boolean expressions, they can be used in if statements, while loops, and first/seq conditions.
+
+Example:
+```
+if seq {
+        first {
+            condition1 => block1,
+            condition2 => block2,
+        }
+        condition3 => block3,
+    } 
+{
+    print("if seq")
+}
+```
+means that if condition1 is true, block1 is executed, then condition3 is evaluated (if it is true, block3 is executed). Otherwise if condition1 is false, then condition2 is evaluated, if it is true, block2 is executed, then condition3 is evaluated (if it is true, block3 is executed), if condition2 is false, condition3 is evaluated, if it is true, block3 is executed. If all conditions are false, the entier expression is false and the pring statement is not executed.
+ */
