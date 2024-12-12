@@ -11,7 +11,7 @@ use channels::{Channels, ChannelsState, ReceiverInfo};
 use fastrand::Rng;
 
 use instruction::{
-    ExpressionControl, GlobalReadsControl, Instruction, InstructionType, ProgramCode,
+    ExpressionControl, Instruction, InstructionType, ProgramCode,
 };
 use running_program::RunningProgramState;
 
@@ -70,7 +70,7 @@ pub struct VM<'a> {
     pub running_programs: Vec<RunningProgramState<'a>>,
     pub programs_code: &'a HashMap<String, ProgramCode>,
     pub executable_programs: BTreeSet<usize>, // needs to be sorted to have a deterministic behavior
-    pub always_conditions: &'a Vec<(HashSet<String>, GlobalReadsControl, ExpressionControl, Pos)>,
+    pub always_conditions: &'a Vec<(HashSet<String>, Vec<String>, ExpressionControl, Pos)>,
 
     /// The programs that are waiting for a condition to be true
     /// The condition depends on the global variables that are in the HashSet
@@ -438,12 +438,12 @@ impl<'a> VM<'a> {
     }
 
     pub fn check_invariants(&self) -> AlthreadResult<()> {
-        for (_deps, read, expr, pos) in self.always_conditions.iter() {
+        for (_deps, read_vars, expr, pos) in self.always_conditions.iter() {
             //if _deps.contains(&var_name) { //TODO improve by checking if the variable is in the dependencies
             // Check if the condition is true
             // create a small memory stack with the value of the variables
             let mut memory = Vec::new();
-            for var_name in read.variables.iter() {
+            for var_name in read_vars.iter() {
                 memory.push(
                     self.globals
                         .get(var_name)

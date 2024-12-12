@@ -13,8 +13,8 @@ use crate::{
 pub enum InstructionType {
     Empty,
     Expression(ExpressionControl),
-    GlobalReads(GlobalReadsControl),
-    GlobalAssignment(GlobalAssignmentControl),
+    GlobalReads {variables: Vec<String>, only_const: bool},
+    GlobalAssignment {identifier: String, operator: BinaryAssignmentOperator,unstack_len: usize},
     LocalAssignment(LocalAssignmentControl),
     JumpIf(JumpIfControl),
     Jump(JumpControl),
@@ -31,7 +31,7 @@ pub enum InstructionType {
     Push(Literal),
     WaitStart(WaitStartControl),
     Wait(WaitControl),
-    Send(SendControl),
+    Send { channel_name: String, unstack_len: usize },
     SendWaiting,
     Connect(ConnectionControl),
     AtomicStart,
@@ -44,8 +44,9 @@ impl fmt::Display for InstructionType {
         match self {
             Self::Empty => write!(f, "EMPTY")?,
             Self::Expression(a) => write!(f, "{}", a)?,
-            Self::GlobalReads(a) => write!(f, "{}", a)?,
-            Self::GlobalAssignment(a) => write!(f, "{}", a)?,
+            Self::GlobalReads {variables, ..} => write!(f, "global_read {}", variables.join(","))?,
+            Self::GlobalAssignment {identifier, operator, unstack_len} => write!(f, "{} {} (unstack {})",
+            identifier, operator, unstack_len)?,
             Self::LocalAssignment(a) => write!(f, "{}", a)?,
             Self::JumpIf(a) => write!(f, "{}", a)?,
             Self::Jump(a) => write!(f, "{}", a)?,
@@ -60,7 +61,8 @@ impl fmt::Display for InstructionType {
             Self::Push(l) => write!(f, "push ({})", l)?,
             Self::WaitStart(w) => write!(f, "{}", w)?,
             Self::Wait(w) => write!(f, "{}", w)?,
-            Self::Send(s) => write!(f, "{}", s)?,
+            Self::Send {channel_name, unstack_len} => write!(f, "send to {} (unstack {})",
+                channel_name, unstack_len)?,
             Self::SendWaiting => write!(f, "send waiting?")?,
             Self::ChannelPeek(s) => write!(f, "peek '{}'", s)?,
             Self::ChannelPop(s) => write!(f, "pop '{}'", s)?,
@@ -75,13 +77,13 @@ impl fmt::Display for InstructionType {
 impl InstructionType {
     pub fn is_local(&self) -> bool {
         match self {
-              Self::GlobalAssignment(_)
-            | Self::Send(_)
+              Self::GlobalAssignment {..}
+            | Self::Send {..}
             | Self::ChannelPeek(_)
             | Self::AtomicStart // starts a block that surely contains a global operation
             | Self::WaitStart(_) => false, // wait starts an atomic block to evaluate the conditions
 
-            Self::GlobalReads(r) => r.only_const, // a global read is local only if it reads constant variables
+            Self::GlobalReads {only_const, ..} => *only_const, // a global read is local only if it reads constant variables
 
             // This should be checked. I think the following are not global because
             // they do not write or read any global variable or channel
@@ -246,17 +248,6 @@ impl fmt::Display for ExpressionControl {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct GlobalReadsControl {
-    pub variables: Vec<String>,
-    pub only_const: bool,
-}
-impl fmt::Display for GlobalReadsControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "global_read {}", self.variables.join(","))?;
-        Ok(())
-    }
-}
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct UnstackControl {
@@ -280,21 +271,6 @@ impl fmt::Display for DeclarationControl {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct SendControl {
-    pub channel_name: String,
-    pub unstack_len: usize,
-}
-impl fmt::Display for SendControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "send to {} (unstack {})",
-            self.channel_name, self.unstack_len
-        )?;
-        Ok(())
-    }
-}
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct ConnectionControl {
@@ -327,22 +303,6 @@ impl fmt::Display for ConnectionControl {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct GlobalAssignmentControl {
-    pub identifier: String,
-    pub operator: BinaryAssignmentOperator,
-    pub unstack_len: usize,
-}
-impl fmt::Display for GlobalAssignmentControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{} {} (unstack {})",
-            self.identifier, self.operator, self.unstack_len
-        )?;
-        Ok(())
-    }
-}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct LocalAssignmentControl {

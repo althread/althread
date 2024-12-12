@@ -229,8 +229,8 @@ impl<'a> RunningProgramState<'a> {
                 self.memory.push(lit);
                 1
             }
-            InstructionType::GlobalReads(global_read) => {
-                for var_name in global_read.variables.iter() {
+            InstructionType::GlobalReads { variables, ..} => {
+                for var_name in variables.iter() {
                     self.memory.push(
                         globals
                             .get(var_name)
@@ -240,29 +240,28 @@ impl<'a> RunningProgramState<'a> {
                 }
                 1
             }
-            InstructionType::GlobalAssignment(global_asgm) => {
+            InstructionType::GlobalAssignment { identifier, operator, unstack_len } => {
                 let lit = self
                     .memory
                     .last()
                     .expect("Panic: stack is empty, cannot perform assignment")
                     .clone();
-                for _ in 0..global_asgm.unstack_len {
+                for _ in 0..*unstack_len {
                     self.memory.pop();
                 }
 
-                let lit = global_asgm
-                    .operator
+                let lit = operator
                     .apply(
-                        &globals.get(&global_asgm.identifier).expect(
-                            format!("global variable '{}' not found", global_asgm.identifier)
+                        &globals.get(identifier).expect(
+                            format!("global variable '{}' not found", identifier)
                                 .as_str(),
                         ),
                         &lit,
                     )
                     .map_err(str_to_expr_error(cur_inst.pos))?;
 
-                globals.insert(global_asgm.identifier.clone(), lit);
-                action = Some(GlobalAction::Write(global_asgm.identifier.clone()));
+                globals.insert(identifier.clone(), lit);
+                action = Some(GlobalAction::Write(identifier.clone()));
                 1
             }
             InstructionType::LocalAssignment(local_asgm) => {
@@ -432,20 +431,20 @@ impl<'a> RunningProgramState<'a> {
                 self.memory.push(literal.clone());
                 1
             }
-            InstructionType::Send(send_ctrl) => {
+            InstructionType::Send {channel_name, unstack_len} => {
                 let value = self
                     .memory
                     .last()
                     .expect("Panic: stack is empty, cannot send")
                     .clone();
 
-                for _ in 0..send_ctrl.unstack_len {
+                for _ in 0..*unstack_len {
                     self.memory.pop();
                 }
 
-                let receiver = channels.send(self.id, send_ctrl.channel_name.clone(), value);
+                let receiver = channels.send(self.id, channel_name.clone(), value);
 
-                action = Some(GlobalAction::Send(send_ctrl.channel_name.clone(), receiver));
+                action = Some(GlobalAction::Send(channel_name.clone(), receiver));
                 1
             }
             InstructionType::SendWaiting => {

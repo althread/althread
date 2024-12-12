@@ -229,11 +229,11 @@ impl Ast {
                                 "The condition must be a single expression".to_string(),
                             ));
                         }
-                        if let InstructionType::GlobalReads(g_read) = &compiled[0].control {
+                        if let InstructionType::GlobalReads { variables, .. } = &compiled[0].control {
                             if let InstructionType::Expression(exp) = &compiled[1].control {
                                 always_conditions.push((
-                                    g_read.variables.iter().map(|s| s.clone()).collect(),
-                                    g_read.clone(),
+                                    variables.iter().map(|s| s.clone()).collect(),
+                                    variables.clone(),
                                     exp.clone(),
                                     condition.pos,
                                 ));

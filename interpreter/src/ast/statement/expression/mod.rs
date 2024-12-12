@@ -29,7 +29,7 @@ use crate::{
     no_rule,
     parser::Rule,
     vm::{
-        instruction::{ExpressionControl, GlobalReadsControl, Instruction, InstructionType},
+        instruction::{ExpressionControl, Instruction, InstructionType},
         Memory,
     },
 };
@@ -309,10 +309,10 @@ impl InstructionBuilder for Node<Expression> {
         if vars.len() > 0 {
             instructions.push(Instruction {
                 pos: Some(self.pos),
-                control: InstructionType::GlobalReads(GlobalReadsControl {
+                control: InstructionType::GlobalReads {
                     only_const: vars.iter().all(|v| state.global_table[v].mutable == false),
                     variables: vars.into_iter().collect(),
-                }),
+                },
             });
         }
 

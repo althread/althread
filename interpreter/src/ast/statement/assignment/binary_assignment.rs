@@ -13,7 +13,7 @@ use crate::{
     error::{AlthreadError, AlthreadResult, ErrorType},
     parser::Rule,
     vm::instruction::{
-        GlobalAssignmentControl, Instruction, InstructionType, LocalAssignmentControl,
+        Instruction, InstructionType, LocalAssignmentControl,
     },
 };
 
@@ -75,11 +75,11 @@ impl InstructionBuilder for Node<BinaryAssignment> {
             }
             builder.instructions.push(Instruction {
                 pos: Some(self.value.identifier.pos),
-                control: InstructionType::GlobalAssignment(GlobalAssignmentControl {
+                control: InstructionType::GlobalAssignment {
                     identifier: self.value.identifier.value.value.clone(),
                     operator: self.value.operator.value.clone(),
                     unstack_len,
-                }),
+                },
             });
         } else {
             let mut var_idx = 0;
