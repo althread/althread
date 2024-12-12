@@ -16,8 +16,7 @@ use crate::{
     no_rule,
     parser::Rule,
     vm::instruction::{
-        Instruction, InstructionType, JumpControl, JumpIfControl, LocalAssignmentControl,
-        WaitControl, WaitStartControl,
+        Instruction, InstructionType, 
     },
 };
 
@@ -95,10 +94,10 @@ impl InstructionBuilder for Node<Wait> {
 
         builder.instructions.push(Instruction {
             pos: Some(self.pos),
-            control: InstructionType::WaitStart(WaitStartControl {
+            control: InstructionType::WaitStart {
                 dependencies,
                 start_atomic: self.value.start_atomic,
-            }),
+            },
         });
 
         state.program_stack.push(Variable {
@@ -141,20 +140,20 @@ impl InstructionBuilder for Node<Wait> {
             });
             case_statement.instructions.push(Instruction {
                 pos: Some(case.pos),
-                control: InstructionType::LocalAssignment(LocalAssignmentControl {
+                control: InstructionType::LocalAssignment {
                     index: 0,
                     operator: BinaryAssignmentOperator::OrAssign,
                     unstack_len: 1,
-                }),
+                },
             });
 
             // the offset is because a jump will be added after the statement
             case_condition.instructions.push(Instruction {
                 pos: Some(case.pos),
-                control: InstructionType::JumpIf(JumpIfControl {
+                control: InstructionType::JumpIf {
                     jump_false: (case_statement.instructions.len() + 1 + jump_if_offset) as i64,
                     unstack_len,
-                }),
+                },
             });
             builder.extend(case_condition);
             if !self.value.start_atomic {
@@ -174,18 +173,16 @@ impl InstructionBuilder for Node<Wait> {
 
         builder.instructions.push(Instruction {
             pos: Some(self.pos),
-            control: InstructionType::Wait(WaitControl {
+            control: InstructionType::Wait {
                 jump: -(builder.instructions.len() as i64),
                 unstack_len: 1,
-            }),
+            },
         });
         state.program_stack.pop();
 
         if self.value.block_kind == WaitingBlockKind::First {
             for index in jump_index.iter() {
-                builder.instructions[*index].control = InstructionType::Jump(JumpControl {
-                    jump: (builder.instructions.len() - index - 1) as i64,
-                });
+                builder.instructions[*index].control = InstructionType::Jump((builder.instructions.len() - index - 1) as i64);
             }
         }
 

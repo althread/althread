@@ -11,13 +11,13 @@ use channels::{Channels, ChannelsState, ReceiverInfo};
 use fastrand::Rng;
 
 use instruction::{
-    ExpressionControl, Instruction, InstructionType, ProgramCode,
+    Instruction, InstructionType, ProgramCode,
 };
 use running_program::RunningProgramState;
 
 use crate::{
     ast::{
-        statement::waiting_case::WaitDependency,
+        statement::{expression::LocalExpressionNode, waiting_case::WaitDependency},
         token::literal::Literal,
     },
     compiler::{stdlib::Stdlib, CompiledProject},
@@ -70,7 +70,7 @@ pub struct VM<'a> {
     pub running_programs: Vec<RunningProgramState<'a>>,
     pub programs_code: &'a HashMap<String, ProgramCode>,
     pub executable_programs: BTreeSet<usize>, // needs to be sorted to have a deterministic behavior
-    pub always_conditions: &'a Vec<(HashSet<String>, Vec<String>, ExpressionControl, Pos)>,
+    pub always_conditions: &'a Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
 
     /// The programs that are waiting for a condition to be true
     /// The condition depends on the global variables that are in the HashSet
@@ -188,10 +188,10 @@ impl<'a> VM<'a> {
                 .expect("waiting on no instruction")
                 .control
             {
-                InstructionType::WaitStart(ctrl) => {
+                InstructionType::WaitStart { dependencies, .. } => {
                     self.executable_programs.remove(&program_id);
                     self.waiting_programs
-                        .insert(program_id, ctrl.dependencies.clone());
+                        .insert(program_id, dependencies.clone());
                 }
                 _ => unreachable!("waiting on an instruction that is not a WaitStart instruction"),
             }
@@ -313,9 +313,9 @@ impl<'a> VM<'a> {
                 .expect("waiting on no instruction")
                 .control
             {
-                InstructionType::WaitStart(ctrl) => {
+                InstructionType::WaitStart { dependencies, .. } => {
                     self.executable_programs.remove(&pid);
-                    self.waiting_programs.insert(pid, ctrl.dependencies.clone());
+                    self.waiting_programs.insert(pid, dependencies.clone());
                 }
                 _ => unreachable!("waiting on an instruction that is not a WaitStart instruction"),
             }
@@ -451,7 +451,7 @@ impl<'a> VM<'a> {
                         .clone(),
                 );
             }
-            match expr.root.eval(&memory) {
+            match expr.eval(&memory) {
                 Ok(cond) => {
                     if !cond.is_true() {
                         return Err(AlthreadError::new(

@@ -29,7 +29,7 @@ use crate::{
     no_rule,
     parser::Rule,
     vm::{
-        instruction::{ExpressionControl, Instruction, InstructionType},
+        instruction::{Instruction, InstructionType},
         Memory,
     },
 };
@@ -327,7 +327,7 @@ impl InstructionBuilder for Node<Expression> {
 
         instructions.push(Instruction {
             pos: Some(self.pos),
-            control: InstructionType::Expression(ExpressionControl { root: local_expr }),
+            control: InstructionType::Expression(local_expr),
         });
 
         state.program_stack.push(Variable {

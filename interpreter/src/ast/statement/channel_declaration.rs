@@ -11,7 +11,7 @@ use crate::{
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
     parser::Rule,
-    vm::instruction::{ConnectionControl, Instruction, InstructionType},
+    vm::instruction::{Instruction, InstructionType},
 };
 
 #[derive(Debug, Clone)]
@@ -177,12 +177,12 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
         }
 
         Ok(InstructionBuilderOk::from_instructions(vec![Instruction {
-            control: InstructionType::Connect(ConnectionControl {
-                sender_idx: get_var_id(&dec.ch_left_prog, state, &self.pos)?,
-                receiver_idx: get_var_id(&dec.ch_right_prog, state, &self.pos)?,
+            control: InstructionType::Connect {
+                sender_pid: get_var_id(&dec.ch_left_prog, state, &self.pos)?,
+                receiver_pid: get_var_id(&dec.ch_right_prog, state, &self.pos)?,
                 sender_channel: dec.ch_left_name.clone(),
                 receiver_channel: dec.ch_right_name.clone(),
-            }),
+            },
             pos: Some(self.pos),
         }]))
     }

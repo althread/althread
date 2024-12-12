@@ -36,7 +36,7 @@ use crate::{
     error::AlthreadResult,
     no_rule,
     parser::Rule,
-    vm::instruction::{Instruction, InstructionType, UnstackControl},
+    vm::instruction::{Instruction, InstructionType},
 };
 
 use super::{
@@ -108,7 +108,7 @@ impl InstructionBuilder for Statement {
                 let mut builder = node.compile(state)?;
                 builder.instructions.push(Instruction {
                     pos: Some(node.pos),
-                    control: InstructionType::Unstack(UnstackControl { unstack_len: 1 }),
+                    control: InstructionType::Unstack { unstack_len: 1 },
                 });
                 state.program_stack.pop();
                 Ok(builder)
@@ -117,7 +117,7 @@ impl InstructionBuilder for Statement {
                 let mut builder = node.compile(state)?;
                 builder.instructions.push(Instruction {
                     pos: Some(node.pos),
-                    control: InstructionType::Unstack(UnstackControl { unstack_len: 1 }),
+                    control: InstructionType::Unstack { unstack_len: 1 },
                 });
                 state.program_stack.pop();
                 Ok(builder)

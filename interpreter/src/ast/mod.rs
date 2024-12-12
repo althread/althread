@@ -117,7 +117,7 @@ impl Ast {
                             for gi in node_compiled.instructions {
                                 match gi.control {
                                     InstructionType::Expression(exp) => {
-                                        literal = Some(exp.root.eval(&memory).or_else(|err| {
+                                        literal = Some(exp.eval(&memory).or_else(|err| {
                                             Err(AlthreadError::new(
                                                 ErrorType::ExpressionError,
                                                 gi.pos,
@@ -125,9 +125,9 @@ impl Ast {
                                             ))
                                         })?);
                                     }
-                                    InstructionType::Declaration(dec) => {
+                                    InstructionType::Declaration {unstack_len} => {
                                         // do nothing
-                                        assert!(dec.unstack_len == 1)
+                                        assert!(unstack_len == 1)
                                     }
                                     InstructionType::Push(literal) => memory.push(literal.clone()),
                                     _ => {

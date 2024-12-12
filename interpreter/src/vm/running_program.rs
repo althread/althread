@@ -204,26 +204,26 @@ impl<'a> RunningProgramState<'a> {
             InstructionType::Empty => 1,
             InstructionType::AtomicStart => 1,
             InstructionType::AtomicEnd => 1,
-            InstructionType::Break(c) => {
-                for _ in 0..c.unstack_len {
+            InstructionType::Break { unstack_len, jump, ..} => {
+                for _ in 0..*unstack_len {
                     self.memory.pop();
                 }
-                c.jump
+                *jump
             }
-            InstructionType::JumpIf(c) => {
+            InstructionType::JumpIf {jump_false, unstack_len} => {
                 let cond = self.memory.last().unwrap().is_true();
-                for _ in 0..c.unstack_len {
+                for _ in 0..*unstack_len {
                     self.memory.pop();
                 }
                 if cond {
                     1
                 } else {
-                    c.jump_false
+                    *jump_false
                 }
             }
-            InstructionType::Jump(c) => c.jump,
+            InstructionType::Jump(jump) => *jump,
             InstructionType::Expression(exp) => {
-                let lit = exp.root.eval(&mut self.memory).map_err(|msg| {
+                let lit = exp.eval(&mut self.memory).map_err(|msg| {
                     AlthreadError::new(ErrorType::ExpressionError, cur_inst.pos, msg)
                 })?;
                 self.memory.push(lit);
@@ -264,55 +264,54 @@ impl<'a> RunningProgramState<'a> {
                 action = Some(GlobalAction::Write(identifier.clone()));
                 1
             }
-            InstructionType::LocalAssignment(local_asgm) => {
+            InstructionType::LocalAssignment {index, unstack_len, operator} => {
                 let lit = self
                     .memory
                     .last()
                     .expect("Panic: stack is empty, cannot perform assignment")
                     .clone();
-                for _ in 0..local_asgm.unstack_len {
+                for _ in 0..*unstack_len {
                     self.memory.pop();
                 }
 
                 let len = self.memory.len();
 
-                self.memory[len - 1 - local_asgm.index] = local_asgm
-                    .operator
-                    .apply(&self.memory[len - 1 - local_asgm.index], &lit)
+                self.memory[len - 1 - index] = operator
+                    .apply(&self.memory[len - 1 - *index], &lit)
                     .map_err(str_to_expr_error(cur_inst.pos))?;
                 1
             }
-            InstructionType::Unstack(unstack_ctrl) => {
-                for _ in 0..unstack_ctrl.unstack_len {
+            InstructionType::Unstack { unstack_len } => {
+                for _ in 0..*unstack_len {
                     self.memory.pop();
                 }
                 1
             }
-            InstructionType::Declaration(dec) => {
+            InstructionType::Declaration {unstack_len} => {
                 let lit = self
                     .memory
                     .last()
                     .expect("Panic: stack is empty, cannot perform declaration with value")
                     .clone();
-                for _ in 0..dec.unstack_len {
+                for _ in 0..*unstack_len {
                     self.memory.pop();
                 }
                 self.memory.push(lit);
                 1
             }
-            InstructionType::RunCall(call) => {
+            InstructionType::RunCall {name, unstack_len} => {
                 let args = self
                     .memory
                     .last()
                     .expect("Panic: stack is empty, cannot run call")
                     .clone();
-                for _ in 0..call.unstack_len {
+                for _ in 0..*unstack_len {
                     self.memory.pop();
                 }
                 self.memory
-                    .push(Literal::Process(call.name.clone(), *next_pid));
+                    .push(Literal::Process(name.clone(), *next_pid));
                 action = Some(GlobalAction::StartProgram(
-                    call.name.clone(),
+                    name.clone(),
                     *next_pid,
                     args,
                 ));
@@ -323,8 +322,8 @@ impl<'a> RunningProgramState<'a> {
                 action = Some(GlobalAction::EndProgram);
                 0
             }
-            InstructionType::FnCall(f) => {
-                if let Some(v_idx) = f.variable_idx {
+            InstructionType::FnCall {variable_idx, name, arguments, unstack_len} => {
+                if let Some(v_idx) = variable_idx {
                     //println!("f: {:?} on v_idx {}", f.name, v_idx);
                     //println!("current instruction: {:?}", cur_inst);
                     let v_idx = self.memory.len() - 1 - v_idx;
@@ -342,17 +341,17 @@ impl<'a> RunningProgramState<'a> {
                         ),
                     )?;
 
-                    let fn_idx = interfaces.iter().position(|i| i.name == f.name);
+                    let fn_idx = interfaces.iter().position(|i| i.name == *name);
                     if fn_idx.is_none() {
                         return Err(AlthreadError::new(
                             ErrorType::UndefinedFunction,
                             cur_inst.pos,
-                            format!("undefined function {}", f.name),
+                            format!("undefined function {}", name),
                         ));
                     }
                     let fn_idx = fn_idx.unwrap();
                     let interface = interfaces.get(fn_idx).unwrap();
-                    let mut args = match &f.arguments {
+                    let mut args = match &arguments {
                         None => self.memory.last().unwrap().clone(),
                         Some(v) => {
                             let mut args = Vec::new();
@@ -368,7 +367,7 @@ impl<'a> RunningProgramState<'a> {
                     //update the memory with object literal
                     self.memory[v_idx] = lit;
 
-                    for _ in 0..f.unstack_len {
+                    for _ in 0..*unstack_len {
                         self.memory.pop();
                     }
 
@@ -376,7 +375,7 @@ impl<'a> RunningProgramState<'a> {
                     1
                 } else {
                     // currently, only the print function is implemented
-                    if f.name != "print" {
+                    if *name != "print" {
                         panic!("implement a proper function call in the VM");
                     }
                     let lit = self
@@ -384,7 +383,7 @@ impl<'a> RunningProgramState<'a> {
                         .last()
                         .expect("Panic: stack is empty, cannot perform function call")
                         .clone();
-                    for _ in 0..f.unstack_len {
+                    for _ in 0..*unstack_len {
                         self.memory.pop();
                     }
 
@@ -401,17 +400,17 @@ impl<'a> RunningProgramState<'a> {
                     1
                 }
             }
-            InstructionType::WaitStart(_) => 1,
-            InstructionType::Wait(wait_ctrl) => {
+            InstructionType::WaitStart {..} => 1,
+            InstructionType::Wait {unstack_len, jump, ..} => {
                 let cond = self.memory.last().unwrap().is_true();
-                for _ in 0..wait_ctrl.unstack_len {
+                for _ in 0..*unstack_len {
                     self.memory.pop();
                 }
                 if cond {
                     1
                 } else {
                     action = Some(GlobalAction::Wait);
-                    wait_ctrl.jump
+                    *jump
                 }
             }
             InstructionType::Destruct(_) => {
@@ -467,8 +466,8 @@ impl<'a> RunningProgramState<'a> {
                 let _ = channels.pop(self.id, channel_name.clone());
                 1
             }
-            InstructionType::Connect(connect_ctrl) => {
-                let sender_pid = match connect_ctrl.sender_idx {
+            InstructionType::Connect {sender_pid, sender_channel, receiver_pid, receiver_channel} => {
+                let sender_pid = match *sender_pid {
                     None => self.id,
                     Some(idx) => self
                         .memory
@@ -478,7 +477,7 @@ impl<'a> RunningProgramState<'a> {
                         .to_pid()
                         .expect("Panic: cannot convert to pid"),
                 };
-                let receiver_pid = match connect_ctrl.receiver_idx {
+                let receiver_pid = match receiver_pid {
                     None => self.id,
                     Some(idx) => self
                         .memory
@@ -492,18 +491,18 @@ impl<'a> RunningProgramState<'a> {
                 let is_data_waiting = channels
                     .connect(
                         sender_pid,
-                        connect_ctrl.sender_channel.clone(),
+                        sender_channel.clone(),
                         receiver_pid,
-                        connect_ctrl.receiver_channel.clone(),
+                        receiver_channel.clone(),
                     )
                     .map_err(|msg| {
                         AlthreadError::new(ErrorType::RuntimeError, cur_inst.pos, msg)
                     })?;
                 // A connection has the same effect as a send globally, if some data was waiting to be sent
                 if is_data_waiting {
-                    action = Some(GlobalAction::Send(connect_ctrl.sender_channel.clone(), Some(ReceiverInfo {
+                    action = Some(GlobalAction::Send(sender_channel.clone(), Some(ReceiverInfo {
                         program_id: receiver_pid,
-                        channel_name: connect_ctrl.receiver_channel.clone(),
+                        channel_name: receiver_channel.clone(),
                     })));
                 }
                 1

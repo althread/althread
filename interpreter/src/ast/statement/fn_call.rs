@@ -11,7 +11,7 @@ use crate::{
     compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
     parser::Rule,
-    vm::instruction::{FnCallControl, Instruction, InstructionType},
+    vm::instruction::{Instruction, InstructionType},
 };
 
 use super::expression::Expression;
@@ -68,12 +68,12 @@ impl InstructionBuilder for Node<FnCall> {
             let unstack_len = state.unstack_current_depth();
 
             builder.instructions.push(Instruction {
-                control: InstructionType::FnCall(FnCallControl {
+                control: InstructionType::FnCall {
                     name: basename.to_string(),
                     unstack_len,
                     variable_idx: None,
                     arguments: None, // use the top of the stack
-                }),
+                },
                 pos: Some(self.pos),
             });
 
@@ -128,12 +128,12 @@ impl InstructionBuilder for Node<FnCall> {
             });
 
             builder.instructions.push(Instruction {
-                control: InstructionType::FnCall(FnCallControl {
+                control: InstructionType::FnCall {
                     name: fn_name,
                     unstack_len,
                     variable_idx: Some(var_id),
                     arguments: None, // use the top of the stack
-                }),
+                },
                 pos: Some(self.pos),
             });
         }

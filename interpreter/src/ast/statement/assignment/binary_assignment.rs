@@ -13,7 +13,7 @@ use crate::{
     error::{AlthreadError, AlthreadResult, ErrorType},
     parser::Rule,
     vm::instruction::{
-        Instruction, InstructionType, LocalAssignmentControl,
+        Instruction, InstructionType,
     },
 };
 
@@ -125,11 +125,11 @@ impl InstructionBuilder for Node<BinaryAssignment> {
 
             builder.instructions.push(Instruction {
                 pos: Some(self.value.identifier.pos),
-                control: InstructionType::LocalAssignment(LocalAssignmentControl {
+                control: InstructionType::LocalAssignment {
                     index: var_idx,
                     operator: self.value.operator.value.clone(),
                     unstack_len,
-                }),
+                },
             });
         }
 
