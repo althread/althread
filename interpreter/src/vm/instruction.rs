@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 use std::fmt;
 
 use crate::{
@@ -12,59 +11,155 @@ use crate::{
 #[derive(Debug, Clone, PartialEq)]
 pub enum InstructionType {
     Empty,
-    Expression(ExpressionControl),
-    GlobalReads(GlobalReadsControl),
-    GlobalAssignment(GlobalAssignmentControl),
-    LocalAssignment(LocalAssignmentControl),
-    JumpIf(JumpIfControl),
-    Jump(JumpControl),
-    Break(BreakLoopControl),
-    Unstack(UnstackControl),
-    RunCall(RunCallControl),
-    EndProgram,
-    FnCall(FnCallControl),
-    Declaration(DeclarationControl),
+    Expression(LocalExpressionNode),
+    GlobalReads {
+        variables: Vec<String>,
+        only_const: bool,
+    },
+    GlobalAssignment {
+        identifier: String,
+        operator: BinaryAssignmentOperator,
+        unstack_len: usize,
+    },
+    LocalAssignment {
+        index: usize,
+        operator: BinaryAssignmentOperator,
+        unstack_len: usize,
+    },
+    JumpIf {
+        jump_false: i64,
+        unstack_len: usize,
+    },
+    Jump(i64),
+    Break {
+        jump: i64,
+        unstack_len: usize,
+        stop_atomic: bool,
+    },
+    Unstack {
+        unstack_len: usize,
+    },
+    RunCall {
+        name: String,
+        unstack_len: usize,
+    },
+    FnCall {
+        name: String,
+        unstack_len: usize,
+        variable_idx: Option<usize>,
+        arguments: Option<Vec<usize>>,
+    },
+    ///
+    Declaration {
+        unstack_len: usize,
+    },
     ChannelPeek(String),
     ChannelPop(String),
     Destruct(usize),
-    Exit,
     Push(Literal),
-    WaitStart(WaitStartControl),
-    Wait(WaitControl),
-    Send(SendControl),
+    WaitStart {
+        dependencies: WaitDependency,
+        start_atomic: bool,
+    },
+    Wait {
+        jump: i64,
+        unstack_len: usize,
+    },
+    Send {
+        channel_name: String,
+        unstack_len: usize,
+    },
     SendWaiting,
-    Connect(ConnectionControl),
+    Connect {
+        /// the index of the sender pid in the stack (none if the sender is the current process)
+        sender_pid: Option<usize>,
+        /// the index of the receiver pid in the stack (none if the receiver is the current process)
+        receiver_pid: Option<usize>,
+        sender_channel: String,
+        receiver_channel: String,
+    },
     AtomicStart,
     AtomicEnd,
-    //Receive,
-    //Any
+    EndProgram,
+    Exit,
 }
 impl fmt::Display for InstructionType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Empty => write!(f, "EMPTY")?,
-            Self::Expression(a) => write!(f, "{}", a)?,
-            Self::GlobalReads(a) => write!(f, "{}", a)?,
-            Self::GlobalAssignment(a) => write!(f, "{}", a)?,
-            Self::LocalAssignment(a) => write!(f, "{}", a)?,
-            Self::JumpIf(a) => write!(f, "{}", a)?,
-            Self::Jump(a) => write!(f, "{}", a)?,
-            Self::Unstack(a) => write!(f, "{}", a)?,
+            Self::Expression(a) => write!(f, "eval {}", a)?,
+            Self::GlobalReads { variables, .. } => {
+                write!(f, "global_read {}", variables.join(","))?
+            }
+            Self::GlobalAssignment {
+                identifier,
+                operator,
+                unstack_len,
+            } => write!(f, "{} {} (unstack {})", identifier, operator, unstack_len)?,
+            Self::LocalAssignment {
+                index,
+                operator,
+                unstack_len,
+            } => write!(f, "[{}] {} (unstack {})", index, operator, unstack_len)?,
+            Self::JumpIf {
+                jump_false,
+                unstack_len,
+            } => write!(f, "jumpIf {} (unstack {})", jump_false, unstack_len)?,
+            Self::Jump(a) => write!(f, "jump {}", a)?,
+            Self::Unstack { unstack_len } => write!(f, "unstack {}", unstack_len)?,
             Self::Destruct(d) => write!(f, "destruct {}", d)?,
-            Self::RunCall(a) => write!(f, "{}", a)?,
-            Self::Break(a) => write!(f, "{}", a)?,
+            Self::RunCall { name, .. } => write!(f, "run {}()", name)?,
+            Self::Break { unstack_len, .. } => write!(f, "break (unstack {})", unstack_len)?,
             Self::EndProgram => write!(f, "end program")?,
-            Self::FnCall(a) => write!(f, "{}", a)?,
+            Self::FnCall {
+                name, unstack_len, ..
+            } => write!(f, "{}()  (unstack {})", name, unstack_len)?,
             Self::Exit => write!(f, "exit")?,
-            Self::Declaration(d) => write!(f, "{}", d)?,
+            Self::Declaration { unstack_len } => {
+                write!(f, "declare var with value (unstack {})", unstack_len)?
+            }
             Self::Push(l) => write!(f, "push ({})", l)?,
-            Self::WaitStart(w) => write!(f, "{}", w)?,
-            Self::Wait(w) => write!(f, "{}", w)?,
-            Self::Send(s) => write!(f, "{}", s)?,
+            Self::WaitStart { start_atomic, .. } => {
+                write!(f, "wait start")?;
+                if *start_atomic {
+                    write!(f, " atomic")?;
+                }
+                ()
+            }
+            Self::Wait { jump, unstack_len } => {
+                write!(f, "wait {} (unstack {})", jump, unstack_len)?
+            }
+            Self::Send {
+                channel_name,
+                unstack_len,
+            } => write!(f, "send to {} (unstack {})", channel_name, unstack_len)?,
             Self::SendWaiting => write!(f, "send waiting?")?,
             Self::ChannelPeek(s) => write!(f, "peek '{}'", s)?,
             Self::ChannelPop(s) => write!(f, "pop '{}'", s)?,
-            Self::Connect(c) => write!(f, "{}", c)?,
+            Self::Connect {
+                sender_pid,
+                receiver_pid,
+                sender_channel,
+                receiver_channel,
+            } => {
+                write!(
+                    f,
+                    "connect [&{}] {}->{} [&{}]",
+                    if sender_pid.is_none() {
+                        "self".to_string()
+                    } else {
+                        sender_pid.unwrap().to_string()
+                    },
+                    sender_channel,
+                    receiver_channel,
+                    if receiver_pid.is_none() {
+                        "self".to_string()
+                    } else {
+                        receiver_pid.unwrap().to_string()
+                    },
+                )?;
+                ()
+            }
             Self::AtomicStart => write!(f, "atomic start")?,
             Self::AtomicEnd => write!(f, "atomic end")?,
         }
@@ -75,13 +170,13 @@ impl fmt::Display for InstructionType {
 impl InstructionType {
     pub fn is_local(&self) -> bool {
         match self {
-              Self::GlobalAssignment(_)
-            | Self::Send(_)
+              Self::GlobalAssignment {..}
+            | Self::Send {..}
             | Self::ChannelPeek(_)
             | Self::AtomicStart // starts a block that surely contains a global operation
-            | Self::WaitStart(_) => false, // wait starts an atomic block to evaluate the conditions
+            | Self::WaitStart {..} => false, // wait starts an atomic block to evaluate the conditions
 
-            Self::GlobalReads(r) => r.only_const, // a global read is local only if it reads constant variables
+            Self::GlobalReads {only_const, ..} => *only_const, // a global read is local only if it reads constant variables
 
             // This should be checked. I think the following are not global because
             // they do not write or read any global variable or channel
@@ -96,24 +191,24 @@ impl InstructionType {
             // Anyway, it is hard to know in advance (in the case we want to stop *before* global 
             // instructions instead of after)
 
-            Self::Connect(_) // connect is global only if a process was waiting
-            | Self::RunCall(_)
+            Self::Connect {..} // connect is global only if a process was waiting
+            | Self::RunCall {..}
             | Self::ChannelPop(_) // This is a local because it follows a peek
-            | Self::Wait(_)
+            | Self::Wait {..}
             | Self::Empty
             | Self::Expression(_)
-            | Self::LocalAssignment(_)
-            | Self::JumpIf(_)
+            | Self::LocalAssignment {..}
+            | Self::JumpIf {..}
             | Self::Jump(_)
-            | Self::Break(_)
+            | Self::Break {..}
             | Self::Destruct(_)
-            | Self::Unstack(_)
-            | Self::EndProgram
-            | Self::FnCall(_)
-            | Self::Declaration(_)
-            | Self::Exit
+            | Self::Unstack {..}
+            | Self::FnCall {..}
+            | Self::Declaration {..}
             | Self::AtomicEnd
             | Self::SendWaiting
+            | Self::EndProgram
+            | Self::Exit
             | Self::Push(_) => true,
 
         }
@@ -122,14 +217,14 @@ impl InstructionType {
     pub fn is_atomic_start(&self) -> bool {
         match self {
             Self::AtomicStart => true,
-            Self::WaitStart(_) => true,
+            Self::WaitStart { .. } => true,
             _ => false,
         }
     }
     pub fn is_atomic_end(&self) -> bool {
         match self {
             Self::AtomicEnd => true,
-            Self::Break(b) => b.stop_atomic,
+            Self::Break { stop_atomic, .. } => *stop_atomic,
             Self::EndProgram => true,
             _ => false,
         }
@@ -164,225 +259,6 @@ impl fmt::Display for Instruction {
             None => {}
         };
         write!(f, ": {}", self.control)?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct JumpIfControl {
-    pub jump_false: i64,
-    pub unstack_len: usize,
-}
-impl fmt::Display for JumpIfControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "jumpIf {} (unstack {})",
-            self.jump_false, self.unstack_len
-        )?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct BreakLoopControl {
-    pub jump: i64,
-    pub unstack_len: usize,
-    pub stop_atomic: bool,
-}
-impl fmt::Display for BreakLoopControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "break (unstack {})", self.unstack_len)?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct JumpControl {
-    pub jump: i64,
-}
-impl fmt::Display for JumpControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "jump {}", self.jump)?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct WaitControl {
-    pub jump: i64,
-    pub unstack_len: usize,
-}
-impl fmt::Display for WaitControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "wait {} (unstack {})", self.jump, self.unstack_len)?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct WaitStartControl {
-    pub dependencies: WaitDependency,
-    pub start_atomic: bool,
-}
-impl fmt::Display for WaitStartControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "wait start")?;
-        if self.start_atomic {
-            write!(f, " atomic")?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct ExpressionControl {
-    pub root: LocalExpressionNode,
-}
-impl fmt::Display for ExpressionControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "eval {}", self.root)?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct GlobalReadsControl {
-    pub variables: Vec<String>,
-    pub only_const: bool,
-}
-impl fmt::Display for GlobalReadsControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "global_read {}", self.variables.join(","))?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct UnstackControl {
-    pub unstack_len: usize,
-}
-impl fmt::Display for UnstackControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "unstack {}", self.unstack_len)?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct DeclarationControl {
-    pub unstack_len: usize,
-}
-impl fmt::Display for DeclarationControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "declare var with value (unstack {})", self.unstack_len)?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct SendControl {
-    pub channel_name: String,
-    pub unstack_len: usize,
-}
-impl fmt::Display for SendControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "send to {} (unstack {})",
-            self.channel_name, self.unstack_len
-        )?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct ConnectionControl {
-    /// the index of the sender pid in the stack (none if the sender is the current process)
-    pub sender_idx: Option<usize>,
-    /// the index of the receiver pid in the stack (none if the receiver is the current process)
-    pub receiver_idx: Option<usize>,
-    pub sender_channel: String,
-    pub receiver_channel: String,
-}
-impl fmt::Display for ConnectionControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "connect [&{}] {}->{} [&{}]",
-            if self.sender_idx.is_none() {
-                "self".to_string()
-            } else {
-                self.sender_idx.unwrap().to_string()
-            },
-            self.sender_channel,
-            self.receiver_channel,
-            if self.receiver_idx.is_none() {
-                "self".to_string()
-            } else {
-                self.receiver_idx.unwrap().to_string()
-            },
-        )?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct GlobalAssignmentControl {
-    pub identifier: String,
-    pub operator: BinaryAssignmentOperator,
-    pub unstack_len: usize,
-}
-impl fmt::Display for GlobalAssignmentControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{} {} (unstack {})",
-            self.identifier, self.operator, self.unstack_len
-        )?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct LocalAssignmentControl {
-    pub index: usize,
-    pub operator: BinaryAssignmentOperator,
-    pub unstack_len: usize,
-}
-impl fmt::Display for LocalAssignmentControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "[{}] {}  (unstack {})",
-            self.index, self.operator, self.unstack_len
-        )?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct RunCallControl {
-    pub name: String,
-    pub unstack_len: usize,
-}
-impl fmt::Display for RunCallControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "run {}()", self.name)?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct FnCallControl {
-    pub name: String,
-    pub unstack_len: usize,
-    pub variable_idx: Option<usize>,
-    pub arguments: Option<Vec<usize>>,
-}
-impl fmt::Display for FnCallControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}()  (unstack {})", self.name, self.unstack_len)?;
         Ok(())
     }
 }

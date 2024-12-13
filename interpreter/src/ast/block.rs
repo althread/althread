@@ -5,7 +5,7 @@ use pest::iterators::Pairs;
 use crate::compiler::{CompilerState, InstructionBuilderOk};
 use crate::error::AlthreadResult;
 use crate::parser::Rule;
-use crate::vm::instruction::{Instruction, InstructionType, UnstackControl};
+use crate::vm::instruction::{Instruction, InstructionType};
 
 use super::{
     display::{AstDisplay, Prefix},
@@ -42,7 +42,7 @@ impl InstructionBuilder for Block {
         let unstack_len = state.unstack_current_depth();
         if unstack_len > 0 {
             builder.instructions.push(Instruction {
-                control: InstructionType::Unstack(UnstackControl { unstack_len }),
+                control: InstructionType::Unstack { unstack_len },
                 pos: None,
             });
         }

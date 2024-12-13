@@ -11,7 +11,7 @@ use crate::{
     error::AlthreadResult,
     no_rule,
     parser::Rule,
-    vm::instruction::{self, Instruction, InstructionType},
+    vm::instruction::{Instruction, InstructionType},
 };
 
 #[derive(Debug, Clone)]
@@ -59,11 +59,11 @@ impl InstructionBuilder for BreakLoopControl {
         }
         builder.instructions.push(Instruction {
             pos: None,
-            control: InstructionType::Break(instruction::BreakLoopControl {
+            control: InstructionType::Break {
                 jump: 0,
                 unstack_len: state.program_stack.len(),
                 stop_atomic: false,
-            }),
+            },
         });
 
         Ok(builder)

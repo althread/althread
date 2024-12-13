@@ -91,17 +91,19 @@ impl InstructionBuilder for Node<Atomic> {
         });
         if builder.contains_jump() {
             for idx in builder.break_indexes.get("").unwrap_or(&Vec::new()) {
-                if let InstructionType::Break(bc) = &mut builder.instructions[*idx as usize].control
+                if let InstructionType::Break { stop_atomic, .. } =
+                    &mut builder.instructions[*idx as usize].control
                 {
-                    bc.stop_atomic = true;
+                    *stop_atomic = true;
                 } else {
                     panic!("Expected Break instruction");
                 }
             }
             for idx in builder.continue_indexes.get("").unwrap_or(&Vec::new()) {
-                if let InstructionType::Break(bc) = &mut builder.instructions[*idx as usize].control
+                if let InstructionType::Break { stop_atomic, .. } =
+                    &mut builder.instructions[*idx as usize].control
                 {
-                    bc.stop_atomic = true;
+                    *stop_atomic = true;
                 } else {
                     panic!("Expected Break instruction");
                 }

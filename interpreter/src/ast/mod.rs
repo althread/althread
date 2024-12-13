@@ -18,10 +18,7 @@ use display::{AstDisplay, Prefix};
 use node::{InstructionBuilder, Node};
 use pest::iterators::Pairs;
 use statement::Statement;
-use token::{
-    args_list::{ArgsList},
-    condition_keyword::ConditionKeyword,
-};
+use token::{args_list::ArgsList, condition_keyword::ConditionKeyword};
 
 use crate::{
     compiler::{CompiledProject, CompilerState, Variable},
@@ -117,7 +114,7 @@ impl Ast {
                             for gi in node_compiled.instructions {
                                 match gi.control {
                                     InstructionType::Expression(exp) => {
-                                        literal = Some(exp.root.eval(&memory).or_else(|err| {
+                                        literal = Some(exp.eval(&memory).or_else(|err| {
                                             Err(AlthreadError::new(
                                                 ErrorType::ExpressionError,
                                                 gi.pos,
@@ -125,9 +122,9 @@ impl Ast {
                                             ))
                                         })?);
                                     }
-                                    InstructionType::Declaration(dec) => {
+                                    InstructionType::Declaration { unstack_len } => {
                                         // do nothing
-                                        assert!(dec.unstack_len == 1)
+                                        assert!(unstack_len == 1)
                                     }
                                     InstructionType::Push(literal) => memory.push(literal.clone()),
                                     _ => {
@@ -229,11 +226,12 @@ impl Ast {
                                 "The condition must be a single expression".to_string(),
                             ));
                         }
-                        if let InstructionType::GlobalReads(g_read) = &compiled[0].control {
+                        if let InstructionType::GlobalReads { variables, .. } = &compiled[0].control
+                        {
                             if let InstructionType::Expression(exp) = &compiled[1].control {
                                 always_conditions.push((
-                                    g_read.variables.iter().map(|s| s.clone()).collect(),
-                                    g_read.clone(),
+                                    variables.iter().map(|s| s.clone()).collect(),
+                                    variables.clone(),
                                     exp.clone(),
                                     condition.pos,
                                 ));

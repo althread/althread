@@ -14,7 +14,7 @@ use crate::{
     error::{AlthreadError, AlthreadResult, ErrorType},
     no_rule,
     parser::Rule,
-    vm::instruction::{DeclarationControl, Instruction, InstructionType},
+    vm::instruction::{Instruction, InstructionType},
 };
 
 use super::expression::SideEffectExpression;
@@ -127,7 +127,7 @@ impl InstructionBuilder for Declaration {
             datatype = Some(computed_datatype);
 
             builder.instructions.push(Instruction {
-                control: InstructionType::Declaration(DeclarationControl { unstack_len }),
+                control: InstructionType::Declaration { unstack_len },
                 pos: Some(self.keyword.pos),
             });
         } else {

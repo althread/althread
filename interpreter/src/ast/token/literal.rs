@@ -2,11 +2,7 @@ use core::fmt;
 use ordered_float::OrderedFloat;
 use pest::iterators::{Pair, Pairs};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
-use std::{
-    fmt::Formatter,
-    hash::Hash,
-    str::FromStr,
-};
+use std::{fmt::Formatter, hash::Hash, str::FromStr};
 
 use crate::{
     ast::{

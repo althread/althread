@@ -11,7 +11,7 @@ use crate::{
     compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
     parser::Rule,
-    vm::instruction::{Instruction, InstructionType, RunCallControl},
+    vm::instruction::{Instruction, InstructionType},
 };
 
 use super::expression::Expression;
@@ -108,10 +108,10 @@ impl InstructionBuilder for Node<RunCall> {
         });
 
         builder.instructions.push(Instruction {
-            control: InstructionType::RunCall(RunCallControl {
+            control: InstructionType::RunCall {
                 name: self.value.identifier.value.clone(),
                 unstack_len,
-            }),
+            },
             pos: Some(self.pos),
         });
 

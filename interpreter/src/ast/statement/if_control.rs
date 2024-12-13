@@ -12,7 +12,7 @@ use crate::{
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
     parser::Rule,
-    vm::instruction::{Instruction, InstructionType, JumpControl, JumpIfControl},
+    vm::instruction::{Instruction, InstructionType},
 };
 
 use super::expression::Expression;
@@ -76,18 +76,16 @@ impl InstructionBuilder for IfControl {
         builder.extend(condition);
         builder.instructions.push(Instruction {
             pos: Some(self.condition.pos),
-            control: InstructionType::JumpIf(JumpIfControl {
+            control: InstructionType::JumpIf {
                 jump_false: (then_block.instructions.len() + 2) as i64,
                 unstack_len,
-            }),
+            },
         });
         builder.extend(then_block);
         if let Some(else_node) = &self.else_block {
             builder.instructions.push(Instruction {
                 pos: Some(else_node.pos),
-                control: InstructionType::Jump(JumpControl {
-                    jump: (else_block.instructions.len() + 1) as i64,
-                }),
+                control: InstructionType::Jump((else_block.instructions.len() + 1) as i64),
             });
             builder.extend(else_block);
         } else {
