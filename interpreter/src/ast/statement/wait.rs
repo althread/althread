@@ -15,9 +15,7 @@ use crate::{
     error::{AlthreadError, AlthreadResult, ErrorType},
     no_rule,
     parser::Rule,
-    vm::instruction::{
-        Instruction, InstructionType, 
-    },
+    vm::instruction::{Instruction, InstructionType},
 };
 
 use super::waiting_case::{WaitDependency, WaitingBlockCase};
@@ -182,7 +180,8 @@ impl InstructionBuilder for Node<Wait> {
 
         if self.value.block_kind == WaitingBlockKind::First {
             for index in jump_index.iter() {
-                builder.instructions[*index].control = InstructionType::Jump((builder.instructions.len() - index - 1) as i64);
+                builder.instructions[*index].control =
+                    InstructionType::Jump((builder.instructions.len() - index - 1) as i64);
             }
         }
 

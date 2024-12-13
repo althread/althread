@@ -12,9 +12,7 @@ use crate::{
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
     parser::Rule,
-    vm::instruction::{
-        Instruction, InstructionType,
-    },
+    vm::instruction::{Instruction, InstructionType},
 };
 
 #[derive(Debug, Clone)]

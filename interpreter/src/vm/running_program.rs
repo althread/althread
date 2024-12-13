@@ -29,7 +29,10 @@ pub struct RunningProgramState<'a> {
 
 impl PartialEq for RunningProgramState<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.id == other.id && self.memory == other.memory && self.name == other.name && self.instruction_pointer == other.instruction_pointer
+        self.id == other.id
+            && self.memory == other.memory
+            && self.name == other.name
+            && self.instruction_pointer == other.instruction_pointer
     }
 }
 
@@ -204,13 +207,18 @@ impl<'a> RunningProgramState<'a> {
             InstructionType::Empty => 1,
             InstructionType::AtomicStart => 1,
             InstructionType::AtomicEnd => 1,
-            InstructionType::Break { unstack_len, jump, ..} => {
+            InstructionType::Break {
+                unstack_len, jump, ..
+            } => {
                 for _ in 0..*unstack_len {
                     self.memory.pop();
                 }
                 *jump
             }
-            InstructionType::JumpIf {jump_false, unstack_len} => {
+            InstructionType::JumpIf {
+                jump_false,
+                unstack_len,
+            } => {
                 let cond = self.memory.last().unwrap().is_true();
                 for _ in 0..*unstack_len {
                     self.memory.pop();
@@ -229,7 +237,7 @@ impl<'a> RunningProgramState<'a> {
                 self.memory.push(lit);
                 1
             }
-            InstructionType::GlobalReads { variables, ..} => {
+            InstructionType::GlobalReads { variables, .. } => {
                 for var_name in variables.iter() {
                     self.memory.push(
                         globals
@@ -240,7 +248,11 @@ impl<'a> RunningProgramState<'a> {
                 }
                 1
             }
-            InstructionType::GlobalAssignment { identifier, operator, unstack_len } => {
+            InstructionType::GlobalAssignment {
+                identifier,
+                operator,
+                unstack_len,
+            } => {
                 let lit = self
                     .memory
                     .last()
@@ -252,10 +264,9 @@ impl<'a> RunningProgramState<'a> {
 
                 let lit = operator
                     .apply(
-                        &globals.get(identifier).expect(
-                            format!("global variable '{}' not found", identifier)
-                                .as_str(),
-                        ),
+                        &globals
+                            .get(identifier)
+                            .expect(format!("global variable '{}' not found", identifier).as_str()),
                         &lit,
                     )
                     .map_err(str_to_expr_error(cur_inst.pos))?;
@@ -264,7 +275,11 @@ impl<'a> RunningProgramState<'a> {
                 action = Some(GlobalAction::Write(identifier.clone()));
                 1
             }
-            InstructionType::LocalAssignment {index, unstack_len, operator} => {
+            InstructionType::LocalAssignment {
+                index,
+                unstack_len,
+                operator,
+            } => {
                 let lit = self
                     .memory
                     .last()
@@ -287,7 +302,7 @@ impl<'a> RunningProgramState<'a> {
                 }
                 1
             }
-            InstructionType::Declaration {unstack_len} => {
+            InstructionType::Declaration { unstack_len } => {
                 let lit = self
                     .memory
                     .last()
@@ -299,7 +314,7 @@ impl<'a> RunningProgramState<'a> {
                 self.memory.push(lit);
                 1
             }
-            InstructionType::RunCall {name, unstack_len} => {
+            InstructionType::RunCall { name, unstack_len } => {
                 let args = self
                     .memory
                     .last()
@@ -308,13 +323,8 @@ impl<'a> RunningProgramState<'a> {
                 for _ in 0..*unstack_len {
                     self.memory.pop();
                 }
-                self.memory
-                    .push(Literal::Process(name.clone(), *next_pid));
-                action = Some(GlobalAction::StartProgram(
-                    name.clone(),
-                    *next_pid,
-                    args,
-                ));
+                self.memory.push(Literal::Process(name.clone(), *next_pid));
+                action = Some(GlobalAction::StartProgram(name.clone(), *next_pid, args));
                 *next_pid += 1;
                 1
             }
@@ -322,7 +332,12 @@ impl<'a> RunningProgramState<'a> {
                 action = Some(GlobalAction::EndProgram);
                 0
             }
-            InstructionType::FnCall {variable_idx, name, arguments, unstack_len} => {
+            InstructionType::FnCall {
+                variable_idx,
+                name,
+                arguments,
+                unstack_len,
+            } => {
                 if let Some(v_idx) = variable_idx {
                     //println!("f: {:?} on v_idx {}", f.name, v_idx);
                     //println!("current instruction: {:?}", cur_inst);
@@ -400,8 +415,10 @@ impl<'a> RunningProgramState<'a> {
                     1
                 }
             }
-            InstructionType::WaitStart {..} => 1,
-            InstructionType::Wait {unstack_len, jump, ..} => {
+            InstructionType::WaitStart { .. } => 1,
+            InstructionType::Wait {
+                unstack_len, jump, ..
+            } => {
                 let cond = self.memory.last().unwrap().is_true();
                 for _ in 0..*unstack_len {
                     self.memory.pop();
@@ -430,7 +447,10 @@ impl<'a> RunningProgramState<'a> {
                 self.memory.push(literal.clone());
                 1
             }
-            InstructionType::Send {channel_name, unstack_len} => {
+            InstructionType::Send {
+                channel_name,
+                unstack_len,
+            } => {
                 let value = self
                     .memory
                     .last()
@@ -466,7 +486,12 @@ impl<'a> RunningProgramState<'a> {
                 let _ = channels.pop(self.id, channel_name.clone());
                 1
             }
-            InstructionType::Connect {sender_pid, sender_channel, receiver_pid, receiver_channel} => {
+            InstructionType::Connect {
+                sender_pid,
+                sender_channel,
+                receiver_pid,
+                receiver_channel,
+            } => {
                 let sender_pid = match *sender_pid {
                     None => self.id,
                     Some(idx) => self
@@ -500,10 +525,13 @@ impl<'a> RunningProgramState<'a> {
                     })?;
                 // A connection has the same effect as a send globally, if some data was waiting to be sent
                 if is_data_waiting {
-                    action = Some(GlobalAction::Send(sender_channel.clone(), Some(ReceiverInfo {
-                        program_id: receiver_pid,
-                        channel_name: receiver_channel.clone(),
-                    })));
+                    action = Some(GlobalAction::Send(
+                        sender_channel.clone(),
+                        Some(ReceiverInfo {
+                            program_id: receiver_pid,
+                            channel_name: receiver_channel.clone(),
+                        }),
+                    ));
                 }
                 1
             }

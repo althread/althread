@@ -7,9 +7,7 @@ pub mod unary_expression;
 use std::{collections::HashSet, fmt};
 
 use binary_expression::{BinaryExpression, LocalBinaryExpressionNode};
-use list_expression::{
-    LocalRangeListExpressionNode, RangeListExpression,
-};
+use list_expression::{LocalRangeListExpressionNode, RangeListExpression};
 use pest::{
     iterators::{Pair, Pairs},
     pratt_parser::PrattParser,
@@ -384,12 +382,6 @@ impl AstDisplay for Expression {
     }
 }
 
-
-
-
-
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -441,8 +433,7 @@ mod tests {
         };
 
         let litteral_expr = Expression::Primary(primary_node);
-        
-        
+
         let binary_node = Node {
             pos: Pos {
                 line: 0,
@@ -482,6 +473,9 @@ mod tests {
         };
         let binary_expr = Expression::Binary(binary_node);
         let local_expr = LocalExpressionNode::from_expression(&binary_expr, &vec![]).unwrap();
-        assert_eq!(local_expr.eval(&Memory::new()).unwrap(), Literal::Int(42+42));
+        assert_eq!(
+            local_expr.eval(&Memory::new()).unwrap(),
+            Literal::Int(42 + 42)
+        );
     }
 }

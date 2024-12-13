@@ -44,7 +44,9 @@ impl InstructionBuilder for Node<LoopControl> {
         if builder.contains_jump() {
             for idx in builder.break_indexes.get("").unwrap_or(&Vec::new()) {
                 let builder_len = builder.instructions.len();
-                if let InstructionType::Break {jump, unstack_len, ..} = &mut builder.instructions[*idx as usize].control
+                if let InstructionType::Break {
+                    jump, unstack_len, ..
+                } = &mut builder.instructions[*idx as usize].control
                 {
                     *jump = (builder_len - idx) as i64;
                     *unstack_len = *unstack_len - stack_len;
@@ -54,7 +56,9 @@ impl InstructionBuilder for Node<LoopControl> {
             }
             builder.break_indexes.remove("");
             for idx in builder.continue_indexes.get("").unwrap_or(&Vec::new()) {
-                if let InstructionType::Break{jump, unstack_len, ..} = &mut builder.instructions[*idx as usize].control
+                if let InstructionType::Break {
+                    jump, unstack_len, ..
+                } = &mut builder.instructions[*idx as usize].control
                 {
                     *jump = -(*idx as i64);
                     *unstack_len = *unstack_len - stack_len;

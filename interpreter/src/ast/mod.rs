@@ -18,10 +18,7 @@ use display::{AstDisplay, Prefix};
 use node::{InstructionBuilder, Node};
 use pest::iterators::Pairs;
 use statement::Statement;
-use token::{
-    args_list::{ArgsList},
-    condition_keyword::ConditionKeyword,
-};
+use token::{args_list::ArgsList, condition_keyword::ConditionKeyword};
 
 use crate::{
     compiler::{CompiledProject, CompilerState, Variable},
@@ -125,7 +122,7 @@ impl Ast {
                                             ))
                                         })?);
                                     }
-                                    InstructionType::Declaration {unstack_len} => {
+                                    InstructionType::Declaration { unstack_len } => {
                                         // do nothing
                                         assert!(unstack_len == 1)
                                     }
@@ -229,7 +226,8 @@ impl Ast {
                                 "The condition must be a single expression".to_string(),
                             ));
                         }
-                        if let InstructionType::GlobalReads { variables, .. } = &compiled[0].control {
+                        if let InstructionType::GlobalReads { variables, .. } = &compiled[0].control
+                        {
                             if let InstructionType::Expression(exp) = &compiled[1].control {
                                 always_conditions.push((
                                     variables.iter().map(|s| s.clone()).collect(),

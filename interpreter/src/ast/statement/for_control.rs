@@ -20,15 +20,10 @@ use crate::{
     error::{AlthreadError, AlthreadResult, ErrorType},
     no_rule,
     parser::Rule,
-    vm::instruction::{
-        Instruction, InstructionType,
-    },
+    vm::instruction::{Instruction, InstructionType},
 };
 
-use super::{
-    expression::Expression,
-    Statement,
-};
+use super::{expression::Expression, Statement};
 
 #[derive(Debug, Clone)]
 pub struct ForControl {
@@ -135,16 +130,18 @@ impl InstructionBuilder for Node<ForControl> {
         });
         builder.instructions.push(Instruction {
             pos: Some(self.value.identifier.pos),
-            control: InstructionType::Expression(LocalExpressionNode::Binary(LocalBinaryExpressionNode {
-                // idx < len(list)
-                left: Box::new(LocalExpressionNode::Primary(
-                    LocalPrimaryExpressionNode::Var(LocalVarNode { index: 1 }),
-                )),
-                operator: BinaryOperator::LessThan,
-                right: Box::new(LocalExpressionNode::Primary(
-                    LocalPrimaryExpressionNode::Var(LocalVarNode { index: 0 }),
-                )),
-            })),
+            control: InstructionType::Expression(LocalExpressionNode::Binary(
+                LocalBinaryExpressionNode {
+                    // idx < len(list)
+                    left: Box::new(LocalExpressionNode::Primary(
+                        LocalPrimaryExpressionNode::Var(LocalVarNode { index: 1 }),
+                    )),
+                    operator: BinaryOperator::LessThan,
+                    right: Box::new(LocalExpressionNode::Primary(
+                        LocalPrimaryExpressionNode::Var(LocalVarNode { index: 0 }),
+                    )),
+                },
+            )),
         });
         builder.instructions.push(Instruction {
             pos: Some(self.value.identifier.pos),
@@ -204,7 +201,9 @@ impl InstructionBuilder for Node<ForControl> {
         if builder.contains_jump() {
             for idx in builder.break_indexes.get("").unwrap_or(&Vec::new()) {
                 let builder_len = builder.instructions.len();
-                if let InstructionType::Break {jump, unstack_len, ..} = &mut builder.instructions[*idx as usize].control
+                if let InstructionType::Break {
+                    jump, unstack_len, ..
+                } = &mut builder.instructions[*idx as usize].control
                 {
                     *jump = (builder_len - idx) as i64;
                     *unstack_len = *unstack_len - stack_len;
@@ -214,7 +213,9 @@ impl InstructionBuilder for Node<ForControl> {
             }
             builder.break_indexes.remove("");
             for idx in builder.continue_indexes.get("").unwrap_or(&Vec::new()) {
-                if let InstructionType::Break {jump, unstack_len, ..} = &mut builder.instructions[*idx as usize].control
+                if let InstructionType::Break {
+                    jump, unstack_len, ..
+                } = &mut builder.instructions[*idx as usize].control
                 {
                     *jump = -(*idx as i64);
                     *unstack_len = *unstack_len - stack_len;

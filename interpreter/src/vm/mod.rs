@@ -10,9 +10,7 @@ use std::{
 use channels::{Channels, ChannelsState, ReceiverInfo};
 use fastrand::Rng;
 
-use instruction::{
-    Instruction, InstructionType, ProgramCode,
-};
+use instruction::{Instruction, InstructionType, ProgramCode};
 use running_program::RunningProgramState;
 
 use crate::{

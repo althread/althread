@@ -12,24 +12,63 @@ use crate::{
 pub enum InstructionType {
     Empty,
     Expression(LocalExpressionNode),
-    GlobalReads { variables: Vec<String>, only_const: bool },
-    GlobalAssignment { identifier: String, operator: BinaryAssignmentOperator,unstack_len: usize },
-    LocalAssignment { index: usize, operator: BinaryAssignmentOperator, unstack_len: usize },
-    JumpIf { jump_false: i64, unstack_len: usize },
+    GlobalReads {
+        variables: Vec<String>,
+        only_const: bool,
+    },
+    GlobalAssignment {
+        identifier: String,
+        operator: BinaryAssignmentOperator,
+        unstack_len: usize,
+    },
+    LocalAssignment {
+        index: usize,
+        operator: BinaryAssignmentOperator,
+        unstack_len: usize,
+    },
+    JumpIf {
+        jump_false: i64,
+        unstack_len: usize,
+    },
     Jump(i64),
-    Break { jump: i64, unstack_len: usize, stop_atomic: bool },
-    Unstack { unstack_len: usize},
-    RunCall { name: String, unstack_len: usize },
-    FnCall { name: String, unstack_len: usize, variable_idx: Option<usize>, arguments: Option<Vec<usize>>},
-    /// 
-    Declaration { unstack_len: usize },
+    Break {
+        jump: i64,
+        unstack_len: usize,
+        stop_atomic: bool,
+    },
+    Unstack {
+        unstack_len: usize,
+    },
+    RunCall {
+        name: String,
+        unstack_len: usize,
+    },
+    FnCall {
+        name: String,
+        unstack_len: usize,
+        variable_idx: Option<usize>,
+        arguments: Option<Vec<usize>>,
+    },
+    ///
+    Declaration {
+        unstack_len: usize,
+    },
     ChannelPeek(String),
     ChannelPop(String),
     Destruct(usize),
     Push(Literal),
-    WaitStart { dependencies: WaitDependency, start_atomic: bool },
-    Wait { jump: i64, unstack_len: usize },
-    Send { channel_name: String, unstack_len: usize },
+    WaitStart {
+        dependencies: WaitDependency,
+        start_atomic: bool,
+    },
+    Wait {
+        jump: i64,
+        unstack_len: usize,
+    },
+    Send {
+        channel_name: String,
+        unstack_len: usize,
+    },
     SendWaiting,
     Connect {
         /// the index of the sender pid in the stack (none if the sender is the current process)
@@ -49,20 +88,36 @@ impl fmt::Display for InstructionType {
         match self {
             Self::Empty => write!(f, "EMPTY")?,
             Self::Expression(a) => write!(f, "eval {}", a)?,
-            Self::GlobalReads {variables, ..} => write!(f, "global_read {}", variables.join(","))?,
-            Self::GlobalAssignment {identifier, operator, unstack_len} => write!(f, "{} {} (unstack {})",
-            identifier, operator, unstack_len)?,
-            Self::LocalAssignment {index, operator, unstack_len} => write!(f, "[{}] {} (unstack {})", index, operator, unstack_len)?,
-            Self::JumpIf {jump_false, unstack_len} => write!(f, "jumpIf {} (unstack {})", jump_false, unstack_len)?,
+            Self::GlobalReads { variables, .. } => {
+                write!(f, "global_read {}", variables.join(","))?
+            }
+            Self::GlobalAssignment {
+                identifier,
+                operator,
+                unstack_len,
+            } => write!(f, "{} {} (unstack {})", identifier, operator, unstack_len)?,
+            Self::LocalAssignment {
+                index,
+                operator,
+                unstack_len,
+            } => write!(f, "[{}] {} (unstack {})", index, operator, unstack_len)?,
+            Self::JumpIf {
+                jump_false,
+                unstack_len,
+            } => write!(f, "jumpIf {} (unstack {})", jump_false, unstack_len)?,
             Self::Jump(a) => write!(f, "jump {}", a)?,
-            Self::Unstack {unstack_len} => write!(f, "unstack {}", unstack_len)?,
+            Self::Unstack { unstack_len } => write!(f, "unstack {}", unstack_len)?,
             Self::Destruct(d) => write!(f, "destruct {}", d)?,
-            Self::RunCall {name, ..} => write!(f, "run {}()", name)?,
-            Self::Break { unstack_len, ..} => write!(f, "break (unstack {})", unstack_len)?,
+            Self::RunCall { name, .. } => write!(f, "run {}()", name)?,
+            Self::Break { unstack_len, .. } => write!(f, "break (unstack {})", unstack_len)?,
             Self::EndProgram => write!(f, "end program")?,
-            Self::FnCall {name, unstack_len, ..} => write!(f, "{}()  (unstack {})", name, unstack_len)?,
+            Self::FnCall {
+                name, unstack_len, ..
+            } => write!(f, "{}()  (unstack {})", name, unstack_len)?,
             Self::Exit => write!(f, "exit")?,
-            Self::Declaration {unstack_len} => write!(f, "declare var with value (unstack {})", unstack_len)?,
+            Self::Declaration { unstack_len } => {
+                write!(f, "declare var with value (unstack {})", unstack_len)?
+            }
             Self::Push(l) => write!(f, "push ({})", l)?,
             Self::WaitStart { start_atomic, .. } => {
                 write!(f, "wait start")?;
@@ -70,14 +125,23 @@ impl fmt::Display for InstructionType {
                     write!(f, " atomic")?;
                 }
                 ()
-            },
-            Self::Wait {jump, unstack_len} => write!(f, "wait {} (unstack {})", jump, unstack_len)?,
-            Self::Send {channel_name, unstack_len} => write!(f, "send to {} (unstack {})",
-                channel_name, unstack_len)?,
+            }
+            Self::Wait { jump, unstack_len } => {
+                write!(f, "wait {} (unstack {})", jump, unstack_len)?
+            }
+            Self::Send {
+                channel_name,
+                unstack_len,
+            } => write!(f, "send to {} (unstack {})", channel_name, unstack_len)?,
             Self::SendWaiting => write!(f, "send waiting?")?,
             Self::ChannelPeek(s) => write!(f, "peek '{}'", s)?,
             Self::ChannelPop(s) => write!(f, "pop '{}'", s)?,
-            Self::Connect {sender_pid, receiver_pid, sender_channel, receiver_channel} => {
+            Self::Connect {
+                sender_pid,
+                receiver_pid,
+                sender_channel,
+                receiver_channel,
+            } => {
                 write!(
                     f,
                     "connect [&{}] {}->{} [&{}]",
@@ -95,7 +159,7 @@ impl fmt::Display for InstructionType {
                     },
                 )?;
                 ()
-            },
+            }
             Self::AtomicStart => write!(f, "atomic start")?,
             Self::AtomicEnd => write!(f, "atomic end")?,
         }
@@ -153,14 +217,14 @@ impl InstructionType {
     pub fn is_atomic_start(&self) -> bool {
         match self {
             Self::AtomicStart => true,
-            Self::WaitStart {..} => true,
+            Self::WaitStart { .. } => true,
             _ => false,
         }
     }
     pub fn is_atomic_end(&self) -> bool {
         match self {
             Self::AtomicEnd => true,
-            Self::Break {stop_atomic, ..} => *stop_atomic,
+            Self::Break { stop_atomic, .. } => *stop_atomic,
             Self::EndProgram => true,
             _ => false,
         }
@@ -198,7 +262,6 @@ impl fmt::Display for Instruction {
         Ok(())
     }
 }
-
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ProgramCode {
