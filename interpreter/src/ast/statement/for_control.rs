@@ -20,16 +20,10 @@ use crate::{
     error::{AlthreadError, AlthreadResult, ErrorType},
     no_rule,
     parser::Rule,
-    vm::instruction::{
-        ExpressionControl, FnCallControl, Instruction, InstructionType, JumpControl, JumpIfControl,
-        LocalAssignmentControl, UnstackControl,
-    },
+    vm::instruction::{Instruction, InstructionType},
 };
 
-use super::{
-    expression::Expression,
-    Statement,
-};
+use super::{expression::Expression, Statement};
 
 #[derive(Debug, Clone)]
 pub struct ForControl {
@@ -118,26 +112,26 @@ impl InstructionBuilder for Node<ForControl> {
         });
         builder.instructions.push(Instruction {
             pos: Some(self.value.identifier.pos),
-            control: InstructionType::LocalAssignment(LocalAssignmentControl {
+            control: InstructionType::LocalAssignment {
                 index: 0,
                 operator: BinaryAssignmentOperator::AddAssign,
                 unstack_len: 1,
-            }),
+            },
         });
         // add the instruction to check if the index is greater than the length of the list
         builder.instructions.push(Instruction {
             pos: Some(self.value.identifier.pos),
-            control: InstructionType::FnCall(FnCallControl {
+            control: InstructionType::FnCall {
                 name: "len".to_string(),
                 unstack_len: 0,
                 variable_idx: Some(2),
                 arguments: Some(vec![0]), // if the arguments are scattered in the stack
-            }),
+            },
         });
         builder.instructions.push(Instruction {
             pos: Some(self.value.identifier.pos),
-            control: InstructionType::Expression(ExpressionControl {
-                root: LocalExpressionNode::Binary(LocalBinaryExpressionNode {
+            control: InstructionType::Expression(LocalExpressionNode::Binary(
+                LocalBinaryExpressionNode {
                     // idx < len(list)
                     left: Box::new(LocalExpressionNode::Primary(
                         LocalPrimaryExpressionNode::Var(LocalVarNode { index: 1 }),
@@ -146,35 +140,35 @@ impl InstructionBuilder for Node<ForControl> {
                     right: Box::new(LocalExpressionNode::Primary(
                         LocalPrimaryExpressionNode::Var(LocalVarNode { index: 0 }),
                     )),
-                }),
-            }),
+                },
+            )),
         });
         builder.instructions.push(Instruction {
             pos: Some(self.value.identifier.pos),
-            control: InstructionType::JumpIf(JumpIfControl {
+            control: InstructionType::JumpIf {
                 jump_false: 0,
                 unstack_len: 2,
-            }),
+            },
         });
         let jump_idx = builder.instructions.len() - 1;
 
         // add the instruction that the variable takes the value of the element in the list at the position of the index
         builder.instructions.push(Instruction {
             pos: Some(self.value.identifier.pos),
-            control: InstructionType::FnCall(FnCallControl {
+            control: InstructionType::FnCall {
                 name: "at".to_string(),
                 unstack_len: 0,
                 variable_idx: Some(2),
                 arguments: Some(vec![0]), // if the arguments are scattered in the stack
-            }),
+            },
         });
         builder.instructions.push(Instruction {
             pos: Some(self.value.identifier.pos),
-            control: InstructionType::LocalAssignment(LocalAssignmentControl {
+            control: InstructionType::LocalAssignment {
                 index: 1,
                 operator: BinaryAssignmentOperator::Assign,
                 unstack_len: 1,
-            }),
+            },
         });
 
         let statement_builder = self.value.statement.as_ref().compile(state)?;
@@ -184,15 +178,13 @@ impl InstructionBuilder for Node<ForControl> {
 
         builder.instructions.push(Instruction {
             pos: Some(self.value.statement.as_ref().pos),
-            control: InstructionType::Jump(JumpControl {
-                jump: -(statement_len as i64) - 7,
-            }),
+            control: InstructionType::Jump(-(statement_len as i64) - 7),
         });
 
-        builder.instructions[jump_idx].control = InstructionType::JumpIf(JumpIfControl {
+        builder.instructions[jump_idx].control = InstructionType::JumpIf {
             jump_false: statement_len as i64 + 4, // statement len plus the assignment of the iterator variable
             unstack_len: 2,
-        });
+        };
 
         let unstack_len = state.unstack_current_depth();
 
@@ -201,7 +193,7 @@ impl InstructionBuilder for Node<ForControl> {
         // unstack the list, iterator variable and index
         builder.instructions.push(Instruction {
             pos: Some(self.value.statement.as_ref().pos),
-            control: InstructionType::Unstack(UnstackControl { unstack_len }),
+            control: InstructionType::Unstack { unstack_len },
         });
 
         assert!(stack_len == state.program_stack.len());
@@ -209,20 +201,24 @@ impl InstructionBuilder for Node<ForControl> {
         if builder.contains_jump() {
             for idx in builder.break_indexes.get("").unwrap_or(&Vec::new()) {
                 let builder_len = builder.instructions.len();
-                if let InstructionType::Break(bc) = &mut builder.instructions[*idx as usize].control
+                if let InstructionType::Break {
+                    jump, unstack_len, ..
+                } = &mut builder.instructions[*idx as usize].control
                 {
-                    bc.jump = (builder_len - idx) as i64;
-                    bc.unstack_len = bc.unstack_len - stack_len;
+                    *jump = (builder_len - idx) as i64;
+                    *unstack_len = *unstack_len - stack_len;
                 } else {
                     panic!("Expected Break instruction");
                 }
             }
             builder.break_indexes.remove("");
             for idx in builder.continue_indexes.get("").unwrap_or(&Vec::new()) {
-                if let InstructionType::Break(bc) = &mut builder.instructions[*idx as usize].control
+                if let InstructionType::Break {
+                    jump, unstack_len, ..
+                } = &mut builder.instructions[*idx as usize].control
                 {
-                    bc.jump = -(*idx as i64);
-                    bc.unstack_len = bc.unstack_len - stack_len;
+                    *jump = -(*idx as i64);
+                    *unstack_len = *unstack_len - stack_len;
                 } else {
                     panic!("Expected Break instruction");
                 }

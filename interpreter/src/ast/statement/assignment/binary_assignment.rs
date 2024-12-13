@@ -12,9 +12,7 @@ use crate::{
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
     parser::Rule,
-    vm::instruction::{
-        GlobalAssignmentControl, Instruction, InstructionType, LocalAssignmentControl,
-    },
+    vm::instruction::{Instruction, InstructionType},
 };
 
 #[derive(Debug, Clone)]
@@ -75,11 +73,11 @@ impl InstructionBuilder for Node<BinaryAssignment> {
             }
             builder.instructions.push(Instruction {
                 pos: Some(self.value.identifier.pos),
-                control: InstructionType::GlobalAssignment(GlobalAssignmentControl {
+                control: InstructionType::GlobalAssignment {
                     identifier: self.value.identifier.value.value.clone(),
                     operator: self.value.operator.value.clone(),
                     unstack_len,
-                }),
+                },
             });
         } else {
             let mut var_idx = 0;
@@ -125,11 +123,11 @@ impl InstructionBuilder for Node<BinaryAssignment> {
 
             builder.instructions.push(Instruction {
                 pos: Some(self.value.identifier.pos),
-                control: InstructionType::LocalAssignment(LocalAssignmentControl {
+                control: InstructionType::LocalAssignment {
                     index: var_idx,
                     operator: self.value.operator.value.clone(),
                     unstack_len,
-                }),
+                },
             });
         }
 

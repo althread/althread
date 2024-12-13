@@ -11,7 +11,7 @@ use crate::{
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
     parser::Rule,
-    vm::instruction::{Instruction, InstructionType, SendControl},
+    vm::instruction::{Instruction, InstructionType},
 };
 
 use super::expression::Expression;
@@ -111,10 +111,10 @@ impl InstructionBuilder for Node<SendStatement> {
         }
 
         builder.instructions.push(Instruction {
-            control: InstructionType::Send(SendControl {
+            control: InstructionType::Send {
                 channel_name: channel_name.clone(),
                 unstack_len,
-            }),
+            },
             pos: Some(self.pos),
         });
 

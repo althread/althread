@@ -12,7 +12,7 @@ use crate::{
     error::{AlthreadError, AlthreadResult, ErrorType},
     no_rule,
     parser::Rule,
-    vm::instruction::{Instruction, InstructionType, JumpIfControl, UnstackControl},
+    vm::instruction::{Instruction, InstructionType},
 };
 
 use super::{
@@ -156,18 +156,18 @@ impl InstructionBuilder for Node<ReceiveStatement> {
         };
 
         builder.instructions.push(Instruction {
-            control: InstructionType::JumpIf(JumpIfControl {
+            control: InstructionType::JumpIf {
                 jump_false: 8
                     + (guard_instructions.len() + statement_builder.instructions.len()) as i64, // If the channel is empty, jump to the end
                 unstack_len: 0, // we keep the false value on the stack
-            }),
+            },
             pos: Some(self.pos),
         });
 
         builder.instructions.push(Instruction {
-            control: InstructionType::Unstack(UnstackControl {
+            control: InstructionType::Unstack {
                 unstack_len: 1, // we remove the true value on the stack (it will be replaced by the next expression
-            }),
+            },
             pos: Some(self.pos),
         });
 
@@ -176,17 +176,17 @@ impl InstructionBuilder for Node<ReceiveStatement> {
         builder.instructions.extend(guard_instructions);
 
         builder.instructions.push(Instruction {
-            control: InstructionType::JumpIf(JumpIfControl {
+            control: InstructionType::JumpIf {
                 jump_false: 5 + statement_builder.instructions.len() as i64, // If the guard is false, jump to the end
                 unstack_len: 0, // keep the boolean of the guard on the stack
-            }),
+            },
             pos: Some(self.pos),
         });
 
         builder.instructions.push(Instruction {
-            control: InstructionType::Unstack(UnstackControl {
+            control: InstructionType::Unstack {
                 unstack_len: 1, // remove the boolean of the guard from the stack (but keep the variables used in the statement)
-            }),
+            },
             pos: Some(self.pos),
         });
         builder.instructions.push(Instruction {
@@ -196,9 +196,9 @@ impl InstructionBuilder for Node<ReceiveStatement> {
         builder.extend(statement_builder);
 
         builder.instructions.push(Instruction {
-            control: InstructionType::Unstack(UnstackControl {
+            control: InstructionType::Unstack {
                 unstack_len: self.value.variables.len(), // remove the variables from the stack
-            }),
+            },
             pos: Some(self.pos),
         });
 

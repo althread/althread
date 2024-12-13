@@ -5,7 +5,6 @@ use std::{
 
 use crate::ast::token::{datatype::DataType, literal::Literal};
 
-
 pub struct Interface {
     pub name: String,
     pub args: Vec<DataType>,

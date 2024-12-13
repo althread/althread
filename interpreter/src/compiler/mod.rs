@@ -4,8 +4,9 @@ use std::rc::Rc;
 
 pub mod stdlib;
 
+use crate::ast::statement::expression::LocalExpressionNode;
 use crate::error::Pos;
-use crate::vm::instruction::{ExpressionControl, GlobalReadsControl, Instruction};
+use crate::vm::instruction::Instruction;
 use crate::{
     ast::token::{datatype::DataType, literal::Literal},
     vm::instruction::ProgramCode,
@@ -139,7 +140,7 @@ pub struct CompiledProject {
     /// The first element is the variables that are used in the condition
     /// The second element is the two instructions that are used to check the condition
     /// (the first in struction is the read operation and the second is the expression)
-    pub always_conditions: Vec<(HashSet<String>, GlobalReadsControl, ExpressionControl, Pos)>,
+    pub always_conditions: Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
 
     pub stdlib: Rc<stdlib::Stdlib>,
 }
