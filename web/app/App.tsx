@@ -6,6 +6,7 @@ import Resizable from '@corvu/resizable'
 import init, { compile, run, check } from '../pkg/althread_web';
 import createEditor from './Editor';
 import Graph from "./Graph";
+import { EditorState } from "@codemirror/state";
 
 
 init().then(() => {
@@ -35,9 +36,72 @@ const nodeToString = (n) => {
   return label;
 }
 
+const Example1 = `
+
+shared {
+  let Done = false;
+  let Leader = 0;
+}
+
+program A(my_id: int) {
+
+  let leader_id = my_id;
+
+  send out(my_id);
+
+  loop atomic wait receive in (x) => {
+    print("receive", x);
+      if x > leader_id {
+        leader_id = x;
+        send out(x);
+      } else {
+        if x == leader_id {
+          print("finished");
+          send out(x);
+          break;
+        }
+      }
+  };
+  
+  if my_id == leader_id {
+    print("I AM THE LEADER!!!");
+    ! {
+        Done = true;
+        Leader += 1;
+    }
+  }
+}
+
+always {
+    !Done || (Leader == 1);
+}
+
+main {
+  let a = run A(1);
+  let b = run A(2);
+
+  channel a.out (int)> b.in;
+  channel b.out (int)> a.in;
+
+  print("DONE");
+}
+
+`;
+
 
 export default function App() {
-  let editor = createEditor(compile);
+
+  let defaultValue =  Example1;
+  if(localStorage.getItem('source-code')) {
+    defaultValue = localStorage.getItem('source-code')!;
+  }
+
+
+  let editor = createEditor({
+    compile, 
+    defaultValue,
+    onValueChange: (value) => {localStorage.setItem('source-code', value);}
+  });
 
   let [nodes, setNodes] = createSignal([]);
   let [edges, setEdges] = createSignal([]);
@@ -46,7 +110,19 @@ export default function App() {
   let [out, setOut] = createSignal("The execution output will appear here");
   return (
     <>
-      <div id="header">Althread Editor</div>
+      <div id="header">
+        <button onClick={() => {
+          let up = editor.editorView().state.update({
+            changes: {
+              from: 0, 
+              to: editor.editorView().state.doc.length,
+              insert: Example1
+            }
+          })
+          editor.editorView().update([up]);
+        }
+        }>Load Example</button>
+      </div>
       <Resizable id="content">
         <Resizable.Panel class="editor-panel"
           initialSize={0.6}
