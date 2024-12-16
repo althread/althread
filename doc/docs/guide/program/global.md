@@ -8,7 +8,7 @@ sidebar_position: 3
 Jusqu'à présent, les variables déclarées dans un programme sont locales à ce programme. Cela signifie qu'un programme ne peut pas accéder aux variables des autres programme :
 
 ```althread
-process Prog1() {
+program Prog1() {
     // This will error
     print(x); // x n'existe pas dans ce processus
 }
@@ -54,7 +54,7 @@ shared {
     let X : int;
 }
 
-process Prog1() {
+program Prog1() {
     X++;
     wait X == 2;
 }

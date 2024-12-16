@@ -76,8 +76,16 @@ const config: Config = {
   onBrokenMarkdownLinks: "warn",
 
   i18n: {
-    defaultLocale: "fr",
-    locales: ["fr"],
+    defaultLocale: 'fr',
+    locales: ['en', 'fr'],
+    localeConfigs: {
+      en: {
+        htmlLang: 'en-GB',
+      },
+      fr: {
+        htmlLang: 'fr-FR',
+      },
+    },
   },
 
   presets: [
@@ -120,6 +128,10 @@ const config: Config = {
           sidebarId: "exampleSidebar",
           position: "left",
           label: "Exemples",
+        },
+        {
+          type: 'localeDropdown',
+          position: 'right',
         },
         {
           href: "https://github.com/althread/althread/",

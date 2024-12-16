@@ -1,0 +1,26 @@
+{
+  "title": {
+    "message": "Althread",
+    "description": "The title in the navbar"
+  },
+  "logo.alt": {
+    "message": "Althread Logo",
+    "description": "The alt text of navbar logo"
+  },
+  "item.label.Guide": {
+    "message": "Guide",
+    "description": "Navbar item with label Guide"
+  },
+  "item.label.Références": {
+    "message": "References",
+    "description": "Navbar item with label Références"
+  },
+  "item.label.Exemples": {
+    "message": "Examples",
+    "description": "Navbar item with label Exemples"
+  },
+  "item.label.GitHub": {
+    "message": "GitHub",
+    "description": "Navbar item with label GitHub"
+  }
+}

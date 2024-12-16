@@ -1,0 +1,22 @@
+{
+  "version.label": {
+    "message": "Next",
+    "description": "The label for version current"
+  },
+  "sidebar.guideSidebar.category.Démarrage": {
+    "message": "Getting Started",
+    "description": "the label for the getting started category in the sidebar"
+  },
+  "sidebar.guideSidebar.category.Programmes": {
+    "message": "Programs",
+    "description": "The label for category programs in sidebar guideSidebar"
+  },
+  "sidebar.guideSidebar.category.Canaux de communication": {
+    "message": "Communication Channels",
+    "description": "The label for category Communication Channels in sidebar guideSidebar"
+  },
+  "sidebar.guideSidebar.category.Fonctionnement interne": {
+    "message": "Internal Architecture",
+    "description": "The label for category Fonctionnement interne in sidebar guideSidebar"
+  }
+}
