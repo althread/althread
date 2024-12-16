@@ -2,7 +2,7 @@
 sidebar_position: 1
 ---
 
-# Architecture interne
+# Architecture
 
 Althread est un langage statiquement typé qui est compilé en instructions pour la machine virtuelle Althread. Cette machine virtuelle est un programme qui exécute les instructions du programme Althread. Les instructions sont des opérations de bas niveau qui manipulent les données du programme, mais ne sont pas aussi bas niveau que les instructions d'une machine physique. La machine virtuelle Althread est conçue pour être facile à implémenter et à comprendre, mais elle reste assez performante pour exécuter des programmes de taille raisonnable.
 L'execution sur la machine virtuelle Althread est similaire à l'execution d'un programme sur un ordinateur standard, avec des piles d'execution par processus, où sont stockées les variables locales, et une zone de mémoire partagé. La machine virtuelle est décrite en détail dans la section [Machine virtuelle](/docs/internal/vm.md).

@@ -293,7 +293,7 @@ impl Ast {
         }
         if args.value.identifiers.len() > 0 {
             process_code.instructions.push(Instruction {
-                control: InstructionType::Destruct(args.value.identifiers.len()),
+                control: InstructionType::Destruct,
                 pos: Some(args.pos),
             });
         }

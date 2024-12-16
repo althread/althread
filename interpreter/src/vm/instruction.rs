@@ -12,6 +12,11 @@ use crate::{
 pub enum InstructionType {
     Empty,
     Expression(LocalExpressionNode),
+    Push(Literal),
+    Unstack {
+        unstack_len: usize,
+    },
+    Destruct,
     GlobalReads {
         variables: Vec<String>,
         only_const: bool,
@@ -26,17 +31,8 @@ pub enum InstructionType {
         operator: BinaryAssignmentOperator,
         unstack_len: usize,
     },
-    JumpIf {
-        jump_false: i64,
-        unstack_len: usize,
-    },
-    Jump(i64),
-    Break {
-        jump: i64,
-        unstack_len: usize,
-        stop_atomic: bool,
-    },
-    Unstack {
+
+    Declaration {
         unstack_len: usize,
     },
     RunCall {
@@ -49,14 +45,19 @@ pub enum InstructionType {
         variable_idx: Option<usize>,
         arguments: Option<Vec<usize>>,
     },
-    ///
-    Declaration {
+    JumpIf {
+        jump_false: i64,
         unstack_len: usize,
+    },
+    Jump(i64),
+    Break {
+        jump: i64,
+        unstack_len: usize,
+        stop_atomic: bool,
     },
     ChannelPeek(String),
     ChannelPop(String),
-    Destruct(usize),
-    Push(Literal),
+    
     WaitStart {
         dependencies: WaitDependency,
         start_atomic: bool,
@@ -69,7 +70,6 @@ pub enum InstructionType {
         channel_name: String,
         unstack_len: usize,
     },
-    SendWaiting,
     Connect {
         /// the index of the sender pid in the stack (none if the sender is the current process)
         sender_pid: Option<usize>,
@@ -107,7 +107,7 @@ impl fmt::Display for InstructionType {
             } => write!(f, "jumpIf {} (unstack {})", jump_false, unstack_len)?,
             Self::Jump(a) => write!(f, "jump {}", a)?,
             Self::Unstack { unstack_len } => write!(f, "unstack {}", unstack_len)?,
-            Self::Destruct(d) => write!(f, "destruct {}", d)?,
+            Self::Destruct => write!(f, "destruct tuple", )?,
             Self::RunCall { name, .. } => write!(f, "run {}()", name)?,
             Self::Break { unstack_len, .. } => write!(f, "break (unstack {})", unstack_len)?,
             Self::EndProgram => write!(f, "end program")?,
@@ -133,7 +133,6 @@ impl fmt::Display for InstructionType {
                 channel_name,
                 unstack_len,
             } => write!(f, "send to {} (unstack {})", channel_name, unstack_len)?,
-            Self::SendWaiting => write!(f, "send waiting?")?,
             Self::ChannelPeek(s) => write!(f, "peek '{}'", s)?,
             Self::ChannelPop(s) => write!(f, "pop '{}'", s)?,
             Self::Connect {
@@ -201,12 +200,11 @@ impl InstructionType {
             | Self::JumpIf {..}
             | Self::Jump(_)
             | Self::Break {..}
-            | Self::Destruct(_)
+            | Self::Destruct
             | Self::Unstack {..}
             | Self::FnCall {..}
             | Self::Declaration {..}
             | Self::AtomicEnd
-            | Self::SendWaiting
             | Self::EndProgram
             | Self::Exit
             | Self::Push(_) => true,

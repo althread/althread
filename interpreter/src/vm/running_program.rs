@@ -430,7 +430,7 @@ impl<'a> RunningProgramState<'a> {
                     *jump
                 }
             }
-            InstructionType::Destruct(_) => {
+            InstructionType::Destruct => {
                 // The values are in a tuple on the top of the stack
                 let tuple = self
                     .memory
@@ -465,9 +465,6 @@ impl<'a> RunningProgramState<'a> {
 
                 action = Some(GlobalAction::Send(channel_name.clone(), receiver));
                 1
-            }
-            InstructionType::SendWaiting => {
-                unimplemented!("SendWaiting not implemented anymore");
             }
             InstructionType::ChannelPeek(channel_name) => {
                 let values = channels.peek(self.id, channel_name.clone());

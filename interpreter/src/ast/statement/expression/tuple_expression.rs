@@ -141,7 +141,7 @@ impl TupleExpression {
             })
         }
         Ok(Instruction {
-            control: InstructionType::Destruct(types.len()),
+            control: InstructionType::Destruct,
             pos: Some(pos),
         })
     }
