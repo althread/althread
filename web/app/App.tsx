@@ -2,6 +2,7 @@
 
 import { createSignal, onCleanup, onMount } from "solid-js";
 import Resizable from '@corvu/resizable'
+import { Example1 } from "./examples/example1";
 
 import init, { compile, run, check } from '../pkg/althread_web';
 import createEditor from './Editor';
@@ -16,77 +17,31 @@ init().then(() => {
 
 const literal = (value) => {
   if(Object.keys(value)[0] == "tuple") {
-    return '('+Object.values(value)[0].map(literal).join(',')+')';
+    return '('+(Object.values(value)[0] as any[]).map(literal).join(',')+')';
   }
   return value[Object.keys(value)[0]];//+'('+Object.values(value)[0]+')';
 }
 
-const nodeToString = (n) => {
+type Node = {
+  channels: Map<any, any[]>,
+  globals: Map<any, any>,
+  locals: { [key: string]: [any[], any] }
+};
+
+const nodeToString = (n: Node) => {
   let label = 'channels:\n'+[
-    ...n.channels.entries().map(
+    ...Array.from(n.channels.entries()).map(
       ([k,v]) => k.join('.')+' <- '+(
         v.map(l => literal(l)).join(',')
         //&& Object.values(v)[0].map(l => literal(l)).join(',')
     )
     )
   ].join('\n');
-  label += '\nGlobals: '+[...n.globals.entries().map(([k,v]) => k+'='+literal(v))].join(',');
+  label += '\nGlobals: '+[...Array.from(n.globals.entries()).map(([k,v]) => k+'='+literal(v))].join(',');
   label += '\nLocals: \n'+Object.values(n.locals).map(l => 'pc:'+l[1]+' stack:['+l[0].map(v=>literal(v)).join(',')+']').join('\n');
 
   return label;
 }
-
-const Example1 = `
-
-shared {
-  let Done = false;
-  let Leader = 0;
-}
-
-program A(my_id: int) {
-
-  let leader_id = my_id;
-
-  send out(my_id);
-
-  loop atomic wait receive in (x) => {
-    print("receive", x);
-      if x > leader_id {
-        leader_id = x;
-        send out(x);
-      } else {
-        if x == leader_id {
-          print("finished");
-          send out(x);
-          break;
-        }
-      }
-  };
-  
-  if my_id == leader_id {
-    print("I AM THE LEADER!!!");
-    ! {
-        Done = true;
-        Leader += 1;
-    }
-  }
-}
-
-always {
-    !Done || (Leader == 1);
-}
-
-main {
-  let a = run A(1);
-  let b = run A(2);
-
-  channel a.out (int)> b.in;
-  channel b.out (int)> a.in;
-
-  print("DONE");
-}
-
-`;
 
 
 export default function App() {
