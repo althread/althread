@@ -1,5 +1,5 @@
 // @refresh granular
-
+/** @jsxImportSource solid-js */
 import { createSignal, onCleanup, onMount } from "solid-js";
 import Resizable from '@corvu/resizable'
 import { Example1 } from "./examples/example1";
@@ -104,7 +104,7 @@ export default function App() {
               setOut(res);
               
               console.log(res);
-              let colored_path = [];
+              let colored_path: string[] = [];
               if(res[0].length > 0) { // a violation occurred
                 res[0].forEach((path) => {
                    colored_path.push(nodeToString(path.to));
