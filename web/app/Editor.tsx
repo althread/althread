@@ -4,7 +4,7 @@ import { createSignal, onMount } from "solid-js";
 import editor_lang from "./editor-lang";
 import {tags} from "@lezer/highlight"
 import {HighlightStyle} from "@codemirror/language"
-
+import { Tag } from "@lezer/highlight";
 import {keymap, highlightSpecialChars, drawSelection, highlightActiveLine, dropCursor,
     rectangularSelection, crosshairCursor,
     lineNumbers, highlightActiveLineGutter, EditorView} from "@codemirror/view"
@@ -95,6 +95,7 @@ const createEditor = ({
     defaultValue,
     onValueChange
   }: {
+    compile: (code: string) => any,
     defaultValue: string | undefined, 
     onValueChange: undefined | ((value:string) => void)
   }) => {
@@ -154,7 +155,7 @@ const createEditor = ({
   });
   const debugHighlightStyle = HighlightStyle.define(
     Object.entries(tags).map(([key, value]) => {
-      return { tag: value, "--tags": `"tag.${key}"` };
+      return { tag: value as Tag, "--tags": `"tag.${key}"` };
     })
   );
   

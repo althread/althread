@@ -1,5 +1,6 @@
+/** @jsxImportSource solid-js */
 import vis from "vis-network/dist/vis-network.esm";
-import { createEffect, createMemo, onMount } from "solid-js"
+import { createEffect, onCleanup, onMount } from "solid-js"
 
 
 export default (props) => {
