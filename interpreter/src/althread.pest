@@ -135,7 +135,7 @@ waiting_block_case       = {
 /// ### Control Flow
 /// Control flow structures include conditional execution and loops.
 
-if_control    = { IF_KW ~ expression ~ code_block ~ (ELSE_KW ~ code_block)? }
+if_control    = { IF_KW ~ expression ~ code_block ~ (ELSE_KW ~ (if_control | code_block))? }
 while_control = { WHILE_KW ~ expression ~ code_block }
 loop_control = { LOOP_KW ~ statement }
 for_control = { FOR_KW ~ identifier ~ "in" ~ list_expression ~ statement }

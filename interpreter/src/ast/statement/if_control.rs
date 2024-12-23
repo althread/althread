@@ -4,15 +4,8 @@ use pest::iterators::Pairs;
 
 use crate::{
     ast::{
-        block::Block,
-        display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
-        token::datatype::DataType,
-    },
-    compiler::{CompilerState, InstructionBuilderOk},
-    error::{AlthreadError, AlthreadResult, ErrorType},
-    parser::Rule,
-    vm::instruction::{Instruction, InstructionType},
+        block::Block, display::{AstDisplay, Prefix}, node::{InstructionBuilder, Node, NodeBuilder}, statement::Statement, token::datatype::DataType
+    }, compiler::{CompilerState, InstructionBuilderOk}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule, vm::instruction::{Instruction, InstructionType}
 };
 
 use super::expression::Expression;
@@ -28,7 +21,34 @@ impl NodeBuilder for IfControl {
     fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
         let condition = Node::build(pairs.next().unwrap())?;
         let then_block = Node::build(pairs.next().unwrap())?;
-        let else_block = pairs.next().map(|pair| Node::build(pair)).transpose()?;
+        
+        // The else block is optional and could be
+        // a if statement, in this case we need to wrap it in a block node
+        let else_block = match pairs.next() {
+            Some(else_block_pair) => match else_block_pair.as_rule() {
+                Rule::if_control => {
+                    // wrape the if controle in a block node
+                    let if_statement: Node<IfControl> = Node::build(else_block_pair)?;
+                    let common_position= if_statement.pos.clone();
+                    let v = vec![Node { 
+                        pos: common_position.clone(), 
+                        value: Statement::If(if_statement)
+                    }];
+                    Some(Node {
+                        pos: common_position,
+                        value: Block {
+                            children: v,
+                        }
+                    })
+                }
+                Rule::code_block => {
+                    Some(Node::build(else_block_pair)?)
+                }
+                _ => return Err(no_rule!(else_block_pair, "For else expression")),
+            },
+            None => None,
+        };
+
 
         let else_block = match else_block {
             Some(else_block) => Some(Box::new(else_block)),
