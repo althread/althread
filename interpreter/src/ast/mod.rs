@@ -103,57 +103,54 @@ impl Ast {
         let mut global_table = HashMap::new();
         state.current_stack_depth = 1;
         state.is_shared = true;
-        match self.global_block.as_ref() {
-            Some(global) => {
-                let mut memory = VM::new_memory();
-                for node in global.value.children.iter() {
-                    match &node.value {
-                        Statement::Declaration(decl) => {
-                            let mut literal = None;
-                            let node_compiled = node.compile(&mut state)?;
-                            for gi in node_compiled.instructions {
-                                match gi.control {
-                                    InstructionType::Expression(exp) => {
-                                        literal = Some(exp.eval(&memory).or_else(|err| {
-                                            Err(AlthreadError::new(
-                                                ErrorType::ExpressionError,
-                                                gi.pos,
-                                                err,
-                                            ))
-                                        })?);
-                                    }
-                                    InstructionType::Declaration { unstack_len } => {
-                                        // do nothing
-                                        assert!(unstack_len == 1)
-                                    }
-                                    InstructionType::Push(literal) => memory.push(literal.clone()),
-                                    _ => {
-                                        panic!("unexpected instruction in compiled declaration statement")
-                                    }
+        if let Some(global) = self.global_block.as_ref() {
+            let mut memory = VM::new_memory();
+            for node in &global.value.children {
+                match &node.value {
+                    Statement::Declaration(decl) => {
+                        let mut literal = None;
+                        let node_compiled = node.compile(&mut state)?;
+                        for gi in node_compiled.instructions {
+                            match gi.control {
+                                InstructionType::Expression(exp) => {
+                                    literal = Some(exp.eval(&memory).map_err(|err| {
+                                        AlthreadError::new(ErrorType::ExpressionError, gi.pos, err)
+                                    })?);
+                                }
+                                InstructionType::Declaration { unstack_len } => {
+                                    // do nothing
+                                    assert!(unstack_len == 1);
+                                }
+                                InstructionType::Push(literal) => memory.push(literal.clone()),
+                                _ => {
+                                    panic!(
+                                        "unexpected instruction in compiled declaration statement"
+                                    )
                                 }
                             }
-                            let literal = literal
-                                .expect("declaration did not compiled to expression nor PushNull");
-                            memory.push(literal);
-
-                            let var_name = &decl.value.identifier.value.value;
-                            global_table.insert(
-                                var_name.clone(),
-                                state.program_stack.last().unwrap().clone(),
-                            );
-                            global_memory.insert(var_name.clone(), memory.last().unwrap().clone());
                         }
-                        _ => return Err(AlthreadError::new(
+                        let literal = literal
+                            .expect("declaration did not compiled to expression nor PushNull");
+                        memory.push(literal);
+
+                        let var_name = &decl.value.identifier.value.value;
+                        global_table.insert(
+                            var_name.clone(),
+                            state.program_stack.last().unwrap().clone(),
+                        );
+                        global_memory.insert(var_name.clone(), memory.last().unwrap().clone());
+                    }
+                    _ => {
+                        return Err(AlthreadError::new(
                             ErrorType::InstructionNotAllowed,
                             Some(node.pos),
                             "The 'shared' block can only contains assignment from an expression"
                                 .to_string(),
-                        )),
+                        ))
                     }
                 }
             }
-            None => (),
-        };
+        }
 
         state.global_table = global_table;
 
@@ -185,7 +182,7 @@ impl Ast {
         programs_code.insert("main".to_string(), code);
         assert!(state.current_stack_depth == 0);
 
-        for (name, _) in self.process_blocks.iter() {
+        for name in self.process_blocks.keys() {
             if name == "main" {
                 continue;
             }
@@ -195,7 +192,7 @@ impl Ast {
         }
 
         // check if all the channed used have been declared
-        for (channel_name, (_, pos)) in state.undefined_channels.iter() {
+        for (channel_name, (_, pos)) in &state.undefined_channels {
             return Err(AlthreadError::new(
                 ErrorType::UndefinedChannel,
                 Some(pos.clone()),
@@ -207,7 +204,7 @@ impl Ast {
         }
 
         let mut always_conditions = Vec::new();
-        for (name, condition_block) in self.condition_blocks.iter() {
+        for (name, condition_block) in &self.condition_blocks {
             match name {
                 ConditionKeyword::Always => {
                     for condition in condition_block.value.children.iter() {
@@ -291,7 +288,7 @@ impl Ast {
         if compiled.contains_jump() {
             unimplemented!("breaks or return statements in programs are not yet implemented");
         }
-        if args.value.identifiers.len() > 0 {
+        if !args.value.identifiers.is_empty() {
             process_code.instructions.push(Instruction {
                 control: InstructionType::Destruct,
                 pos: Some(args.pos),
