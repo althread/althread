@@ -70,7 +70,7 @@ export default function App() {
       <div id="header">
           <div class="brand">
             <Logo />
-            <h1>Althread</h1>
+            <h3>Althread</h3>
           </div>
           <div class="actions">
             <button
@@ -173,7 +173,7 @@ export default function App() {
           minSize={0.2}>
           <div ref={editor.ref} />
         </Resizable.Panel>
-        <Resizable.Handle />
+        <Resizable.Handle class="Resizable-handle"/>
         <Resizable.Panel class="right-panel"
           initialSize={0.45}
           minSize={0.2}>

@@ -22,8 +22,8 @@ body {
     align-items: center;
     justify-content: space-between;
     gap: 2rem;
-    padding: 1rem 1rem 1rem 1rem;
-    background-color: gray;
+    padding: 1rem 1rem 1rem 0.5rem;
+    background-color: #1e1e1e;
 }
 #content {
     height: calc( 100vh - 30px );
@@ -123,6 +123,49 @@ body {
     padding: 0.5rem;
   }
   
-  .brand svg {
-    fill: currentColor;
+
+  .Resizable-handle {
+    width: 1px;
+    border: 0;
+    margin: 0;
+    background: transparent;
+    cursor: col-resize;
+    transition: all 0.2s ease;
+    position: relative;
+  }
+  
+  .Resizable-handle::after {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: rgba(127, 127, 127, 0.2);
+    transition: all 0.2s ease;
+  }
+  
+  .Resizable-handle::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 4px;
+    height: 60px;
+    background: rgba(127, 127, 127, 0.2);
+    transition: height 0.2s ease;
+  }
+  
+  .Resizable-handle:hover::before {
+    height: 100%;
+    background: rgba(127, 127, 127, 0.2);
+  }
+  
+  .Resizable-handle:hover {
+    background: rgba(127, 127, 127, 0.2);
+  }
+  
+  .Resizable-handle:hover::after {
+    width: 2px;
+    background: rgba(127, 127, 127, 0.2);
   }
