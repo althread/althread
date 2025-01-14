@@ -123,7 +123,11 @@ const createEditor = ({
     '&': {
       textAlign: 'left',
       fontSize: '18px',
+      background: '#242A3B',
     },
+    '.cm-editor.cm-focused': {
+      background: '#242A3B',
+    }
   });
   editor.createExtension(baseTheme);
   editor.createExtension(basicSetup);
