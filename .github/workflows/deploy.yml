@@ -40,7 +40,7 @@ jobs:
           wasm-pack build --target web --release
 
       - name: Upload Wasm Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wasm-artifacts
           path: web/pkg
@@ -55,7 +55,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Download Wasm Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: wasm-artifacts
           path: web/pkg
@@ -79,7 +79,7 @@ jobs:
           mv dist ../editor
 
       - name: Upload Built Web Editor
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: web-editor
           path: editor
