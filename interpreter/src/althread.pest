@@ -16,7 +16,7 @@ condition_block = { condition_keywords ~ expression_block }
 program_block   = { PROGRAM_KW ~ identifier ~ arg_list ~ code_block }
 main_block      = { MAIN_KW ~ code_block }
 
-code_block           = { "{" ~ statement* ~ "}" }
+code_block           = { "{" ~ statement* ~ return_statement? ~ "}" }
 expression_block     = { "{" ~ expression_statement* ~ "}" }
 expression_statement = { expression ~ ";" }
 
@@ -42,6 +42,8 @@ statement = {
   | call_statement
   | code_block
   | break_loop_statement
+  | inline_statement
+  | return_statement
 }
 
 break_loop_statement = { (BREAK_KW | CONTINUE_KW) ~ identifier? ~ ";" }
@@ -55,6 +57,10 @@ call_statement        = _{ fn_call ~ ";" }
 run_statement         = _{ run_call ~ ";" }
 send_statement         = _{ send_call ~ ";" }
 channel_declaration_statement = _{ channel_declaration ~ ";" }
+
+// Inline functions
+inline_statement = { INLINE KW ~ identifier ~ arg_list ~ "->" ~ datatype ~ code_block }
+return_statement = { RETURN_KW ~ expression ~ ";" }
 
 fn_call  = { object_identifier ~ tuple_expression }
 run_call = { RUN_KW ~ identifier ~ tuple_expression }
@@ -158,6 +164,8 @@ KEYWORDS = _{
   | IF_KW
   | ELSE_KW
   | WHILE_KW
+  | INLINE_KW
+  | RETURN_KW
   | BOOL
   | INT_TYPE
   | FLOAT_TYPE
@@ -196,6 +204,10 @@ FALSE_KW = _{ "false" }
 NULL_KW  = _{ "null" }
 
 ATOMIC_KW = _{ "atomic" }
+
+// Functions
+INLINE_KW = _{ "inline" }
+RETURN_KW = _{ "return" }
 
 /// ### Operators
 /// Operators are used for arithmetic, logical operations, and assignments.
