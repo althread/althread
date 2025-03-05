@@ -19,24 +19,24 @@ Althread is an open source Promela alternative for modeling and verifying multi-
 ## Installation
 1. Clone the repository: 
    ```
-   git clone https://github.com/romainbourdain/althread.git
+   git clone https://github.com/althread/althread.git
    ```
 
 2. Navigate to the directory and compile :
     ```
-    cd althread/interpreter
+    cd althread
     cargo build
     ```
 
 3. Run an example
     ```
-    cargo run test.alt
+    cargo run run test.alt
     ```
 
 ## Quick Start
 Here is a minimal example of modeling a multi-thread system :
 ```
-process A() {
+program A() {
     print("Hello world from A process");
 }
 
@@ -47,7 +47,7 @@ main {
 ```
 
 ## Full Documentation
-- Check out the [full documentation](https://romainbourdain.github.io/althread/) for more examples, guides and a reference of symbols.
+- Check out the [full documentation](https://althread.github.io/) for more examples, guides and a reference of symbols.
 
 ## Sources
 - https://www.rust-lang.org/fr
