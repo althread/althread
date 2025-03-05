@@ -92,7 +92,7 @@ impl<'a> GraphNode<'a> {
 /// Checks a given project, returning a path from an initial state to the first state that violates an invariant. (return an empty vector if no invariant is violated)
 pub fn check_program<'a>(
     compiled_project: &'a CompiledProject,
-) -> AlthreadResult<(Vec<StateLink>, StateGraph)> {
+) -> AlthreadResult<(Vec<StateLink<'a>>, StateGraph<'a>)> {
     let mut state_graph = StateGraph {
         nodes: HashMap::new(),
     };
