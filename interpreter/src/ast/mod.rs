@@ -36,6 +36,7 @@ pub struct Ast {
     pub process_blocks: HashMap<String, (Node<ArgsList>, Node<Block>)>,
     pub condition_blocks: HashMap<ConditionKeyword, Node<ConditionBlock>>,
     pub global_block: Option<Node<Block>>,
+    pub inline_function_blocks: HashMap<String, (Node<ArgsList>, String, Node<Block>)>,
 }
 
 impl Ast {
@@ -44,9 +45,10 @@ impl Ast {
             process_blocks: HashMap::new(),
             condition_blocks: HashMap::new(),
             global_block: None,
+            inline_function_blocks: HashMap::new(),
         }
     }
-
+    /// 
     pub fn build(pairs: Pairs<Rule>) -> AlthreadResult<Self> {
         let mut ast = Self::new();
         for pair in pairs {
@@ -86,6 +88,22 @@ impl Ast {
                     let program_block = Node::build(pairs.next().unwrap())?;
                     ast.process_blocks
                         .insert(process_identifier, (args_list, program_block));
+                }
+                Rule::inline_function_block => {
+                    let mut pairs  = pair.into_inner();
+
+                    let inline_function_identifier = pairs.next().unwrap().as_str().to_string();
+                    let inline_args_list: Node<token::args_list::ArgsList> = Node::build(pairs.next().unwrap())?;
+                    pairs.next(); // skip the "->" token
+                    let inline_return_datatype = pairs.next().unwrap().as_str().to_string();
+                    let inline_function_block: Node<Block>  = Node::build(pairs.next().unwrap())?;
+                    
+                    ast.inline_function_blocks
+                        .insert(
+                        inline_function_identifier,
+                        (inline_args_list, inline_return_datatype, inline_function_block)
+                    );
+
                 }
                 Rule::EOI => (),
                 _ => return Err(no_rule!(pair, "root ast")),
