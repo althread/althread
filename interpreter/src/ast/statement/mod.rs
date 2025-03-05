@@ -5,6 +5,7 @@ pub mod channel_declaration;
 pub mod declaration;
 pub mod expression;
 pub mod fn_call;
+pub mod fn_return;
 pub mod for_control;
 pub mod if_control;
 pub mod loop_control;
@@ -22,6 +23,7 @@ use break_loop::BreakLoopControl;
 use channel_declaration::ChannelDeclaration;
 use declaration::Declaration;
 use fn_call::FnCall;
+use fn_return::FnReturn;
 use for_control::ForControl;
 use if_control::IfControl;
 use loop_control::LoopControl;
@@ -53,6 +55,7 @@ pub enum Statement {
     ChannelDeclaration(Node<ChannelDeclaration>),
     Run(Node<RunCall>),
     FnCall(Node<FnCall>),
+    FnReturn(Node<FnReturn>),
     If(Node<IfControl>),
     While(Node<WhileControl>),
     Loop(Node<LoopControl>),
@@ -72,6 +75,7 @@ impl NodeBuilder for Statement {
             Rule::declaration => Ok(Self::Declaration(Node::build(pair)?)),
             Rule::wait_statement => Ok(Self::Wait(Node::build(pair)?)),
             Rule::fn_call => Ok(Self::FnCall(Node::build(pair)?)),
+            Rule::return_statement => Ok(Self::FnReturn(Node::build(pair)?)),
             Rule::run_call => Ok(Self::Run(Node::build(pair)?)),
             Rule::if_control => Ok(Self::If(Node::build(pair)?)),
             Rule::while_control => Ok(Self::While(Node::build(pair)?)),
@@ -122,6 +126,9 @@ impl InstructionBuilder for Statement {
                 state.program_stack.pop();
                 Ok(builder)
             }
+            Self::FnReturn(node) => {
+                todo!("Implement this");
+            }
         }
     }
 }
@@ -141,6 +148,7 @@ impl AstDisplay for Statement {
             Statement::ChannelDeclaration(node) => node.ast_fmt(f, prefix),
             Statement::Wait(node) => node.ast_fmt(f, prefix),
             Statement::FnCall(node) => node.ast_fmt(f, prefix),
+            Statement::FnReturn(node) => node.ast_fmt(f, prefix),
             Statement::Run(node) => node.ast_fmt(f, prefix),
             Statement::If(node) => node.ast_fmt(f, prefix),
             Statement::While(node) => node.ast_fmt(f, prefix),

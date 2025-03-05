@@ -208,7 +208,10 @@ impl Expression {
             end: pair.as_span().end(),
         };
         match pair.as_rule() {
-            //Rule::expression => Self::build(pair.into_inner()),
+            Rule::expression => {
+                let expr = Self::build(pair.into_inner())?;
+                Ok(Node { pos, value: expr })
+            }
             Rule::tuple_expression => {
                 let mut values = Vec::new();
                 for pair in pair.into_inner() {

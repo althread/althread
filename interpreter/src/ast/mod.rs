@@ -351,6 +351,12 @@ impl AstDisplay for Ast {
             writeln!(f, "")?;
         }
 
+        for (inline_function_name, (_args, return_type, inline_function_node)) in &self.inline_function_blocks {
+            writeln!(f, "{}{} -> {}", prefix, inline_function_name, return_type)?;
+            inline_function_node.ast_fmt(f, &prefix.add_branch())?;
+            writeln!(f, "")?;
+        }
+
         Ok(())
     }
 }

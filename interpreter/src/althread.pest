@@ -18,7 +18,7 @@ program_block   = { PROGRAM_KW ~ identifier ~ arg_list ~ code_block }
 main_block      = { MAIN_KW ~ code_block }
 
 code_block           = { "{" ~ statement* ~ "}" }
-function_code_block = { "{" ~ statementpp* ~ "}" }
+function_code_block = { "{" ~ statement* ~ "}" }
 expression_block     = { "{" ~ expression_statement* ~ "}" }
 expression_statement = { expression ~ ";" }
 
@@ -44,12 +44,13 @@ statement = {
   | call_statement
   | code_block
   | break_loop_statement
-}
-
-statementpp = {
-    statement
   | return_statement
 }
+
+// statementpp = {
+//     statement
+//   | return_statement
+// }
 
 break_loop_statement = { (BREAK_KW | CONTINUE_KW) ~ identifier? ~ ";" }
 assignment_statement  = _{ assignment ~ ";" }
