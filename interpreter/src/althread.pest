@@ -17,7 +17,8 @@ condition_block = { condition_keywords ~ expression_block }
 program_block   = { PROGRAM_KW ~ identifier ~ arg_list ~ code_block }
 main_block      = { MAIN_KW ~ code_block }
 
-code_block           = { "{" ~ statement* ~ return_statement? ~ "}" }
+code_block           = { "{" ~ statement* ~ "}" }
+function_code_block = { "{" ~ statementpp* ~ "}" }
 expression_block     = { "{" ~ expression_statement* ~ "}" }
 expression_statement = { expression ~ ";" }
 
@@ -43,6 +44,10 @@ statement = {
   | call_statement
   | code_block
   | break_loop_statement
+}
+
+statementpp = {
+    statement
   | return_statement
 }
 
@@ -59,7 +64,7 @@ send_statement         = _{ send_call ~ ";" }
 channel_declaration_statement = _{ channel_declaration ~ ";" }
 
 // Inline functions
-inline_function_block = { INLINE_KW ~ identifier ~ arg_list ~ RARROW ~ datatype ~ code_block }
+inline_function_block = { INLINE_KW ~ identifier ~ arg_list ~ RARROW ~ datatype ~ function_code_block }
 return_statement = { RETURN_KW ~ expression ~ ";" }
 
 fn_call  = { object_identifier ~ tuple_expression }
