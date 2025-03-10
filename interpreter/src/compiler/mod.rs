@@ -100,6 +100,7 @@ pub struct CompilerState {
     pub current_program_name: String,
     pub is_atomic: bool,
     pub is_shared: bool,
+    pub in_function: bool,
 }
 
 impl CompilerState {
@@ -114,6 +115,7 @@ impl CompilerState {
             program_arguments: HashMap::new(),
             is_atomic: false,
             is_shared: false,
+            in_function: false,
             stdlib: stdlib::Stdlib::new(),
         }
     }

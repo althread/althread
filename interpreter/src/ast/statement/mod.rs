@@ -127,6 +127,8 @@ impl InstructionBuilder for Statement {
                 Ok(builder)
             }
             Self::FnReturn(node) => {
+                let mut builder: InstructionBuilderOk = node.compile(state)?;
+
                 todo!("Implement this");
             }
         }

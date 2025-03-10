@@ -60,6 +60,7 @@ pub enum ErrorType {
     NotImplemented,
     UndefinedFunction,
     UndefinedChannel,
+    ReturnOutsideFunction
 }
 
 impl fmt::Display for ErrorType {
@@ -78,6 +79,7 @@ impl fmt::Display for ErrorType {
             ErrorType::UndefinedFunction => write!(f, "Undefined Function"),
             ErrorType::UndefinedChannel => write!(f, "Undefined Channel"),
             ErrorType::InvariantError => write!(f, "Invariant Error"),
+            ErrorType::ReturnOutsideFunction => write!(f, "Return statement can only be in a function"),
         }
     }
 }

@@ -31,6 +31,14 @@ impl NodeBuilder for FnReturn {
 
 impl InstructionBuilder for FnReturn {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
+        if !state.in_function {
+            return Err(AlthreadError::new(
+                ErrorType::ReturnOutsideFunction,
+                Some(self.value.pos),
+                "Return statement outside function".to_string(),
+            ));
+        }
+        
         todo!("Not implemented yet");
     }
 }

@@ -96,6 +96,7 @@ impl Ast {
                     let inline_args_list: Node<token::args_list::ArgsList> = Node::build(pairs.next().unwrap())?;
                     pairs.next(); // skip the "->" token
                     let inline_return_datatype = pairs.next().unwrap().as_str().to_string();
+                    //TODO define proper function block ??
                     let inline_function_block: Node<Block>  = Node::build(pairs.next().unwrap())?;
                     
                     ast.inline_function_blocks
@@ -177,6 +178,13 @@ impl Ast {
 
         state.unstack_current_depth();
         assert!(state.current_stack_depth == 0);
+
+        //TODO before compiling the programs, compile the functions
+        state.in_function = true;
+
+        //TODO functions
+
+        state.in_function = false;
 
         // before compiling the programs, get the list of program names and their arguments
         state.program_arguments = self
