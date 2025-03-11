@@ -144,7 +144,12 @@ impl InstructionBuilder for Node<FnCall> {
 
 impl AstDisplay for FnCall {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
-        writeln!(f, "{prefix}print")?;
+        let names: Vec<String> = self.fn_name
+            .iter()
+            .map(|n| n.value.value.clone())
+            .collect();
+        let fn_name = names.join(".");
+        writeln!(f, "{}{}", prefix, fn_name)?;
         self.values.ast_fmt(f, &prefix.add_leaf())?;
 
         Ok(())
