@@ -58,32 +58,56 @@ impl InstructionBuilder for Node<FnCall> {
         if self.value.fn_name.len() == 1 {
             // this is a top level function
 
-            if basename != "print" {
-                return Err(AlthreadError::new(
-                    ErrorType::UndefinedFunction,
-                    Some(self.pos),
-                    "undefined function".to_string(),
-                ));
+            if basename == "print" {
+                let unstack_len = state.unstack_current_depth();
+
+                builder.instructions.push(Instruction {
+                    control: InstructionType::FnCall {
+                        name: basename.to_string(),
+                        unstack_len,
+                        variable_idx: None,
+                        arguments: None, // use the top of the stack
+                    },
+                    pos: Some(self.pos),
+                });
+
+                state.program_stack.push(Variable {
+                    mutable: true,
+                    name: "".to_string(),
+                    datatype: DataType::Void,
+                    depth: state.current_stack_depth,
+                    declare_pos: None,
+                });
+            } else {
+                // check user-defined functions
+                if let Some(func_def) = state.user_functions.get(basename).cloned() {
+                    let unstack_len = state.unstack_current_depth();
+
+                    builder.instructions.push(Instruction {
+                        control: InstructionType::FnCall {
+                            name: basename.to_string(),
+                            unstack_len,
+                            variable_idx: None,
+                            arguments: None, // use the top of the stack
+                        },
+                        pos: Some(self.pos),
+                    });
+
+                    state.program_stack.push(Variable {
+                        mutable: true,
+                        name: "".to_string(),
+                        datatype: func_def.return_type.clone(),
+                        depth: state.current_stack_depth,
+                        declare_pos: None,
+                    });
+                } else {
+                    return Err(AlthreadError::new(
+                        ErrorType::UndefinedFunction,
+                        Some(self.pos),
+                        format!("undefined function {}", basename),
+                    ));
+                }
             }
-            let unstack_len = state.unstack_current_depth();
-
-            builder.instructions.push(Instruction {
-                control: InstructionType::FnCall {
-                    name: basename.to_string(),
-                    unstack_len,
-                    variable_idx: None,
-                    arguments: None, // use the top of the stack
-                },
-                pos: Some(self.pos),
-            });
-
-            state.program_stack.push(Variable {
-                mutable: true,
-                name: "".to_string(),
-                datatype: DataType::Void,
-                depth: state.current_stack_depth,
-                declare_pos: None,
-            });
         } else {
             // this is a method call
 
