@@ -45,6 +45,7 @@ pub enum InstructionType {
         variable_idx: Option<usize>,
         arguments: Option<Vec<usize>>,
     },
+    Return,
     JumpIf {
         jump_false: i64,
         unstack_len: usize,
@@ -114,7 +115,8 @@ impl fmt::Display for InstructionType {
             Self::FnCall {
                 name, unstack_len, ..
             } => write!(f, "{}()  (unstack {})", name, unstack_len)?,
-            Self::Exit => write!(f, "exit")?,
+            Self::Return => write!(f, "return")?,
+            Self::Exit => write!(f, "exit")?, //TODO check again ???
             Self::Declaration { unstack_len } => {
                 write!(f, "declare var with value (unstack {})", unstack_len)?
             }
@@ -203,6 +205,7 @@ impl InstructionType {
             | Self::Destruct
             | Self::Unstack {..}
             | Self::FnCall {..}
+            | Self::Return
             | Self::Declaration {..}
             | Self::AtomicEnd
             | Self::EndProgram

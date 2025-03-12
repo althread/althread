@@ -39,7 +39,18 @@ impl InstructionBuilder for FnReturn {
             ));
         }
         
-        todo!("Not implemented yet");
+        let mut builder = self.value.compile(state)?;
+
+        let ret_instr = Instruction {
+            control: InstructionType::Return,
+            pos: Some(self.value.pos),
+        };
+
+        builder.return_indexes.push(builder.instructions.len());
+
+        builder.instructions.push(ret_instr);
+
+        Ok(builder)
     }
 }
 
