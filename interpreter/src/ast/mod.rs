@@ -18,10 +18,10 @@ use display::{AstDisplay, Prefix};
 use node::{InstructionBuilder, Node};
 use pest::iterators::Pairs;
 use statement::Statement;
-use token::{args_list::ArgsList, condition_keyword::ConditionKeyword};
+use token::{args_list::ArgsList, condition_keyword::ConditionKeyword, datatype::DataType, identifier::Identifier};
 
 use crate::{
-    compiler::{CompiledProject, CompilerState, Variable},
+    compiler::{CompiledProject, CompilerState, FunctionDefinition, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
     no_rule,
     parser::Rule,
@@ -36,7 +36,7 @@ pub struct Ast {
     pub process_blocks: HashMap<String, (Node<ArgsList>, Node<Block>)>,
     pub condition_blocks: HashMap<ConditionKeyword, Node<ConditionBlock>>,
     pub global_block: Option<Node<Block>>,
-    pub inline_function_blocks: HashMap<String, (Node<ArgsList>, String, Node<Block>)>,
+    pub inline_function_blocks: HashMap<String, (Node<ArgsList>, DataType, Node<Block>)>,
 }
 
 impl Ast {
@@ -95,7 +95,7 @@ impl Ast {
                     let inline_function_identifier = pairs.next().unwrap().as_str().to_string();
                     let inline_args_list: Node<token::args_list::ArgsList> = Node::build(pairs.next().unwrap())?;
                     pairs.next(); // skip the "->" token
-                    let inline_return_datatype = pairs.next().unwrap().as_str().to_string();
+                    let inline_return_datatype = DataType::from_str(pairs.next().unwrap().as_str());
                     //TODO define proper function block ??
                     let inline_function_block: Node<Block>  = Node::build(pairs.next().unwrap())?;
                     
@@ -179,12 +179,33 @@ impl Ast {
         state.unstack_current_depth();
         assert!(state.current_stack_depth == 0);
 
-        //TODO before compiling the programs, compile the functions
-        state.in_function = true;
 
-        //TODO functions
+        // functions baby ??
+        for (func_name, (args_list, return_datatype, func_block)) in &self.inline_function_blocks {
+            
+            state.in_function = true;
+            let compiled_body = func_block.compile(&mut state)?;
+            state.in_function = false;
 
-        state.in_function = false;
+            let arguments: Vec<(Identifier, DataType)> = args_list.value
+                .identifiers
+                .iter()
+                .zip(args_list.value.datatypes.iter())
+                .map(|(id, dt)| (id.value.clone(), dt.value.clone()))
+                .collect();
+
+            let func_def = FunctionDefinition {
+                name: func_name.clone(),
+                arguments,
+                return_type: return_datatype.clone(),
+                body: compiled_body.instructions,
+                pos: func_block.pos,
+                is_inline: true,
+            };
+
+            state.user_functions.insert(func_name.clone(), func_def);
+
+        }
 
         // before compiling the programs, get the list of program names and their arguments
         state.program_arguments = self

@@ -8,7 +8,7 @@ use crate::ast::statement::expression::LocalExpressionNode;
 use crate::error::Pos;
 use crate::vm::instruction::Instruction;
 use crate::{
-    ast::token::{datatype::DataType, literal::Literal},
+    ast::token::{datatype::DataType, literal::Literal, identifier::Identifier},
     vm::instruction::ProgramCode,
 };
 
@@ -64,6 +64,7 @@ impl InstructionBuilderOk {
 
         self.return_indexes
             .extend(other.return_indexes.iter().map(|x| x + off_set));
+
     }
     pub fn contains_jump(&self) -> bool {
         self.break_indexes.len() > 0
@@ -79,6 +80,16 @@ pub struct Variable {
     pub datatype: DataType,
     pub depth: usize,
     pub declare_pos: Option<Pos>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionDefinition {
+    pub name: String,
+    pub arguments: Vec<(Identifier, DataType)>,
+    pub return_type: DataType,
+    pub body: Vec<Instruction>,
+    pub pos: Pos,
+    pub is_inline: bool,
 }
 
 #[derive(Debug)]
@@ -101,6 +112,8 @@ pub struct CompilerState {
     pub is_atomic: bool,
     pub is_shared: bool,
     pub in_function: bool,
+
+    pub user_functions: HashMap<String, FunctionDefinition>
 }
 
 impl CompilerState {
@@ -117,6 +130,7 @@ impl CompilerState {
             is_shared: false,
             in_function: false,
             stdlib: stdlib::Stdlib::new(),
+            user_functions: HashMap::new(),
         }
     }
 
