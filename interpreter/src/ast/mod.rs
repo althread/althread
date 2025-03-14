@@ -93,12 +93,22 @@ impl Ast {
                     let mut pairs  = pair.into_inner();
 
                     let inline_function_identifier = pairs.next().unwrap().as_str().to_string();
+                    
                     let inline_args_list: Node<token::args_list::ArgsList> = Node::build(pairs.next().unwrap())?;
                     pairs.next(); // skip the "->" token
                     let inline_return_datatype = DataType::from_str(pairs.next().unwrap().as_str());
                     //TODO define proper function block ??
                     let inline_function_block: Node<Block>  = Node::build(pairs.next().unwrap())?;
                     
+                    // check if function definition is already defined
+                    if ast.inline_function_blocks.contains_key(&inline_function_identifier) {
+                        return Err(AlthreadError::new(
+                            ErrorType::FunctionAlreadyDefined,
+                            Some(inline_function_block.pos),
+                            format!("Function '{}' is already defined", inline_function_identifier),
+                        ));
+                    }
+
                     ast.inline_function_blocks
                         .insert(
                         inline_function_identifier,
@@ -182,7 +192,7 @@ impl Ast {
 
         // functions baby ??
         for (func_name, (args_list, return_datatype, func_block)) in &self.inline_function_blocks {
-            
+
             state.in_function = true;
             let compiled_body = func_block.compile(&mut state)?;
             state.in_function = false;
