@@ -126,7 +126,9 @@ impl Ast {
                                         // do nothing
                                         assert!(unstack_len == 1)
                                     }
-                                    InstructionType::Push(literal) => memory.push(literal.clone()),
+                                    InstructionType::Push(pushed_literal) => {
+                                        literal = Some(pushed_literal)
+                                    }
                                     _ => {
                                         panic!("unexpected instruction in compiled declaration statement")
                                     }
@@ -135,7 +137,6 @@ impl Ast {
                             let literal = literal
                                 .expect("declaration did not compiled to expression nor PushNull");
                             memory.push(literal);
-
                             let var_name = &decl.value.identifier.value.value;
                             global_table.insert(
                                 var_name.clone(),
