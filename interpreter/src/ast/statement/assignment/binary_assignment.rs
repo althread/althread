@@ -75,6 +75,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
                 pos: Some(self.value.identifier.pos),
                 control: InstructionType::GlobalAssignment {
                     identifier: self.value.identifier.value.value.clone(),
+                    variable_idx: 0,
                     operator: self.value.operator.value.clone(),
                     unstack_len,
                 },

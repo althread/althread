@@ -250,12 +250,13 @@ impl<'a> RunningProgramState<'a> {
             }
             InstructionType::GlobalAssignment {
                 identifier,
+                variable_idx,
                 operator,
                 unstack_len,
             } => {
                 let lit = self
                     .memory
-                    .last()
+                    .get(self.memory.len() - 1 - *variable_idx)
                     .expect("Panic: stack is empty, cannot perform assignment")
                     .clone();
                 for _ in 0..*unstack_len {

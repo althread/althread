@@ -23,6 +23,7 @@ pub enum InstructionType {
     },
     GlobalAssignment {
         identifier: String,
+        variable_idx: usize,
         operator: BinaryAssignmentOperator,
         unstack_len: usize,
     },
@@ -57,7 +58,7 @@ pub enum InstructionType {
     },
     ChannelPeek(String),
     ChannelPop(String),
-    
+
     WaitStart {
         dependencies: WaitDependency,
         start_atomic: bool,
@@ -93,6 +94,7 @@ impl fmt::Display for InstructionType {
             }
             Self::GlobalAssignment {
                 identifier,
+                variable_idx,
                 operator,
                 unstack_len,
             } => write!(f, "{} {} (unstack {})", identifier, operator, unstack_len)?,
@@ -107,7 +109,7 @@ impl fmt::Display for InstructionType {
             } => write!(f, "jumpIf {} (unstack {})", jump_false, unstack_len)?,
             Self::Jump(a) => write!(f, "jump {}", a)?,
             Self::Unstack { unstack_len } => write!(f, "unstack {}", unstack_len)?,
-            Self::Destruct => write!(f, "destruct tuple", )?,
+            Self::Destruct => write!(f, "destruct tuple",)?,
             Self::RunCall { name, .. } => write!(f, "run {}()", name)?,
             Self::Break { unstack_len, .. } => write!(f, "break (unstack {})", unstack_len)?,
             Self::EndProgram => write!(f, "end program")?,
