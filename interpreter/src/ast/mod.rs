@@ -71,6 +71,7 @@ impl Ast {
                     let condition_keyword = match keyword_pair.as_rule() {
                         Rule::ALWAYS_KW => ConditionKeyword::Always,
                         Rule::NEVER_KW => ConditionKeyword::Never,
+                        Rule::EVENTUALLY_KW => ConditionKeyword::Eventually,
                         _ => return Err(no_rule!(keyword_pair, "condition keyword")),
                     };
                     let condition_block = Node::build(pairs.next().unwrap())?;
@@ -207,6 +208,9 @@ impl Ast {
         }
 
         let mut always_conditions = Vec::new();
+
+        let mut eventually_conditions = Vec::new();
+
         for (name, condition_block) in self.condition_blocks.iter() {
             match name {
                 ConditionKeyword::Always => {
@@ -251,15 +255,59 @@ impl Ast {
                         }
                     }
                 }
+                ConditionKeyword::Eventually => {
+                    for condition in condition_block.value.children.iter() {
+                        let compiled = condition.compile(&mut state)?.instructions;
+                        if compiled.len() == 1 {
+                            return Err(AlthreadError::new(
+                                ErrorType::InstructionNotAllowed,
+                                Some(condition.pos),
+                                "The condition must depend on shared variable(s)".to_string(),
+                            ));
+                        }
+                        if compiled.len() != 2 {
+                            return Err(AlthreadError::new(
+                                ErrorType::InstructionNotAllowed,
+                                Some(condition.pos),
+                                "The condition must be a single expression".to_string(),
+                            ));
+                        }
+                        if let InstructionType::GlobalReads { variables, .. } = &compiled[0].control
+                        {
+                            if let InstructionType::Expression(exp) = &compiled[1].control {
+                                eventually_conditions.push((
+                                    variables.iter().map(|s| s.clone()).collect(),
+                                    variables.clone(),
+                                    exp.clone(),
+                                    condition.pos,
+                                ));
+                            } else {
+                                return Err(AlthreadError::new(
+                                    ErrorType::InstructionNotAllowed,
+                                    Some(condition.pos),
+                                    "The condition must be a single expression".to_string(),
+                                ));
+                            }
+                        } else {
+                            return Err(AlthreadError::new(
+                                ErrorType::InstructionNotAllowed,
+                                Some(condition.pos),
+                                "The condition must depend on shared variable(s)".to_string(),
+                            ));
+                        }
+                    }
+                }
                 _ => {}
             }
+        
         }
-
         Ok(CompiledProject {
             global_memory,
             programs_code,
             always_conditions,
+            eventually_conditions,
             stdlib: Rc::new(state.stdlib),
+            
         })
     }
     fn compile_program(

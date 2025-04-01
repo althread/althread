@@ -141,6 +141,8 @@ pub struct CompiledProject {
     /// The second element is the two instructions that are used to check the condition
     /// (the first in struction is the read operation and the second is the expression)
     pub always_conditions: Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
+    /// conditions that must be true at least once in each possible executions
+    pub eventually_conditions: Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
 
     pub stdlib: Rc<stdlib::Stdlib>,
 }
