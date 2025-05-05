@@ -23,8 +23,9 @@ pub struct RunningProgramState<'a> {
     code: &'a ProgramCode,
     instruction_pointer: usize,
     pub id: usize,
-
     pub stdlib: Rc<Stdlib>,
+    pub clock: usize, //counts number of send event
+
 }
 
 impl PartialEq for RunningProgramState<'_> {
@@ -67,6 +68,7 @@ impl<'a> RunningProgramState<'a> {
             name,
             id,
             stdlib,
+            clock: 0, 
         }
     }
 
@@ -460,8 +462,8 @@ impl<'a> RunningProgramState<'a> {
                 for _ in 0..*unstack_len {
                     self.memory.pop();
                 }
-
-                let receiver = channels.send(self.id, channel_name.clone(), value);
+                self.clock+=1;
+                let receiver = channels.send(self.id, channel_name.clone(), value, self.clock);
 
                 action = Some(GlobalAction::Send(channel_name.clone(), receiver));
                 1
