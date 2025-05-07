@@ -6,12 +6,23 @@ pub mod stdlib;
 
 use crate::ast::statement::expression::LocalExpressionNode;
 use crate::error::Pos;
-use crate::vm::instruction::Instruction;
+use crate::vm::instruction::{Instruction};
 use crate::{
     ast::token::{datatype::DataType, literal::Literal, identifier::Identifier},
     vm::instruction::ProgramCode,
 };
 
+
+#[derive(Debug, Clone)]
+pub struct FunctionDefinition { 
+    pub name: String,
+    pub arguments: Vec<(Identifier, DataType)>,
+    pub return_type: DataType,
+    pub body: Vec<Instruction>,
+    pub pos: Pos,
+}
+
+#[derive(Debug)]
 pub struct InstructionBuilderOk {
     pub instructions: Vec<Instruction>,
 
@@ -82,15 +93,6 @@ pub struct Variable {
     pub declare_pos: Option<Pos>,
 }
 
-#[derive(Debug, Clone)]
-pub struct FunctionDefinition {
-    pub name: String,
-    pub arguments: Vec<(Identifier, DataType)>,
-    pub return_type: DataType,
-    pub body: Vec<Instruction>,
-    pub pos: Pos,
-    pub is_inline: bool,
-}
 
 #[derive(Debug)]
 pub struct CompilerState {
@@ -150,6 +152,7 @@ impl CompilerState {
 #[derive(Debug)]
 pub struct CompiledProject {
     pub programs_code: HashMap<String, ProgramCode>,
+    pub user_functions: HashMap<String, FunctionDefinition>,
     pub global_memory: BTreeMap<String, Literal>,
 
     /// The conditions that should always be true

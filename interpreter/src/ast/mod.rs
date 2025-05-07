@@ -36,7 +36,7 @@ pub struct Ast {
     pub process_blocks: HashMap<String, (Node<ArgsList>, Node<Block>)>,
     pub condition_blocks: HashMap<ConditionKeyword, Node<ConditionBlock>>,
     pub global_block: Option<Node<Block>>,
-    pub inline_function_blocks: HashMap<String, (Node<ArgsList>, DataType, Node<Block>)>,
+    pub function_blocks: HashMap<String, (Node<ArgsList>, DataType, Node<Block>)>,
 }
 
 impl Ast {
@@ -45,7 +45,7 @@ impl Ast {
             process_blocks: HashMap::new(),
             condition_blocks: HashMap::new(),
             global_block: None,
-            inline_function_blocks: HashMap::new(),
+            function_blocks: HashMap::new(),
         }
     }
     /// 
@@ -89,30 +89,30 @@ impl Ast {
                     ast.process_blocks
                         .insert(process_identifier, (args_list, program_block));
                 }
-                Rule::inline_function_block => {
+                Rule::function_block => {
                     let mut pairs  = pair.into_inner();
 
-                    let inline_function_identifier = pairs.next().unwrap().as_str().to_string();
+                    let function_identifier = pairs.next().unwrap().as_str().to_string();
                     
-                    let inline_args_list: Node<token::args_list::ArgsList> = Node::build(pairs.next().unwrap())?;
+                    let args_list: Node<token::args_list::ArgsList> = Node::build(pairs.next().unwrap())?;
                     pairs.next(); // skip the "->" token
-                    let inline_return_datatype = DataType::from_str(pairs.next().unwrap().as_str());
-                    //TODO define proper function block ??
-                    let inline_function_block: Node<Block>  = Node::build(pairs.next().unwrap())?;
+                    let return_datatype = DataType::from_str(pairs.next().unwrap().as_str());
+                    
+                    let function_block: Node<Block>  = Node::build(pairs.next().unwrap())?;
                     
                     // check if function definition is already defined
-                    if ast.inline_function_blocks.contains_key(&inline_function_identifier) {
+                    if ast.function_blocks.contains_key(&function_identifier) {
                         return Err(AlthreadError::new(
                             ErrorType::FunctionAlreadyDefined,
-                            Some(inline_function_block.pos),
-                            format!("Function '{}' is already defined", inline_function_identifier),
+                            Some(function_block.pos),
+                            format!("Function '{}' is already defined", function_identifier),
                         ));
                     }
 
-                    ast.inline_function_blocks
+                    ast.function_blocks
                         .insert(
-                        inline_function_identifier,
-                        (inline_args_list, inline_return_datatype, inline_function_block)
+                        function_identifier,
+                        (args_list, return_datatype, function_block)
                     );
 
                 }
@@ -162,7 +162,7 @@ impl Ast {
                                 }
                             }
                             let literal = literal
-                                .expect("declaration did not compiled to expression nor PushNull");
+                                .expect("declaration did not compile to expression nor PushNull");
                             memory.push(literal);
 
                             let var_name = &decl.value.identifier.value.value;
@@ -191,18 +191,77 @@ impl Ast {
 
 
         // functions baby ??
-        for (func_name, (args_list, return_datatype, func_block)) in &self.inline_function_blocks {
+        for (func_name, (args_list, return_datatype, func_block)) in &self.function_blocks {
 
             state.in_function = true;
-            let compiled_body = func_block.compile(&mut state)?;
-            state.in_function = false;
+            state.current_stack_depth += 1;
+            let initial_stack_len = state.program_stack.len();
 
             let arguments: Vec<(Identifier, DataType)> = args_list.value
                 .identifiers
                 .iter()
                 .zip(args_list.value.datatypes.iter())
-                .map(|(id, dt)| (id.value.clone(), dt.value.clone()))
+                .map(|(id, dt)| {
+                    // add the arguments to the stack
+                    state.program_stack.push(Variable {
+                        name: id.value.value.clone(),
+                        depth: state.current_stack_depth,
+                        mutable: true,
+                        datatype: dt.value.clone(),
+                        declare_pos: Some(id.pos),
+                    });
+                    (id.value.clone(), dt.value.clone())
+                })
                 .collect();
+
+
+            // placeholder function for recursive calls
+            let func_def = FunctionDefinition {
+                name: func_name.clone(),
+                arguments: arguments.clone(),
+                return_type: return_datatype.clone(),
+                body: Vec::new(),
+                pos: func_block.pos,
+            };
+
+            // check if function is already defined
+            if state.user_functions.contains_key(func_name) {
+                return Err(AlthreadError::new(
+                    ErrorType::FunctionAlreadyDefined,
+                    Some(func_block.pos),
+                    format!("Function '{}' is already defined", func_name),
+                ));
+            }
+            state.user_functions.insert(func_name.clone(), func_def);
+
+            // compile the function body
+            let mut compiled_body = func_block.compile(&mut state)?;
+            
+
+            // let needs_implicit_end = match compiled_body.instructions.last() {
+            //     Some(Instruction {
+            //         control:InstructionType::Return { .. }, ..}) => false,
+            //     Some(Instruction {
+            //         control: InstructionType::EndProgram, ..}) => false,
+            //     _ => true,
+            // };
+
+            // if needs_implicit_end {
+                compiled_body.instructions.push(Instruction {
+                    control: InstructionType::Return { 
+                        has_value: *return_datatype != DataType::Void,
+                    },
+                    pos: Some(func_block.pos),
+                });
+            // }
+
+            // clean up compiler state
+            state.program_stack.truncate(initial_stack_len);
+            state.current_stack_depth -= 1;
+            state.in_function = false;
+
+            // println!("compiled body: {:?}", compiled_body);
+
 
             let func_def = FunctionDefinition {
                 name: func_name.clone(),
@@ -210,7 +269,6 @@ impl Ast {
                 return_type: return_datatype.clone(),
                 body: compiled_body.instructions,
                 pos: func_block.pos,
-                is_inline: true,
             };
 
             state.user_functions.insert(func_name.clone(), func_def);
@@ -314,6 +372,7 @@ impl Ast {
 
         Ok(CompiledProject {
             global_memory,
+            user_functions: state.user_functions.clone(),
             programs_code,
             always_conditions,
             stdlib: Rc::new(state.stdlib),
@@ -390,9 +449,9 @@ impl AstDisplay for Ast {
             writeln!(f, "")?;
         }
 
-        for (inline_function_name, (_args, return_type, inline_function_node)) in &self.inline_function_blocks {
-            writeln!(f, "{}{} -> {}", prefix, inline_function_name, return_type)?;
-            inline_function_node.ast_fmt(f, &prefix.add_branch())?;
+        for (function_name, (_args, return_type, function_node)) in &self.function_blocks {
+            writeln!(f, "{}{} -> {}", prefix, function_name, return_type)?;
+            function_node.ast_fmt(f, &prefix.add_branch())?;
             writeln!(f, "")?;
         }
 
