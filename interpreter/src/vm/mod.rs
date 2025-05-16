@@ -57,7 +57,7 @@ pub enum GlobalAction {
 #[derive(Debug, PartialEq, Clone)]
 pub struct GlobalActions {
     pub actions: Vec<GlobalAction>,
-    pub await: bool,
+    pub wait: bool,
     pub end: bool,
 }
 
@@ -170,7 +170,7 @@ impl<'a> VM<'a> {
             &mut self.next_program_id,
         )?;
         // maybe should be replace to avoid recurrent calls
-        if actions.await {
+        if actions.wait {
             // actually nothing happened
             assert!(
                 actions.actions.is_empty(),
@@ -295,7 +295,7 @@ impl<'a> VM<'a> {
             &mut self.next_program_id,
         )?;
         // maybe should be replace to avoid recurrent calls
-        if actions.await {
+        if actions.wait {
             // actually nothing happened
             assert!(
                 actions.actions.is_empty(),

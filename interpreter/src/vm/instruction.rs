@@ -173,7 +173,7 @@ impl InstructionType {
             | Self::Send {..}
             | Self::ChannelPeek(_)
             | Self::AtomicStart // starts a block that surely contains a global operation
-            | Self::WaitStart {..} => false, // await starts an atomic block to evaluate the conditions
+            | Self::WaitStart {..} => false, // wait starts an atomic block to evaluate the conditions
 
             Self::GlobalReads {only_const, ..} => *only_const, // a global read is local only if it reads constant variables
 

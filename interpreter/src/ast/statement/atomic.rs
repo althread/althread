@@ -31,8 +31,8 @@ impl NodeBuilder for Atomic {
         let start_atomic_lambda = |s: &mut Statement| {
             // if the statement is a await block then tell it so
             match s {
-                Statement::Wait(await) => {
-                    await.value.start_atomic = true;
+                Statement::Wait(wait) => {
+                    wait.value.start_atomic = true;
                     true
                 }
                 _ => false,

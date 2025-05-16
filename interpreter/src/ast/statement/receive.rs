@@ -220,7 +220,7 @@ impl InstructionBuilder for Node<ReceiveStatement> {
             depth: state.current_stack_depth,
             declare_pos: None,
         });
-        // The next instruction will likely be a await or an if based on the current stack top.
+        // The next instruction will likely be a wait or an if based on the current stack top.
 
         //if builder.contains_jump() {
         //    todo!("breaking inside a receive statement is not yet implemented");

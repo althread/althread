@@ -11,7 +11,7 @@ pub mod loop_control;
 pub mod receive;
 pub mod run_call;
 pub mod send;
-pub mod await;
+pub mod wait;
 pub mod waiting_case;
 pub mod while_control;
 
@@ -28,7 +28,7 @@ use loop_control::LoopControl;
 use pest::iterators::Pairs;
 use run_call::RunCall;
 use send::SendStatement;
-use await::Wait;
+use wait::Wait;
 use while_control::WhileControl;
 
 use crate::{
