@@ -7,6 +7,7 @@ import { Example1 } from "./examples/example1";
 import init, { compile, run, check } from '../pkg/althread_web';
 import createEditor from './Editor';
 import Graph from "./Graph";
+import { Logo } from "./assets/images/Logo";
 import { EditorState } from "@codemirror/state";
 
 
@@ -60,105 +61,143 @@ export default function App() {
 
   let [nodes, setNodes] = createSignal([]);
   let [edges, setEdges] = createSignal([]);
+  let [isRun, setIsRun] = createSignal(true);
 
-  let [stdout, setStdout] = createSignal("The console output will appear here");
-  let [out, setOut] = createSignal("The execution output will appear here");
+  let [stdout, setStdout] = createSignal("The console output will appear here.");
+  let [out, setOut] = createSignal("The execution output will appear here.");
   return (
     <>
       <div id="header">
-        <button onClick={() => {
-          let up = editor.editorView().state.update({
-            changes: {
-              from: 0, 
-              to: editor.editorView().state.doc.length,
-              insert: Example1
+          <div class="brand">
+            <Logo />
+            <h3>Althread</h3>
+          </div>
+          <div class="actions">
+            <button
+              class="vscode-button" 
+              onClick={() => {
+              let up = editor.editorView().state.update({
+                changes: {
+                  from: 0, 
+                  to: editor.editorView().state.doc.length,
+                  insert: Example1
+                }
+              })
+              editor.editorView().update([up]);
             }
-          })
-          editor.editorView().update([up]);
-        }
-        }>Load Example</button>
+            }>
+              <i class="codicon codicon-file"></i>
+              Load Example</button>
+            <button 
+              class="vscode-button"
+              onClick={(e) => {
+                try {
+                  setIsRun(true);
+                  let res = run(editor.editorView().state.doc.toString());
+                  setOut(res.debug);
+                  setStdout(res.stdout.join('\n'));
+                } catch(e) {
+                  setOut("ERROR: "+(e.pos && ('line '+e.pos.line))+"\n"+e.message);
+                }
+              }}>
+                <i class="codicon codicon-play"></i>
+                Run</button>
+              <button 
+                class="vscode-button"
+                onClick={(e) => {
+                try {
+                  let res = check(editor.editorView().state.doc.toString())
+                  setOut(res);
+                  
+                  console.log(res);
+                  let colored_path: string[] = [];
+                  if(res[0].length > 0) { // a violation occurred
+                    res[0].forEach((path) => {
+                      colored_path.push(nodeToString(path.to));
+                    });
+                  }
+
+                  let nodes = {};
+                  setNodes(res[1].nodes.map((n, i) => {
+                    let label = nodeToString(n[0]);
+                    const {level, predecessor, successors} = n[1];
+                    nodes[label] = i;
+                    return {
+                      id: i,
+                      level,
+                      label,
+                      color: colored_path.includes(label) || (colored_path.length>0 && level == 0)  ? "#ec9999" : "#a6dfa6",
+                      shape: "box",
+                      font: { align: "left" },
+                    }
+                  }));
+
+                  let edges: any = [];
+                  res[1].nodes.forEach((n, i) => {
+                    let label = nodeToString(n[0]);
+                    const {level, predecessor, successors} = n[1];
+                    successors.forEach(({lines, pid, name, to}) => {
+                      to = nodeToString(to);
+                      edges.push({
+                        from: i,
+                        to: nodes[to],
+                        label: name+'#'+pid+': '+lines.join(',')
+                      });
+                    })
+                  });
+                  setEdges(edges);
+                  setIsRun(false);
+
+                } catch(e) {
+                  setOut("ERROR: "+(e.pos && ('line '+e.pos.line))+"\n"+e.message);
+                }
+              }}>
+                <i class="codicon codicon-check"></i>
+                Check</button>
+                <button 
+              class="vscode-button"
+              onClick={(e) => {
+                setIsRun(true);
+                setOut("The execution output will appear here.");
+                setStdout("The console output will appear here.");
+                setNodes([]);
+                setEdges([]);
+              }}>
+                <i class="codicon codicon-clear-all"></i>
+                Reset</button>
+            </div>
       </div>
       <Resizable id="content">
         <Resizable.Panel class="editor-panel"
-          initialSize={0.6}
+          initialSize={0.55}
           minSize={0.2}>
           <div ref={editor.ref} />
         </Resizable.Panel>
-        <Resizable.Handle />
+        <Resizable.Handle class="Resizable-handle"/>
         <Resizable.Panel class="right-panel"
-          initialSize={0.4}
+          initialSize={0.45}
           minSize={0.2}>
-          <button onClick={(e) => {
-            try {
-              let res = run(editor.editorView().state.doc.toString());
-              setOut(res.debug);
-              setStdout(res.stdout.join('\n'));
-            } catch(e) {
-              setOut("ERROR: "+(e.pos && ('line '+e.pos.line))+"\n"+e.message);
-            }
-          }}>Run</button>
 
-          <button onClick={(e) => {
-            try {
-              let res = check(editor.editorView().state.doc.toString())
-              setOut(res);
-              
-              console.log(res);
-              let colored_path: string[] = [];
-              if(res[0].length > 0) { // a violation occurred
-                res[0].forEach((path) => {
-                   colored_path.push(nodeToString(path.to));
-                });
-              }
-
-              let nodes = {};
-              setNodes(res[1].nodes.map((n, i) => {
-                let label = nodeToString(n[0]);
-                const {level, predecessor, successors} = n[1];
-                nodes[label] = i;
-                return {
-                  id: i,
-                  level,
-                  label,
-                  color: colored_path.includes(label) || (colored_path.length>0 && level == 0)  ? "#ec9999" : "#a6dfa6",
-                  shape: "box",
-                  font: { align: "left" },
-                }
-              }));
-
-              let edges: any = [];
-              res[1].nodes.forEach((n, i) => {
-                let label = nodeToString(n[0]);
-                const {level, predecessor, successors} = n[1];
-                successors.forEach(({lines, pid, name, to}) => {
-                  to = nodeToString(to);
-                  edges.push({
-                    from: i,
-                    to: nodes[to],
-                    label: name+'#'+pid+': '+lines.join(',')
-                  });
-                })
-              });
-              setEdges(edges);
-
-            } catch(e) {
-              setOut("ERROR: "+(e.pos && ('line '+e.pos.line))+"\n"+e.message);
-            }
-          }}>Check</button>
+  
           <div>
-            <div>Console</div>
-            <pre>
-            {stdout()}
-            </pre>
+            <h3>Console</h3>
+            <div class="console">
+              <pre>{stdout()}</pre>
+            </div>
           </div>
           <div>
-            <div>Execution</div>
-            <pre>
-            {out()}
-            </pre>
+            <h3>Execution</h3>
+            {isRun() ? (
+            <div class="console">
+                <div>
+                  <pre>{out()}</pre>
+                </div>
             </div>
-          <Graph nodes={nodes()} edges={edges()} />
-        </Resizable.Panel>
+          ) : (
+            <Graph nodes={nodes()} edges={edges()} />
+          )}
+        </div>
+          </Resizable.Panel>
       </Resizable>
     </>
   );

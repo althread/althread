@@ -105,7 +105,7 @@ impl Ast {
         state.is_shared = true;
         if let Some(global) = self.global_block.as_ref() {
             let mut memory = VM::new_memory();
-            for node in &global.value.children {
+            for node in global.value.children.iter() {
                 match &node.value {
                     Statement::Declaration(decl) => {
                         let mut literal = None;
@@ -113,26 +113,29 @@ impl Ast {
                         for gi in node_compiled.instructions {
                             match gi.control {
                                 InstructionType::Expression(exp) => {
-                                    literal = Some(exp.eval(&memory).map_err(|err| {
-                                        AlthreadError::new(ErrorType::ExpressionError, gi.pos, err)
+                                    literal = Some(exp.eval(&memory).or_else(|err| {
+                                        Err(AlthreadError::new(
+                                            ErrorType::ExpressionError,
+                                            gi.pos,
+                                            err,
+                                        ))
                                     })?);
                                 }
                                 InstructionType::Declaration { unstack_len } => {
                                     // do nothing
-                                    assert!(unstack_len == 1);
+                                    assert!(unstack_len == 1)
                                 }
-                                InstructionType::Push(literal) => memory.push(literal.clone()),
+                                InstructionType::Push(pushed_literal) => {
+                                    literal = Some(pushed_literal)
+                                }
                                 _ => {
-                                    panic!(
-                                        "unexpected instruction in compiled declaration statement"
-                                    )
+                                    panic!("unexpected instruction in compiled declaration statement")
                                 }
                             }
                         }
                         let literal = literal
                             .expect("declaration did not compiled to expression nor PushNull");
                         memory.push(literal);
-
                         let var_name = &decl.value.identifier.value.value;
                         global_table.insert(
                             var_name.clone(),

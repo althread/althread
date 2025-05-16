@@ -39,11 +39,21 @@ always {
 }
 
 main {
-  let a = run A(1);
-  let b = run A(2);
-
-  channel a.out (int)> b.in;
-  channel b.out (int)> a.in;
+  let n = 4;
+  let a:list(proc(A));
+  for i in 0..n {
+    let p = run A(i);
+    a.push(p);
+  }
+  for i in 0..n-1 {
+    let p1 = a.at(i);
+    let p2 = a.at(i+1);
+    channel p1.out (int)> p2.in;
+  }
+  
+  let p1 = a.at(n-1);
+  let p2 = a.at(0);
+  channel p1.out (int)> p2.in;
 
   print("DONE");
 }

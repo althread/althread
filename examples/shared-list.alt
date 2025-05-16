@@ -1,0 +1,29 @@
+shared {
+  let L:list(int);
+
+}
+
+main {
+    
+
+    // add an element to a global list
+    // L.push() is not yet supported 
+    //
+    atomic {
+      let l = L;
+      l.push(1);
+      l.push(2);
+      l.push(42);
+      L = l;
+    }
+    print("L = ", L);
+
+    // get an element from a global list
+    let a:int;
+    ! {
+        let l = L;
+        a = l.at(2);
+    }
+    print("a = ", a);
+}
+
