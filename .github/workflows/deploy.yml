@@ -77,7 +77,13 @@ jobs:
         run: |
           cd web
           pnpm install
-          pnpm build --public-url /editor
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "Building for production (main branch)"
+            pnpm build --public-url /editor
+          else
+            echo "Building for development (dev branch)"
+            pnpm build --public-url /dev/editor
+          fi
           mv dist ../editor
 
       - name: Upload Built Web Editor

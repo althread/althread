@@ -3,7 +3,7 @@
   "source": "app/index.html",
   "scripts": {
     "start": "parcel --no-hmr",
-    "build": "parcel build --public-url ./",
+    "build": "parcel build",
     "build-lezer": "lezer-generator lezer/althread.grammar -o lezer/parser.js",
     "build-wasm": "wasm-pack build --target web",
     "install-deps": "cargo install wasm-pack"
