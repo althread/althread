@@ -56,7 +56,7 @@ shared {
 
 program Prog1() {
     X++;
-    wait X == 2;
+    await X == 2;
 }
 
 main {

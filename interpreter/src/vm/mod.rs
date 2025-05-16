@@ -57,7 +57,7 @@ pub enum GlobalAction {
 #[derive(Debug, PartialEq, Clone)]
 pub struct GlobalActions {
     pub actions: Vec<GlobalAction>,
-    pub wait: bool,
+    pub await: bool,
     pub end: bool,
 }
 
@@ -170,11 +170,11 @@ impl<'a> VM<'a> {
             &mut self.next_program_id,
         )?;
         // maybe should be replace to avoid recurrent calls
-        if actions.wait {
+        if actions.await {
             // actually nothing happened
             assert!(
                 actions.actions.is_empty(),
-                "a process returning wait should means that no actions have been performed..."
+                "a process returning await should means that no actions have been performed..."
             );
 
             let program = self
@@ -201,7 +201,7 @@ impl<'a> VM<'a> {
         for action in actions.actions.iter() {
             match action {
                 GlobalAction::Wait => {
-                    unreachable!("wait action should not be in the list of actions");
+                    unreachable!("await action should not be in the list of actions");
                 }
                 GlobalAction::Send(_sender_channel, receiver_info) => {
                     if let Some(receiver_info) = receiver_info {
@@ -217,7 +217,7 @@ impl<'a> VM<'a> {
                             }
                         }
                     } else {
-                        // the current process is waiting but this  will be catched up by the wait instruction
+                        // the current process is waiting but this  will be catched up by the await instruction
                     }
                 }
                 GlobalAction::Connect(sender_id, sender_channel) => {
@@ -295,11 +295,11 @@ impl<'a> VM<'a> {
             &mut self.next_program_id,
         )?;
         // maybe should be replace to avoid recurrent calls
-        if actions.wait {
+        if actions.await {
             // actually nothing happened
             assert!(
                 actions.actions.is_empty(),
-                "a process returning wait should means that no actions have been performed..."
+                "a process returning await should means that no actions have been performed..."
             );
 
             let program = self
@@ -323,7 +323,7 @@ impl<'a> VM<'a> {
         for action in actions.actions {
             match action {
                 GlobalAction::Wait => {
-                    unreachable!("wait action should not be in the list of actions");
+                    unreachable!("await action should not be in the list of actions");
                 }
                 GlobalAction::Send(_sender_channel, receiver_info) => {
                     if let Some(receiver_info) = receiver_info {
@@ -339,7 +339,7 @@ impl<'a> VM<'a> {
                             }
                         }
                     } else {
-                        // the current process is waiting but this  will be catched up by the wait instruction
+                        // the current process is waiting but this  will be catched up by the await instruction
                     }
                 }
                 GlobalAction::Connect(sender_id, sender_channel) => {

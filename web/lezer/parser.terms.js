@@ -51,7 +51,7 @@ export const
   atomic = 62,
   SendExpression = 63,
   send = 64,
-  wait = 65,
+  await = 65,
   WaitingBlock = 66,
   seq = 67,
   first = 68,

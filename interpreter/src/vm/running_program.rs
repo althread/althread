@@ -104,7 +104,7 @@ impl<'a> RunningProgramState<'a> {
     ) -> AlthreadResult<(GlobalActions, Vec<Instruction>)> {
         let mut instructions = Vec::new();
         let mut actions = Vec::new();
-        let mut wait = false;
+        let mut await = false;
         let mut end = false;
         loop {
             let (at_actions, at_instructions) = self.next_atomic(globals, channels, next_pid)?;
@@ -112,8 +112,8 @@ impl<'a> RunningProgramState<'a> {
             actions.extend(at_actions.actions);
             instructions.extend(at_instructions);
 
-            if at_actions.wait {
-                wait = true;
+            if at_actions.await {
+                await = true;
                 break;
             }
             if at_actions.end {
@@ -124,7 +124,7 @@ impl<'a> RunningProgramState<'a> {
                 break;
             }
         }
-        Ok((GlobalActions { actions, wait, end }, instructions))
+        Ok((GlobalActions { actions, await, end }, instructions))
     }
 
     pub fn is_next_instruction_global(&mut self) -> bool {
@@ -142,7 +142,7 @@ impl<'a> RunningProgramState<'a> {
 
         let mut result = GlobalActions {
             actions: Vec::new(),
-            wait: false,
+            await: false,
             end: false,
         };
         // if the next instruction is not the start of an atomic block, we execute the next instruction
@@ -151,7 +151,7 @@ impl<'a> RunningProgramState<'a> {
             let action = self.next(globals, channels, next_pid)?;
             if let Some(action) = action {
                 if action == GlobalAction::Wait {
-                    result.wait = true;
+                    result.await = true;
                 } else if action == GlobalAction::EndProgram {
                     result.end = true;
                 } else {
@@ -166,7 +166,7 @@ impl<'a> RunningProgramState<'a> {
             let action = self.next(globals, channels, next_pid)?;
             if let Some(action) = action {
                 if action == GlobalAction::Wait {
-                    result.wait = true;
+                    result.await = true;
                     break;
                 } else {
                     result.actions.push(action);

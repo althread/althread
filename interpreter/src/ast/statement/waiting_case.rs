@@ -68,7 +68,7 @@ impl NodeBuilder for WaitingBlockCase {
 
 impl AstDisplay for WaitingBlockCase {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
-        writeln!(f, "{prefix}wait case")?;
+        writeln!(f, "{prefix}await case")?;
 
         {
             let prefix = prefix.add_branch();

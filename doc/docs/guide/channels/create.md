@@ -54,7 +54,7 @@ L'envoie d'un message est une opération asynchrone, c'est-à-dire que le proces
 ## Réception de messages
 
 Un message est reçu sur un canal en utilisant l'instruction `receive`. 
-C'est une opération particulière qui doit être précédée de l'instruction `wait` afin de la rendre bloquante. 
+C'est une opération particulière qui doit être précédée de l'instruction `await` afin de la rendre bloquante. 
 Voici un exemple de réception de message :
 
 ```althread
@@ -62,7 +62,7 @@ main {
     let p1 = run Prog1();
     channel p1.out (string, int)> self.in;
     // highlight-next-line
-    wait receive in (x, y) => {
+    await receive in (x, y) => {
         print("Message reçu : ", x, y);
     }
 }

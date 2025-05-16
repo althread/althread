@@ -120,14 +120,14 @@ impl fmt::Display for InstructionType {
             }
             Self::Push(l) => write!(f, "push ({})", l)?,
             Self::WaitStart { start_atomic, .. } => {
-                write!(f, "wait start")?;
+                write!(f, "await start")?;
                 if *start_atomic {
                     write!(f, " atomic")?;
                 }
                 ()
             }
             Self::Wait { jump, unstack_len } => {
-                write!(f, "wait {} (unstack {})", jump, unstack_len)?
+                write!(f, "await {} (unstack {})", jump, unstack_len)?
             }
             Self::Send {
                 channel_name,
@@ -173,7 +173,7 @@ impl InstructionType {
             | Self::Send {..}
             | Self::ChannelPeek(_)
             | Self::AtomicStart // starts a block that surely contains a global operation
-            | Self::WaitStart {..} => false, // wait starts an atomic block to evaluate the conditions
+            | Self::WaitStart {..} => false, // await starts an atomic block to evaluate the conditions
 
             Self::GlobalReads {only_const, ..} => *only_const, // a global read is local only if it reads constant variables
 

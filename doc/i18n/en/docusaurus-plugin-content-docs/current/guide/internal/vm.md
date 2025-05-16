@@ -163,7 +163,7 @@ Connects `sender_channel` and `receiver_channel` between the processes `sender_p
 </InstructionType>
 
 <InstructionType code="AtomicStart" args="">
-Begins an atomic section where processes cannot be interrupted, preventing concurrency issues. An atomic section ends with `AtomicEnd` and must not contain wait instructions, except at the beginning.
+Begins an atomic section where processes cannot be interrupted, preventing concurrency issues. An atomic section ends with `AtomicEnd` and must not contain await instructions, except at the beginning.
 </InstructionType>
 
 <InstructionType code="AtomicEnd" args="">
