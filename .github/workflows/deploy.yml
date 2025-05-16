@@ -130,7 +130,7 @@ jobs:
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             pnpm --prefix ./doc run build
           else
-            pnpm --prefix ./doc run build -- --out-dir=build/dev
+            pnpm --prefix ./doc run build:dev
           fi
   
       - name: Deploy to althread.github.io 
