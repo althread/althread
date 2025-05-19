@@ -3,7 +3,7 @@
 import { createSignal, onCleanup, onMount } from "solid-js";
 import Resizable from '@corvu/resizable'
 import { Example1 } from "./examples/example1";
-import { Router, Route } from "@solidjs/router";
+import { HashRouter, Route } from "@solidjs/router";
 
 import init, { compile, run, check } from '../pkg/althread_web';
 import createEditor from './Editor';
@@ -69,7 +69,7 @@ export default function App() {
   let [stdout, setStdout] = createSignal("The console output will appear here.");
   let [out, setOut] = createSignal("The execution output will appear here.");
   return (
-    <Router>
+    <HashRouter>
       <Route path="/tutorial" component={Tutorial} />
       <Route path="/" component={() =>
         <>
@@ -207,7 +207,7 @@ export default function App() {
           </Resizable>
         </>
       } />
-    </Router>
+    </HashRouter>
   );
 }
 
