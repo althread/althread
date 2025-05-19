@@ -35,5 +35,8 @@
   },
   "@parcel/resolver-default": {
     "packageExports": true
+  },
+  "dependencies": {
+    "@solidjs/router": "^0.15.3"
   }
 }

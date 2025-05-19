@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      '@solidjs/router':
+        specifier: ^0.15.3
+        version: 0.15.3(solid-js@1.9.3)
     devDependencies:
       '@babel/core':
         specifier: ^7.26.0
@@ -698,6 +702,11 @@ packages:
     engines: {node: '>= 16.0.0'}
     peerDependencies:
       '@parcel/core': ^2.13.3
+
+  '@solidjs/router@0.15.3':
+    resolution: {integrity: sha512-iEbW8UKok2Oio7o6Y4VTzLj+KFCmQPGEpm1fS3xixwFBdclFVBvaQVeibl1jys4cujfAK5Kn6+uG2uBm3lxOMw==}
+    peerDependencies:
+      solid-js: ^1.8.6
 
   '@swc/core-darwin-arm64@1.10.1':
     resolution: {integrity: sha512-NyELPp8EsVZtxH/mEqvzSyWpfPJ1lugpTQcSlMduZLj1EASLO4sC8wt8hmL1aizRlsbjCX+r0PyL+l0xQ64/6Q==}
@@ -2654,6 +2663,10 @@ snapshots:
       '@parcel/types-internal': 2.13.3
       '@parcel/utils': 2.13.3
       nullthrows: 1.1.1
+
+  '@solidjs/router@0.15.3(solid-js@1.9.3)':
+    dependencies:
+      solid-js: 1.9.3
 
   '@swc/core-darwin-arm64@1.10.1':
     optional: true
