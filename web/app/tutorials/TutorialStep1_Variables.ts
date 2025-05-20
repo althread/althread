@@ -39,6 +39,8 @@ main {
 Try declaring one local variable \`count\` initialized to \`5\` and one shared variable \`STATUS_MESSAGE\` of type \`string\` initialized to \`"Pending"\`.
   `,
   defaultCode: `
+// Declare a shared block with a STATUS_MESSAGE variable
+
 main {
     // Declare a local variable 'count'
     // You can try to print them if you like

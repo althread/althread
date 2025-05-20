@@ -29,10 +29,6 @@ For example, for \`i = 2\`, it should print \`4\`.
   `,
   defaultCode: `main {
     // Add your for loop here
-    // for i in 1..6 {
-    //     let square = i * i;
-    //     print(square);
-    // }
 }`,
   validate: (code: string) => {
     const loopRegex = /for\s+(\w+)\s+in\s+1\.\.6\s*{([\s\S]*?)}/s;

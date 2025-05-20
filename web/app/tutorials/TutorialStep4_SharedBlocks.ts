@@ -6,7 +6,7 @@ export const tutorial: TutorialStep = {
   content: `
 # 4. Shared Blocks & Shared Variables
 
-As introduced earlier, \`shared\` blocks are crucial for concurrent programming in Althread. They define variables that can be accessed and modified by multiple programs simultaneously.
+As introduced earlier, \`shared\` blocks are crucial for concurrent programming in Althread. They define variables that can be accessed and modified by multiple processes simultaneously.
 
 Key points:
 *   Declared with the \`shared { ... }\` syntax.
@@ -21,20 +21,20 @@ shared {
     let IS_ACTIVE: bool = true;
 }
 
-program Worker1 {
+program Worker1 ({
     // Can read and write to GLOBAL_COUNT, APP_STATE, IS_ACTIVE
     GLOBAL_COUNT = GLOBAL_COUNT + 1;
 }
 
-program Worker2 {
+program Worker2() {
     if IS_ACTIVE {
         print(APP_STATE);
     }
 }
 
 main {
-    run Worker1;
-    run Worker2;
+    run Worker1();
+    run Worker2();
 }
 \`\`\`
 This mechanism allows different parts of your Althread application to coordinate and share data safely.
@@ -60,8 +60,8 @@ main {
     if (!hasSharedOpening) {
         issues.push("presence of 'shared {' block");
     } else {
-        const hasCounter = /Counter\s*(:\s*int\s*)?=\s*0;/.test(code);
-        const isCounterInShared = /shared\s*{[^}]*Counter\s*(:\s*int\s*)?=\s*0;[\s\S]*}/s.test(code);
+        const hasCounter = /Counter\s*(:\s*int\s*)?(=\s*0)?;/.test(code);
+        const isCounterInShared = /shared\s*{[^}]*Counter\s*(:\s*int\s*)?(=\s*0)?;[\s\S]*}/s.test(code);
         if (!hasCounter || !isCounterInShared) {
             issues.push("shared variable 'Counter: int = 0;' inside the shared block");
         }

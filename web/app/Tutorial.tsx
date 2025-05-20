@@ -4,6 +4,8 @@ import createEditor from './Editor';
 import { marked } from 'marked';
 import './Tutorial.css';
 
+import  { compile, run, check } from '../pkg/althread_web';
+
 // Import all tutorials
 import { tutorial as tutorialStep1 } from './tutorials/TutorialStep1_Variables';
 import { tutorial as tutorialStep2 } from './tutorials/TutorialStep2_IfElse';
@@ -94,6 +96,7 @@ const Tutorial: Component = () => {
   });
 
   const compileFromEditor = (currentEditorCode: string) => {
+    return compile(currentEditorCode);
     // Placeholder for actual compilation/execution logic for the "Result" tab
     // console.log("Compile/Execute called with:", currentEditorCode);
     // setExecutionResult("Simulated execution output.");
