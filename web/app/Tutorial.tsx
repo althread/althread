@@ -14,6 +14,7 @@ import { tutorial as tutorialStep4 } from './tutorials/TutorialStep4_SharedBlock
 import { tutorial as tutorialStep5 } from './tutorials/TutorialStep5_Programs';
 import { tutorial as tutorialStep6 } from './tutorials/TutorialStep6_Wait';
 import { tutorial as tutorialStep7 } from './tutorials/TutorialStep7_Channels';
+import { A } from '@solidjs/router';
 
 export interface TutorialStep {
   name: string; // e.g., "Variables", "IfElse"
@@ -161,9 +162,10 @@ const Tutorial: Component = () => {
     <div class="tutorial-container">
       <div class="explanation-pane">
         <div class="tutorial-header">
-          <a href="#/" class="vscode-button" style="margin-right:8px; margin-bottom:8px">
+          <A href="/" 
+            class="vscode-button" style="margin-right:8px; margin-bottom:8px">
             <i class="codicon codicon-home"></i> Home
-          </a>
+          </A>
           <select
             value={tutorialOrder[currentTutorialIndex()]}
             onChange={(e) => {
