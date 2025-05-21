@@ -10,7 +10,6 @@ import createEditor from './Editor';
 import Graph from "./Graph";
 import { Logo } from "./assets/images/Logo";
 import { EditorState } from "@codemirror/state";
-import Home from "./Home"; // Assuming you have a Home component
 import Tutorial from "./Tutorial"; // Import the Tutorial component
 
 
@@ -171,6 +170,12 @@ export default function App() {
                   }}>
                     <i class="codicon codicon-clear-all"></i>
                     Reset</button>
+                  <button 
+                    class="vscode-button"
+                    onClick={() => { window.location.hash = '#/tutorial'; }}>
+                      <i class="codicon codicon-book"></i>
+                      Tutorials
+                  </button>
                 </div>
           </div>
           <Resizable id="content">

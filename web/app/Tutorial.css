@@ -8,7 +8,7 @@
 
 .explanation-pane {
   flex: 1;
-  padding: 20px;
+  padding: 20px 20px 0; /* pas de padding en bas pour éviter l'espace sous la barre sticky */
   border-right: 1px solid #333; /* Darker border */
   overflow-y: auto;
   background-color: #252526; /* Slightly lighter dark for left pane */
@@ -72,7 +72,13 @@
   justify-content: space-between;
   padding-top: 20px;
   border-top: 1px solid #333;
-  margin-top: auto; /* Pushes navigation to the bottom */
+  margin-top: 0; /* override previous auto for sticky behavior */
+  position: sticky;
+  bottom: 0; /* coller la barre sticky en bas */
+  padding-bottom: 20px; /* espace interne bas pour marger les boutons */
+  background-color: #252526; /* match pane background */
+  width: 100%; /* couvrer toute la largeur interne */
+  z-index: 2; /* placer au-dessus du contenu déroulant */
 }
 
 .navigation-buttons button {
@@ -209,4 +215,11 @@
   font-size: 0.9em;
   /* border: 1px solid #3c3c3c; */ /* Handled by .output-content */
   margin: 0; /* Reset margin if pre is direct child */
+}
+
+/* Styling for result-output */
+.result-output {
+  white-space: pre-wrap; /* Preserve newlines and wrap lines */
+  word-wrap: break-word;
+  font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
 }

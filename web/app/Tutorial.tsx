@@ -45,10 +45,10 @@ const tutorialOrder: string[] = [
 
 const Tutorial: Component = () => {
   const [code, setCode] = createSignal("");
-  // const [executionResult, setExecutionResult] = createSignal(""); // For "Result" tab if implemented
   const [currentTutorialIndex, setCurrentTutorialIndex] = createSignal(0);
   const [activeTab, setActiveTab] = createSignal<'validation' | 'result'>('validation');
   const [validationOutput, setValidationOutput] = createSignal<{ message: string, success: boolean } | null>(null);
+  const [executionResult, setExecutionResult] = createSignal<string>("");
 
   const getLocalStorageKey = (index: number): string => {
     if (index >= 0 && index < tutorialOrder.length) {
@@ -76,7 +76,7 @@ const Tutorial: Component = () => {
       const newCode = savedCode !== null ? savedCode : tutorialData.defaultCode;
       setCode(newCode); // This will trigger the editor update effect if editor is mounted
       setValidationOutput(null); // Clear validation from previous step
-      // setExecutionResult(""); // Clear execution result from previous step
+      setExecutionResult(""); // Clear execution result from previous step
       setActiveTab('validation'); // Reset to validation tab
     } else {
       console.error(`Tutorial data not found for key: ${tutorialKey}`);
@@ -136,6 +136,13 @@ const Tutorial: Component = () => {
     }
   };
 
+  const handleRunCode = () => {
+     const currentEditorCode = code();
+     const result = run(currentEditorCode);
+     setExecutionResult(result.stdout.join('\n'));
+     setActiveTab('result');
+  };
+
   const handleNextTutorial = () => {
     if (currentTutorialIndex() < tutorialOrder.length - 1) {
       setCurrentTutorialIndex(currentTutorialIndex() + 1);
@@ -154,6 +161,9 @@ const Tutorial: Component = () => {
     <div class="tutorial-container">
       <div class="explanation-pane">
         <div class="tutorial-header">
+          <a href="#/" class="vscode-button" style="margin-right:8px; margin-bottom:8px">
+            <i class="codicon codicon-home"></i> Home
+          </a>
           <select
             value={tutorialOrder[currentTutorialIndex()]}
             onChange={(e) => {
@@ -180,6 +190,9 @@ const Tutorial: Component = () => {
           </button>
           <button onClick={handleValidateCode} class="validate-button">
             Validate Code
+          </button>
+          <button onClick={handleRunCode} class="run-button">
+             Run Code
           </button>
           <button onClick={handleNextTutorial} disabled={currentTutorialIndex() === tutorialOrder.length - 1}>
             Next &rarr;
@@ -213,10 +226,8 @@ const Tutorial: Component = () => {
               </div>
             )}
             {activeTab() === 'result' && (
-              <div>
-                {/* Placeholder for actual execution result */}
-                {/* To use executionResult signal: executionResult() */}
-                Execution results will appear here.
+              <div class="result-output">
+                {executionResult()}
               </div>
             )}
           </div>
