@@ -261,6 +261,8 @@ impl<'a> VM<'a> {
             self.waiting_programs.remove(&remove_id);
         }
 
+        // TODO this method should be modified so eventually violation generate an error, 
+        // for example by having a encounterd eventually counter, if the final VM's counter is == 0 no block validated eventually and path is wrong
         if need_to_check_invariants {
             exec_info.invariant_error = self.check_invariants();
         }
@@ -492,7 +494,7 @@ impl<'a> VM<'a> {
                 Ok(cond) => {
                     if !cond.is_true() {
                         return Ok(0); // eventually not checking on a specific state isn't an error
-                    }
+                    } 
                 }
                 Err(e) => {
                     return Err(AlthreadError::new(

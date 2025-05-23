@@ -7,7 +7,7 @@ export const althreadHighlight = styleTags({
     t.controlKeyword,
   "instanceof": t.operatorKeyword,
   "let const channel": t.definitionKeyword,
-  "program always main shared": t.moduleKeyword,
+  "program always eventually main shared": t.moduleKeyword,
   //"with as new": t.keyword,
   TemplateString: t.special(t.string),
   super: t.atom,

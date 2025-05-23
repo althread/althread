@@ -145,7 +145,7 @@ pub fn check_program<'a>(
             //42 remove all dupes 
             lines.dedup();
 
-            //42 add all the successors of the current node to the state graph
+            //42 add all the state links allowing transition from the current node to another one to the state graph
             state_graph
                 .nodes
                 .get_mut(&current_node)
@@ -159,7 +159,7 @@ pub fn check_program<'a>(
                     name,
                 });
             
-            //42 should ask the TER superviser how this work
+            //42 if the graphnode resulting from a statelink transition don't yet exist, create it
             if !state_graph.nodes.contains_key(&vm.clone()) {
                 state_graph.nodes.insert(
                     vm.clone(),
@@ -207,6 +207,9 @@ pub fn check_program<'a>(
     }
 
     //42 now checking eventually violations
+
+    // path visit is used to keep track of the successors we've already checked
+    let mut path_visit: Vec<usize> = Vec::new();
     let mut path = Vec::new();
     // if root node check eventually condition no path can exist
     if state_graph.nodes.get(&initial_vm).unwrap().eventually {
@@ -215,6 +218,9 @@ pub fn check_program<'a>(
 
     // retrieving the state Link of the initial VM
     path.push(initial_vm.clone());
+    // no successors have yet been visited
+    path_visit.push(0);
+
 
     while !path.is_empty()
     {
@@ -222,6 +228,8 @@ pub fn check_program<'a>(
             let temp = path.last().unwrap();
             temp.clone() // Drops immutable borrow IMMEDIATELY
         };
+
+        let mut visited_succ = path_visit.pop().unwrap();
 
         // get all the successors of the current node 
         let mut succ = Vec::new();
@@ -231,18 +239,20 @@ pub fn check_program<'a>(
             .unwrap()
             .successors
             .iter()
+            .skip(visited_succ)
         {
             succ.push(link.clone());
         }
-        // if the current node have no successors then we found a path of exectuion violating the eventually
         
-        if succ.is_empty()
+        // if the current node have no successors then we found an invalid path of execution
+        if succ.is_empty() && visited_succ == 0
         {
             let ret  = vec_vm_to_stalin(path, &state_graph);
 
             match ret {
-                Ok(vec) => return Ok((vec.into_iter().rev().collect(),state_graph)),
-
+                Ok(vec) => {
+                    return Ok((vec.into_iter().rev().collect(),state_graph));
+                },
                 Err(e) => return Err(AlthreadError::new(
                     ErrorType::ExpressionError,
                     None,
@@ -256,28 +266,21 @@ pub fn check_program<'a>(
         while !succ.is_empty() && !explorable_path
         {
             let curr_succ = succ.pop().unwrap();
+            visited_succ += 1;
 
-            // if the successor is already in the path we ignore it
+            // if the successor is already in the path we found an invalid execution path
             if path.iter().any(|x| x == &curr_succ.to)
             {
                 let ret  = vec_vm_to_stalin(path, &state_graph);
-                
                 match ret {
-                    Ok(vec) => {
-                        //HELP NEEDED don't understand why the vec isn't empty here but is empty when received in Web Assembly
-                        // for sl in vec.clone() {
-                        //     println!("{}", sl.to_string());
-                        // }
-                        return Ok((vec.into_iter().rev().collect(),state_graph));
-                    }
-
+                    Ok(vec) => return Ok((vec.into_iter().rev().collect(),state_graph)),
+                    // safety purpose 
                     Err(e) => return Err(AlthreadError::new(
                         ErrorType::ExpressionError,
                         None,
                         e.message,
                     )),
                 }
-                
             }
 
             // we get the corresponding graphnode and check wheter he has the eventually flag or not
@@ -289,6 +292,10 @@ pub fn check_program<'a>(
             {
                 explorable_path = true;
                 path.push(curr_succ.to.clone());
+                // we update the number of visited successors of the current node
+                path_visit.push(visited_succ);
+                // we then init the number of visited successors from the new node in the path
+                path_visit.push(0);
             }
             
         }
@@ -326,7 +333,6 @@ pub fn vec_vm_to_stalin<'a>(
                 .unwrap()
                 .clone(),
         );
-        println!("{}", ret_path.last().unwrap().to_string());
 
         back_node = pred;
     }

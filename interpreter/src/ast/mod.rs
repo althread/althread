@@ -255,6 +255,7 @@ impl Ast {
                         }
                     }
                 }
+                // TODO  since the content is sensitively similar to always block find a way to combine both to avoid code duplication
                 ConditionKeyword::Eventually => {
                     for condition in condition_block.value.children.iter() {
                         let compiled = condition.compile(&mut state)?.instructions;
