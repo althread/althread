@@ -191,6 +191,38 @@ impl Ast {
 
 
         // functions baby ??
+        // allow cross-function calls, recursive calls
+        // this creates FunctionDefinitions without the compiled body, so that
+        // compilation can be done no matter the order of the functions
+        // or if they are recursive
+        for (func_name, (args_list, return_datatype, func_block)) in &self.function_blocks {
+            // check if the function is already defined
+            if state.user_functions.contains_key(func_name) {
+                return Err(AlthreadError::new(
+                    ErrorType::FunctionAlreadyDefined,
+                    Some(func_block.pos),
+                    format!("Function '{}' is already defined", func_name),
+                ));
+            }
+            // add the function to the user functions
+            let arguments: Vec<(Identifier, DataType)> = args_list.value
+                .identifiers
+                .iter()
+                .zip(args_list.value.datatypes.iter())
+                .map(|(id, dt)| (id.value.clone(), dt.value.clone()))
+                .collect();
+
+            let func_def = FunctionDefinition {
+                name: func_name.clone(),
+                arguments: arguments.clone(),
+                return_type: return_datatype.clone(),
+                body: Vec::new(),
+                pos: func_block.pos,
+            };
+            state.user_functions.insert(func_name.clone(), func_def);
+        }
+
+
         for (func_name, (args_list, return_datatype, func_block)) in &self.function_blocks {
 
             state.in_function = true;
@@ -214,25 +246,6 @@ impl Ast {
                 })
                 .collect();
 
-
-            // placeholder function for recursive calls
-            let func_def = FunctionDefinition {
-                name: func_name.clone(),
-                arguments: arguments.clone(),
-                return_type: return_datatype.clone(),
-                body: Vec::new(),
-                pos: func_block.pos,
-            };
-
-            // check if function is already defined
-            if state.user_functions.contains_key(func_name) {
-                return Err(AlthreadError::new(
-                    ErrorType::FunctionAlreadyDefined,
-                    Some(func_block.pos),
-                    format!("Function '{}' is already defined", func_name),
-                ));
-            }
-            state.user_functions.insert(func_name.clone(), func_def);
 
             // compile the function body
             let mut compiled_body = func_block.compile(&mut state)?;
@@ -259,8 +272,6 @@ impl Ast {
             state.program_stack.truncate(initial_stack_len);
             state.current_stack_depth -= 1;
             state.in_function = false;
-
-            // println!("compiled body: {:?}", compiled_body);
 
 
             let func_def = FunctionDefinition {
