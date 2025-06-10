@@ -250,23 +250,30 @@ impl Ast {
             // compile the function body
             let mut compiled_body = func_block.compile(&mut state)?;
             
-
-            // let needs_implicit_end = match compiled_body.instructions.last() {
-            //     Some(Instruction {
-            //         control:InstructionType::Return { .. }, ..}) => false,
-            //     Some(Instruction {
-            //         control: InstructionType::EndProgram, ..}) => false,
-            //     _ => true,
-            // };
-
-            // if needs_implicit_end {
-                compiled_body.instructions.push(Instruction {
-                    control: InstructionType::Return { 
-                        has_value: *return_datatype != DataType::Void,
-                    },
-                    pos: Some(func_block.pos),
-                });
-            // }
+            // if the function's return datatype is Void
+            if *return_datatype == DataType::Void {
+                let mut has_return = false;
+                // check if it has a return instruction as the last instruction
+                match compiled_body.instructions.last() {
+                    Some(last_instruction) => {
+                        if let InstructionType::Return { has_value: false } = &last_instruction.control {
+                            has_return = true;
+                        }
+                    }
+                    None => {}
+                }
+                // if it does not have a return instruction, add one
+                if !has_return {
+                    compiled_body.instructions.push(
+                        Instruction {
+                            control: InstructionType::Return {
+                                has_value: false,
+                            },
+                            pos: Some(func_block.pos),
+                        },
+                    );
+                }
+            }
 
             // clean up compiler state
             state.program_stack.truncate(initial_stack_len);
