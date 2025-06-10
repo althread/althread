@@ -9,8 +9,8 @@ program = _{ SOI ~ blocks* ~ EOI }
 /// - **Shared Block**: Declares global variables accessible across different parts of the program.
 /// - **Condition Block**: Monitors conditions at each atomic step (e.g., always, never, eventually).
 /// - **Program Block**: Encapsulates code that runs concurrently in parallel processes.
-/// - **Inline Function Block**: Defines functions that are inlined at the call site.
-blocks = _{ main_block | global_block | condition_block | program_block | inline_function_block }
+/// - **Function Block**: User-defined functions
+blocks = _{ main_block | global_block | condition_block | program_block | function_block }
 
 global_block    = { GLOBAL_KW ~ code_block }
 condition_block = { condition_keywords ~ expression_block }
@@ -59,8 +59,8 @@ run_statement         = _{ run_call ~ ";" }
 send_statement         = _{ send_call ~ ";" }
 channel_declaration_statement = _{ channel_declaration ~ ";" }
 
-// Inline functions
-inline_function_block = { INLINE_KW ~ identifier ~ arg_list ~ RARROW ~ datatype ~ code_block }
+// Functions
+function_block = { FN_KW ~ identifier ~ arg_list ~ RARROW ~ datatype ~ code_block }
 return_statement = { RETURN_KW ~ expression? ~ ";" }
 
 fn_call  = { object_identifier ~ tuple_expression }
@@ -106,8 +106,8 @@ receive_expression = { RECEIVE_KW ~ object_identifier? ~ pattern_list ~ ("=>" ~ 
 /// ### Expressions
 /// Expressions evaluate values based on arithmetic and logical operations, following standard precedence rules.
 expression = {
-    binary_expression
-  | unary_expression
+  fn_call
+  | binary_expression
   | primary_expression
 }
 
@@ -165,7 +165,7 @@ KEYWORDS = _{
   | IF_KW
   | ELSE_KW
   | WHILE_KW
-  | INLINE_KW
+  | FN_KW
   | RETURN_KW
   | BOOL
   | INT_TYPE
@@ -207,7 +207,7 @@ NULL_KW  = _{ "null" }
 ATOMIC_KW = _{ "atomic" }
 
 // Functions
-INLINE_KW = _{ "inline" }
+FN_KW = _{ "fn" }
 RETURN_KW = _{ "return" }
 RARROW = { "->" }
 
