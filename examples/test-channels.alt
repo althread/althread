@@ -5,8 +5,8 @@ shared {
     let Start = false;
 }
 program A() {
-    wait Start;
-    wait receive in (x,y) => {
+    await Start;
+    await receive in (x,y) => {
         print("received ");
     };
 }

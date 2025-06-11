@@ -134,14 +134,14 @@ impl fmt::Display for InstructionType {
             }
             Self::Push(l) => write!(f, "push ({})", l)?,
             Self::WaitStart { start_atomic, .. } => {
-                write!(f, "wait start")?;
+                write!(f, "await start")?;
                 if *start_atomic {
                     write!(f, " atomic")?;
                 }
                 ()
             }
             Self::Wait { jump, unstack_len } => {
-                write!(f, "wait {} (unstack {})", jump, unstack_len)?
+                write!(f, "await {} (unstack {})", jump, unstack_len)?
             }
             Self::Send {
                 channel_name,

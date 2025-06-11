@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - main  # or your primary branch
+      - dev   # adding dev branch
   pull_request:
     branches:
       - main  # or your primary branch
+      - dev   # adding dev branch
   workflow_dispatch:  # Allow manual runs
 
 jobs:
@@ -75,7 +77,13 @@ jobs:
         run: |
           cd web
           pnpm install
-          pnpm build --public-url /editor
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "Building for production (main branch)"
+            pnpm build --public-url /editor
+          else
+            echo "Building for development (dev branch)"
+            pnpm build --public-url /dev/editor
+          fi
           mv dist ../editor
 
       - name: Upload Built Web Editor
@@ -92,6 +100,16 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Set environment variables
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "DEPLOY_PATH=" >> $GITHUB_ENV
+            echo "Building for production (main branch)"
+          else
+            echo "DEPLOY_PATH=dev" >> $GITHUB_ENV
+            echo "Building for development (dev branch)"
+          fi
 
       - name: Download Built Web Editor
         uses: actions/download-artifact@v4
@@ -114,7 +132,12 @@ jobs:
         run: pnpm --prefix ./doc install
 
       - name: Build site
-        run: pnpm --prefix ./doc run build
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            pnpm --prefix ./doc run build
+          else
+            pnpm --prefix ./doc run build:dev
+          fi
   
       - name: Deploy to althread.github.io 
         env:
@@ -127,17 +150,25 @@ jobs:
           # Clone the target repository (orgname.github.io)
           git clone --branch=gh-pages git@github.com:althread/althread.github.io.git deploy
 
-          # Remove old files and copy new ones
-          rm -rf deploy/*
-          ls
-          cp -r doc/build/* deploy/ 
-          cp -r editor deploy/editor
+          # Remove old files and copy new ones based on branch
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            # For main branch, deploy to root
+            rm -rf deploy/*
+            cp -r doc/build/* deploy/
+            cp -r editor deploy/editor
+          else
+            # For dev branch, deploy to /dev folder
+            rm -rf deploy/dev
+            mkdir -p deploy/dev
+            cp -r doc/build/dev/* deploy/dev/
+            cp -r editor deploy/dev/editor
+          fi
           
           # Commit and push changes
           cd deploy
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add .
-          git commit -m "Deploy site"
+          git commit -m "Deploy site from ${GITHUB_REF##*/} branch"
           git push origin gh-pages
 

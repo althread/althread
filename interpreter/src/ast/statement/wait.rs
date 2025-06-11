@@ -116,7 +116,7 @@ impl InstructionBuilder for Node<Wait> {
         } else {
             0
         };
-        // the if offset also depends on whether the wait block is atomic or not
+        // the if offset also depends on whether the await block is atomic or not
         if !self.value.start_atomic {
             jump_if_offset += 1;
         }
@@ -211,7 +211,7 @@ impl InstructionBuilder for Node<Wait> {
         */
         // It should work!
         //if builder.contains_jump() {
-        //    unimplemented!("breaks in wait blocks are not yet implemented");
+        //    unimplemented!("breaks in await blocks are not yet implemented");
         //}
         Ok(builder)
     }

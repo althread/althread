@@ -29,7 +29,7 @@ impl NodeBuilder for Atomic {
         let mut first_statement = statement.as_mut();
 
         let start_atomic_lambda = |s: &mut Statement| {
-            // if the statement is a wait block then tell it so
+            // if the statement is a await block then tell it so
             match s {
                 Statement::Wait(wait) => {
                     wait.value.start_atomic = true;

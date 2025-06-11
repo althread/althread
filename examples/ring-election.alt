@@ -11,7 +11,7 @@ program A(my_id: int) {
 
   send out(my_id);
 
-  loop atomic wait receive in (x) => {
+  loop atomic await receive in (x) => {
     print("receive", x);
       if x > leader_id {
         leader_id = x;
