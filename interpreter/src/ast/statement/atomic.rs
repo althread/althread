@@ -115,10 +115,9 @@ impl InstructionBuilder for Node<Atomic> {
 
 impl AstDisplay for Atomic {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
-        writeln!(f, "{prefix}loop_control")?;
+        writeln!(f, "{prefix}atomic")?;
 
         let prefix = prefix.switch();
-        writeln!(f, "{prefix}do")?;
         {
             let prefix = prefix.add_leaf();
             self.statement.as_ref().ast_fmt(f, &prefix)?;

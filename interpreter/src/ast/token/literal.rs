@@ -78,7 +78,11 @@ impl NodeBuilder for Literal {
             Rule::BOOL => Self::Bool(safe_parse(&pair)?),
             Rule::INT => Self::Int(safe_parse(&pair)?),
             Rule::FLOAT => Self::Float(safe_parse(&pair)?),
-            Rule::STR => Self::String(pair.as_str().to_string()),
+            Rule::STR => {
+                let s = pair.as_str();
+                let unquoted = &s[1..s.len() - 1];
+                Self::String(unquoted.to_string())
+            },
             _ => return Err(no_rule!(pair, "Literal")),
         })
     }
@@ -165,11 +169,21 @@ impl Literal {
             (Self::Int(i), Self::Int(j)) => Ok(Self::Int(i + j)),
             (Self::Float(i), Self::Float(j)) => Ok(Self::Float(i + *j)),
             (Self::String(i), Self::String(j)) => Ok(Self::String(format!("{}{}", i, j))),
+            (Self::String(s), other) => {
+                Ok(Self::String(
+                    format!("{}{}", s, other.to_string())
+                ))
+            },
+            (other, Self::String(s)) => {
+                Ok(Self::String(
+                    format!("{}{}", other.to_string(), s)
+                ))
+            },
             (i, j) => Err(format!(
                 "Cannot add {} and {}",
                 i.get_datatype(),
                 j.get_datatype()
-            )),
+            ))
         }
     }
 

@@ -222,7 +222,7 @@ impl AstDisplay for Wait {
         writeln!(f, "{prefix}wait_control")?;
         {
             for case in &self.waiting_cases {
-                case.ast_fmt(f, &prefix.add_branch())?;
+                case.ast_fmt(f, &prefix.add_leaf())?;
             }
         }
 

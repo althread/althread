@@ -246,6 +246,10 @@ impl AstDisplay for ReceiveStatement {
                 .join(",")
         )?;
 
+        if let Some(stmt) = &self.statement {
+            stmt.ast_fmt(f, &prefix.add_leaf())?;
+        }
+
         Ok(())
     }
 }

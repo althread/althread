@@ -18,7 +18,7 @@ use crate::{
         statement::{expression::LocalExpressionNode, waiting_case::WaitDependency},
         token::literal::Literal,
     },
-    compiler::{stdlib::Stdlib, CompiledProject},
+    compiler::{stdlib::Stdlib, CompiledProject, FunctionDefinition},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
 };
 
@@ -67,6 +67,7 @@ pub struct VM<'a> {
     pub channels: Channels,
     pub running_programs: Vec<RunningProgramState<'a>>,
     pub programs_code: &'a HashMap<String, ProgramCode>,
+    pub user_funcs: &'a HashMap<String, FunctionDefinition>,
     pub executable_programs: BTreeSet<usize>, // needs to be sorted to have a deterministic behavior
     pub always_conditions: &'a Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
 
@@ -87,6 +88,7 @@ impl<'a> VM<'a> {
             running_programs: Vec::new(),
             executable_programs: BTreeSet::new(),
             programs_code: &compiled_project.programs_code,
+            user_funcs: &compiled_project.user_functions,
             always_conditions: &compiled_project.always_conditions,
             next_program_id: 0,
             waiting_programs: HashMap::new(),
@@ -101,12 +103,14 @@ impl<'a> VM<'a> {
             "program with id {} already exists",
             pid
         );
+
         self.running_programs.insert(
             pid,
             RunningProgramState::new(
                 pid,
                 program_name.to_string(),
                 &self.programs_code[program_name],
+                self.user_funcs,
                 args,
                 self.stdlib.clone(),
             ),

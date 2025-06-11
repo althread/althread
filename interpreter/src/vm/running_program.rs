@@ -1,11 +1,12 @@
 use std::{
     hash::{Hash, Hasher},
     rc::Rc,
+    collections::HashMap,
 };
 
 use crate::{
-    ast::token::literal::Literal,
-    compiler::stdlib::Stdlib,
+    ast::token::{datatype::DataType, literal::Literal},
+    compiler::{stdlib::Stdlib, FunctionDefinition},
     error::{AlthreadError, AlthreadResult, ErrorType},
 };
 
@@ -15,16 +16,29 @@ use super::{
     str_to_expr_error, GlobalAction, GlobalActions, GlobalMemory, Memory,
 };
 
+
+#[derive(Debug, Clone)]
+struct StackFrame<'a> {
+    return_ip: usize, // the instruction pointer to return to
+    caller_fp: usize, // the frame pointer of the caller
+    caller_code: &'a [Instruction], // the code of the caller
+    expected_return_type: DataType  // the expected return type of the function
+}
+
 #[derive(Debug, Clone)]
 pub struct RunningProgramState<'a> {
     pub name: String,
 
     memory: Memory,
     code: &'a ProgramCode,
+    current_code: &'a [Instruction],
     instruction_pointer: usize,
     pub id: usize,
-
     pub stdlib: Rc<Stdlib>,
+
+    pub user_functions: &'a HashMap<String, FunctionDefinition>,
+    call_stack: Vec<StackFrame<'a>>,
+    frame_pointer: usize,
 }
 
 impl PartialEq for RunningProgramState<'_> {
@@ -33,6 +47,8 @@ impl PartialEq for RunningProgramState<'_> {
             && self.memory == other.memory
             && self.name == other.name
             && self.instruction_pointer == other.instruction_pointer
+            && self.frame_pointer == other.frame_pointer
+            && self.call_stack.len() == other.call_stack.len()
     }
 }
 
@@ -49,6 +65,7 @@ impl<'a> RunningProgramState<'a> {
         id: usize,
         name: String,
         code: &'a ProgramCode,
+        user_functions: &'a HashMap<String, FunctionDefinition>,
         args: Literal,
         stdlib: Rc<Stdlib>,
     ) -> Self {
@@ -61,12 +78,16 @@ impl<'a> RunningProgramState<'a> {
         let memory = if arg_len > 0 { vec![args] } else { Vec::new() };
 
         Self {
+            id,
+            name,
             memory,
             code,
+            current_code: &code.instructions,
             instruction_pointer: 0,
-            name,
-            id,
             stdlib,
+            user_functions,
+            call_stack: Vec::new(),
+            frame_pointer: 0,
         }
     }
 
@@ -75,8 +96,7 @@ impl<'a> RunningProgramState<'a> {
     }
 
     pub fn current_instruction(&self) -> AlthreadResult<&Instruction> {
-        self.code
-            .instructions
+        self.current_code
             .get(self.instruction_pointer)
             .ok_or(AlthreadError::new(
                 ErrorType::InstructionNotAllowed,
@@ -185,21 +205,8 @@ impl<'a> RunningProgramState<'a> {
         channels: &mut Channels,
         next_pid: &mut usize,
     ) -> AlthreadResult<Option<GlobalAction>> {
-        let cur_inst =
-            self.code
-                .instructions
-                .get(self.instruction_pointer)
-                .ok_or(AlthreadError::new(
-                    ErrorType::InstructionNotAllowed,
-                    None,
-                    format!(
-                        "the current instruction pointer points to no instruction (pointer {}",
-                        self.instruction_pointer
-                    ),
-                ))?;
 
-        //println!("{} current memory:\n{}", self.id, self.memory.iter().map(|lit| format!("{:?}", lit)).collect::<Vec<_>>().join("\n"));
-        //println!("{} running instruction {}", self.id, self.current_instruction().unwrap());
+        let cur_inst = self.current_instruction()?.clone();
 
         let mut action = None;
 
@@ -235,6 +242,29 @@ impl<'a> RunningProgramState<'a> {
                     AlthreadError::new(ErrorType::ExpressionError, cur_inst.pos, msg)
                 })?;
                 self.memory.push(lit);
+                1
+            }
+            InstructionType::MakeTupleAndCleanup { elements, unstack_len } => {
+                let mut evaluated_elements = Vec::new();
+
+                for expr_node in elements {
+                    let val = expr_node
+                        .eval(&mut self.memory)
+                        .map_err(|msg| {AlthreadError::new(ErrorType::ExpressionError, cur_inst.pos, msg)})?;
+                    evaluated_elements.push(val);
+                }
+
+                for _ in 0..*unstack_len {
+                    if self.memory.pop().is_none() {
+                        return Err(AlthreadError::new(
+                            ErrorType::RuntimeError,
+                            cur_inst.pos,
+                            "Stack underflow during tuple cleanup.".to_string(),
+                        ));
+                    }
+                }
+
+                self.memory.push(Literal::Tuple(evaluated_elements));
                 1
             }
             InstructionType::GlobalReads { variables, .. } => {
@@ -329,7 +359,51 @@ impl<'a> RunningProgramState<'a> {
                 1
             }
             InstructionType::EndProgram => {
-                action = Some(GlobalAction::EndProgram);
+                if self.call_stack.is_empty() {
+                    action = Some(GlobalAction::EndProgram);
+                    0
+                } else {
+                    let return_value = Literal::Null;
+                    let frame = self.call_stack.pop().unwrap();
+                    self.memory.truncate(self.frame_pointer);
+                    self.frame_pointer = frame.caller_fp;
+                    self.instruction_pointer = frame.return_ip;
+                    self.current_code = &self.code.instructions;
+                    self.memory.push(return_value);
+                    0
+                }
+            }
+            InstructionType::Return {has_value}  => {
+
+                let return_value = if *has_value {
+                    self.memory.pop().expect("Stack empty, expected return value")
+                } else {
+                    Literal::Null
+                };
+
+
+                let frame = self.call_stack.pop().expect("Panic: stack is empty, cannot perform return");
+
+                if return_value.get_datatype() != frame.expected_return_type {
+                    return Err(AlthreadError::new(
+                        ErrorType::FunctionReturnTypeMismatch,
+                        cur_inst.pos,
+                        format!(
+                            "expected {:?}, got {:?}",
+                            frame.expected_return_type,
+                            return_value.get_datatype()
+                        ),
+                    ));
+                }
+
+                self.memory.truncate(self.frame_pointer);
+
+                self.frame_pointer = frame.caller_fp;
+
+                self.instruction_pointer = frame.return_ip;
+                self.current_code = frame.caller_code;
+
+                self.memory.push(return_value);
                 0
             }
             InstructionType::FnCall {
@@ -338,6 +412,7 @@ impl<'a> RunningProgramState<'a> {
                 arguments,
                 unstack_len,
             } => {
+
                 if let Some(v_idx) = variable_idx {
                     //println!("f: {:?} on v_idx {}", f.name, v_idx);
                     //println!("current instruction: {:?}", cur_inst);
@@ -347,6 +422,8 @@ impl<'a> RunningProgramState<'a> {
                         .get(v_idx)
                         .expect("Panic: stack is empty, cannot perform function call")
                         .clone();
+
+
 
                     let interfaces = self.stdlib.get_interfaces(&lit.get_datatype()).ok_or(
                         AlthreadError::new(
@@ -387,32 +464,73 @@ impl<'a> RunningProgramState<'a> {
                     }
 
                     self.memory.push(ret);
+
                     1
                 } else {
                     // currently, only the print function is implemented
-                    if *name != "print" {
-                        panic!("implement a proper function call in the VM");
-                    }
-                    let lit = self
-                        .memory
-                        .last()
-                        .expect("Panic: stack is empty, cannot perform function call")
-                        .clone();
-                    for _ in 0..*unstack_len {
-                        self.memory.pop();
-                    }
+                    if name == "print" {
+                        let lit = self
+                            .memory
+                            .last()
+                            .expect("Panic: stack is empty, cannot perform function call")
+                            .clone();
 
-                    let str = lit
-                        .into_tuple()
-                        .unwrap()
-                        .iter()
-                        .map(|lit| lit.to_string())
-                        .collect::<Vec<_>>()
-                        .join(",");
-                    println!("{}", str);
-                    action = Some(GlobalAction::Print(str));
-                    self.memory.push(Literal::Null);
-                    1
+                        for _ in 0..*unstack_len {
+                            self.memory.pop();
+                        }
+                                                
+                        let str_val = lit.into_tuple().unwrap_or_default()
+                            .iter()
+                            .map(|lit| lit.to_string())
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        println!("{}", str_val);
+                        action = Some(GlobalAction::Print(str_val));
+                        self.memory.push(Literal::Null);
+
+                        1
+                    } else {
+                        if let Some(func_def) = self.user_functions.get(name) {
+                        
+
+                            let args_tuple_lit = self.memory.pop().unwrap();
+
+                            let arg_values = match args_tuple_lit {
+                                Literal::Tuple(v) => v,
+                                _ => {
+                                    return Err(AlthreadError::new(
+                                        ErrorType::RuntimeError,
+                                        cur_inst.pos,
+                                        format!("function {} expects a tuple as argument", name),
+                                    ));
+                                }
+                            };
+                            
+                            self.call_stack.push(StackFrame {
+                                return_ip: self.instruction_pointer + 1,
+                                caller_fp: self.frame_pointer,
+                                caller_code: self.current_code,
+                                expected_return_type: func_def.return_type.clone(),
+                            });
+
+                            self.frame_pointer = self.memory.len();
+
+                            for arg in arg_values {
+                                self.memory.push(arg);
+                            }
+
+                            self.current_code = &func_def.body;
+                            self.instruction_pointer = 0;
+                            
+                            0
+                        } else {
+                            return Err(AlthreadError::new(
+                                ErrorType::UndefinedFunction,
+                                cur_inst.pos,
+                                format!("undefined function {}", name),
+                            ));
+                        }
+                    }
                 }
             }
             InstructionType::WaitStart { .. } => 1,
