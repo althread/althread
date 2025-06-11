@@ -161,8 +161,24 @@ impl InstructionBuilder for Node<FnCall> {
 
             } else if basename == "print" {
 
-                let unstack_len = state.unstack_current_depth();
+                let provided_arg_types = args_on_stack_var.datatype.tuple_unwrap();
 
+                for (idx, arg_type) in provided_arg_types.iter().enumerate() {
+                    if *arg_type == DataType::Void {
+                        
+                        state.unstack_current_depth();
+                        return Err(AlthreadError::new(
+                            ErrorType::FunctionArgumentTypeMismatch,
+                            Some(self.pos),
+                            format!(
+                                "Function 'print' can't accept argument {} of type Void.",
+                                idx + 1
+                            ),
+                        ));
+                    }
+                }
+
+                let unstack_len = state.unstack_current_depth();
 
                 state.program_stack.push(Variable {
                     mutable: true,
