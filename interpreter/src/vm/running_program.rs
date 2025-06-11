@@ -404,7 +404,6 @@ impl<'a> RunningProgramState<'a> {
                 self.current_code = frame.caller_code;
 
                 self.memory.push(return_value);
-                println!("program stack after function call: {:?}", self.memory);
                 0
             }
             InstructionType::FnCall {
@@ -413,7 +412,7 @@ impl<'a> RunningProgramState<'a> {
                 arguments,
                 unstack_len,
             } => {
-                println!("program stack before function call: {:?}", self.memory);
+
                 if let Some(v_idx) = variable_idx {
                     //println!("f: {:?} on v_idx {}", f.name, v_idx);
                     //println!("current instruction: {:?}", cur_inst);
@@ -423,7 +422,8 @@ impl<'a> RunningProgramState<'a> {
                         .get(v_idx)
                         .expect("Panic: stack is empty, cannot perform function call")
                         .clone();
-                    
+
+
 
                     let interfaces = self.stdlib.get_interfaces(&lit.get_datatype()).ok_or(
                         AlthreadError::new(
@@ -469,7 +469,6 @@ impl<'a> RunningProgramState<'a> {
                 } else {
                     // currently, only the print function is implemented
                     if name == "print" {
-                        println!("program stack before print call: {:?}", self.memory);
                         let lit = self
                             .memory
                             .last()

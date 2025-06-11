@@ -195,7 +195,7 @@ impl InstructionBuilder for Node<FnCall> {
             // this is a method call
 
             //get the type of the variable in the stack with this name
-            let var_id = state
+            let raw_var_id = state
                 .program_stack
                 .iter()
                 .rev()
@@ -205,7 +205,10 @@ impl InstructionBuilder for Node<FnCall> {
                     Some(self.pos),
                     format!("Variable '{}' not found", basename),
                 ))?;
-            let var = &state.program_stack[state.program_stack.len() - var_id - 1];
+
+            let final_var_id = raw_var_id + state.method_call_stack_offset;
+
+            let var = &state.program_stack[state.program_stack.len() - 1 - raw_var_id];
 
             let interfaces = state.stdlib.interfaces(&var.datatype);
 
@@ -231,14 +234,14 @@ impl InstructionBuilder for Node<FnCall> {
                 name: "".to_string(),
                 datatype: ret_type,
                 depth: state.current_stack_depth,
-                declare_pos: None,
+                declare_pos: Some(self.pos),
             });
 
             builder.instructions.push(Instruction {
                 control: InstructionType::FnCall {
                     name: fn_name,
                     unstack_len: unstack_len,
-                    variable_idx: Some(var_id),
+                    variable_idx: Some(final_var_id),
                     arguments: None, // use the top of the stack
                 },
                 pos: Some(self.pos),

@@ -115,7 +115,8 @@ pub struct CompilerState {
     pub is_shared: bool,
     pub in_function: bool,
 
-    pub user_functions: HashMap<String, FunctionDefinition>
+    pub user_functions: HashMap<String, FunctionDefinition>,
+    pub method_call_stack_offset: usize,
 }
 
 impl CompilerState {
@@ -133,6 +134,7 @@ impl CompilerState {
             in_function: false,
             stdlib: stdlib::Stdlib::new(),
             user_functions: HashMap::new(),
+            method_call_stack_offset: 0,
         }
     }
 

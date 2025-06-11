@@ -297,9 +297,7 @@ impl LocalExpressionNode {
                     if let Some(var) = var {
                         if let Some(interfaces) = state.stdlib.get_interfaces(&var.datatype) {
                             let method_name = node.value.fn_name.last().unwrap().value.value.clone();
-                            println!("method_name: {:?}", method_name);
                             if let Some(method) = interfaces.iter().find(|m| m.name == method_name) {
-                                println!("found interface name: {}", method.name);
                                 Ok(method.ret.clone())
                             } else {
                                 Err(format!("Method {} not found in interface", method_name))
@@ -371,7 +369,6 @@ impl InstructionBuilder for Node<Expression> {
         }
 
         let local_expr = LocalExpressionNode::from_expression(&self.value, &state.program_stack)?;
-        // println!("local_expr: {:?}", local_expr.datatype(state));
         
         let result_type = local_expr.datatype(state).map_err(|err| {
             AlthreadError::new(
@@ -403,31 +400,37 @@ impl InstructionBuilder for Node<Expression> {
                 if contains_fn_call {
                     let mut compiled_args: Vec<LocalExpressionNode> = Vec::new();
                     let total_fn_calls_in_tuple = node.values.iter().filter(|e| matches!(e, LocalExpressionNode::FnCall(_))).count();
-                    let mut fn_call_processed_count = 0;
+                    let mut direct_fn_children_processed_count = 0;
+
+                    let outer_method_call_stack_offset = state.method_call_stack_offset;
 
                     for element in &node.values {
                         match element {
                             LocalExpressionNode::FnCall(node) => {
+
+                                state.method_call_stack_offset = outer_method_call_stack_offset + direct_fn_children_processed_count;
+
                                 let builder = node.compile(state)?;
                                 instructions.extend(builder.instructions);
 
-                                let runtime_stack_offset = total_fn_calls_in_tuple - 1 - fn_call_processed_count;
+                                let runtime_stack_offset = total_fn_calls_in_tuple - 1 - direct_fn_children_processed_count;
                                 compiled_args.push(LocalExpressionNode::Primary(
                                     LocalPrimaryExpressionNode::Var(LocalVarNode {
                                         index: runtime_stack_offset,
                                     }),
                                 ));
-                                fn_call_processed_count += 1;
+                                direct_fn_children_processed_count += 1;
                                 state.program_stack.pop();
                             }
                             _ => {
-                                println!("element: {:?}", element);
+                                // If it's not a function call, we just clone the element
+                                // and push it to the compiled_args
                                 compiled_args.push(element.clone());
                             }
                         }
                     }
-
-                    println!("compiled_args: {:?}", compiled_args);
+                    
+                    state.method_call_stack_offset = outer_method_call_stack_offset;
 
                     instructions.push(Instruction {
                         pos: Some(self.pos),
