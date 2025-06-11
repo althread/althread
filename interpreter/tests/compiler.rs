@@ -1,7 +1,7 @@
 use althread::{
     ast::{
         statement::expression::{
-            binary_expression::LocalBinaryExpressionNode, primary_expression::{LocalLiteralNode, LocalPrimaryExpressionNode, LocalVarNode}, tuple_expression::LocalTupleExpressionNode, Expression, LocalExpressionNode
+            binary_expression::LocalBinaryExpressionNode, primary_expression::{LocalLiteralNode, LocalPrimaryExpressionNode, LocalVarNode}, tuple_expression::LocalTupleExpressionNode, LocalExpressionNode
         },
         token::{
             binary_assignment_operator::BinaryAssignmentOperator, binary_operator::BinaryOperator,
@@ -334,7 +334,7 @@ main {
                     values: vec![LocalExpressionNode::Primary(
                         LocalPrimaryExpressionNode::Literal(
                             LocalLiteralNode {
-                                value: Literal::String("\"done\"".to_string())
+                                value: Literal::String("done".to_string())
                             }
                         )
                     )],
