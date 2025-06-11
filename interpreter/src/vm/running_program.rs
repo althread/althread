@@ -244,6 +244,29 @@ impl<'a> RunningProgramState<'a> {
                 self.memory.push(lit);
                 1
             }
+            InstructionType::MakeTupleAndCleanup { elements, unstack_len } => {
+                let mut evaluated_elements = Vec::new();
+
+                for expr_node in elements {
+                    let val = expr_node
+                        .eval(&mut self.memory)
+                        .map_err(|msg| {AlthreadError::new(ErrorType::ExpressionError, cur_inst.pos, msg)})?;
+                    evaluated_elements.push(val);
+                }
+
+                for _ in 0..*unstack_len {
+                    if self.memory.pop().is_none() {
+                        return Err(AlthreadError::new(
+                            ErrorType::RuntimeError,
+                            cur_inst.pos,
+                            "Stack underflow during tuple cleanup.".to_string(),
+                        ));
+                    }
+                }
+
+                self.memory.push(Literal::Tuple(evaluated_elements));
+                1
+            }
             InstructionType::GlobalReads { variables, .. } => {
                 for var_name in variables.iter() {
                     self.memory.push(
@@ -381,7 +404,7 @@ impl<'a> RunningProgramState<'a> {
                 self.current_code = frame.caller_code;
 
                 self.memory.push(return_value);
-
+                println!("program stack after function call: {:?}", self.memory);
                 0
             }
             InstructionType::FnCall {
@@ -390,6 +413,7 @@ impl<'a> RunningProgramState<'a> {
                 arguments,
                 unstack_len,
             } => {
+                println!("program stack before function call: {:?}", self.memory);
                 if let Some(v_idx) = variable_idx {
                     //println!("f: {:?} on v_idx {}", f.name, v_idx);
                     //println!("current instruction: {:?}", cur_inst);
@@ -399,6 +423,7 @@ impl<'a> RunningProgramState<'a> {
                         .get(v_idx)
                         .expect("Panic: stack is empty, cannot perform function call")
                         .clone();
+                    
 
                     let interfaces = self.stdlib.get_interfaces(&lit.get_datatype()).ok_or(
                         AlthreadError::new(
@@ -439,10 +464,12 @@ impl<'a> RunningProgramState<'a> {
                     }
 
                     self.memory.push(ret);
+
                     1
                 } else {
                     // currently, only the print function is implemented
                     if name == "print" {
+                        println!("program stack before print call: {:?}", self.memory);
                         let lit = self
                             .memory
                             .last()
@@ -468,6 +495,7 @@ impl<'a> RunningProgramState<'a> {
                         
 
                             let args_tuple_lit = self.memory.pop().unwrap();
+
                             let arg_values = match args_tuple_lit {
                                 Literal::Tuple(v) => v,
                                 _ => {

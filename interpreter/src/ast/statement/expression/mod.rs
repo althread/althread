@@ -12,7 +12,7 @@ use pest::{
     iterators::{Pair, Pairs},
     pratt_parser::PrattParser,
 };
-use primary_expression::{LocalPrimaryExpressionNode, PrimaryExpression};
+use primary_expression::{LocalPrimaryExpressionNode, LocalVarNode, PrimaryExpression};
 use tuple_expression::{LocalTupleExpressionNode, TupleExpression};
 use unary_expression::{LocalUnaryExpressionNode, UnaryExpression};
 
@@ -281,12 +281,35 @@ impl LocalExpressionNode {
             Self::Tuple(node) => node.datatype(state),
             Self::Range(node) => node.datatype(state),
             Self::FnCall(node) => {
-                let fn_name = &node.value.fn_name[0].value.value;
 
-                if let Some(func_def) = state.user_functions.get(fn_name) {
-                    Ok(func_def.return_type.clone())
+                if node.value.fn_name.len() == 1 {
+                    let fn_name = &node.value.fn_name[0].value.value;
+
+                    if let Some(func_def) = state.user_functions.get(fn_name) {
+                        Ok(func_def.return_type.clone())
+                    } else {
+                        Err(format!("Function {} not found", fn_name))
+                    }
                 } else {
-                    Err(format!("Function {} not found", fn_name))
+
+                    let receiver_name = &node.value.fn_name[0].value.value;
+                    let var = state.program_stack.iter().rev().find(|v| &v.name == receiver_name);
+                    if let Some(var) = var {
+                        if let Some(interfaces) = state.stdlib.get_interfaces(&var.datatype) {
+                            let method_name = node.value.fn_name.last().unwrap().value.value.clone();
+                            println!("method_name: {:?}", method_name);
+                            if let Some(method) = interfaces.iter().find(|m| m.name == method_name) {
+                                println!("found interface name: {}", method.name);
+                                Ok(method.ret.clone())
+                            } else {
+                                Err(format!("Method {} not found in interface", method_name))
+                            }
+                        } else {
+                            Err(format!("No interface found for type {}", var.datatype))
+                        }
+                    } else {
+                        Err(format!("Receiver {} not found in stack", receiver_name))
+                    }
                 }
             }
         }
@@ -348,6 +371,8 @@ impl InstructionBuilder for Node<Expression> {
         }
 
         let local_expr = LocalExpressionNode::from_expression(&self.value, &state.program_stack)?;
+        // println!("local_expr: {:?}", local_expr.datatype(state));
+        
         let result_type = local_expr.datatype(state).map_err(|err| {
             AlthreadError::new(
                 ErrorType::ExpressionError,
@@ -360,6 +385,64 @@ impl InstructionBuilder for Node<Expression> {
             LocalExpressionNode::FnCall(node) => {
                 let builder = node.compile(state)?;
                 instructions.extend(builder.instructions);
+            },
+            LocalExpressionNode::Tuple(node) => {
+                let mut contains_fn_call = false;
+
+                // check if the tuple contains a function call
+                for element in &node.values {
+                    match element {
+                        LocalExpressionNode::FnCall(_) => {
+                            contains_fn_call = true;
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+
+                if contains_fn_call {
+                    let mut compiled_args: Vec<LocalExpressionNode> = Vec::new();
+                    let total_fn_calls_in_tuple = node.values.iter().filter(|e| matches!(e, LocalExpressionNode::FnCall(_))).count();
+                    let mut fn_call_processed_count = 0;
+
+                    for element in &node.values {
+                        match element {
+                            LocalExpressionNode::FnCall(node) => {
+                                let builder = node.compile(state)?;
+                                instructions.extend(builder.instructions);
+
+                                let runtime_stack_offset = total_fn_calls_in_tuple - 1 - fn_call_processed_count;
+                                compiled_args.push(LocalExpressionNode::Primary(
+                                    LocalPrimaryExpressionNode::Var(LocalVarNode {
+                                        index: runtime_stack_offset,
+                                    }),
+                                ));
+                                fn_call_processed_count += 1;
+                                state.program_stack.pop();
+                            }
+                            _ => {
+                                println!("element: {:?}", element);
+                                compiled_args.push(element.clone());
+                            }
+                        }
+                    }
+
+                    println!("compiled_args: {:?}", compiled_args);
+
+                    instructions.push(Instruction {
+                        pos: Some(self.pos),
+                        control: InstructionType::MakeTupleAndCleanup {
+                            elements: compiled_args,
+                            unstack_len: total_fn_calls_in_tuple
+                        }
+                    });
+
+                } else {
+                    instructions.push(Instruction {
+                    pos: Some(self.pos),
+                    control: InstructionType::Expression(local_expr),
+                    });
+                }
             },
             _ => {        
                 instructions.push(Instruction {

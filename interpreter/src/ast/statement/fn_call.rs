@@ -72,10 +72,8 @@ impl InstructionBuilder for Node<FnCall> {
         state.current_stack_depth += 1;
 
 
-        // flatten nested function calls in arguments
-
-
         builder.extend(self.value.values.compile(state)?);
+
 
         // normally it's always a tuple so it's always 1 argument
         // Tuple([]) when nothing is passed as argument
@@ -84,6 +82,9 @@ impl InstructionBuilder for Node<FnCall> {
             .last()
             .cloned()
             .expect("Stack should not be empty");
+
+        // println!("args_on_stack_var: {:?}", args_on_stack_var);
+
 
         // get the function's basename (the last identifier in the fn_name)
         let basename = &self.value.fn_name[0].value.value;
@@ -138,6 +139,16 @@ impl InstructionBuilder for Node<FnCall> {
 
                 let unstack_len = state.unstack_current_depth();
 
+
+                state.program_stack.push(Variable {
+                    mutable: true,
+                    name: "".to_string(),
+                    datatype: func_def.return_type.clone(),
+                    depth: state.current_stack_depth,
+                    declare_pos: Some(self.pos),
+                });
+
+
                 builder.instructions.push(Instruction {
                     control: InstructionType::FnCall { 
                         name: basename.to_string(), 
@@ -148,18 +159,18 @@ impl InstructionBuilder for Node<FnCall> {
                     pos: Some(self.pos),
                 });
 
+            } else if basename == "print" {
+
+                let unstack_len = state.unstack_current_depth();
+
 
                 state.program_stack.push(Variable {
                     mutable: true,
                     name: "".to_string(),
-                    datatype: func_def.return_type.clone(),
+                    datatype: DataType::Void,
                     depth: state.current_stack_depth,
                     declare_pos: Some(self.pos),
                 });
-
-            } else if basename == "print" {
-
-                let unstack_len = state.unstack_current_depth();
 
                 builder.instructions.push(Instruction {
                     control: InstructionType::FnCall {
@@ -169,14 +180,6 @@ impl InstructionBuilder for Node<FnCall> {
                         arguments: None,
                     },
                     pos: Some(self.pos),
-                });
-
-                state.program_stack.push(Variable {
-                    mutable: true,
-                    name: "".to_string(),
-                    datatype: DataType::Void,
-                    depth: state.current_stack_depth,
-                    declare_pos: Some(self.pos),
                 });
 
             } else {
