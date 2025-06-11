@@ -170,6 +170,22 @@ impl<'a> ControlFlowGraph<'a> {
                     }
                     current_preceding_cfg_node_ids.clear();
                 }
+                Statement::Atomic(atomic_node) => {
+                    let inner_stmt_node_ref: &Node<Statement> = &atomic_node.value.statement.as_ref();
+
+                    let (_inner_atomic_entry_id, inner_atomic_open_ends) =
+                        ControlFlowGraph::build_cfg_recursive(
+                            match &inner_stmt_node_ref.value {
+                                Statement::Block(inner_block) => &inner_block.value.children,
+                                _ => std::slice::from_ref(inner_stmt_node_ref),
+                            },
+                            vec![current_stmt_cfg_node_id],
+                            nodes,
+                            next_id_counter,
+                            function_exit_id,
+                        );
+                    current_preceding_cfg_node_ids = inner_atomic_open_ends;
+                }
                 Statement::If(if_control_node) => {
                     current_preceding_cfg_node_ids.clear();
 
@@ -220,6 +236,17 @@ impl<'a> ControlFlowGraph<'a> {
         (first_cfg_node_in_this_sequence, current_preceding_cfg_node_ids)
     }
 
+    /// Finds the first point in the CFG where a path might be missing a return.
+    ///
+    /// Args:
+    ///   - `fn_body_pos_for_empty_case`: The `Pos` of the entire function block. This is used
+    ///     if a non-void function is empty and thus trivially misses a return.
+    ///
+    /// Returns:
+    ///   - `Some(Pos)`: The position of an AST node related to the first detected non-returning path.
+    ///     This could be the last statement on such a path, or an 'if' statement where a branch
+    ///     doesn't return, or `fn_body_pos_for_empty_case` if the function body is empty.
+    ///   - `None`: If all paths are found to have an explicit return statement.
     pub fn find_first_missing_return_point(&self, fn_body_for_empty_case: Pos) -> Option<Pos> {
         let mut visited_on_current_path = HashSet::new();
         let mut globally_visited_tuples = HashSet::new();
