@@ -29,7 +29,7 @@ use crate::{
         instruction::{Instruction, InstructionType, ProgramCode},
         VM,
     },
-    analysis::cfg::ControlFlowGraph,
+    analysis::control_flow_graph::ControlFlowGraph,
 };
 
 #[derive(Debug)]

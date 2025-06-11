@@ -1,1 +1,1 @@
-pub mod cfg;
+pub mod control_flow_graph;
