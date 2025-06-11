@@ -69,7 +69,7 @@ impl<'a> ControlFlowGraph<'a> {
         );
 
 
-        println!("Building CFG for function with entry node ID: {}, exit node ID: {}", entry_node_id, exit_node_id);
+        // println!("Building CFG for function with entry node ID: {}, exit node ID: {}", entry_node_id, exit_node_id);
 
 
         let (_first_actual_stmt_node_id, open_ends_from_body) =
@@ -81,7 +81,7 @@ impl<'a> ControlFlowGraph<'a> {
                 exit_node_id,
             ); 
 
-        println!("CFG built with {} nodes", nodes.len());
+        // println!("CFG built with {} nodes", nodes.len());
 
         if fn_body_node.value.children.is_empty() {
             if let Some(entry_cfg_node) = nodes.get_mut(&entry_node_id) {
@@ -227,7 +227,7 @@ impl<'a> ControlFlowGraph<'a> {
                         );
                     current_preceding_cfg_node_ids = inner_block_open_ends;
                 }
-                // todo!("Handle while, for, loop, atomic, etc. statements")
+                // todo!("Handle while, for, loop, etc. statements")
                 _ => {
                 }
             }

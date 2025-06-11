@@ -48,7 +48,7 @@ pub fn check_function_returns(func_name: &str,  func_body: &Node<Block>, return_
     let cfg = ControlFlowGraph::from_function(func_body);
     
     // display the control flow graph for debugging
-    cfg.display();
+    // cfg.display();
 
 
     // we need to return the function at line does not return a value
