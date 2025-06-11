@@ -5,7 +5,7 @@ use wasm_bindgen::prelude::*;
 use althread::{ast::Ast, checker, error::AlthreadError, vm::GlobalAction};
 use althread::{vm::instruction::InstructionType};
 use althread::{vm::VM};
-use althread::ast::token::literal::Literal; ///////////////
+use althread::ast::token::literal::Literal;
 
 const SEND: u8 = b's';
 const RECV: u8 = b'r';
@@ -96,7 +96,7 @@ pub fn run(source: &str) -> Result<JsValue, JsValue> {
     let mut stdout = vec![];
     let mut messageFlow_graph = Vec::new();
     let mut nmsg_sent:usize = 0;
-    let mut vm_states = Vec::new(); /////
+    let mut vm_states = Vec::new();
     let mut i = 0; //index for vm_states
 
     for _ in 0..100000 {
@@ -105,10 +105,10 @@ pub fn run(source: &str) -> Result<JsValue, JsValue> {
             break;
         }
         let info = vm.next_random().map_err(error_to_js)?;
-        vm_states.push(vm.clone()); /////////////////////
+        vm_states.push(vm.clone());
         for inst in info.instructions.iter() {
             result.push_str(&format!("#{}: {}\n", info.prog_id, inst));
-            /////////////////////////////////////////////////////////////////
+            
             if let InstructionType::ChannelPop(ref s) = &inst.control{
                 if i>0 { //first vm shouldn't be able to read anything 
                     let previous_vm = vm_states.get(i-1);
@@ -134,9 +134,8 @@ pub fn run(source: &str) -> Result<JsValue, JsValue> {
                         }
                     }  
                 }       
-            }
-            ///////////////////////////////////////////////////////////////////     
-        }
+            }  
+        } //it didnt wanna work without the if let if let if let if let
     
         for p in info.actions.iter() {
             if let GlobalAction::Print(s) = p {
@@ -144,12 +143,6 @@ pub fn run(source: &str) -> Result<JsValue, JsValue> {
             }
             match p{
                 GlobalAction::Send(s, Some(receiverinfos)) => {
-                  //  if i>0 {
-                    //    let previous_vm = vm_states.get(i-1);
-                   // if let Some(chan_content) = previous_vm.unwrap().channels.getStates().get(&(info.prog_id, s.to_string())){
-                      //  if let Some(Literal::Tuple(ref msg)) = chan_content.get(0){ //messsage popped
-                        //    if let Some(Literal::Tuple(ref sender_info)) = msg.get(0){
-                          //      if let Some(Literal::Int(clock)) = sender_info.get(1){
                                     nmsg_sent+=1;
                                     let event = MessageFlowEvent {
                                         sender: info.prog_id, 
@@ -160,11 +153,6 @@ pub fn run(source: &str) -> Result<JsValue, JsValue> {
                                         vm_state: vm.clone(),
                                     };
                                     messageFlow_graph.push(event);
-                            //    }
-                            //}
-                        //}
-                    //}
-                
                 }
                 GlobalAction::Send(s, None) => { //broadcast
                     nmsg_sent+=1;

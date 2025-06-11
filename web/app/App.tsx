@@ -149,7 +149,6 @@ export default function App() {
                   let res = run(editor.editorView().state.doc.toString());
                   let proglist = extractProgs(res.vm_states);
                   setProgList(proglist);
-                  //console.log("MessageFlow Graph:", res.messageFlow_graph);
                   console.log(res.vm_states);
                   setOut(res.debug);
                   setCommGraphOut(res.messageFlow_graph); //set the message flow data

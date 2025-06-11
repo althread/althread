@@ -68,12 +68,11 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
   onMount(() => {
     if (!commGraphData) return;
 
-    const nodes= new vis.DataSet(); //{id: string; x: number; y: number; shape: string; size: number; color: string}[] = [];
-    const edges = new vis.DataSet(); //{from: string; to: string; color: string; width?: number; label?: string; arrows?: string; font?: object}[] = [];
+    const nodes= new vis.DataSet();
+    const edges = new vis.DataSet();
     const processLines = new Map(); //coordinates of start&end of each process line
     const processes: string[] = [];
 
-    //console.log(prog_list);
     // extract processes name to make one line per process
       processes.push("main");
       prog_list.forEach(prog =>{
@@ -127,7 +126,7 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
       let id_txt = "p";
       let evt_type = String.fromCharCode(event.evt_type);
       
-      //lengthen the process lines for each new event so it doesn't go overboard
+      //lengthen the process lines for each new event so it doesnt go overboard
       for(let j = 0; j<processes.length; ++j){
         nodes.update({id: `p${j}_end`, x: 450+20+50*i});
       }
@@ -136,7 +135,6 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
       if ( evt_type === 'r') {
         yposLine = event.receiver; //reception -> node on receiver line
         id_txt += event.receiver.toString();
-        //console.log("evt num recv : " + event.number);
         id_txt += "_recv" + "_from" + event.sender + "_"  + event.number;
        
       }
@@ -145,7 +143,7 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
         let id_suite;
         yposLine = event.sender;
         id_txt += event.sender.toString();
-        //console.log("evt num send : " + nmsg_sent[event.sender]);
+        
         if (event.receiver === undefined){
           broadcast = true;
           id_suite = "B";
