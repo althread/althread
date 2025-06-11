@@ -29,6 +29,7 @@ use crate::{
         instruction::{Instruction, InstructionType, ProgramCode},
         VM,
     },
+    analysis::cfg::ControlFlowGraph,
 };
 
 #[derive(Debug)]
@@ -37,6 +38,34 @@ pub struct Ast {
     pub condition_blocks: HashMap<ConditionKeyword, Node<ConditionBlock>>,
     pub global_block: Option<Node<Block>>,
     pub function_blocks: HashMap<String, (Node<ArgsList>, DataType, Node<Block>)>,
+}
+
+pub fn check_function_returns(func_name: &str,  func_body: &Node<Block>, return_type: &DataType) -> AlthreadResult<()> {
+    if matches!(return_type, DataType::Void) {
+        return Ok(());
+    }
+
+    let cfg = ControlFlowGraph::from_function(func_body);
+    
+    // display the control flow graph for debugging
+    // cfg.display();
+
+
+    // we need to return the function at line does not return a value
+    // and say on which line it does not return a value
+    
+    if let Some(missing_return_pos) = cfg.find_first_missing_return_point(func_body.pos) {
+        return Err(AlthreadError::new(
+            ErrorType::FunctionMissingReturnStatement,
+            Some(missing_return_pos), // Use the specific Pos found by the CFG analysis
+            format!(
+                "Function '{}' does not return a value on all code paths. Problem detected in construct starting at line {}.",
+                func_name, missing_return_pos.line
+            ),
+        ));
+    }
+
+    Ok(())
 }
 
 impl Ast {
@@ -219,6 +248,13 @@ impl Ast {
                 body: Vec::new(),
                 pos: func_block.pos,
             };
+
+            // println!("Function body for {}: {:?}", func_name, func_block);
+
+            if let Err(e) = check_function_returns(&func_name,func_block, return_datatype){
+                return Err(e);
+            }
+
             state.user_functions.insert(func_name.clone(), func_def);
         }
 
