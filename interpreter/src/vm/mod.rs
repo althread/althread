@@ -1,10 +1,7 @@
 use core::panic;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
-    fmt,
-    hash::{Hash, Hasher},
-    rc::Rc,
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fmt, hash::{Hash, Hasher}, rc::Rc
 };
 
 use channels::{Channels, ChannelsState, ReceiverInfo};
@@ -34,7 +31,7 @@ pub struct ExecutionStepInfo {
     pub prog_name: String,
     pub prog_id: usize,
     pub instructions: Vec<Instruction>,
-    pub invariant_error: AlthreadResult<()>,
+    pub invariant_error: AlthreadResult<i32>,
     pub actions: Vec<GlobalAction>,
 }
 
@@ -70,6 +67,7 @@ pub struct VM<'a> {
     pub user_funcs: &'a HashMap<String, FunctionDefinition>,
     pub executable_programs: BTreeSet<usize>, // needs to be sorted to have a deterministic behavior
     pub always_conditions: &'a Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
+    pub eventually_conditions : &'a Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>, // adding a eventually conditions structure
 
     /// The programs that are waiting for a condition to be true
     /// The condition depends on the global variables that are in the HashSet
@@ -90,6 +88,7 @@ impl<'a> VM<'a> {
             programs_code: &compiled_project.programs_code,
             user_funcs: &compiled_project.user_functions,
             always_conditions: &compiled_project.always_conditions,
+            eventually_conditions: &compiled_project.eventually_conditions,
             next_program_id: 0,
             waiting_programs: HashMap::new(),
             rng: Rng::new(),
@@ -159,13 +158,14 @@ impl<'a> VM<'a> {
             .get_mut(*program)
             .expect("program is executable but not found in running programs");
         let program_id = program.id;
-
+        
+       
         let mut exec_info = ExecutionStepInfo {
             prog_name: program.name.clone(),
             prog_id: program_id,
             instructions: Vec::new(),
             actions: Vec::new(),
-            invariant_error: Ok(()),
+            invariant_error: Ok(0),
         };
 
         let (actions, executed_instructions) = program.next_global(
@@ -265,6 +265,8 @@ impl<'a> VM<'a> {
             self.waiting_programs.remove(&remove_id);
         }
 
+        // TODO this method should be modified so eventually violation generate an error, 
+        // for example by having a encounterd eventually counter, if the final VM's counter is == 0 no block validated eventually and path is wrong
         if need_to_check_invariants {
             exec_info.invariant_error = self.check_invariants();
         }
@@ -290,7 +292,7 @@ impl<'a> VM<'a> {
             prog_id: pid,
             instructions: Vec::new(),
             actions: Vec::new(),
-            invariant_error: Ok(()),
+            invariant_error: Ok(0),
         };
 
         let (actions, executed_instructions) = program.next_global(
@@ -439,7 +441,10 @@ impl<'a> VM<'a> {
         (&self.globals, self.channels.state(), local_states)
     }
 
-    pub fn check_invariants(&self) -> AlthreadResult<()> {
+    //42 this check invariants, actually it only check always digging in to either expand it to take in account eventually or do a special one for eventually
+    // return OK(0) if only always is verified
+    // return OK(1) if eventually is also true
+    pub fn check_invariants(&self) -> AlthreadResult<i32> {
         for (_deps, read_vars, expr, pos) in self.always_conditions.iter() {
             //if _deps.contains(&var_name) { //TODO improve by checking if the variable is in the dependencies
             // Check if the condition is true
@@ -475,7 +480,38 @@ impl<'a> VM<'a> {
             //}
         }
 
-        Ok(())
+        // now checking eventually
+        for (_deps, read_vars, expr, pos) in self.eventually_conditions.iter() {
+            //if _deps.contains(&var_name) { //TODO improve by checking if the variable is in the dependencies
+            // Check if the eventually condition is true
+            // create a small memory stack with the value of the variables
+            let mut memory = Vec::new();
+            for var_name in read_vars.iter() {
+                memory.push(
+                    self.globals
+                        .get(var_name)
+                        .expect(format!("global variable '{}' not found", var_name).as_str())
+                        .clone(),
+                );
+            }
+            match expr.eval(&memory) {
+                Ok(cond) => {
+                    if !cond.is_true() {
+                        return Ok(0); // eventually not checking on a specific state isn't an error
+                    } 
+                }
+                Err(e) => {
+                    return Err(AlthreadError::new(
+                        ErrorType::ExpressionError,
+                        Some(*pos),
+                        e,
+                    ));
+                }
+            }
+
+            //}
+        }
+        Ok(1) // if the eventually is valid we say it in the return
     }
 }
 

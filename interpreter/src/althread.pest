@@ -21,7 +21,7 @@ code_block           = { "{" ~ statement* ~ "}" }
 expression_block     = { "{" ~ expression_statement* ~ "}" }
 expression_statement = { expression ~ ";" }
 
-condition_keywords = _{ ALWAYS_KW | NEVER_KW }
+condition_keywords = _{ ALWAYS_KW | NEVER_KW | EVENTUALLY_KW }
 
 /// ## Statements
 /// Statements are the executable instructions in the language.
@@ -158,6 +158,7 @@ KEYWORDS = _{
   | GLOBAL_KW
   | PROGRAM_KW
   | ALWAYS_KW
+  | EVENTUALLY_KW
   | NEVER_KW
   | RUN_KW
   | LET_KW
@@ -179,6 +180,7 @@ GLOBAL_KW  = _{ "shared" }
 PROGRAM_KW = _{ "program" }
 WAIT_KW    = _{ "await" }
 ALWAYS_KW  =  { "always" }
+EVENTUALLY_KW  =  { "eventually" }
 NEVER_KW   =  { "never" }
 RUN_KW     = _{ "run" }
 
