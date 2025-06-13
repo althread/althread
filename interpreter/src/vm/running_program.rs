@@ -508,7 +508,6 @@ impl<'a> RunningProgramState<'a> {
                                 }
                             };
 
-                            self.frame_pointer = self.memory.len();
                             
                             self.call_stack.push(StackFrame {
                                 return_ip: self.instruction_pointer + 1,
@@ -516,6 +515,8 @@ impl<'a> RunningProgramState<'a> {
                                 caller_code: self.current_code,
                                 expected_return_type: func_def.return_type.clone(),
                             });
+
+                            self.frame_pointer = self.memory.len();
 
 
                             for arg in arg_values {
