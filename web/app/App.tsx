@@ -103,7 +103,7 @@ export default function App() {
       } else if (activetab() === "msg_flow") {
         return ( //run + message flow tab
             <div class="console">
-           {renderMessageFlowGraph(commgraphout(), prog_list(), vm_states())}
+              <div>{renderMessageFlowGraph(commgraphout(), prog_list(), vm_states())}</div>
             </div>
         );
       } else if (activetab() === "vm_states"){
@@ -157,7 +157,7 @@ export default function App() {
                   setCommGraphOut(res.messageFlow_graph); //set the message flow data
                   setVmStates(res.vm_states);
                   setStdout(res.stdout.join('\n'));
-                } catch(e) {
+                } catch(e: any) {
                   setOut("ERROR: "+(e.pos && ('line '+e.pos.line))+"\n"+e.message);
                 }
               }}>
@@ -210,7 +210,7 @@ export default function App() {
                   setEdges(edges);
                   setIsRun(false);
 
-                } catch(e) {
+                } catch(e: any) {
                   setOut("ERROR: "+(e.pos && ('line '+e.pos.line))+"\n"+e.message);
                 }
               }}>
@@ -246,23 +246,14 @@ export default function App() {
         <Resizable.Panel class="right-panel"
           initialSize={0.45}
           minSize={0.2}>
-          <Resizable orientation="vertical" class="size-full">
-          <Resizable.Panel class="console-panel" 
-            initialSize={0.1} 
-            minSize={0.2}>
+
             <div>
               <h3>Console</h3>
               <div class="console">
                 <pre>{stdout()}</pre>
               </div>
             </div>
-          </Resizable.Panel>
 
-          <Resizable.Handle class="Resizable-handle-vertical"/>
-          
-          <Resizable.Panel class="execution-content-panel"
-            initialSize={0.9}
-            minSize={0.2}>
             <div class="execution_content">
               <div class ="tab">
                 <button class ={`tab_button ${activetab() === "execution" ? "active" : ""}`}
@@ -284,8 +275,6 @@ export default function App() {
                 </div>
             </div>
             
-          </Resizable.Panel>
-          </Resizable>
        
         </Resizable.Panel>
       </Resizable>

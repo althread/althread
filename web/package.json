@@ -2,6 +2,7 @@
   "name": "solid-parcel-template",
   "source": "app/index.html",
   "scripts": {
+    "dev": "parcel",
     "start": "parcel --no-hmr",
     "build": "parcel build",
     "build-lezer": "lezer-generator lezer/althread.grammar -o lezer/parser.js",
