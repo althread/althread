@@ -83,8 +83,6 @@ impl InstructionBuilder for Node<FnCall> {
             .cloned()
             .expect("Stack should not be empty");
 
-        // println!("args_on_stack_var: {:?}", args_on_stack_var);
-
 
         // get the function's basename (the last identifier in the fn_name)
         let basename = &self.value.fn_name[0].value.value;

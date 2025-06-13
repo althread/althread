@@ -378,8 +378,11 @@ impl InstructionBuilder for Node<Expression> {
             )
         })?;
 
+        let mut is_direct_fn_call_expression = false;
+
         match &local_expr {
             LocalExpressionNode::FnCall(node) => {
+                is_direct_fn_call_expression = true;
                 let builder = node.compile(state)?;
                 instructions.extend(builder.instructions);
             },
@@ -401,7 +404,9 @@ impl InstructionBuilder for Node<Expression> {
                     let mut compiled_args: Vec<LocalExpressionNode> = Vec::new();
                     let total_fn_calls_in_tuple = node.values.iter().filter(|e| matches!(e, LocalExpressionNode::FnCall(_))).count();
                     let mut direct_fn_children_processed_count = 0;
-
+                    
+                    // if we have nested method calls, we need to keep track of the object on which
+                    // the method is called, so we can pass it as an argument to the method call
                     let outer_method_call_stack_offset = state.method_call_stack_offset;
 
                     for element in &node.values {
@@ -455,15 +460,18 @@ impl InstructionBuilder for Node<Expression> {
             }
         }
 
-
-
-        state.program_stack.push(Variable {
-            name: "".to_string(),
-            depth: state.current_stack_depth,
-            mutable: false,
-            datatype: result_type,
-            declare_pos: None,
-        });
+        // if the expression is a function call, we don't need to push a variable on the stack
+        // because the function call will handle the return value
+        // otherwise, we push a variable on the stack with the result type
+        if !is_direct_fn_call_expression {
+            state.program_stack.push(Variable {
+                name: "".to_string(),
+                depth: state.current_stack_depth,
+                mutable: false,
+                datatype: result_type,
+                declare_pos: None,
+            });
+        }
 
         Ok(InstructionBuilderOk::from_instructions(instructions))
     }
