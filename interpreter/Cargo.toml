@@ -14,3 +14,7 @@ pest_derive = { workspace = true }
 fastrand = { workspace = true }
 serde = { workspace = true }
 ordered-float = { workspace = true }
+
+[[bench]]
+name = "bench-examples"
+harness = false

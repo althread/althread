@@ -3,6 +3,7 @@
 import { createSignal, onCleanup, onMount } from "solid-js";
 import Resizable from '@corvu/resizable'
 import { Example1 } from "./examples/example1";
+import { useNavigate } from "@solidjs/router";
 
 import init, { compile, run, check } from '../pkg/althread_web';
 import createEditor from './Editor';
@@ -57,6 +58,8 @@ export const nodeToString = (n: Node) => {
 
 
 export default function App() {
+
+  const navigate = useNavigate();
 
   let defaultValue =  Example1;
   if(localStorage.getItem('source-code')) {
@@ -225,6 +228,12 @@ export default function App() {
               }}>
                 <i class="codicon codicon-clear-all"></i>
                 Reset</button>
+              <button 
+                class="vscode-button"
+                onClick={() => { navigate('/tutorial'); }}>
+                  <i class="codicon codicon-book"></i>
+                  Tutorials
+              </button>
             </div>
       </div>
       <Resizable id="content">

@@ -18,10 +18,10 @@ use display::{AstDisplay, Prefix};
 use node::{InstructionBuilder, Node};
 use pest::iterators::Pairs;
 use statement::Statement;
-use token::{args_list::ArgsList, condition_keyword::ConditionKeyword};
+use token::{args_list::ArgsList, condition_keyword::ConditionKeyword, datatype::DataType, identifier::Identifier};
 
 use crate::{
-    compiler::{CompiledProject, CompilerState, Variable},
+    compiler::{CompiledProject, CompilerState, FunctionDefinition, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
     no_rule,
     parser::Rule,
@@ -29,6 +29,7 @@ use crate::{
         instruction::{Instruction, InstructionType, ProgramCode},
         VM,
     },
+    analysis::control_flow_graph::ControlFlowGraph,
 };
 
 #[derive(Debug)]
@@ -36,6 +37,35 @@ pub struct Ast {
     pub process_blocks: HashMap<String, (Node<ArgsList>, Node<Block>)>,
     pub condition_blocks: HashMap<ConditionKeyword, Node<ConditionBlock>>,
     pub global_block: Option<Node<Block>>,
+    pub function_blocks: HashMap<String, (Node<ArgsList>, DataType, Node<Block>)>,
+}
+
+pub fn check_function_returns(func_name: &str,  func_body: &Node<Block>, return_type: &DataType) -> AlthreadResult<()> {
+    if matches!(return_type, DataType::Void) {
+        return Ok(());
+    }
+
+    let cfg = ControlFlowGraph::from_function(func_body);
+    
+    // display the control flow graph for debugging
+    // cfg.display();
+
+
+    // we need to return the function at line does not return a value
+    // and say on which line it does not return a value
+    
+    if let Some(missing_return_pos) = cfg.find_first_missing_return_point(func_body.pos) {
+        return Err(AlthreadError::new(
+            ErrorType::FunctionMissingReturnStatement,
+            Some(missing_return_pos), // Use the specific Pos found by the CFG analysis
+            format!(
+                "Function '{}' does not return a value on all code paths. Problem detected in construct starting at line {}.",
+                func_name, missing_return_pos.line
+            ),
+        ));
+    }
+
+    Ok(())
 }
 
 impl Ast {
@@ -44,9 +74,10 @@ impl Ast {
             process_blocks: HashMap::new(),
             condition_blocks: HashMap::new(),
             global_block: None,
+            function_blocks: HashMap::new(),
         }
     }
-
+    /// 
     pub fn build(pairs: Pairs<Rule>) -> AlthreadResult<Self> {
         let mut ast = Self::new();
         for pair in pairs {
@@ -71,6 +102,7 @@ impl Ast {
                     let condition_keyword = match keyword_pair.as_rule() {
                         Rule::ALWAYS_KW => ConditionKeyword::Always,
                         Rule::NEVER_KW => ConditionKeyword::Never,
+                        Rule::EVENTUALLY_KW => ConditionKeyword::Eventually,
                         _ => return Err(no_rule!(keyword_pair, "condition keyword")),
                     };
                     let condition_block = Node::build(pairs.next().unwrap())?;
@@ -86,6 +118,33 @@ impl Ast {
                     let program_block = Node::build(pairs.next().unwrap())?;
                     ast.process_blocks
                         .insert(process_identifier, (args_list, program_block));
+                }
+                Rule::function_block => {
+                    let mut pairs  = pair.into_inner();
+
+                    let function_identifier = pairs.next().unwrap().as_str().to_string();
+                    
+                    let args_list: Node<token::args_list::ArgsList> = Node::build(pairs.next().unwrap())?;
+                    pairs.next(); // skip the "->" token
+                    let return_datatype = DataType::from_str(pairs.next().unwrap().as_str());
+                    
+                    let function_block: Node<Block>  = Node::build(pairs.next().unwrap())?;
+                    
+                    // check if function definition is already defined
+                    if ast.function_blocks.contains_key(&function_identifier) {
+                        return Err(AlthreadError::new(
+                            ErrorType::FunctionAlreadyDefined,
+                            Some(function_block.pos),
+                            format!("Function '{}' is already defined", function_identifier),
+                        ));
+                    }
+
+                    ast.function_blocks
+                        .insert(
+                        function_identifier,
+                        (args_list, return_datatype, function_block)
+                    );
+
                 }
                 Rule::EOI => (),
                 _ => return Err(no_rule!(pair, "root ast")),
@@ -103,63 +162,174 @@ impl Ast {
         let mut global_table = HashMap::new();
         state.current_stack_depth = 1;
         state.is_shared = true;
-        match self.global_block.as_ref() {
-            Some(global) => {
-                let mut memory = VM::new_memory();
-                for node in global.value.children.iter() {
-                    match &node.value {
-                        Statement::Declaration(decl) => {
-                            let mut literal = None;
-                            let node_compiled = node.compile(&mut state)?;
-                            for gi in node_compiled.instructions {
-                                match gi.control {
-                                    InstructionType::Expression(exp) => {
-                                        literal = Some(exp.eval(&memory).or_else(|err| {
-                                            Err(AlthreadError::new(
-                                                ErrorType::ExpressionError,
-                                                gi.pos,
-                                                err,
-                                            ))
-                                        })?);
-                                    }
-                                    InstructionType::Declaration { unstack_len } => {
-                                        // do nothing
-                                        assert!(unstack_len == 1)
-                                    }
-                                    InstructionType::Push(pushed_literal) => {
-                                        literal = Some(pushed_literal)
-                                    }
-                                    _ => {
-                                        panic!("unexpected instruction in compiled declaration statement")
-                                    }
+        if let Some(global) = self.global_block.as_ref() {
+            let mut memory = VM::new_memory();
+            for node in global.value.children.iter() {
+                match &node.value {
+                    Statement::Declaration(decl) => {
+                        let mut literal = None;
+                        let node_compiled = node.compile(&mut state)?;
+                        for gi in node_compiled.instructions {
+                            match gi.control {
+                                InstructionType::Expression(exp) => {
+                                    literal = Some(exp.eval(&memory).or_else(|err| {
+                                        Err(AlthreadError::new(
+                                            ErrorType::ExpressionError,
+                                            gi.pos,
+                                            err,
+                                        ))
+                                    })?);
+                                }
+                                InstructionType::Declaration { unstack_len } => {
+                                    // do nothing
+                                    assert!(unstack_len == 1)
+                                }
+                                InstructionType::Push(pushed_literal) => {
+                                    literal = Some(pushed_literal)
+                                }
+                                _ => {
+                                    panic!("unexpected instruction in compiled declaration statement")
                                 }
                             }
+                          }
                             let literal = literal
-                                .expect("declaration did not compiled to expression nor PushNull");
+                                .expect("declaration did not compile to expression nor PushNull");
                             memory.push(literal);
+
                             let var_name = &decl.value.identifier.value.value;
                             global_table.insert(
                                 var_name.clone(),
                                 state.program_stack.last().unwrap().clone(),
                             );
                             global_memory.insert(var_name.clone(), memory.last().unwrap().clone());
-                        }
-                        _ => return Err(AlthreadError::new(
+                    }
+                    _ => {
+                        return Err(AlthreadError::new(
                             ErrorType::InstructionNotAllowed,
                             Some(node.pos),
                             "The 'shared' block can only contains assignment from an expression"
                                 .to_string(),
-                        )),
+                        ))
                     }
                 }
             }
-            None => (),
-        };
+        }
 
         state.global_table = global_table;
 
         state.unstack_current_depth();
         assert!(state.current_stack_depth == 0);
+
+
+        // functions baby ??
+        // allow cross-function calls, recursive calls
+        // this creates FunctionDefinitions without the compiled body, so that
+        // compilation can be done no matter the order of the functions
+        // or if they are recursive
+        for (func_name, (args_list, return_datatype, func_block)) in &self.function_blocks {
+            // check if the function is already defined
+            if state.user_functions.contains_key(func_name) {
+                return Err(AlthreadError::new(
+                    ErrorType::FunctionAlreadyDefined,
+                    Some(func_block.pos),
+                    format!("Function '{}' is already defined", func_name),
+                ));
+            }
+            // add the function to the user functions
+            let arguments: Vec<(Identifier, DataType)> = args_list.value
+                .identifiers
+                .iter()
+                .zip(args_list.value.datatypes.iter())
+                .map(|(id, dt)| (id.value.clone(), dt.value.clone()))
+                .collect();
+
+            let func_def = FunctionDefinition {
+                name: func_name.clone(),
+                arguments: arguments.clone(),
+                return_type: return_datatype.clone(),
+                body: Vec::new(),
+                pos: func_block.pos,
+            };
+
+            // println!("Function body for {}: {:?}", func_name, func_block);
+
+            if let Err(e) = check_function_returns(&func_name,func_block, return_datatype){
+                return Err(e);
+            }
+
+            state.user_functions.insert(func_name.clone(), func_def);
+        }
+
+
+        for (func_name, (args_list, return_datatype, func_block)) in &self.function_blocks {
+
+            state.in_function = true;
+            state.current_stack_depth += 1;
+            let initial_stack_len = state.program_stack.len();
+
+            let arguments: Vec<(Identifier, DataType)> = args_list.value
+                .identifiers
+                .iter()
+                .zip(args_list.value.datatypes.iter())
+                .map(|(id, dt)| {
+                    // add the arguments to the stack
+                    state.program_stack.push(Variable {
+                        name: id.value.value.clone(),
+                        depth: state.current_stack_depth,
+                        mutable: true,
+                        datatype: dt.value.clone(),
+                        declare_pos: Some(id.pos),
+                    });
+                    (id.value.clone(), dt.value.clone())
+                })
+                .collect();
+
+
+            // compile the function body
+            let mut compiled_body = func_block.compile(&mut state)?;
+            
+            // if the function's return datatype is Void
+            if *return_datatype == DataType::Void {
+                let mut has_return = false;
+                // check if it has a return instruction as the last instruction
+                match compiled_body.instructions.last() {
+                    Some(last_instruction) => {
+                        if let InstructionType::Return { has_value: false } = &last_instruction.control {
+                            has_return = true;
+                        }
+                    }
+                    None => {}
+                }
+                // if it does not have a return instruction, add one
+                if !has_return {
+                    compiled_body.instructions.push(
+                        Instruction {
+                            control: InstructionType::Return {
+                                has_value: false,
+                            },
+                            pos: Some(func_block.pos),
+                        },
+                    );
+                }
+            }
+
+            // clean up compiler state
+            state.program_stack.truncate(initial_stack_len);
+            state.current_stack_depth -= 1;
+            state.in_function = false;
+
+
+            let func_def = FunctionDefinition {
+                name: func_name.clone(),
+                arguments,
+                return_type: return_datatype.clone(),
+                body: compiled_body.instructions,
+                pos: func_block.pos,
+            };
+
+            state.user_functions.insert(func_name.clone(), func_def);
+
+        }
 
         // before compiling the programs, get the list of program names and their arguments
         state.program_arguments = self
@@ -186,7 +356,7 @@ impl Ast {
         programs_code.insert("main".to_string(), code);
         assert!(state.current_stack_depth == 0);
 
-        for (name, _) in self.process_blocks.iter() {
+        for name in self.process_blocks.keys() {
             if name == "main" {
                 continue;
             }
@@ -196,7 +366,7 @@ impl Ast {
         }
 
         // check if all the channed used have been declared
-        for (channel_name, (_, pos)) in state.undefined_channels.iter() {
+        for (channel_name, (_, pos)) in &state.undefined_channels {
             return Err(AlthreadError::new(
                 ErrorType::UndefinedChannel,
                 Some(pos.clone()),
@@ -208,6 +378,8 @@ impl Ast {
         }
 
         let mut always_conditions = Vec::new();
+        let mut eventually_conditions = Vec::new();
+
         for (name, condition_block) in self.condition_blocks.iter() {
             match name {
                 ConditionKeyword::Always => {
@@ -252,15 +424,61 @@ impl Ast {
                         }
                     }
                 }
+                // TODO  since the content is sensitively similar to always block find a way to combine both to avoid code duplication
+                ConditionKeyword::Eventually => {
+                    for condition in condition_block.value.children.iter() {
+                        let compiled = condition.compile(&mut state)?.instructions;
+                        if compiled.len() == 1 {
+                            return Err(AlthreadError::new(
+                                ErrorType::InstructionNotAllowed,
+                                Some(condition.pos),
+                                "The condition must depend on shared variable(s)".to_string(),
+                            ));
+                        }
+                        if compiled.len() != 2 {
+                            return Err(AlthreadError::new(
+                                ErrorType::InstructionNotAllowed,
+                                Some(condition.pos),
+                                "The condition must be a single expression".to_string(),
+                            ));
+                        }
+                        if let InstructionType::GlobalReads { variables, .. } = &compiled[0].control
+                        {
+                            if let InstructionType::Expression(exp) = &compiled[1].control {
+                                eventually_conditions.push((
+                                    variables.iter().map(|s| s.clone()).collect(),
+                                    variables.clone(),
+                                    exp.clone(),
+                                    condition.pos,
+                                ));
+                            } else {
+                                return Err(AlthreadError::new(
+                                    ErrorType::InstructionNotAllowed,
+                                    Some(condition.pos),
+                                    "The condition must be a single expression".to_string(),
+                                ));
+                            }
+                        } else {
+                            return Err(AlthreadError::new(
+                                ErrorType::InstructionNotAllowed,
+                                Some(condition.pos),
+                                "The condition must depend on shared variable(s)".to_string(),
+                            ));
+                        }
+                    }
+                }
                 _ => {}
             }
+        
         }
-
         Ok(CompiledProject {
             global_memory,
+            user_functions: state.user_functions.clone(),
             programs_code,
             always_conditions,
+            eventually_conditions,
             stdlib: Rc::new(state.stdlib),
+            
         })
     }
     fn compile_program(
@@ -292,7 +510,7 @@ impl Ast {
         if compiled.contains_jump() {
             unimplemented!("breaks or return statements in programs are not yet implemented");
         }
-        if args.value.identifiers.len() > 0 {
+        if !args.value.identifiers.is_empty() {
             process_code.instructions.push(Instruction {
                 control: InstructionType::Destruct,
                 pos: Some(args.pos),
@@ -331,6 +549,12 @@ impl AstDisplay for Ast {
         for (process_name, (_args, process_node)) in &self.process_blocks {
             writeln!(f, "{}{}", prefix, process_name)?;
             process_node.ast_fmt(f, &prefix.add_branch())?;
+            writeln!(f, "")?;
+        }
+
+        for (function_name, (_args, return_type, function_node)) in &self.function_blocks {
+            writeln!(f, "{}{} -> {}", prefix, function_name, return_type)?;
+            function_node.ast_fmt(f, &prefix.add_branch())?;
             writeln!(f, "")?;
         }
 

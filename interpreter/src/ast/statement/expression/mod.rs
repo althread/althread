@@ -12,7 +12,7 @@ use pest::{
     iterators::{Pair, Pairs},
     pratt_parser::PrattParser,
 };
-use primary_expression::{LocalPrimaryExpressionNode, PrimaryExpression};
+use primary_expression::{LocalPrimaryExpressionNode, LocalVarNode, PrimaryExpression};
 use tuple_expression::{LocalTupleExpressionNode, TupleExpression};
 use unary_expression::{LocalUnaryExpressionNode, UnaryExpression};
 
@@ -96,6 +96,7 @@ pub enum Expression {
     Primary(Node<PrimaryExpression>),
     Tuple(Node<TupleExpression>),
     Range(Node<RangeListExpression>),
+    FnCall(Node<FnCall>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -110,12 +111,14 @@ pub enum LocalExpressionNode {
     Primary(LocalPrimaryExpressionNode),
     Tuple(LocalTupleExpressionNode),
     Range(LocalRangeListExpressionNode),
+    FnCall(Box<Node<FnCall>>),
 }
 impl fmt::Display for LocalExpression {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.root)
     }
 }
+
 impl fmt::Display for LocalExpressionNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -124,6 +127,7 @@ impl fmt::Display for LocalExpressionNode {
             Self::Primary(node) => write!(f, "{}", node),
             Self::Tuple(node) => write!(f, "{}", node),
             Self::Range(node) => write!(f, "{}", node),
+            Self::FnCall(node) => write!(f, "{:?}", node),
         }
     }
 }
@@ -131,7 +135,20 @@ impl fmt::Display for LocalExpressionNode {
 pub fn parse_expr(pairs: Pairs<Rule>) -> AlthreadResult<Node<Expression>> {
     PRATT_PARSER
         .map_primary(|primary| {
-            Ok(Node {
+            match primary.as_rule() {
+                Rule::fn_call => {
+                    Ok(Node {
+                        pos: Pos {
+                            line: primary.line_col().0,
+                            col: primary.line_col().1,
+                            start: primary.as_span().start(),
+                            end: primary.as_span().end(),
+                        },
+                        value: Expression::FnCall(Node::build(primary)?),
+                    })
+                },
+                _ => 
+                Ok(Node {
                 pos: Pos {
                     line: primary.line_col().0,
                     col: primary.line_col().1,
@@ -139,7 +156,8 @@ pub fn parse_expr(pairs: Pairs<Rule>) -> AlthreadResult<Node<Expression>> {
                     end: primary.as_span().end(),
                 },
                 value: Expression::Primary(PrimaryExpression::build(primary)?),
-            })
+                }),
+            }
         })
         .map_infix(|left, op, right| {
             Ok(Node {
@@ -208,7 +226,10 @@ impl Expression {
             end: pair.as_span().end(),
         };
         match pair.as_rule() {
-            //Rule::expression => Self::build(pair.into_inner()),
+            Rule::expression => {
+                let expr = Self::build(pair.into_inner())?;
+                Ok(Node { pos, value: expr })
+            }
             Rule::tuple_expression => {
                 let mut values = Vec::new();
                 for pair in pair.into_inner() {
@@ -242,6 +263,7 @@ impl LocalExpressionNode {
             Expression::Primary(node) => LocalExpressionNode::Primary(
                 LocalPrimaryExpressionNode::from_primary(&node.value, program_stack)?,
             ),
+            Expression::FnCall(node) => LocalExpressionNode::FnCall(Box::new(node.clone())),
             Expression::Tuple(node) => LocalExpressionNode::Tuple(
                 LocalTupleExpressionNode::from_tuple(&node.value, program_stack)?,
             ),
@@ -258,6 +280,36 @@ impl LocalExpressionNode {
             Self::Primary(node) => node.datatype(state),
             Self::Tuple(node) => node.datatype(state),
             Self::Range(node) => node.datatype(state),
+            Self::FnCall(node) => {
+
+                if node.value.fn_name.len() == 1 {
+                    let fn_name = &node.value.fn_name[0].value.value;
+
+                    if let Some(func_def) = state.user_functions.get(fn_name) {
+                        Ok(func_def.return_type.clone())
+                    } else {
+                        Err(format!("Function {} not found", fn_name))
+                    }
+                } else {
+
+                    let receiver_name = &node.value.fn_name[0].value.value;
+                    let var = state.program_stack.iter().rev().find(|v| &v.name == receiver_name);
+                    if let Some(var) = var {
+                        if let Some(interfaces) = state.stdlib.get_interfaces(&var.datatype) {
+                            let method_name = node.value.fn_name.last().unwrap().value.value.clone();
+                            if let Some(method) = interfaces.iter().find(|m| m.name == method_name) {
+                                Ok(method.ret.clone())
+                            } else {
+                                Err(format!("Method {} not found in interface", method_name))
+                            }
+                        } else {
+                            Err(format!("No interface found for type {}", var.datatype))
+                        }
+                    } else {
+                        Err(format!("Receiver {} not found in stack", receiver_name))
+                    }
+                }
+            }
         }
     }
     pub fn eval(&self, mem: &Memory) -> Result<Literal, String> {
@@ -276,6 +328,9 @@ impl LocalExpressionNode {
             },
             LocalExpressionNode::Tuple(tuple_exp) => tuple_exp.eval(mem),
             LocalExpressionNode::Range(list_exp) => list_exp.eval(mem),
+            LocalExpressionNode::FnCall(node) => {
+                Err(format!("Cannot evaluate function call in this context: {}", &node.value.fn_name[0].value.value))
+            }
         }
     }
 }
@@ -285,7 +340,6 @@ impl LocalExpressionNode {
 impl InstructionBuilder for Node<Expression> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         let mut instructions = Vec::new();
-
         let mut vars = HashSet::new();
         self.value.get_vars(&mut vars);
 
@@ -315,7 +369,8 @@ impl InstructionBuilder for Node<Expression> {
         }
 
         let local_expr = LocalExpressionNode::from_expression(&self.value, &state.program_stack)?;
-        let restult_type = local_expr.datatype(state).map_err(|err| {
+        
+        let result_type = local_expr.datatype(state).map_err(|err| {
             AlthreadError::new(
                 ErrorType::ExpressionError,
                 Some(self.pos),
@@ -323,16 +378,90 @@ impl InstructionBuilder for Node<Expression> {
             )
         })?;
 
-        instructions.push(Instruction {
-            pos: Some(self.pos),
-            control: InstructionType::Expression(local_expr),
-        });
+        match &local_expr {
+            LocalExpressionNode::FnCall(node) => {
+                let builder = node.compile(state)?;
+                instructions.extend(builder.instructions);
+            },
+            LocalExpressionNode::Tuple(node) => {
+                let mut contains_fn_call = false;
+
+                // check if the tuple contains a function call
+                for element in &node.values {
+                    match element {
+                        LocalExpressionNode::FnCall(_) => {
+                            contains_fn_call = true;
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+
+                if contains_fn_call {
+                    let mut compiled_args: Vec<LocalExpressionNode> = Vec::new();
+                    let total_fn_calls_in_tuple = node.values.iter().filter(|e| matches!(e, LocalExpressionNode::FnCall(_))).count();
+                    let mut direct_fn_children_processed_count = 0;
+
+                    let outer_method_call_stack_offset = state.method_call_stack_offset;
+
+                    for element in &node.values {
+                        match element {
+                            LocalExpressionNode::FnCall(node) => {
+
+                                state.method_call_stack_offset = outer_method_call_stack_offset + direct_fn_children_processed_count;
+
+                                let builder = node.compile(state)?;
+                                instructions.extend(builder.instructions);
+
+                                let runtime_stack_offset = total_fn_calls_in_tuple - 1 - direct_fn_children_processed_count;
+                                compiled_args.push(LocalExpressionNode::Primary(
+                                    LocalPrimaryExpressionNode::Var(LocalVarNode {
+                                        index: runtime_stack_offset,
+                                    }),
+                                ));
+                                direct_fn_children_processed_count += 1;
+                                state.program_stack.pop();
+                            }
+                            _ => {
+                                // If it's not a function call, we just clone the element
+                                // and push it to the compiled_args
+                                compiled_args.push(element.clone());
+                            }
+                        }
+                    }
+                    
+                    state.method_call_stack_offset = outer_method_call_stack_offset;
+
+                    instructions.push(Instruction {
+                        pos: Some(self.pos),
+                        control: InstructionType::MakeTupleAndCleanup {
+                            elements: compiled_args,
+                            unstack_len: total_fn_calls_in_tuple
+                        }
+                    });
+
+                } else {
+                    instructions.push(Instruction {
+                    pos: Some(self.pos),
+                    control: InstructionType::Expression(local_expr),
+                    });
+                }
+            },
+            _ => {        
+                instructions.push(Instruction {
+                pos: Some(self.pos),
+                control: InstructionType::Expression(local_expr),
+                });
+            }
+        }
+
+
 
         state.program_stack.push(Variable {
             name: "".to_string(),
             depth: state.current_stack_depth,
             mutable: false,
-            datatype: restult_type,
+            datatype: result_type,
             declare_pos: None,
         });
 
@@ -346,6 +475,7 @@ impl Expression {
             Self::Binary(node) => node.value.add_dependencies(dependencies),
             Self::Unary(node) => node.value.add_dependencies(dependencies),
             Self::Primary(node) => node.value.add_dependencies(dependencies),
+            Self::FnCall(node) => node.value.add_dependencies(dependencies),
             Self::Tuple(node) => node.value.add_dependencies(dependencies),
             Self::Range(node) => node.value.add_dependencies(dependencies),
         }
@@ -366,6 +496,7 @@ impl Expression {
             Self::Primary(node) => node.value.get_vars(vars),
             Self::Tuple(node) => node.value.get_vars(vars),
             Self::Range(node) => node.value.get_vars(vars),
+            Self::FnCall(node) => node.value.get_vars(vars),
         }
     }
 }
@@ -378,6 +509,7 @@ impl AstDisplay for Expression {
             Self::Primary(node) => node.ast_fmt(f, prefix),
             Self::Tuple(node) => node.ast_fmt(f, prefix),
             Self::Range(node) => node.ast_fmt(f, prefix),
+            Self::FnCall(node) => node.ast_fmt(f, prefix),
         }
     }
 }

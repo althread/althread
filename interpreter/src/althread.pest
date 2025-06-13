@@ -9,7 +9,8 @@ program = _{ SOI ~ blocks* ~ EOI }
 /// - **Shared Block**: Declares global variables accessible across different parts of the program.
 /// - **Condition Block**: Monitors conditions at each atomic step (e.g., always, never, eventually).
 /// - **Program Block**: Encapsulates code that runs concurrently in parallel processes.
-blocks = _{ main_block | global_block | condition_block | program_block }
+/// - **Function Block**: User-defined functions
+blocks = _{ main_block | global_block | condition_block | program_block | function_block }
 
 global_block    = { GLOBAL_KW ~ code_block }
 condition_block = { condition_keywords ~ expression_block }
@@ -20,7 +21,7 @@ code_block           = { "{" ~ statement* ~ "}" }
 expression_block     = { "{" ~ expression_statement* ~ "}" }
 expression_statement = { expression ~ ";" }
 
-condition_keywords = _{ ALWAYS_KW | NEVER_KW }
+condition_keywords = _{ ALWAYS_KW | NEVER_KW | EVENTUALLY_KW }
 
 /// ## Statements
 /// Statements are the executable instructions in the language.
@@ -42,7 +43,9 @@ statement = {
   | call_statement
   | code_block
   | break_loop_statement
+  | return_statement
 }
+
 
 break_loop_statement = { (BREAK_KW | CONTINUE_KW) ~ identifier? ~ ";" }
 assignment_statement  = _{ assignment ~ ";" }
@@ -55,6 +58,10 @@ call_statement        = _{ fn_call ~ ";" }
 run_statement         = _{ run_call ~ ";" }
 send_statement         = _{ send_call ~ ";" }
 channel_declaration_statement = _{ channel_declaration ~ ";" }
+
+// Functions
+function_block = { FN_KW ~ identifier ~ arg_list ~ RARROW ~ datatype ~ code_block }
+return_statement = { RETURN_KW ~ expression? ~ ";" }
 
 fn_call  = { object_identifier ~ tuple_expression }
 run_call = { RUN_KW ~ identifier ~ tuple_expression }
@@ -70,7 +77,7 @@ channel_declaration = {
 type_list = { "(" ~ datatype ~ ("," ~ datatype)* ~ ")" }
 pattern_list = { "(" ~ pattern ~ ("," ~ pattern)* ~ ")" }
 arg_list = { 
-  ( "(" ~ ")") 
+  ( "(" ~ ")")
   | ("(" ~ (identifier ~ ":" ~ datatype) ~ ("," ~ identifier ~ ":" ~ datatype)* ~ ")" )
 }
 pattern = { identifier | literal }
@@ -99,8 +106,8 @@ receive_expression = { RECEIVE_KW ~ object_identifier? ~ pattern_list ~ ("=>" ~ 
 /// ### Expressions
 /// Expressions evaluate values based on arithmetic and logical operations, following standard precedence rules.
 expression = {
-    binary_expression
-  | unary_expression
+  fn_call
+  | binary_expression
   | primary_expression
 }
 
@@ -151,6 +158,7 @@ KEYWORDS = _{
   | GLOBAL_KW
   | PROGRAM_KW
   | ALWAYS_KW
+  | EVENTUALLY_KW
   | NEVER_KW
   | RUN_KW
   | LET_KW
@@ -158,6 +166,8 @@ KEYWORDS = _{
   | IF_KW
   | ELSE_KW
   | WHILE_KW
+  | FN_KW
+  | RETURN_KW
   | BOOL
   | INT_TYPE
   | FLOAT_TYPE
@@ -168,8 +178,9 @@ KEYWORDS = _{
 MAIN_KW    = _{ "main" }
 GLOBAL_KW  = _{ "shared" }
 PROGRAM_KW = _{ "program" }
-WAIT_KW    = _{ "wait" }
+WAIT_KW    = _{ "await" }
 ALWAYS_KW  =  { "always" }
+EVENTUALLY_KW  =  { "eventually" }
 NEVER_KW   =  { "never" }
 RUN_KW     = _{ "run" }
 
@@ -196,6 +207,11 @@ FALSE_KW = _{ "false" }
 NULL_KW  = _{ "null" }
 
 ATOMIC_KW = _{ "atomic" }
+
+// Functions
+FN_KW = _{ "fn" }
+RETURN_KW = _{ "return" }
+RARROW = { "->" }
 
 /// ### Operators
 /// Operators are used for arithmetic, logical operations, and assignments.

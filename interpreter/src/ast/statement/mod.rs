@@ -5,6 +5,7 @@ pub mod channel_declaration;
 pub mod declaration;
 pub mod expression;
 pub mod fn_call;
+pub mod fn_return;
 pub mod for_control;
 pub mod if_control;
 pub mod loop_control;
@@ -22,6 +23,7 @@ use break_loop::BreakLoopControl;
 use channel_declaration::ChannelDeclaration;
 use declaration::Declaration;
 use fn_call::FnCall;
+use fn_return::FnReturn;
 use for_control::ForControl;
 use if_control::IfControl;
 use loop_control::LoopControl;
@@ -33,7 +35,7 @@ use while_control::WhileControl;
 
 use crate::{
     compiler::{CompilerState, InstructionBuilderOk},
-    error::AlthreadResult,
+    error::{AlthreadResult,Pos},
     no_rule,
     parser::Rule,
     vm::instruction::{Instruction, InstructionType},
@@ -53,6 +55,7 @@ pub enum Statement {
     ChannelDeclaration(Node<ChannelDeclaration>),
     Run(Node<RunCall>),
     FnCall(Node<FnCall>),
+    FnReturn(Node<FnReturn>),
     If(Node<IfControl>),
     While(Node<WhileControl>),
     Loop(Node<LoopControl>),
@@ -72,6 +75,26 @@ impl NodeBuilder for Statement {
             Rule::declaration => Ok(Self::Declaration(Node::build(pair)?)),
             Rule::wait_statement => Ok(Self::Wait(Node::build(pair)?)),
             Rule::fn_call => Ok(Self::FnCall(Node::build(pair)?)),
+            Rule::return_statement => {
+                // build the node in here
+                // we need to set the position here because 
+                // the node is built from the inner pairs
+                // and the position of the return statement is lost
+
+                let pos = Pos::from(pair.as_span());
+                let inner_pairs = pair.into_inner();
+
+                let mut fn_return_node = FnReturn::build(inner_pairs)?;
+
+                fn_return_node.pos = pos;
+                
+                let node = Node {
+                    value: fn_return_node,
+                    pos
+                };
+
+                Ok(Self::FnReturn(node))
+            },
             Rule::run_call => Ok(Self::Run(Node::build(pair)?)),
             Rule::if_control => Ok(Self::If(Node::build(pair)?)),
             Rule::while_control => Ok(Self::While(Node::build(pair)?)),
@@ -122,6 +145,9 @@ impl InstructionBuilder for Statement {
                 state.program_stack.pop();
                 Ok(builder)
             }
+            Self::FnReturn(node) => {
+                node.compile(state)
+            }
         }
     }
 }
@@ -141,6 +167,7 @@ impl AstDisplay for Statement {
             Statement::ChannelDeclaration(node) => node.ast_fmt(f, prefix),
             Statement::Wait(node) => node.ast_fmt(f, prefix),
             Statement::FnCall(node) => node.ast_fmt(f, prefix),
+            Statement::FnReturn(node) => node.ast_fmt(f, prefix),
             Statement::Run(node) => node.ast_fmt(f, prefix),
             Statement::If(node) => node.ast_fmt(f, prefix),
             Statement::While(node) => node.ast_fmt(f, prefix),

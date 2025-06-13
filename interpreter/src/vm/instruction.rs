@@ -12,6 +12,10 @@ use crate::{
 pub enum InstructionType {
     Empty,
     Expression(LocalExpressionNode),
+    MakeTupleAndCleanup {
+        elements: Vec<LocalExpressionNode>,
+        unstack_len: usize
+    },
     Push(Literal),
     Unstack {
         unstack_len: usize,
@@ -44,6 +48,9 @@ pub enum InstructionType {
         unstack_len: usize,
         variable_idx: Option<usize>,
         arguments: Option<Vec<usize>>,
+    },
+    Return {
+        has_value: bool,
     },
     JumpIf {
         jump_false: i64,
@@ -88,6 +95,12 @@ impl fmt::Display for InstructionType {
         match self {
             Self::Empty => write!(f, "EMPTY")?,
             Self::Expression(a) => write!(f, "eval {}", a)?,
+            Self::MakeTupleAndCleanup { elements, unstack_len } => write!(
+                f,
+                "make tuple ({}) and cleanup (unstack {})",
+                elements.len(),
+                unstack_len
+            )?,
             Self::GlobalReads { variables, .. } => {
                 write!(f, "global_read {}", variables.join(","))?
             }
@@ -114,20 +127,21 @@ impl fmt::Display for InstructionType {
             Self::FnCall {
                 name, unstack_len, ..
             } => write!(f, "{}()  (unstack {})", name, unstack_len)?,
-            Self::Exit => write!(f, "exit")?,
+            Self::Return {has_value} => write!(f, "return {:?}", if *has_value { "value" } else { "void" })?,
+            Self::Exit => write!(f, "exit")?, //TODO check again ???
             Self::Declaration { unstack_len } => {
                 write!(f, "declare var with value (unstack {})", unstack_len)?
             }
             Self::Push(l) => write!(f, "push ({})", l)?,
             Self::WaitStart { start_atomic, .. } => {
-                write!(f, "wait start")?;
+                write!(f, "await start")?;
                 if *start_atomic {
                     write!(f, " atomic")?;
                 }
                 ()
             }
             Self::Wait { jump, unstack_len } => {
-                write!(f, "wait {} (unstack {})", jump, unstack_len)?
+                write!(f, "await {} (unstack {})", jump, unstack_len)?
             }
             Self::Send {
                 channel_name,
@@ -196,6 +210,7 @@ impl InstructionType {
             | Self::Wait {..}
             | Self::Empty
             | Self::Expression(_)
+            | Self::MakeTupleAndCleanup {..}
             | Self::LocalAssignment {..}
             | Self::JumpIf {..}
             | Self::Jump(_)
@@ -203,6 +218,7 @@ impl InstructionType {
             | Self::Destruct
             | Self::Unstack {..}
             | Self::FnCall {..}
+            | Self::Return {..}
             | Self::Declaration {..}
             | Self::AtomicEnd
             | Self::EndProgram

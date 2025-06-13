@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use pest::Span;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
 pub struct Pos {
@@ -16,6 +17,18 @@ impl Default for Pos {
             col: 0,
             start: 0,
             end: 0,
+        }
+    }
+}
+
+impl<'i> From<Span<'i>> for Pos {
+    fn from(span: Span<'i>) -> Self {
+        let start_pos = span.start_pos().line_col();
+        Self {
+            line: start_pos.0,
+            col: start_pos.1,
+            start: span.start(),
+            end: span.end(),
         }
     }
 }
@@ -57,9 +70,17 @@ pub enum ErrorType {
     InstructionNotAllowed,
     ExpressionError,
     InvariantError,
+    NoPathError,
     NotImplemented,
     UndefinedFunction,
     UndefinedChannel,
+    ReturnOutsideFunction,
+    FunctionAlreadyDefined,
+    FunctionArgumentCountError,
+    FunctionArgumentTypeMismatch,
+    FunctionNotFound,
+    FunctionMissingReturnStatement,
+    FunctionReturnTypeMismatch
 }
 
 impl fmt::Display for ErrorType {
@@ -78,6 +99,14 @@ impl fmt::Display for ErrorType {
             ErrorType::UndefinedFunction => write!(f, "Undefined Function"),
             ErrorType::UndefinedChannel => write!(f, "Undefined Channel"),
             ErrorType::InvariantError => write!(f, "Invariant Error"),
+            ErrorType::NoPathError => write!(f, "No Path Error"),
+            ErrorType::ReturnOutsideFunction => write!(f, "Return statement can only be in a function"),
+            ErrorType::FunctionAlreadyDefined => write!(f, "Function already defined"),
+            ErrorType::FunctionArgumentCountError => write!(f, "Function argument count error"),
+            ErrorType::FunctionArgumentTypeMismatch => write!(f, "Function argument type mismatch"),
+            ErrorType::FunctionNotFound => write!(f, "Function not found"),
+            ErrorType::FunctionMissingReturnStatement => write!(f, "Function missing return statement"),
+            ErrorType::FunctionReturnTypeMismatch => write!(f, "Function return type mismatch"),
         }
     }
 }

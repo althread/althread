@@ -29,7 +29,7 @@ impl NodeBuilder for Atomic {
         let mut first_statement = statement.as_mut();
 
         let start_atomic_lambda = |s: &mut Statement| {
-            // if the statement is a wait block then tell it so
+            // if the statement is a await block then tell it so
             match s {
                 Statement::Wait(wait) => {
                     wait.value.start_atomic = true;
@@ -115,10 +115,9 @@ impl InstructionBuilder for Node<Atomic> {
 
 impl AstDisplay for Atomic {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
-        writeln!(f, "{prefix}loop_control")?;
+        writeln!(f, "{prefix}atomic")?;
 
         let prefix = prefix.switch();
-        writeln!(f, "{prefix}do")?;
         {
             let prefix = prefix.add_leaf();
             self.statement.as_ref().ast_fmt(f, &prefix)?;

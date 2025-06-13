@@ -31,11 +31,11 @@ always {
 main {
   let a = run A();
   run B();
-  wait Done == 2;
+  await Done == 2;
 
   channel a.out (int, bool)> self.in;
 
-  wait receive in(x,y) => {
+  await receive in(x,y) => {
     print("Receive", x, y);
   };
   print("DONE");

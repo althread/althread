@@ -35,6 +35,16 @@ pub fn parse(source: &str) -> Result<Pairs<Rule>, AlthreadError> {
         let error_message = match e.variant {
             ErrorVariant::ParsingError { positives, .. } => {
                 format!("Expected one of {:?}", positives)
+                // TODO: better error message
+                // For example, if the dev uses return in the wrong place
+                // we should tell them, that return can't be used in there.
+                // the output is like this at the moment:
+                // Error at 56:3
+                //    |
+                // 56 |   return 0;
+                //    |   ^---
+                //    |
+                // Syntax Error: Expected one of [statement]
             }
             ErrorVariant::CustomError { message } => message,
         };

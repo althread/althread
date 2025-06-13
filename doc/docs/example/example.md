@@ -18,7 +18,7 @@ shared {
 program A() {
     X = true;
     T = B_TURN;
-    wait Y == false || T == A_TURN;
+    await Y == false || T == A_TURN;
 
     NbSC += 1;
     //section critique
@@ -30,7 +30,7 @@ program A() {
 program B() {
     Y = true;
     T = A_TURN;
-    wait X == false || T == B_TURN;
+    await X == false || T == B_TURN;
 
     NbSC += 1;
     //section critique
