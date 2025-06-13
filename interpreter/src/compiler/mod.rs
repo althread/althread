@@ -6,12 +6,23 @@ pub mod stdlib;
 
 use crate::ast::statement::expression::LocalExpressionNode;
 use crate::error::Pos;
-use crate::vm::instruction::Instruction;
+use crate::vm::instruction::{Instruction};
 use crate::{
-    ast::token::{datatype::DataType, literal::Literal},
+    ast::token::{datatype::DataType, literal::Literal, identifier::Identifier},
     vm::instruction::ProgramCode,
 };
 
+
+#[derive(Debug, Clone)]
+pub struct FunctionDefinition { 
+    pub name: String,
+    pub arguments: Vec<(Identifier, DataType)>,
+    pub return_type: DataType,
+    pub body: Vec<Instruction>,
+    pub pos: Pos,
+}
+
+#[derive(Debug)]
 pub struct InstructionBuilderOk {
     pub instructions: Vec<Instruction>,
 
@@ -64,6 +75,7 @@ impl InstructionBuilderOk {
 
         self.return_indexes
             .extend(other.return_indexes.iter().map(|x| x + off_set));
+
     }
     pub fn contains_jump(&self) -> bool {
         self.break_indexes.len() > 0
@@ -80,6 +92,7 @@ pub struct Variable {
     pub depth: usize,
     pub declare_pos: Option<Pos>,
 }
+
 
 #[derive(Debug)]
 pub struct CompilerState {
@@ -100,6 +113,10 @@ pub struct CompilerState {
     pub current_program_name: String,
     pub is_atomic: bool,
     pub is_shared: bool,
+    pub in_function: bool,
+
+    pub user_functions: HashMap<String, FunctionDefinition>,
+    pub method_call_stack_offset: usize,
 }
 
 impl CompilerState {
@@ -114,7 +131,10 @@ impl CompilerState {
             program_arguments: HashMap::new(),
             is_atomic: false,
             is_shared: false,
+            in_function: false,
             stdlib: stdlib::Stdlib::new(),
+            user_functions: HashMap::new(),
+            method_call_stack_offset: 0,
         }
     }
 
@@ -134,6 +154,7 @@ impl CompilerState {
 #[derive(Debug)]
 pub struct CompiledProject {
     pub programs_code: HashMap<String, ProgramCode>,
+    pub user_functions: HashMap<String, FunctionDefinition>,
     pub global_memory: BTreeMap<String, Literal>,
 
     /// The conditions that should always be true

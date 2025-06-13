@@ -26,7 +26,7 @@ main {
 
     send out(0);
 
-    wait receive in(i) => {
+    await receive in(i) => {
         print("FINAL Received: ", i);
     };
 }
@@ -34,7 +34,7 @@ main {
 
 program A(id:int) {
     print("Hello from A");
-    wait receive in (i) => {
+    await receive in (i) => {
         id += i;
         print("Received", i, " new value is ", id);
     };

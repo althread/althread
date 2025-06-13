@@ -15,7 +15,7 @@ use crate::{
         statement::{expression::LocalExpressionNode, waiting_case::WaitDependency},
         token::literal::Literal,
     },
-    compiler::{stdlib::Stdlib, CompiledProject},
+    compiler::{stdlib::Stdlib, CompiledProject, FunctionDefinition},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
 };
 
@@ -64,6 +64,7 @@ pub struct VM<'a> {
     pub channels: Channels,
     pub running_programs: Vec<RunningProgramState<'a>>,
     pub programs_code: &'a HashMap<String, ProgramCode>,
+    pub user_funcs: &'a HashMap<String, FunctionDefinition>,
     pub executable_programs: BTreeSet<usize>, // needs to be sorted to have a deterministic behavior
     pub always_conditions: &'a Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
     pub eventually_conditions : &'a Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>, // adding a eventually conditions structure
@@ -85,6 +86,7 @@ impl<'a> VM<'a> {
             running_programs: Vec::new(),
             executable_programs: BTreeSet::new(),
             programs_code: &compiled_project.programs_code,
+            user_funcs: &compiled_project.user_functions,
             always_conditions: &compiled_project.always_conditions,
             eventually_conditions: &compiled_project.eventually_conditions,
             next_program_id: 0,
@@ -100,12 +102,14 @@ impl<'a> VM<'a> {
             "program with id {} already exists",
             pid
         );
+
         self.running_programs.insert(
             pid,
             RunningProgramState::new(
                 pid,
                 program_name.to_string(),
                 &self.programs_code[program_name],
+                self.user_funcs,
                 args,
                 self.stdlib.clone(),
             ),
@@ -174,7 +178,7 @@ impl<'a> VM<'a> {
             // actually nothing happened
             assert!(
                 actions.actions.is_empty(),
-                "a process returning wait should means that no actions have been performed..."
+                "a process returning await should means that no actions have been performed..."
             );
 
             let program = self
@@ -201,7 +205,7 @@ impl<'a> VM<'a> {
         for action in actions.actions.iter() {
             match action {
                 GlobalAction::Wait => {
-                    unreachable!("wait action should not be in the list of actions");
+                    unreachable!("await action should not be in the list of actions");
                 }
                 GlobalAction::Send(_sender_channel, receiver_info) => {
                     if let Some(receiver_info) = receiver_info {
@@ -217,7 +221,7 @@ impl<'a> VM<'a> {
                             }
                         }
                     } else {
-                        // the current process is waiting but this  will be catched up by the wait instruction
+                        // the current process is waiting but this  will be catched up by the await instruction
                     }
                 }
                 GlobalAction::Connect(sender_id, sender_channel) => {
@@ -301,7 +305,7 @@ impl<'a> VM<'a> {
             // actually nothing happened
             assert!(
                 actions.actions.is_empty(),
-                "a process returning wait should means that no actions have been performed..."
+                "a process returning await should means that no actions have been performed..."
             );
 
             let program = self
@@ -325,7 +329,7 @@ impl<'a> VM<'a> {
         for action in actions.actions {
             match action {
                 GlobalAction::Wait => {
-                    unreachable!("wait action should not be in the list of actions");
+                    unreachable!("await action should not be in the list of actions");
                 }
                 GlobalAction::Send(_sender_channel, receiver_info) => {
                     if let Some(receiver_info) = receiver_info {
@@ -341,7 +345,7 @@ impl<'a> VM<'a> {
                             }
                         }
                     } else {
-                        // the current process is waiting but this  will be catched up by the wait instruction
+                        // the current process is waiting but this  will be catched up by the await instruction
                     }
                 }
                 GlobalAction::Connect(sender_id, sender_channel) => {

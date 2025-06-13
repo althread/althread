@@ -99,11 +99,11 @@ Variables declared in a control structure are only visible inside that structure
 
 ## Blocking Instructions
 
-In Althread, the only blocking instruction is waiting for a condition with the `wait` instruction. This instruction allows pausing a process's execution until the condition is verified.
+In Althread, the only blocking instruction is waiting for a condition with the `await` instruction. This instruction allows pausing a process's execution until the condition is verified.
 
 ```althread
 program A() {
-    wait X == 5;
+    await X == 5;
     print("x is equal to 5");
 }
 ```
@@ -112,28 +112,28 @@ The condition can be a boolean expression as in the previous example, but it can
 
 ```althread
 program A() {
-    wait receive channel_name(x);
+    await receive channel_name(x);
 
     print("message received");
     // x is not in scope
 }
 ```
-In the previous example, `x` is not in scope after the `wait` instruction because the `receive` instruction is optionally followed by an instruction block, allowing the use of received variables.
+In the previous example, `x` is not in scope after the `await` instruction because the `receive` instruction is optionally followed by an instruction block, allowing the use of received variables.
 
 ```althread	
 program A() {
-    wait receive channel_name(x) => {
+    await receive channel_name(x) => {
         print("message received, x=", x);
         // x is in scope
     }
 }
 ```
 
-The `wait` instruction can also be used to wait for a condition among multiple conditions by following it with the `first` or `all` instruction.
+The `await` instruction can also be used to wait for a condition among multiple conditions by following it with the `first` or `all` instruction.
 
 ```althread
 program A() {
-    wait first {
+    await first {
         receive channel_name1(x) => {
             print("message received, x=", x);
         }
@@ -156,7 +156,7 @@ An atomic expression is the smallest unit of execution. In Althread, there are 6
 - **Assignment**: `x = 5;`, `x++;`, `x += 1`;
 - **Arithmetic Operation**: `x + y;`, `x - y;`, `x * y;`, `x / y;`, `x % y;`
 - **Atomic Scope**: `atomic { ... }`
-- **Function Call**: `print("Hello world");`, `wait x == 5;`
+- **Function Call**: `print("Hello world");`, `await x == 5;`
 - **Process Execution**: `run A();`
 
 :::note

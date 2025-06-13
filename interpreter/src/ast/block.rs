@@ -18,6 +18,14 @@ pub struct Block {
     pub children: Vec<Node<Statement>>,
 }
 
+impl Block {
+    pub fn new() -> Self {
+        Self {
+            children: Vec::new(),
+        }
+    }
+}
+
 impl NodeBuilder for Block {
     fn build(pairs: Pairs<Rule>) -> AlthreadResult<Self> {
         let mut block = Self::new();
@@ -47,14 +55,6 @@ impl InstructionBuilder for Block {
             });
         }
         Ok(builder)
-    }
-}
-
-impl Block {
-    pub fn new() -> Self {
-        Self {
-            children: Vec::new(),
-        }
     }
 }
 

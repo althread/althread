@@ -6,7 +6,7 @@ shared {
 program A() {
     let i = 0;
     loop {
-        wait first {
+        await first {
             A => {
                 print("A is true");
                 break;

@@ -39,7 +39,7 @@
 			alias: 'system-block'
 		},
 
-		'keyword': /\b(?:let|const|channel|while|for|in|loop|atomic|if|else|run|send|wait|seq|first|receive)\b/,
+		'keyword': /\b(?:let|const|channel|while|for|in|loop|atomic|if|else|run|send|await|seq|first|receive)\b/,
 
         'function': /\b\w+(?=\()/,
 		// Hex, oct, bin, dec numbers with visual separators and type suffix

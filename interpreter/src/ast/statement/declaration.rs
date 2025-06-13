@@ -88,7 +88,7 @@ impl InstructionBuilder for Declaration {
                 ));
             }
         } else {
-            if state.is_shared {
+            if state.is_shared && !state.in_function {
                 return Err(AlthreadError::new(
                     ErrorType::VariableError,
                     Some(self.identifier.pos),
