@@ -98,7 +98,7 @@ impl<'a> GraphNode<'a> {
             level,
             predecessor,
             eventually: false,
-            successors: Vec::new(), //42 c'est ça qui fait l'état vert alors qu'il est possiblement faux
+            successors: Vec::new(), //42 that’s what makes the state appear green even though it might be false.
         }
     }
 }
