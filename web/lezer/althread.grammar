@@ -23,13 +23,17 @@ project_block {
   GlobalBlock |
   MainBlock |
   ProgramBlock |
-  ConditionBlock
+  ConditionBlock |
+  FunctionBlock
 }
 
 GlobalBlock  { kw<"shared"> "{" shared_declaration* "}" }
 MainBlock    { kw<"main"> code_block }
-ProgramBlock { kw<"program"> ProgName "(" ")" code_block }
+ProgramBlock { kw<"program"> ProgName ArgList code_block }
 ConditionBlock { Condition expression_block }
+FunctionBlock { kw<"fn"> FnName ArgList ReturnType code_block }
+
+ReturnType {"->" Type}
 
 Condition {
   kw<"always"> |
@@ -60,10 +64,11 @@ statement {
   wait_statement |
   code_block |
   call_statement | 
-  assignment_statement
+  assignment_statement |
+  return_statement |
+  break_loop_statement
 }
 
-//!assign
 
 assignment_statement {
   AssignmentExpression semi
@@ -73,6 +78,16 @@ AssignmentExpression {
 }
 Variable { LocalVariableName | SharedVariableName | kw<"self"> }
 
+
+//!return_statement
+
+return_statement { kw<"return"> expression? semi}
+
+
+//!break_loop_statement
+break_loop_statement { (kw<"break"> | kw<"continue">) identifier? semi}
+
+//!assign
 
 //!variabledeclaration
 
@@ -252,7 +267,6 @@ SharedVariableName { global_identifer }
   
   non_global_identifer { $[a-z] identifierTail }
   global_identifer { $[A-Z] identifierTail }
-  
 
 //!numberTokens
 

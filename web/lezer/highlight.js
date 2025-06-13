@@ -3,11 +3,11 @@ import { ProgName } from "./parser.terms";
 
 export const althreadHighlight = styleTags({
   "atomic": t.modifier,
-  "while await if else receive send run for loop in":
+  "while await if else receive send run for loop in return break continue":
     t.controlKeyword,
   "instanceof": t.operatorKeyword,
   "let const channel": t.definitionKeyword,
-  "program always eventually main shared": t.moduleKeyword,
+  "program always eventually main shared fn": t.moduleKeyword,
   //"with as new": t.keyword,
   TemplateString: t.special(t.string),
   super: t.atom,
