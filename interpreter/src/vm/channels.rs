@@ -144,7 +144,7 @@ impl Channels {
         &self.states
     }
     
-    pub fn getStates(&self) -> ChannelsState{
+    pub fn get_states(&self) -> ChannelsState{
         return self.states.clone();
     }
 }

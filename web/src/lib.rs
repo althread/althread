@@ -41,7 +41,7 @@ pub struct MessageFlowEvent<'a> {
 pub struct RunResult<'a> {
     debug: String,
     stdout: Vec<String>,
-    messageFlow_graph: Vec<MessageFlowEvent<'a>>,
+    message_flow_graph: Vec<MessageFlowEvent<'a>>,
     vm_states: Vec<VM<'a>>,
 
 }
@@ -71,7 +71,7 @@ impl <'a> Serialize for RunResult<'a> {
         let mut state = serializer.serialize_struct("RunResult", 3)?;
         state.serialize_field("debug", &self.debug)?;
         state.serialize_field("stdout", &self.stdout)?;
-        state.serialize_field("messageFlow_graph", &self.messageFlow_graph)?;
+        state.serialize_field("message_flow_graph", &self.message_flow_graph)?;
         state.serialize_field("vm_states", &self.vm_states)?;
         state.end()
     }
@@ -94,7 +94,7 @@ pub fn run(source: &str) -> Result<JsValue, JsValue> {
 
     let mut result = String::new();
     let mut stdout = vec![];
-    let mut messageFlow_graph = Vec::new();
+    let mut message_flow_graph = Vec::new();
     let mut nmsg_sent:usize = 0;
     let mut vm_states = Vec::new();
     let mut i = 0; //index for vm_states
@@ -112,7 +112,7 @@ pub fn run(source: &str) -> Result<JsValue, JsValue> {
             if let InstructionType::ChannelPop(ref s) = &inst.control{
                 if i>0 { //first vm shouldn't be able to read anything 
                     let previous_vm = vm_states.get(i-1);
-                    if let Some(chan_content) = previous_vm.unwrap().channels.getStates().get(&(info.prog_id, s.to_string())){
+                    if let Some(chan_content) = previous_vm.unwrap().channels.get_states().get(&(info.prog_id, s.to_string())){
                         if let Some(Literal::Tuple(ref msg)) = chan_content.get(0){ //messsage popped
                             if let Some(Literal::Tuple(ref sender_info)) = msg.get(0){
                                 if let Some(Literal::Int(senderid)) = sender_info.get(0){ //sender id
@@ -126,7 +126,7 @@ pub fn run(source: &str) -> Result<JsValue, JsValue> {
                                                 number: *clock as usize,
                                                 vm_state: vm.clone(),
                                             };
-                                            messageFlow_graph.push(event);
+                                            message_flow_graph.push(event);
                                         }
                                     }  
                                 }
@@ -152,7 +152,7 @@ pub fn run(source: &str) -> Result<JsValue, JsValue> {
                                         number : nmsg_sent,
                                         vm_state: vm.clone(),
                                     };
-                                    messageFlow_graph.push(event);
+                                    message_flow_graph.push(event);
                 }
                 GlobalAction::Send(s, None) => { //broadcast
                     nmsg_sent+=1;
@@ -164,7 +164,7 @@ pub fn run(source: &str) -> Result<JsValue, JsValue> {
                         number: nmsg_sent,
                         vm_state: vm.clone(),
                     };
-                    messageFlow_graph.push(event);
+                    message_flow_graph.push(event);
                     
                 }
                 _ => {}
@@ -185,7 +185,7 @@ pub fn run(source: &str) -> Result<JsValue, JsValue> {
     Ok(serde_wasm_bindgen::to_value(&RunResult {
         debug: result,
         stdout,
-        messageFlow_graph,
+        message_flow_graph,
         vm_states,
     })
     .unwrap())
