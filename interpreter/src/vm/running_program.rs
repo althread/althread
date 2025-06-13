@@ -35,6 +35,7 @@ pub struct RunningProgramState<'a> {
     instruction_pointer: usize,
     pub id: usize,
     pub stdlib: Rc<Stdlib>,
+    pub clock: usize, //counts number of send event
 
     pub user_functions: &'a HashMap<String, FunctionDefinition>,
     call_stack: Vec<StackFrame<'a>>,
@@ -85,6 +86,7 @@ impl<'a> RunningProgramState<'a> {
             current_code: &code.instructions,
             instruction_pointer: 0,
             stdlib,
+            clock: 0, 
             user_functions,
             call_stack: Vec::new(),
             frame_pointer: 0,
@@ -578,8 +580,8 @@ impl<'a> RunningProgramState<'a> {
                 for _ in 0..*unstack_len {
                     self.memory.pop();
                 }
-
-                let receiver = channels.send(self.id, channel_name.clone(), value);
+                self.clock+=1;
+                let receiver = channels.send(self.id, channel_name.clone(), value, self.clock);
 
                 action = Some(GlobalAction::Send(channel_name.clone(), receiver));
                 1

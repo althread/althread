@@ -4,6 +4,7 @@ use crate::ast::token::literal::Literal;
 
 pub type ChannelsState = BTreeMap<(usize, String), Vec<Literal>>;
 
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct Channels {
     /// states represent the input buffer of the channel
@@ -39,7 +40,11 @@ impl Channels {
         program_id: usize,
         channel_name: String,
         value: Literal,
+        clock: usize,
     ) -> Option<ReceiverInfo> {
+        let msg = Literal::Tuple(vec![
+            Literal::Tuple(vec![Literal::Int(program_id as i64), Literal::Int(clock as i64)]), value]);
+        //^ added sender id to let the receiver know who sent a msg
         if let Some((to_program_id, to_channel_name)) =
             self.connections.get(&(program_id, channel_name.clone()))
         {
@@ -47,11 +52,11 @@ impl Channels {
             if let Some(state) = self
                 .states
                 .get_mut(&(*to_program_id, to_channel_name.clone()))
-            {
-                state.push(value);
+            {              
+                state.push(msg);
             } else {
                 self.states
-                    .insert((*to_program_id, to_channel_name.clone()), vec![value]);
+                    .insert((*to_program_id, to_channel_name.clone()), vec![msg]);
             }
             return Some(ReceiverInfo {
                 program_id: *to_program_id,
@@ -62,7 +67,7 @@ impl Channels {
         self.waiting_send
             .entry((program_id, channel_name.clone()))
             .or_insert(vec![])
-            .push(value);
+            .push(msg);
 
         None
     }
@@ -107,7 +112,13 @@ impl Channels {
      */
     pub fn peek(&self, program_id: usize, channel_name: String) -> Option<&Literal> {
         match self.states.get(&(program_id, channel_name)) {
-            Some(state) => state.get(0),
+            Some(state) => {
+                if let Some(Literal::Tuple(value)) = state.get(0){
+                    value.get(1) //extracts message content from entire message
+                                        // ((prog_id, clock), content)
+                } else { None } //should be impossible to have something other than
+                                //a tuple or nothing
+            }
             None => None,
         }
     }
@@ -119,7 +130,10 @@ impl Channels {
         match self.states.get_mut(&(program_id, channel_name)) {
             Some(state) => {
                 let value = state.remove(0);
-                Some(value)
+                if let Literal::Tuple(msg) = value{
+                    msg.get(1).cloned() 
+                } else { None } //should be impossible to have something other than
+                                //a tuple or nothing
             }
             None => None,
         }
@@ -128,5 +142,9 @@ impl Channels {
     /// the state of the object is the state of each channel
     pub fn state(&self) -> &ChannelsState {
         &self.states
+    }
+    
+    pub fn getStates(&self) -> ChannelsState{
+        return self.states.clone();
     }
 }
