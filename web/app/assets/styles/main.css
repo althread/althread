@@ -52,9 +52,8 @@ body {
   height: 100%;
   flex: 1 1 0%;
   min-height: 0;
-  background: #181c24;
+  background: 1e1e1e;
   border: 1.5px solid #333;
-  border-radius: 6px;
   box-shadow: 0 2px 16px rgba(0,0,0,0.25);
   position: relative;
 }

@@ -71,10 +71,9 @@ export default function App() {
     onValueChange: (value) => {localStorage.setItem('source-code', value);}
   });
 
-  let [activetab, setActivetab] = createSignal("execution");
+  let [activetab, setActivetab] = createSignal("console");
   const handleTabClick = (tab: string) => {
     setActivetab(tab);
-    console.log("tab clicked : " + tab);
   };
 
   let [nodes, setNodes] = createSignal([]);
@@ -240,6 +239,7 @@ export default function App() {
                 setCommGraphOut([]);
                 setNodes([]);
                 setEdges([]);
+                setVmStates([]);
               }}>
               <i class="codicon codicon-clear-all"></i>
               Reset
