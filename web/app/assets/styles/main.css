@@ -124,6 +124,12 @@ body {
     font-size: 14px;
   }
 
+  .vscode-button.active {
+    background-color: #232323;
+    border: 1px solid #fff;
+    color: #fff;
+  }
+
   .actions{
     display: flex;
     align-items: center;
@@ -192,13 +198,13 @@ body {
   margin-bottom: 0;
   padding: 0;
   border-bottom: 1px solid #222; /* VS Code style separator */
-  background: #232323;
+  background: #1e1e1e;
 }
 
 .tab_button {
   display: flex;
   align-items: center;
-  background-color: #232323;
+  background-color: #1e1e1e;
   color: #cccccc;
   border: 0px solid #222;
   border-bottom: 2px solid transparent; /* Reserve space for underline */
@@ -229,7 +235,7 @@ body {
 }
 
 .tab_button.active {
-  background-color: #1e1e1e;
+  background-color: #232323;
   color: #fff;
   border-bottom: 2px solid #fff; /* White underline for active tab */
   z-index: 1;

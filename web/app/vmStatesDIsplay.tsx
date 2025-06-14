@@ -7,9 +7,12 @@ import {nodeToString} from "./App.tsx";
 export const rendervmStates = (vm_states) => {
     console.log(vm_states);
     let container!: HTMLDivElement;
-    let network: vis.Network | null = null;
+
+    if (!vm_states || vm_states.length === 0) {
+        return <pre>The VM states will appear here.</pre>;
+    }
+
     onMount(() => {
-        if (!vm_states) return;
         const nodes: any = [];
         const edges: any = [];
 

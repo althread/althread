@@ -2,15 +2,14 @@
 import vis from "vis-network/dist/vis-network.esm";
 import { createSignal, onCleanup, onMount } from "solid-js"
 import {nodeToString} from "./App.tsx";
-import { STR_MSGFLOW } from "./stringConstants";
 
 
 
 export const printCommGrapEventList = (eventl: any) => {
   //debug purpose
   try{
-    if (eventl === STR_MSGFLOW){
-      return (<pre>{eventl}</pre>);
+    if (eventl.length === 0) {
+      return (<pre>No MessageFlow events recorded.</pre>);
     }
     else return (
       <>
@@ -50,10 +49,9 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
   //prog_list = array of program names (strings)
   //commGraphData = array of communication events
   let container!: HTMLDivElement;
-  let network: vis.Network | null = null;
 
-  if (commGraphData === STR_MSGFLOW){
-    return(<pre>{STR_MSGFLOW}</pre>);
+  if (!commGraphData || commGraphData.length === 0) {
+    return <pre>The communication graph will appear here.</pre>;
   }
 
   let [popupVisible, setPopupVisible] = createSignal(false);
@@ -61,7 +59,6 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
   let [popupPosition, setPopupPosition] = createSignal({ x: 0, y: 0 });
 
   onMount(() => {
-    if (!commGraphData) return;
 
     const nodes= new vis.DataSet();
     const edges = new vis.DataSet();
@@ -223,7 +220,7 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
   });
 
   return (
-    <div style="position: relative;">
+    <>
       <div class="state-graph" ref={container} />
   
       {popupVisible() && (
@@ -244,7 +241,7 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
           <pre style={{color: "black"}}>{popupContent()}</pre>
         </div>
       )}
-    </div>
+    </>
   );
   
   

@@ -10,7 +10,6 @@ import createEditor from './Editor';
 import Graph from "./Graph";
 import { Logo } from "./assets/images/Logo";
 import {renderMessageFlowGraph} from "./CommGraph";
-import { STR_MSGFLOW } from "./stringConstants";
 import { extractProgs } from "./ExtractFromVm";
 import { rendervmStates } from "./vmStatesDIsplay";
 
@@ -84,9 +83,10 @@ export default function App() {
 
   let [stdout, setStdout] = createSignal("The console output will appear here.");
   let [out, setOut] = createSignal("The execution output will appear here.");
-  let [commgraphout, setCommGraphOut] = createSignal(STR_MSGFLOW); //messageflow graph
+  let [commgraphout, setCommGraphOut] = createSignal([]); //messageflow graph
   let [prog_list, setProgList] = createSignal<any[]>([]); //for the messageflow graph
   let [vm_states, setVmStates] = createSignal<any[]>([]); //to display vm states information
+  let [activeAction, setActiveAction] = createSignal<string | null>(null);
 
 
   const renderExecContent = () => {
@@ -135,23 +135,27 @@ export default function App() {
           </div>
           <div class="actions">
             <button
-              class="vscode-button" 
+              class={`vscode-button${activeAction() === "load" ? " active" : ""}`}
               onClick={() => {
-              let up = editor.editorView().state.update({
-                changes: {
-                  from: 0, 
-                  to: editor.editorView().state.doc.length,
-                  insert: Example1
-                }
-              })
-              editor.editorView().update([up]);
-            }
-            }>
+                setActiveAction(activeAction() === "load" ? null : "load");
+                let up = editor.editorView().state.update({
+                  changes: {
+                    from: 0, 
+                    to: editor.editorView().state.doc.length,
+                    insert: Example1
+                  }
+                })
+                editor.editorView().update([up]);
+              }
+              }>
               <i class="codicon codicon-file"></i>
-              Load Example</button>
-            <button 
-              class="vscode-button"
-              onClick={(e) => {
+              Load Example
+            </button>
+
+            <button
+              class={`vscode-button${activeAction() === "run" ? " active" : ""}`}
+              onClick={() => {
+                setActiveAction(activeAction() === "run" ? null : "run");
                 try {
                   setIsRun(true);
                   let res = run(editor.editorView().state.doc.toString());
@@ -159,18 +163,21 @@ export default function App() {
                   setProgList(proglist);
                   console.log(res.vm_states);
                   setOut(res.debug);
-                  setCommGraphOut(res.messageFlow_graph); //set the message flow data
+                  setCommGraphOut(res.message_flow_graph); //set the message flow data
                   setVmStates(res.vm_states);
                   setStdout(res.stdout.join('\n'));
                 } catch(e: any) {
                   setOut("ERROR: "+(e.pos && ('line '+e.pos.line))+"\n"+e.message);
                 }
               }}>
-                <i class="codicon codicon-play"></i>
-                Run</button>
-              <button 
-                class="vscode-button"
-                onClick={(e) => {
+              <i class="codicon codicon-play"></i>
+              Run
+            </button>
+
+            <button
+              class={`vscode-button${activeAction() === "check" ? " active" : ""}`}
+              onClick={() => {
+                setActiveAction(activeAction() === "check" ? null : "check");
                 try {
                   let res = check(editor.editorView().state.doc.toString())
                   setOut(res);
@@ -219,27 +226,35 @@ export default function App() {
                   setOut("ERROR: "+(e.pos && ('line '+e.pos.line))+"\n"+e.message);
                 }
               }}>
-                <i class="codicon codicon-check"></i>
-                Check</button>
-                <button 
-              class="vscode-button"
-              onClick={(e) => {
+              <i class="codicon codicon-check"></i>
+              Check
+            </button>
+
+            <button
+              class={`vscode-button${activeAction() === "reset" ? " active" : ""}`}
+              onClick={() => {
+                setActiveAction(activeAction() === "reset" ? null : "reset");
                 setIsRun(true);
                 setOut("The execution output will appear here.");
                 setStdout("The console output will appear here.");
-                setCommGraphOut(STR_MSGFLOW);
+                setCommGraphOut([]);
                 setNodes([]);
                 setEdges([]);
               }}>
-                <i class="codicon codicon-clear-all"></i>
-                Reset</button>
-              <button 
-                class="vscode-button"
-                onClick={() => { navigate('/tutorial'); }}>
-                  <i class="codicon codicon-book"></i>
-                  Tutorials
-              </button>
-            </div>
+              <i class="codicon codicon-clear-all"></i>
+              Reset
+            </button>
+
+            <button
+              class={`vscode-button${activeAction() === "tutorial" ? " active" : ""}`}
+              onClick={() => {
+                setActiveAction(activeAction() === "tutorial" ? null : "tutorial");
+                navigate('/tutorial');
+              }}>
+              <i class="codicon codicon-book"></i>
+              Tutorials
+            </button>
+          </div>
       </div>
       <Resizable id="content">
         <Resizable.Panel class="editor-panel"
