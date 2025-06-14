@@ -1,6 +1,6 @@
 // @refresh granular
 /** @jsxImportSource solid-js */
-import { createSignal, onCleanup, onMount } from "solid-js";
+import { createSignal } from "solid-js";
 import Resizable from '@corvu/resizable'
 import { Example1 } from "./examples/example1";
 import { useNavigate } from "@solidjs/router";
@@ -10,7 +10,6 @@ import createEditor from './Editor';
 import Graph from "./Graph";
 import { Logo } from "./assets/images/Logo";
 import {renderMessageFlowGraph} from "./CommGraph";
-import { EditorState } from "@codemirror/state";
 import { STR_MSGFLOW } from "./stringConstants";
 import { extractProgs } from "./ExtractFromVm";
 import { rendervmStates } from "./vmStatesDIsplay";
@@ -92,30 +91,36 @@ export default function App() {
 
   const renderExecContent = () => {
     if (isRun()) {
-      if (activetab() === "execution") {
-        return ( //run + execution tab
+      if (activetab() === "console") {
+        return (
           <div class="console">
-            <div>
-              <pre>{out()}</pre>
-            </div>
+            <pre>{stdout()}</pre>
+          </div>
+        );
+      } else if (activetab() === "execution") {
+        return (
+          <div class="console">
+            <pre>{out()}</pre>
           </div>
         );
       } else if (activetab() === "msg_flow") {
-        return ( //run + message flow tab
-            <div class="console">
-              <div>{renderMessageFlowGraph(commgraphout(), prog_list(), vm_states())}</div>
-            </div>
+        return (
+          <div class="console">
+            {renderMessageFlowGraph(commgraphout(), prog_list(), vm_states())}
+          </div>
         );
-      } else if (activetab() === "vm_states"){
-        return ( //run + vm states tab
+      } else if (activetab() === "vm_states") {
+        return (
           <div class="console">
             {rendervmStates(vm_states())}
           </div>
         );
       }
     } else {
-      return ( //check
-        <Graph nodes={nodes()} edges={edges()} />
+      return (
+        <div class="console">
+          <Graph nodes={nodes()} edges={edges()} />
+        </div>
       );
     }
   };
@@ -247,36 +252,32 @@ export default function App() {
           initialSize={0.45}
           minSize={0.2}>
 
-            <div>
-              <h3>Console</h3>
-              <div class="console">
-                <pre>{stdout()}</pre>
+            <div class="execution-content">
+              <div class="tab">
+                <button class={`tab_button ${activetab() === "console" ? "active" : ""}`}
+                        onclick={() => handleTabClick("console")}>
+                  <h3>Console</h3>
+                </button>
+                <button class={`tab_button ${activetab() === "execution" ? "active" : ""}`}
+                        onclick={() => handleTabClick("execution")}>
+                  <h3>Execution</h3>
+                </button>
+                <button class={`tab_button ${activetab() === "msg_flow" ? "active" : ""}`}
+                        onclick={() => handleTabClick("msg_flow")}>
+                  <h3>Message flow</h3>
+                </button>
+                <button class={`tab_button ${activetab() === "vm_states" ? "active" : ""}`}
+                        onclick={() => handleTabClick("vm_states")}>
+                  <h3>VM states</h3>
+                </button>
+              </div>
+
+              <div class="tab-content">
+                {renderExecContent()}
               </div>
             </div>
 
-            <div class="execution_content">
-              <div class ="tab">
-                <button class ={`tab_button ${activetab() === "execution" ? "active" : ""}`}
-                        onclick={()=> handleTabClick("execution")
-                        }><h3>Execution</h3></button>
-                <button class={`tab_button ${activetab() === "msg_flow" ? "active" : ""}`} 
-                        onclick={()=>handleTabClick("msg_flow")
-                        }><h3>Message flow</h3></button>
-                <button class={`tab_button ${activetab() === "vm_states" ? "active" : ""}`} 
-                        onclick={()=>handleTabClick("vm_states")
-                        }><h3>VM states</h3></button>
-            
-            
-              </div>
-          
-              { /*render execution field content */}
-                <div class="tab-content">
-                  {renderExecContent()}
-                </div>
-            </div>
-            
-       
-        </Resizable.Panel>
+</Resizable.Panel>
       </Resizable>
     </>
   );

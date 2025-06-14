@@ -57,5 +57,4 @@ export const rendervmStates = (vm_states) => {
 
     });
     return <div class="state-graph" ref={container} />;
-    
 }

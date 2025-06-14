@@ -33,28 +33,44 @@ body {
     overflow: scroll;
 }
 .right-panel {
-    padding-left: 1rem;
-    padding-right: 1rem;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
 }
 
+.execution-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+}
 
 .state-graph {
-    width: 100%;
-    height: 50vh;
-    border-radius: 6px;
-    border: 1px solid #333;
-    box-shadow: 0 0 10px rgba(0,0,0,0.2);
-    background-color: #1e1e1e;
+  width: 100%;
+  height: 100%;
+  flex: 1 1 0%;
+  min-height: 0;
+  background: #181c24;
+  border: 1.5px solid #333;
+  border-radius: 6px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.25);
+  position: relative;
 }
 
 .console {
   background-color: #1e1e1e;
-  border-radius: 6px;
-  border: 1px solid #333;
+  border-top: none;
   box-shadow: 0 0 10px rgba(0,0,0,0.2);
-  margin: 1rem 0;
-  max-height: 50vh;
+  padding: 1rem;
+  margin: 0;
+  flex: 1 1 0%;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  display: flex;          
+  flex-direction: column; 
 }
 
 .console pre {
@@ -169,37 +185,70 @@ body {
     background: rgba(127, 127, 127, 0.2);
   }
 
-  .tab{
-    display: flex;
-    justify-content: flex-start; 
-    margin-bottom: 0;  
-    padding: 0;  
-    border-bottom: 1px solid #5f5f5f;
-    border-radius: 2px;
-  }
+  .tab {
+  display: flex;
+  gap: 0;
+  justify-content: flex-start;
+  margin-bottom: 0;
+  padding: 0;
+  border-bottom: 1px solid #222; /* VS Code style separator */
+  background: #232323;
+}
 
-  .tab_button{
-    background: rgba(161, 161, 161, 0.137);
-    padding: 2px 5px;
-    color: #cccccc;
-    transition: background-color 0.2s;
-    border: none;
-    cursor: pointer;
+.tab_button {
+  display: flex;
+  align-items: center;
+  background-color: #232323;
+  color: #cccccc;
+  border: 0px solid #222;
+  border-bottom: 2px solid transparent; /* Reserve space for underline */
+  border-right: none;
+  padding: 10px 18px 10px 18px;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  min-width: 0;
+  min-height: 0;
+  transition: background-color 0.2s, border-color 0.2s;
+  border-radius: 0;
+  position: relative;
+  /* top: 1px; visually raise tabs above the border */
+}
 
-  }
-  .tab_button:hover{
-    background-color: rgba(223, 223, 223, 0.137);
-  }
-  .tab_button:active{
-    background-color: rgba(61, 61, 61, 0.219);
-  }
-  .tab_button.active{
-    background-color: rgba(61, 61, 61, 0.219);
-  }
+.tab_button:first-child {
+  border-top-left-radius: 4px;
+  border-left: 1px solid #222;
+}
+
+.tab_button:last-child {
+  border-top-right-radius: 4px;
+}
+
+.tab_button:not(.active):hover {
+  background-color: #2d2d2d;
+}
+
+.tab_button.active {
+  background-color: #1e1e1e;
+  color: #fff;
+  border-bottom: 2px solid #fff; /* White underline for active tab */
+  z-index: 1;
+}
+
+.tab_button h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: normal;
+}
+
   .tab:last-child{
   margin-right: 0;
   }
-  .tab-content{
-    margin-top: 0;
-
-  }
+  .tab-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  min-height: 0;
+  margin-top: 0;
+  /* Remove or avoid overflow-y here */
+}

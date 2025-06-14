@@ -10,10 +10,10 @@ export const printCommGrapEventList = (eventl: any) => {
   //debug purpose
   try{
     if (eventl === STR_MSGFLOW){
-      return (<div class="console"><pre>{eventl}</pre></div>);
+      return (<pre>{eventl}</pre>);
     }
     else return (
-      <div class="console">
+      <>
         {eventl && eventl.length > 0 ? (
           <ul>
             {eventl.map((event, index) => (
@@ -25,7 +25,7 @@ export const printCommGrapEventList = (eventl: any) => {
         ) : (
           <p>No MessageFlow events recorded.</p>
         )}
-      </div>
+      </>
     );
   }catch(e){
     console.log(e.message);
@@ -52,14 +52,9 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
   let container!: HTMLDivElement;
   let network: vis.Network | null = null;
 
-  if (commGraphData === STR_MSGFLOW || commGraphData.length === 0){
-    return(<div class="console"><pre>{STR_MSGFLOW}</pre></div>);
+  if (commGraphData === STR_MSGFLOW){
+    return(<pre>{STR_MSGFLOW}</pre>);
   }
-  //ne sert a rien pour l'instant
-  const zoom = {
-    scale:1,
-    position: {x:0, y:0},
-  };
 
   let [popupVisible, setPopupVisible] = createSignal(false);
   let [popupContent, setPopupContent] = createSignal("");
