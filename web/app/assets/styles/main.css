@@ -260,6 +260,7 @@ body {
 
 .tab_button:disabled {
   opacity: 0.7;
+  pointer-events: none;
 }
 
 .tab_button:disabled:hover {
