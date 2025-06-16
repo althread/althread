@@ -20,6 +20,7 @@ init().then(() => {
   console.log('loaded');
 });
 
+const animationTimeOut = 100; //ms
 
 export default function App() {
 
@@ -36,9 +37,9 @@ export default function App() {
     onValueChange: (value) => {localStorage.setItem('source-code', value);}
   });
 
-  let [activetab, setActivetab] = createSignal("console");
+  let [activeTab, setActiveTab] = createSignal("console");
   const handleTabClick = (tab: string) => {
-    setActivetab(tab);
+    setActiveTab(tab);
   };
 
   let [nodes, setNodes] = createSignal([]);
@@ -51,29 +52,30 @@ export default function App() {
   let [prog_list, setProgList] = createSignal<any[]>([]); //for the messageflow graph
   let [vm_states, setVmStates] = createSignal<any[]>([]); //to display vm states information
   let [activeAction, setActiveAction] = createSignal<string | null>(null);
+  const [loadingAction, setLoadingAction] = createSignal<string | null>(null);
 
 
   const renderExecContent = () => {
     if (isRun()) {
-      if (activetab() === "console") {
+      if (activeTab() === "console") {
         return (
           <div class="console">
             <pre>{stdout()}</pre>
           </div>
         );
-      } else if (activetab() === "execution") {
+      } else if (activeTab() === "execution") {
         return (
           <div class="console">
             <pre>{out()}</pre>
           </div>
         );
-      } else if (activetab() === "msg_flow") {
+      } else if (activeTab() === "msg_flow") {
         return (
           <div class="console">
             {renderMessageFlowGraph(commgraphout(), prog_list(), vm_states())}
           </div>
         );
-      } else if (activetab() === "vm_states") {
+      } else if (activeTab() === "vm_states") {
         return (
           <div class="console">
             {rendervmStates(vm_states())}
@@ -81,7 +83,7 @@ export default function App() {
         );
       }
     } else {
-      setActivetab("vm_states");
+      setActiveTab("vm_states");
       return (
         <div class="console">
           <Graph nodes={nodes()} edges={edges()} />
@@ -100,9 +102,10 @@ export default function App() {
           </div>
           <div class="actions">
             <button
-              class={`vscode-button${activeAction() === "load" ? " active" : ""}`}
-              onClick={() => {
-                setActiveAction(activeAction() === "load" ? null : "load");
+              class={`vscode-button${loadingAction() === "load" ? " active" : ""}`}
+              onClick={async () => {
+                setLoadingAction("load");
+                try {
                 let up = editor.editorView().state.update({
                   changes: {
                     from: 0, 
@@ -111,16 +114,24 @@ export default function App() {
                   }
                 })
                 editor.editorView().update([up]);
+              } catch (error) {
+                console.error("Error loading example:", error);
+              } finally {
+                setTimeout(() => {
+                    setLoadingAction(null);
+                    setActiveAction(null);
+                }, animationTimeOut);
               }
-              }>
-              <i class="codicon codicon-file"></i>
+              }}>
+              <i class={loadingAction() === "load" ? "codicon codicon-loading codicon-modifier-spin" : "codicon codicon-file"}></i>
               Load Example
             </button>
 
             <button
-              class={`vscode-button${activeAction() === "run" ? " active" : ""}`}
-              onClick={() => {
-                setActiveAction(activeAction() === "run" ? null : "run");
+              class={`vscode-button${loadingAction() === "run" ? " active" : ""}`}
+              disabled={loadingAction() === "run"}
+              onClick={async () => {
+                setLoadingAction("run");
                 try {
                   setIsRun(true);
                   let res = run(editor.editorView().state.doc.toString());
@@ -128,14 +139,20 @@ export default function App() {
                   setProgList(proglist);
                   console.log(res.vm_states);
                   setOut(res.debug);
-                  setCommGraphOut(res.message_flow_graph); //set the message flow data
+                  setCommGraphOut(res.message_flow_graph);
                   setVmStates(res.vm_states);
                   setStdout(res.stdout.join('\n'));
+                  setActiveTab("execution");
                 } catch(e: any) {
                   setOut("ERROR: "+(e.pos && ('line '+e.pos.line))+"\n"+e.message);
+                } finally {
+                  setTimeout(() => {
+                    setLoadingAction(null);
+                    setActiveAction(null);
+                  }, animationTimeOut);
                 }
               }}>
-              <i class="codicon codicon-play"></i>
+              <i class={loadingAction() === "run" ? "codicon codicon-loading codicon-modifier-spin" : "codicon codicon-play"}></i>
               Run
             </button>
 
@@ -196,25 +213,31 @@ export default function App() {
             </button>
 
             <button
-              class={`vscode-button${activeAction() === "reset" ? " active" : ""}`}
-              onClick={() => {
-                setActiveAction(activeAction() === "reset" ? null : "reset");
-                setIsRun(true);
-                setOut("The execution output will appear here.");
-                setStdout("The console output will appear here.");
-                setCommGraphOut([]);
-                setNodes([]);
-                setEdges([]);
-                setVmStates([]);
+              class={`vscode-button${loadingAction() === "reset" ? " active" : ""}`}
+              onClick={async () => {
+                setLoadingAction("reset");
+                try {
+                  setIsRun(true);
+                  setOut("The execution output will appear here.");
+                  setStdout("The console output will appear here.");
+                  setCommGraphOut([]);
+                  setNodes([]);
+                  setEdges([]);
+                  setVmStates([]);
+                } finally {
+                  setTimeout(() => {
+                    setLoadingAction(null);
+                  }, animationTimeOut);
+                }
               }}>
-              <i class="codicon codicon-clear-all"></i>
+              <i class={loadingAction() === "reset" ? "codicon codicon-loading codicon-modifier-spin" : "codicon codicon-clear-all"}></i>
               Reset
             </button>
 
             <button
-              class={`vscode-button${activeAction() === "tutorial" ? " active" : ""}`}
+              class={`vscode-button${loadingAction() === "tutorial" ? " active" : ""}`}
               onClick={() => {
-                setActiveAction(activeAction() === "tutorial" ? null : "tutorial");
+                setLoadingAction("tutorial");
                 navigate('/tutorial');
               }}>
               <i class="codicon codicon-book"></i>
@@ -235,25 +258,25 @@ export default function App() {
 
             <div class="execution-content">
               <div class="tab">
-                <button class={`tab_button ${activetab() === "console" ? "active" : ""}`}
+                <button class={`tab_button ${activeTab() === "console" ? "active" : ""}`}
                         onclick={() => handleTabClick("console")}
                         disabled={!isRun()}
                 >
                   <h3>Console</h3>
                 </button>
-                <button class={`tab_button ${activetab() === "execution" ? "active" : ""}`}
+                <button class={`tab_button ${activeTab() === "execution" ? "active" : ""}`}
                         onclick={() => handleTabClick("execution")}
                         disabled={!isRun()}
                 >
                   <h3>Execution</h3>
                 </button>
-                <button class={`tab_button ${activetab() === "msg_flow" ? "active" : ""}`}
+                <button class={`tab_button ${activeTab() === "msg_flow" ? "active" : ""}`}
                         onclick={() => handleTabClick("msg_flow")}
                         disabled={!isRun()}
                 >
                   <h3>Message flow</h3>
                 </button>
-                <button class={`tab_button ${activetab() === "vm_states" ? "active" : ""}`}
+                <button class={`tab_button ${activeTab() === "vm_states" ? "active" : ""}`}
                         onclick={() => handleTabClick("vm_states")}
                 >
                   <h3>VM states</h3>

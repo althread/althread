@@ -20,10 +20,6 @@ const visOptions = {
     borderWidth: 2,
     borderWidthSelected: 4,
     shadow: true,
-    shadowColor: "rgba(0,0,0,0.2)",
-    shadowSize: 10,
-    shadowX: 0,
-    shadowY: 0,
     font: {
       color: "#222",
       size: 16,

@@ -57,7 +57,7 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
   const [maximized, setMaximized] = createSignal(false);
 
   if (!commGraphData || commGraphData.length === 0) {
-    return <pre>The communication graph will appear here.</pre>;
+    return <pre>The communication graph will appear here (if any communication events are recorded).</pre>;
   }
 
   let [popupVisible, setPopupVisible] = createSignal(false);
