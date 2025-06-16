@@ -1,6 +1,6 @@
 /** @jsxImportSource solid-js */
 import vis from "vis-network/dist/vis-network.esm";
-import { onCleanup, onMount } from "solid-js";
+import { createSignal, onCleanup, onMount } from "solid-js";
 import {nodeToString} from "./Node";
 import GraphToolbar from "./GraphToolbar";
 
@@ -8,6 +8,7 @@ export const rendervmStates = (vm_states) => {
     console.log(vm_states);
     let container: HTMLDivElement | undefined;
     let network: vis.Network | null = null;
+    const [maximized, setMaximized] = createSignal(false);
 
     if (!vm_states || vm_states.length === 0) {
         return <pre>The VM states will appear here.</pre>;
@@ -63,22 +64,29 @@ export const rendervmStates = (vm_states) => {
     });
 
 
-      const handleFullscreen = () => {
-    if (container && container.requestFullscreen) {
-      container.requestFullscreen();
-    }
-  }
 
-  const handleRecenter = () => {
-    if (network) {
-      network.fit();
-    }
-  }
+    const handleMaximize = () => {
+      setMaximized(!maximized());
+    };
+
+    const handleRecenter = () => {
+      if (network) {
+        network.fit();
+      }
+    };
 
     return (
-        <>
-          <GraphToolbar onFullscreen={handleFullscreen} onRecenter={handleRecenter} />
-          <div class="state-graph" ref={container} />
-        </>
+      <div
+        class={`state-graph${maximized() ? " maximized" : ""}`}
+      >
+        <div
+          ref={container}
+          style="width: 100%; height: 100%;"
+        />
+        <GraphToolbar
+          onFullscreen={handleMaximize}
+          onRecenter={handleRecenter}
+        />
+      </div>
     );
 }

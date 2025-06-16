@@ -51,6 +51,7 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
   //commGraphData = array of communication events
   let container!: HTMLDivElement;
   let network: vis.Network | null = null;
+  const [maximized, setMaximized] = createSignal(false);
 
   if (!commGraphData || commGraphData.length === 0) {
     return <pre>The communication graph will appear here.</pre>;
@@ -224,22 +225,30 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
     onCleanup(() => { if (network) network.destroy(); });
   });
 
-  const handleFullscreen = () => {
-    if (container.requestFullscreen) {
-      container.requestFullscreen();
-    }
-  }
+  const handleMaximize = () => {
+    setMaximized(!maximized());
+  };
 
   const handleRecenter = () => {
     if (network) {
       network.fit();
     }
-  }
+  };
 
   return (
     <>
-      <GraphToolbar onFullscreen={handleFullscreen} onRecenter={handleRecenter} />
-      <div class="state-graph" ref={container} />
+    <div
+      class={`state-graph${maximized() ? " maximized" : ""}`}
+    >
+      <div
+        ref={container}
+        style="width: 100%; height: 100%;"
+      />
+      <GraphToolbar
+        onFullscreen={handleMaximize}
+        onRecenter={handleRecenter}
+      />
+    </div>
 
       {popupVisible() && (
         <div
@@ -261,6 +270,4 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
       )}
     </>
   );
-  
-  
 }
