@@ -5,6 +5,7 @@ import {nodeToString} from "./Node";
 import GraphToolbar from "./GraphToolbar.jsx";
 
 import { createGraphToolbarHandlers } from "./visHelpers";
+import { useGraphMaximizeHotkeys } from "./hooks/useGraphMaximizeHotkeys";
 
 
 
@@ -226,6 +227,8 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
 
     onCleanup(() => { if (network) network.destroy(); });
   });
+
+  useGraphMaximizeHotkeys(setMaximized);
 
   const { handleMaximize, handleRecenter, handleDownload } = createGraphToolbarHandlers(
       () => network,

@@ -8,10 +8,16 @@ interface GraphToolbarProps {
 }
 
 export default function GraphToolbar(props: GraphToolbarProps) {
-
   return (
     <div class="graph-toolbar">
-      <button title={props.isFullscreen ? "Exit Fullscreen" : "Fullscreen"} onClick={props.onFullscreen}>
+      <button
+        title={
+          props.isFullscreen
+            ? "Exit Fullscreen (Esc, F)"
+            : "Fullscreen (F)"
+        }
+        onClick={props.onFullscreen}
+      >
         <i class={props.isFullscreen ? "codicon codicon-chrome-close" : "codicon codicon-screen-full"}></i>
       </button>
       <button title="Recenter" onClick={props.onRecenter}>

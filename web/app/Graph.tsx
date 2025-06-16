@@ -4,6 +4,7 @@ import { createEffect, onCleanup, onMount, createSignal } from "solid-js";
 import GraphToolbar from "./GraphToolbar";
 import visOptions from "./visOptions";
 import { setupNodeClickZoom, createGraphToolbarHandlers } from "./visHelpers";
+import { useGraphMaximizeHotkeys } from "./hooks/useGraphMaximizeHotkeys";
 
 export default (props /*: GraphProps*/) => {
     let container: HTMLDivElement | undefined; // Renamed for clarity
@@ -45,6 +46,8 @@ export default (props /*: GraphProps*/) => {
             }
         });
     });
+
+    useGraphMaximizeHotkeys(setMaximized);
 
     const { handleMaximize, handleRecenter, handleDownload } = createGraphToolbarHandlers(
         () => network,

@@ -5,6 +5,7 @@ import {nodeToString} from "./Node";
 import GraphToolbar from "./GraphToolbar";
 import visOptions from "./visOptions";
 import { setupNodeClickZoom, createGraphToolbarHandlers } from "./visHelpers";
+import { useGraphMaximizeHotkeys } from "./hooks/useGraphMaximizeHotkeys";
 
 export const rendervmStates = (vm_states) => {
     console.log(vm_states);
@@ -52,6 +53,7 @@ export const rendervmStates = (vm_states) => {
     });
 
 
+    useGraphMaximizeHotkeys(setMaximized);
 
     const { handleMaximize, handleRecenter, handleDownload } = createGraphToolbarHandlers(
         () => network,
