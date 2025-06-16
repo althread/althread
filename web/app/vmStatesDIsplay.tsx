@@ -86,6 +86,7 @@ export const rendervmStates = (vm_states) => {
         <GraphToolbar
           onFullscreen={handleMaximize}
           onRecenter={handleRecenter}
+          isFullscreen={maximized()}
         />
       </div>
     );

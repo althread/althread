@@ -247,6 +247,7 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
       <GraphToolbar
         onFullscreen={handleMaximize}
         onRecenter={handleRecenter}
+        isFullscreen={maximized()}
       />
     </div>
 
