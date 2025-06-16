@@ -3,6 +3,8 @@ import vis from "vis-network/dist/vis-network.esm";
 import { createSignal, onCleanup, onMount } from "solid-js";
 import {nodeToString} from "./Node";
 import GraphToolbar from "./GraphToolbar";
+import visOptions from "./visOptions";
+import { setupNodeClickZoom } from "./visHelpers";
 
 export const rendervmStates = (vm_states) => {
     console.log(vm_states);
@@ -39,23 +41,9 @@ export const rendervmStates = (vm_states) => {
             }
         })
         const data = { nodes, edges };
-        
-        const options = {
-            layout: {
-                hierarchical: {
-                    enabled: true,
-                    direction: "LR", //idk why but it goes up-down with LR
-                    nodeSpacing: 250,
-                    sortMethod: "directed", 
-                }
-            },
-            edges: {
-                arrows: "to",
-            },
-            physics: true, 
-        };
-        
-        network = new vis.Network(container, data, options);
+        visOptions.layout.hierarchical.direction = "LR";
+        network = new vis.Network(container, data, visOptions);
+        setupNodeClickZoom(network);
         network.once('stabilized', function() {
             if (network) network.fit();
         });
