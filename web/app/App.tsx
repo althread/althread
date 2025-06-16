@@ -81,6 +81,7 @@ export default function App() {
         );
       }
     } else {
+      setActivetab("vm_states");
       return (
         <div class="console">
           <Graph nodes={nodes()} edges={edges()} />
@@ -235,19 +236,26 @@ export default function App() {
             <div class="execution-content">
               <div class="tab">
                 <button class={`tab_button ${activetab() === "console" ? "active" : ""}`}
-                        onclick={() => handleTabClick("console")}>
+                        onclick={() => handleTabClick("console")}
+                        disabled={!isRun()}
+                >
                   <h3>Console</h3>
                 </button>
                 <button class={`tab_button ${activetab() === "execution" ? "active" : ""}`}
-                        onclick={() => handleTabClick("execution")}>
+                        onclick={() => handleTabClick("execution")}
+                        disabled={!isRun()}
+                >
                   <h3>Execution</h3>
                 </button>
                 <button class={`tab_button ${activetab() === "msg_flow" ? "active" : ""}`}
-                        onclick={() => handleTabClick("msg_flow")}>
+                        onclick={() => handleTabClick("msg_flow")}
+                        disabled={!isRun()}
+                >
                   <h3>Message flow</h3>
                 </button>
                 <button class={`tab_button ${activetab() === "vm_states" ? "active" : ""}`}
-                        onclick={() => handleTabClick("vm_states")}>
+                        onclick={() => handleTabClick("vm_states")}
+                >
                   <h3>VM states</h3>
                 </button>
               </div>

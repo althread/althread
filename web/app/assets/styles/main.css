@@ -230,7 +230,6 @@ body {
   transition: background-color 0.2s, border-color 0.2s;
   border-radius: 0;
   position: relative;
-  /* top: 1px; visually raise tabs above the border */
 }
 
 .tab_button:first-child {
@@ -259,22 +258,30 @@ body {
   font-weight: normal;
 }
 
-  .tab:last-child{
+.tab_button:disabled {
+  opacity: 0.7;
+}
+
+.tab_button:disabled:hover {
+  background: #1e1e1e;
+}
+
+.tab:last-child {
   margin-right: 0;
-  }
-  .tab-content {
+}
+
+.tab-content {
   display: flex;
   flex-direction: column;
   flex: 1 1 0%;
   min-height: 0;
   margin-top: 0;
-  /* Remove or avoid overflow-y here */
 }
 
 .graph-toolbar {
   position: absolute;
-  top: 10px; /* Adjusted from 34px */
-  right: 10px; /* Adjusted from 30px */
+  top: 10px;
+  right: 10px;
   display: flex;
   flex-direction: column;
   gap: 10px;
