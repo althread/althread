@@ -15,5 +15,5 @@
     "jsx": "preserve",
     "jsxImportSource": "solid-js"
   },
-  "include": ["./app"]
+  "include": ["./app", "./vis-network-esm.d.ts"]
 }
