@@ -3,7 +3,7 @@ import vis from "vis-network/dist/vis-network.esm";
 import { createEffect, onCleanup, onMount, createSignal } from "solid-js";
 import GraphToolbar from "./GraphToolbar";
 import visOptions from "./visOptions";
-import { setupNodeClickZoom } from "./visHelpers";
+import { setupNodeClickZoom, createGraphToolbarHandlers } from "./visHelpers";
 
 export default (props /*: GraphProps*/) => {
     let container: HTMLDivElement | undefined; // Renamed for clarity
@@ -46,15 +46,11 @@ export default (props /*: GraphProps*/) => {
         });
     });
 
-    const handleMaximize = () => {
-      setMaximized(!maximized());
-    };
-
-    const handleRecenter = () => {
-      if (network) {
-        network.fit();
-      }
-    };
+    const { handleMaximize, handleRecenter, handleDownload } = createGraphToolbarHandlers(
+        () => network,
+        () => container,
+        () => setMaximized((v: boolean) => !v)
+    );
 
     return (
       <div
@@ -67,6 +63,7 @@ export default (props /*: GraphProps*/) => {
         <GraphToolbar
           onFullscreen={handleMaximize}
           onRecenter={handleRecenter}
+          onDownload={handleDownload}
           isFullscreen={maximized()}
         />
       </div>

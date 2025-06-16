@@ -3,10 +3,12 @@
 interface GraphToolbarProps {
   onFullscreen: () => void;
   onRecenter: () => void;
+  onDownload: () => void;
   isFullscreen?: boolean;
 }
 
 export default function GraphToolbar(props: GraphToolbarProps) {
+
   return (
     <div class="graph-toolbar">
       <button title={props.isFullscreen ? "Exit Fullscreen" : "Fullscreen"} onClick={props.onFullscreen}>
@@ -14,6 +16,9 @@ export default function GraphToolbar(props: GraphToolbarProps) {
       </button>
       <button title="Recenter" onClick={props.onRecenter}>
         <i class="codicon codicon-record"></i>
+      </button>
+      <button title="Download" onClick={props.onDownload}>
+        <i class="codicon codicon-desktop-download"></i>
       </button>
     </div>
   );

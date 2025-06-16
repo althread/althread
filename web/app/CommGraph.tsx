@@ -4,6 +4,8 @@ import { createSignal, onCleanup, onMount } from "solid-js"
 import {nodeToString} from "./Node";
 import GraphToolbar from "./GraphToolbar.jsx";
 
+import { createGraphToolbarHandlers } from "./visHelpers";
+
 
 
 export const printCommGrapEventList = (eventl: any) => {
@@ -225,15 +227,11 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
     onCleanup(() => { if (network) network.destroy(); });
   });
 
-  const handleMaximize = () => {
-    setMaximized(!maximized());
-  };
-
-  const handleRecenter = () => {
-    if (network) {
-      network.fit();
-    }
-  };
+  const { handleMaximize, handleRecenter, handleDownload } = createGraphToolbarHandlers(
+      () => network,
+      () => container,
+      () => setMaximized((v: boolean) => !v)
+  );
 
   return (
     <>
@@ -247,6 +245,7 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
       <GraphToolbar
         onFullscreen={handleMaximize}
         onRecenter={handleRecenter}
+        onDownload={handleDownload}
         isFullscreen={maximized()}
       />
     </div>

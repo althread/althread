@@ -4,7 +4,7 @@ import { createSignal, onCleanup, onMount } from "solid-js";
 import {nodeToString} from "./Node";
 import GraphToolbar from "./GraphToolbar";
 import visOptions from "./visOptions";
-import { setupNodeClickZoom } from "./visHelpers";
+import { setupNodeClickZoom, createGraphToolbarHandlers } from "./visHelpers";
 
 export const rendervmStates = (vm_states) => {
     console.log(vm_states);
@@ -53,15 +53,11 @@ export const rendervmStates = (vm_states) => {
 
 
 
-    const handleMaximize = () => {
-      setMaximized(!maximized());
-    };
-
-    const handleRecenter = () => {
-      if (network) {
-        network.fit();
-      }
-    };
+    const { handleMaximize, handleRecenter, handleDownload } = createGraphToolbarHandlers(
+        () => network,
+        () => container,
+        () => setMaximized((v: boolean) => !v)
+    );
 
     return (
       <div
@@ -74,6 +70,7 @@ export const rendervmStates = (vm_states) => {
         <GraphToolbar
           onFullscreen={handleMaximize}
           onRecenter={handleRecenter}
+          onDownload={handleDownload}
           isFullscreen={maximized()}
         />
       </div>
