@@ -1,18 +1,25 @@
 /** @jsxImportSource solid-js */
-import {For} from "solid-js";
 import vis from "vis-network/dist/vis-network.esm";
-import { createEffect, onCleanup, onMount } from "solid-js";
-import {nodeToString} from "./App.tsx";
+import { onCleanup, onMount } from "solid-js";
+import {nodeToString} from "./Node";
+import GraphToolbar from "./GraphToolbar";
 
 export const rendervmStates = (vm_states) => {
     console.log(vm_states);
-    let container!: HTMLDivElement;
+    let container: HTMLDivElement | undefined;
+    let network: vis.Network | null = null;
 
     if (!vm_states || vm_states.length === 0) {
         return <pre>The VM states will appear here.</pre>;
     }
 
     onMount(() => {
+        if (!container) {
+            console.error("Graph container element not found.");
+            return;
+        }
+
+
         const nodes: any = [];
         const edges: any = [];
 
@@ -47,17 +54,31 @@ export const rendervmStates = (vm_states) => {
             physics: true, 
         };
         
-        var network = new vis.Network(container, data, options);
+        network = new vis.Network(container, data, options);
         network.once('stabilized', function() {
-            network.fit();
+            if (network) network.fit();
         });
 
-        onCleanup(() => network.destroy());
-
-
-
-
-
+        onCleanup(() => { if (network) network.destroy(); });
     });
-    return <div class="state-graph" ref={container} />;
+
+
+      const handleFullscreen = () => {
+    if (container && container.requestFullscreen) {
+      container.requestFullscreen();
+    }
+  }
+
+  const handleRecenter = () => {
+    if (network) {
+      network.fit();
+    }
+  }
+
+    return (
+        <>
+          <GraphToolbar onFullscreen={handleFullscreen} onRecenter={handleRecenter} />
+          <div class="state-graph" ref={container} />
+        </>
+    );
 }

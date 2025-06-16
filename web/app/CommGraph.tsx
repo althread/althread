@@ -1,7 +1,8 @@
 /** @jsxImportSource solid-js */
 import vis from "vis-network/dist/vis-network.esm";
 import { createSignal, onCleanup, onMount } from "solid-js"
-import {nodeToString} from "./App.tsx";
+import {nodeToString} from "./Node";
+import GraphToolbar from "./GraphToolbar.jsx";
 
 
 
@@ -49,6 +50,7 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
   //prog_list = array of program names (strings)
   //commGraphData = array of communication events
   let container!: HTMLDivElement;
+  let network: vis.Network | null = null;
 
   if (!commGraphData || commGraphData.length === 0) {
     return <pre>The communication graph will appear here.</pre>;
@@ -171,7 +173,7 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
       }
       i++;
     });
-    const data = { nodes, edges };
+    const data = { nodes: nodes.get(), edges: edges.get() };
 
     const options = {
       layout: {
@@ -186,7 +188,10 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
       }
     };
 
-    var network = new vis.Network(container, data, options);
+    network = new vis.Network(container, data, options);
+    network.once('stabilized', function() {
+      if (network) network.fit();
+    });
 
     /* to display the associated vm state when clicking on an event node */
     let previous_node_id = null;
@@ -216,13 +221,26 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
     }
     );
 
-    onCleanup(() => network.destroy());
+    onCleanup(() => { if (network) network.destroy(); });
   });
+
+  const handleFullscreen = () => {
+    if (container.requestFullscreen) {
+      container.requestFullscreen();
+    }
+  }
+
+  const handleRecenter = () => {
+    if (network) {
+      network.fit();
+    }
+  }
 
   return (
     <>
+      <GraphToolbar onFullscreen={handleFullscreen} onRecenter={handleRecenter} />
       <div class="state-graph" ref={container} />
-  
+
       {popupVisible() && (
         <div
           style={{

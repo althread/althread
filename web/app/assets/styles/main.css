@@ -70,6 +70,7 @@ body {
   min-height: 0;
   display: flex;          
   flex-direction: column; 
+  position: relative; /* Add this! */
 }
 
 .console pre {
@@ -256,4 +257,28 @@ body {
   min-height: 0;
   margin-top: 0;
   /* Remove or avoid overflow-y here */
+}
+
+.graph-toolbar {
+  position: absolute; /* Add this! */
+  top: 34px;
+  right: 30px;
+  display: flex;
+  gap: 6px;
+  z-index: 10;
+}
+
+.graph-toolbar button {
+  display: flex;
+  padding: 0.5rem;
+  background: #232323;
+  border: 1px solid #444;
+  color: #ccc;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 15px;
+  transition: background 0.2s;
+}
+.graph-toolbar button:hover {
+  background: #333;
 }

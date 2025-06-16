@@ -1,36 +1,34 @@
 /** @jsxImportSource solid-js */
 import vis from "vis-network/dist/vis-network.esm";
-import { createEffect, onCleanup, onMount } from "solid-js"
+import { createEffect, onCleanup, onMount } from "solid-js";
+import GraphToolbar from "./GraphToolbar";
 
+export default (props /*: GraphProps*/) => {
+    let container: HTMLDivElement | undefined;
+    let network: vis.Network | null = null;
 
-export default (props) => {
-
-    // DOM container
-    var container;
-    let nodesArray = [
-    ];
-    let nodes = new vis.DataSet(nodesArray);
-
-    // create an array with edges
-    let edgesArray = [
-    ];
-    let edges = new vis.DataSet(edgesArray);
+    const nodes = new vis.DataSet(props.nodes || []);
+    const edges = new vis.DataSet(props.edges || []);
 
     createEffect(() => {
         nodes.clear();
+        nodes.add(props.nodes || []);
         edges.clear();
-        nodes.add(props.nodes);
-        edges.add(props.edges);
+        edges.add(props.edges || []);
     });
 
     onMount(() => {
+        if (!container) {
+            console.error("Graph container element not found.");
+            return;
+        }
 
-        // provide the data in the vis format
-        var data = {
-            nodes: nodes,
-            edges: edges
+        const data = {
+            nodes: nodes.get(),
+            edges: edges.get()
         };
-        var options = {
+
+        const options = {
             layout: {
               hierarchical: {
                 direction: "UD",
@@ -41,30 +39,39 @@ export default (props) => {
               arrows: "to",
             },
             physics: {
-            enabled: true,
-            /*barnesHut: {
-                theta: 0.5,
-                gravitationalConstant: -2000,
-                centralGravity: 0.2,
-                springLength: 150,
-                springConstant: 0.04,
-                damping: 0.4,
-                avoidOverlap: 0.9
-            },*/
-              hierarchicalRepulsion: {
-                avoidOverlap: 1,
-              },
-              /*repulsion: {
-                springLength: 2000,
-                nodeDistance: 500,
-                centralGravity: 0.1,
-              }*/
+                enabled: true,
+                hierarchicalRepulsion: {
+                    avoidOverlap: 1,
+                },
             },
-          };
+        };
 
-        // initialize your network!
-        var network = new vis.Network(container, data, options);
+        network = new vis.Network(container, data, options);
+
+        onCleanup(() => {
+            if (network) {
+                network.destroy();
+                network = null;
+            }
+        });
     });
-    return <div class="state-graph" ref={container} />
 
-}
+  const handleFullscreen = () => {
+    if (container && container.requestFullscreen) {
+      container.requestFullscreen();
+    }
+  }
+
+  const handleRecenter = () => {
+    if (network) {
+      network.fit();
+    }
+  }
+
+    return (
+      <>
+      <GraphToolbar onFullscreen={handleFullscreen} onRecenter={handleRecenter} />
+      <div class="state-graph" ref={container} />
+      </>
+    );
+};
