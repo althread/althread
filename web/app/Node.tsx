@@ -18,7 +18,7 @@ export const literal = (value) => {
 }
 
 export const nodeToString = (n: Node) => {
-  let label = 'channels:\n'+[
+  let label = 'Channels:\n'+[
     ...Array.from(n.channels.entries()).map(
       ([k,v]) => k.join('.')+' <- '+(
         v.map(l => literal(l)).join(',')
@@ -26,8 +26,8 @@ export const nodeToString = (n: Node) => {
     )
     )
   ].join('\n');
-  label += '\nGlobals: '+[...Array.from(n.globals.entries()).map(([k,v]) => k+'='+literal(v))].join(',');
-  label += '\nLocals: \n'+Object.values(n.locals).map(l => 'pc:'+l[1]+' stack:['+l[0].map(v=>literal(v)).join(',')+']').join('\n');
+  label += '\n\nGlobals:\n'+[...Array.from(n.globals.entries()).map(([k,v]) => k+'='+literal(v))].join(',');
+  label += '\n\nLocals:\n'+Object.values(n.locals).map(l => 'pc:'+l[1]+' stack:['+l[0].map(v=>literal(v)).join(',')+']').join('\n');
 
   return label;
 }

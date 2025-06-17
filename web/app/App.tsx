@@ -142,7 +142,7 @@ export default function App() {
                   setCommGraphOut(res.message_flow_graph);
                   setVmStates(res.vm_states);
                   setStdout(res.stdout.join('\n'));
-                  setActiveTab("execution");
+                  setActiveTab("console");
                 } catch(e: any) {
                   setOut("ERROR: "+(e.pos && ('line '+e.pos.line))+"\n"+e.message);
                 } finally {
@@ -227,7 +227,7 @@ export default function App() {
                 } finally {
                   setTimeout(() => {
                     setLoadingAction(null);
-                  }, animationTimeOut);
+                  }, 100);
                 }
               }}>
               <i class={loadingAction() === "reset" ? "codicon codicon-loading codicon-modifier-spin" : "codicon codicon-clear-all"}></i>

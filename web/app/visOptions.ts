@@ -11,7 +11,7 @@ const visOptions = {
   nodes: {
     color: {
       highlight: {
-        border: "#ff8800"
+        border: "#6FA6F9"
       },
       hover: {
         border: "#228be6"

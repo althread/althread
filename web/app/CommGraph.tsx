@@ -119,6 +119,8 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
     let i:number = 0;
     let broadcast: boolean = false;
 
+    console.log("commGraphData", commGraphData);
+
     commGraphData.forEach(event => {
       let yposLine = 0;
       let id_txt = "p";
@@ -137,7 +139,6 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
        
       }
       else {
-        nmsg_sent[event.sender]++;
         let id_suite;
         yposLine = event.sender;
         id_txt += event.sender.toString();
@@ -149,7 +150,7 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
         else{
           broadcast = false; id_suite = event.receiver;
         }
-        id_txt += "_send" + "_to" + id_suite + "_" + nmsg_sent[event.sender];
+        id_txt += "_send" + "_to" + id_suite + "_" + event.number;
       }
 
       let msgNode = { id: id_txt, y: yposLine * ySpacing, x: xStart+20+i*50, 
@@ -168,7 +169,7 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
               color: "white",
               align: "middle",
               background: "none",
-              strokeWidth: 0
+              strokeWidth: 0,
             },
             arrows: "to",
             color: "green",
@@ -198,8 +199,8 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
     });
 
     /* to display the associated vm state when clicking on an event node */
-    let previous_node_id = null;
-    let previous_node_colour = null;
+    let previous_node_id: number | null = null;
+    let previous_node_colour: string | null = null;
     network.on("click", (event) =>{
       if(previous_node_id){ //change previous clicked node back to its original colour
         nodes.update({id: previous_node_id, color: previous_node_colour});
@@ -251,9 +252,7 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
         onDownload={handleDownload}
         isFullscreen={maximized()}
       />
-    </div>
-
-      {popupVisible() && (
+        {popupVisible() && (
         <div
           style={{
             position: "absolute",
@@ -261,16 +260,16 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
             left: `${popupPosition().x}px`,
             background: "white",
             color: "black",
-            padding: "8px",
+            padding: "0.1rem",
             border: "1px solid black",
-            "border-radius": "5px",
             "box-shadow": "0px 2px 5px rgba(0, 0, 0, 0.3)",
-            "z-index": "1000",
+            "z-index": "10000",
           }}
         >
           <pre style={{color: "black"}}>{popupContent()}</pre>
         </div>
       )}
+    </div>
     </>
   );
 }
