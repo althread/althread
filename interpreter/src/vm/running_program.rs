@@ -383,7 +383,7 @@ impl<'a> RunningProgramState<'a> {
                     Literal::Null
                 };
 
-
+                // get the frame to restore caller state
                 let frame = self.call_stack.pop().expect("Panic: stack is empty, cannot perform return");
 
                 if return_value.get_datatype() != frame.expected_return_type {
@@ -398,11 +398,14 @@ impl<'a> RunningProgramState<'a> {
                     ));
                 }
 
+                // clean up the memory to the frame pointer
                 self.memory.truncate(self.frame_pointer);
 
+                // restore the frame pointer and instruction pointer
                 self.frame_pointer = frame.caller_fp;
-
                 self.instruction_pointer = frame.return_ip;
+
+                // restore the current code to the caller's code
                 self.current_code = frame.caller_code;
 
                 self.memory.push(return_value);
@@ -416,16 +419,13 @@ impl<'a> RunningProgramState<'a> {
             } => {
 
                 if let Some(v_idx) = variable_idx {
-                    //println!("f: {:?} on v_idx {}", f.name, v_idx);
-                    //println!("current instruction: {:?}", cur_inst);
+
                     let v_idx = self.memory.len() - 1 - v_idx;
                     let mut lit = self
                         .memory
                         .get(v_idx)
                         .expect("Panic: stack is empty, cannot perform function call")
                         .clone();
-
-
 
                     let interfaces = self.stdlib.get_interfaces(&lit.get_datatype()).ok_or(
                         AlthreadError::new(
@@ -469,7 +469,6 @@ impl<'a> RunningProgramState<'a> {
 
                     1
                 } else {
-                    // currently, only the print function is implemented
                     if name == "print" {
                         let lit = self
                             .memory

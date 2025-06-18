@@ -281,7 +281,7 @@ impl LocalExpressionNode {
             Self::Tuple(node) => node.datatype(state),
             Self::Range(node) => node.datatype(state),
             Self::FnCall(node) => {
-
+                // the datatype of a function call is the return type of the function
                 if node.value.fn_name.len() == 1 {
                     let fn_name = &node.value.fn_name[0].value.value;
 
@@ -291,7 +291,7 @@ impl LocalExpressionNode {
                         Err(format!("Function {} not found", fn_name))
                     }
                 } else {
-
+                    // same for method calls
                     let receiver_name = &node.value.fn_name[0].value.value;
                     let var = state.program_stack.iter().rev().find(|v| &v.name == receiver_name);
                     if let Some(var) = var {
@@ -412,12 +412,13 @@ impl InstructionBuilder for Node<Expression> {
                     for element in &node.values {
                         match element {
                             LocalExpressionNode::FnCall(node) => {
-
+                                // method calls use this to find the object on which the method is called
                                 state.method_call_stack_offset = outer_method_call_stack_offset + direct_fn_children_processed_count;
 
                                 let builder = node.compile(state)?;
                                 instructions.extend(builder.instructions);
 
+                                // we need to know the index of the variable to keep the result of the function call
                                 let runtime_stack_offset = total_fn_calls_in_tuple - 1 - direct_fn_children_processed_count;
                                 compiled_args.push(LocalExpressionNode::Primary(
                                     LocalPrimaryExpressionNode::Var(LocalVarNode {
@@ -437,6 +438,10 @@ impl InstructionBuilder for Node<Expression> {
                     
                     state.method_call_stack_offset = outer_method_call_stack_offset;
 
+                    // we create a tuple with the compiled arguments
+                    // and cleanup the stack afterwards
+                    // the cleanup is necessary because we have pushed the variables on the stack
+                    // and we need to remove them after the tuple is created
                     instructions.push(Instruction {
                         pos: Some(self.pos),
                         control: InstructionType::MakeTupleAndCleanup {

@@ -138,6 +138,9 @@ impl CompilerState {
         }
     }
 
+    /// Pop all variables from the program stack that have the same depth as the current stack depth
+    /// and decrease the current stack depth by one.
+    /// Returns the number of variables that were popped.
     pub fn unstack_current_depth(&mut self) -> usize {
         let mut unstack_len = 0;
         while self.program_stack.len() > 0

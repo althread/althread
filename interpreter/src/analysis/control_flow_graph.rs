@@ -13,6 +13,7 @@ pub struct CFGNode<'a> {
     pub successors: Vec<usize>
 }
 
+
 pub struct ControlFlowGraph<'a> {
     pub nodes: HashMap<usize, CFGNode<'a>>,
     pub entry: usize,
@@ -32,8 +33,13 @@ impl<'a> ControlFlowGraph<'a> {
         println!("Entry Node ID: {}, Exit Node ID: {}", self.entry, self.exit);
     }
 
-
-
+    /// Creates a new Control Flow Graph from the function body AST node.
+    /// This function initializes the CFG with an entry and exit node,
+    /// and builds the CFG recursively from the function body statements.
+    /// Args:
+    ///   - `fn_body_node`: The AST node representing the function body.
+    /// Returns:
+    ///   - A `ControlFlowGraph` instance representing the control flow of the function.
     pub fn from_function(fn_body_node: &'a Node<Block>) -> Self {
         let mut nodes : HashMap<usize, CFGNode<'a>> = HashMap::new();
         let mut next_node_id_counter = 0;
@@ -69,20 +75,18 @@ impl<'a> ControlFlowGraph<'a> {
         );
 
 
-        // println!("Building CFG for function with entry node ID: {}, exit node ID: {}", entry_node_id, exit_node_id);
-
-
+        // build the CFG recursively from the function body
+        // starting with the entry node as the only predecessor
         let (_first_actual_stmt_node_id, open_ends_from_body) =
             ControlFlowGraph::build_cfg_recursive(
-                &fn_body_node.value.children,
+                &fn_body_node.value.children, // the statements in the function body
                 vec![entry_node_id],
                 &mut nodes,
                 &mut next_node_id_counter,
                 exit_node_id,
             ); 
-
-        // println!("CFG built with {} nodes", nodes.len());
-
+        
+        // if the function body is empty, we need to connect the entry node to the exit node
         if fn_body_node.value.children.is_empty() {
             if let Some(entry_cfg_node) = nodes.get_mut(&entry_node_id) {
                 if entry_cfg_node.successors.is_empty() {
@@ -94,6 +98,8 @@ impl<'a> ControlFlowGraph<'a> {
             }
         }
 
+        // connect all open ends to the exit node
+        // these are nodes that do not end with a return statement
         for id_of_open_end_node in open_ends_from_body {
             let node = nodes.get_mut(&id_of_open_end_node).unwrap();
 
@@ -107,8 +113,6 @@ impl<'a> ControlFlowGraph<'a> {
             }
         }
 
-
-
         ControlFlowGraph {
             nodes,
             entry: entry_node_id,
@@ -116,6 +120,24 @@ impl<'a> ControlFlowGraph<'a> {
         }
     }
 
+
+    /// Recursively builds the control flow graph from a list of statements.
+    /// This function processes each statement and its control flow constructs
+    /// (like `if`, `atomic`, `block`, etc.) to create a CFG.
+    /// Args:
+    ///   - `stmts`: The statements to process.
+    ///   - `current_preceding_cfg_node_ids`: The IDs of the CFG nodes
+    ///     that precede the current statement.
+    ///   - `nodes`: The mutable reference to the map of CFG nodes being built.
+    ///   - `next_id_counter`: A mutable reference to the counter for generating new node IDs.
+    ///   - `function_exit_id`: The ID of the exit node for the function.
+    ///
+    /// Returns:
+    ///   - A tuple containing:
+    ///     - `Option<usize>`: The ID of the first CFG node in this sequence of statements,
+    ///       or `None` if there are no statements.
+    ///     - `Vec<usize>`: A vector of IDs of CFG nodes that are open ends,
+    ///       meaning they do not end with a return statement.
     fn build_cfg_recursive<'b>(
         stmts: &'b [Node<Statement>],
         mut current_preceding_cfg_node_ids: Vec<usize>,
@@ -149,6 +171,8 @@ impl<'a> ControlFlowGraph<'a> {
                 first_cfg_node_in_this_sequence = Some(current_stmt_cfg_node_id);
             }
 
+            // connect the current statement node to its predecessors
+            // and the predecessors to the current statement node
             for pred_id in &current_preceding_cfg_node_ids {
                 if let Some(pred_node) = nodes.get_mut(pred_id) {
                     pred_node.successors.push(current_stmt_cfg_node_id);
@@ -248,7 +272,9 @@ impl<'a> ControlFlowGraph<'a> {
     ///     doesn't return, or `fn_body_pos_for_empty_case` if the function body is empty.
     ///   - `None`: If all paths are found to have an explicit return statement.
     pub fn find_first_missing_return_point(&self, fn_body_for_empty_case: Pos) -> Option<Pos> {
+        // track nodes visited on the current path to avoid cycles
         let mut visited_on_current_path = HashSet::new();
+        // track globally visited nodes to avoid reprocessing them
         let mut globally_visited_tuples = HashSet::new();
 
         let mut stack = vec![(self.entry, false, None)];
@@ -258,6 +284,7 @@ impl<'a> ControlFlowGraph<'a> {
                 continue; // already visited this node with this return state
             }
 
+            // we want to avoid cycles in the CFG
             if visited_on_current_path.contains(&current_node_id) {
                 continue; // already visited this node in the current path
             }
