@@ -210,7 +210,7 @@ export const renderMessageFlowGraph = (commGraphData, vm_states) => {
           edges.add({
             from: sender.id,
             to: node.id,
-            label: node.event?.message + node.id,
+            label: node.event?.message,
             font:{
               size: 20,
               color: "white",
