@@ -58,12 +58,33 @@ export const printCommGrapEventList = (eventl: any) => {
   }
 }
 
-const searchSenderNode = (graphNodes, receivingEvent, msgNum, broadcast) => {
+const matchedSendNodeIds = new Set<string>();
+
+const searchSenderNode = (size, graphNodes, receivingEvent, msgNum, broadcast) => {
   //searches for the sending event corresponding to the receiving event
   let suite = "";
   (broadcast) ? suite = "B" : suite = receivingEvent.receiver;
   let str = "p" + receivingEvent.sender + "_send" + "_to" + suite + "_" + msgNum;
   let sender_node = graphNodes.get(str);
+
+  let number = size;
+  graphNodes.forEach((node) => {
+    if (node.event && node.event.evt_type === 115
+        && node.event.sender === receivingEvent.sender
+        && node.event.receiver === receivingEvent.receiver
+
+        && !matchedSendNodeIds.has(node.id) // Check if the sender node has already been matched
+    ) {
+      if (number > node.event.number) {
+        number = node.event.number; // Find the smallest number for the sender node
+        sender_node = node;
+      } 
+    }
+  });
+
+  if (sender_node){
+    matchedSendNodeIds.add(sender_node.id); // Mark this sender node as matched
+  }
   return sender_node;
   
 }
