@@ -1,7 +1,15 @@
-export type Node = {
-  channels: Map<any, any[]>,
-  globals: Map<any, any>,
-  locals: { [key: string]: [any[], any] }
+export type ProgramStateJS = {
+  pid: number;
+  name: string;
+  memory: any[]; // This will be the array of serialized Literal objects (the stack)
+  instruction_pointer: number;
+  clock: number; // Assuming 'clock' is also part of the serialized program state
+};
+
+export type Node = { // This represents the VM state in JS
+  channels: Map<any, any[]>; // Or however channels are structured from Rust
+  globals: Map<any, any>;    // Or however globals are structured from Rust
+  locals: ProgramStateJS[];  // This is the key change: an array of program states
 };
 
 //////////////////////////////////////
@@ -10,24 +18,85 @@ export const node_entirely = (n: Node) => {
 };
 //////////////////////////////////////
 
-export const literal = (value) => {
-  if(Object.keys(value)[0] == "tuple") {
-    return '('+(Object.values(value)[0] as any[]).map(literal).join(',')+')';
+export const literal = (value: any): string => {
+  if (!value || typeof value !== 'object') {
+    return String(value); // Handle primitive types or null/undefined gracefully
   }
-  return value[Object.keys(value)[0]];//+'('+Object.values(value)[0]+')';
-}
+  const keys = Object.keys(value);
+  if (keys.length === 0) {
+    return '{}'; // Handle empty objects
+  }
+  const firstKey = keys[0];
 
-export const nodeToString = (n: Node) => {
-  let label = 'Channels:\n'+[
-    ...Array.from(n.channels.entries()).map(
-      ([k,v]) => k.join('.')+' <- '+(
-        v.map(l => literal(l)).join(',')
-        //&& Object.values(v)[0].map(l => literal(l)).join(',')
-    )
-    )
-  ].join('\n');
-  label += '\n\nGlobals:\n'+[...Array.from(n.globals.entries()).map(([k,v]) => k+'='+literal(v))].join(',');
-  label += '\n\nLocals:\n'+Object.values(n.locals).map(l => 'pc:'+l[1]+' stack:['+l[0].map(v=>literal(v)).join(',')+']').join('\n');
+  if (firstKey === "tuple") {
+    const tupleValues = value[firstKey];
+    if (Array.isArray(tupleValues)) {
+      return '(' + tupleValues.map(literal).join(',') + ')';
+    }
+    return '()'; // Empty tuple
+  }
+  // For other literal types like {int: 5}, {bool: true}, {string: "hello"}
+  // or your {program: 'B', pid: 1} which might appear on a stack
+  if (keys.length === 1 && typeof value[firstKey] !== 'object') {
+     if (firstKey === "program" && value.pid !== undefined) { // Special handling for process literals
+        return `Process(${value[firstKey]}, pid ${value.pid})`;
+     }
+    return String(value[firstKey]);
+  }
+  // Fallback for more complex objects on stack, or adjust as needed
+  return JSON.stringify(value);
+};
 
-  return label;
-}
+export const nodeToString = (n: Node): string => {
+  if (!n) {
+    return "VM state is not available.";
+  }
+
+  // Global section for globals (channels will be per-program)
+  let globals_label = 'Globals:\n' + (
+    n.globals && n.globals.size > 0
+      ? [...Array.from(n.globals.entries()).map(
+          ([k, v]) => String(k) + ' = ' + literal(v)
+        )].join('\n')
+      : 'No global variables'
+  );
+
+  let locals_and_channels_label = '\n\nProgram States & Channels:\n' + (
+    n.locals && n.locals.length > 0
+      ? n.locals.map(
+          (prog_state: ProgramStateJS) => {
+            let program_details =
+              `  Program ${prog_state.name} (pid ${prog_state.pid}, clock ${prog_state.clock}):\n` +
+              `    pc: ${prog_state.instruction_pointer}\n` +
+              `    stack: [${prog_state.memory.map(v => literal(v)).join(', ')}]`;
+
+            let program_channels_output = '';
+            let has_prog_channels = false;
+            if (n.channels && n.channels.size > 0) {
+              for (const [key, value] of n.channels.entries()) {
+                // Assuming key is [program_id: number, channel_name: string]
+                if (Array.isArray(key) && key.length === 2 && key[0] === prog_state.pid) {
+                  if (!has_prog_channels) {
+                    program_channels_output += '\n    Program Channels:\n';
+                    has_prog_channels = true;
+                  }
+                  const channelName = key[1];
+                  program_channels_output += `      ${channelName} <- ${
+                    Array.isArray(value) ? value.map(l => literal(l)).join(',') : String(value)
+                  }\n`;
+                }
+              }
+            }
+            if (!has_prog_channels && program_channels_output === '') {
+              program_channels_output = '\n    Program Channels:\n      No active input channels for this program.';
+            }
+            
+            return program_details + program_channels_output;
+          }
+        ).join('\n\n') // Add an extra newline between programs for readability
+      : 'No running programs'
+  );
+  
+  const result = globals_label + locals_and_channels_label;
+  return result;
+};
