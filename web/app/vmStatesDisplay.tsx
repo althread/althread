@@ -3,7 +3,7 @@ import vis from "vis-network/dist/vis-network.esm";
 import { createSignal, onCleanup, onMount } from "solid-js";
 import {nodeToString} from "./Node";
 import GraphToolbar from "./GraphToolbar";
-import visOptions from "./visOptions";
+import { themes } from "./visOptions";
 import { setupNodeClickZoom, createGraphToolbarHandlers } from "./visHelpers";
 import { useGraphMaximizeHotkeys } from "./hooks/useGraphMaximizeHotkeys";
 
@@ -34,7 +34,7 @@ export const rendervmStates = (vm_states) => {
         })
         vm_states.forEach((vm,i) =>{
             //arrow between parent node and its child
-            if (i < vm_states.length){
+            if (i < vm_states.length - 1){
                 edges.push({
                     from: i,
                     to: i+1,
@@ -42,8 +42,8 @@ export const rendervmStates = (vm_states) => {
             }
         })
         const data = { nodes, edges };
-        visOptions.layout.hierarchical.direction = "LR";
-        network = new vis.Network(container, data, visOptions);
+        const options = themes.dark;
+        network = new vis.Network(container, data, options);
         setupNodeClickZoom(network);
         network.once('stabilized', function() {
             if (network) network.fit();

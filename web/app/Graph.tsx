@@ -2,11 +2,11 @@
 import vis from "vis-network/dist/vis-network.esm";
 import { createEffect, onCleanup, onMount, createSignal } from "solid-js";
 import GraphToolbar from "./GraphToolbar";
-import visOptions from "./visOptions";
+import { themes } from "./visOptions";
 import { setupNodeClickZoom, createGraphToolbarHandlers } from "./visHelpers";
 import { useGraphMaximizeHotkeys } from "./hooks/useGraphMaximizeHotkeys";
 
-export default (props /*: GraphProps*/) => {
+export default (props /*: GraphProps & { theme?: 'light' | 'dark' } */) => {
     let container: HTMLDivElement | undefined; // Renamed for clarity
     let network: vis.Network | null = null;
     const [maximized, setMaximized] = createSignal(false);
@@ -32,7 +32,8 @@ export default (props /*: GraphProps*/) => {
             edges: edges.get()
         };
 
-        network = new vis.Network(container, data, visOptions);
+        const options = props.theme === 'dark' ? themes.dark : themes.light;
+        network = new vis.Network(container, data, options);
         setupNodeClickZoom(network);
 
         network.once('stabilized', function() {

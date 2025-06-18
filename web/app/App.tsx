@@ -84,7 +84,7 @@ export default function App() {
       setActiveTab("vm_states");
       return (
         <div class="console">
-          <Graph nodes={nodes()} edges={edges()} />
+          <Graph nodes={nodes()} edges={edges()} theme="dark" />
         </div>
       );
     }
@@ -172,13 +172,15 @@ export default function App() {
                     let label = nodeToString(n[0]);
                     const {level, predecessor, successors} = n[1];
                     nodes[label] = i;
+                    const isViolationNode = colored_path.includes(label) || (colored_path.length > 0 && level == 0);
                     return {
                       id: i,
                       level,
                       label,
-                      color: colored_path.includes(label) || (colored_path.length>0 && level == 0)  ? "#ec9999" : "#a6dfa6",
-                      shape: "box",
-                      font: { align: "left" },
+                      color: {
+                        border: isViolationNode ? "#ec9999" : "#a6dfa6",
+                        background: isViolationNode ? "#4d3131" : "#314d31"
+                      }
                     }
                   }));
 

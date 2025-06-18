@@ -52,21 +52,21 @@ export const nodeToString = (n: Node): string => {
     return "VM state is not available.";
   }
 
-  // Global section for globals (channels will be per-program)
-  let globals_label = 'Globals:\n' + (
+  // Global section for globals
+  let globals_label = '*Globals:*\n' + (
     n.globals && n.globals.size > 0
       ? [...Array.from(n.globals.entries()).map(
-          ([k, v]) => String(k) + ' = ' + literal(v)
+          ([k, v]) => '  ' + String(k) + ' = ' + literal(v)
         )].join('\n')
-      : 'No global variables'
+      : '  _No global variables_'
   );
 
-  let locals_and_channels_label = '\n\nProgram States & Channels:\n' + (
+  let locals_and_channels_label = '\n\n*Program States & Channels:*\n' + (
     n.locals && n.locals.length > 0
       ? n.locals.map(
           (prog_state: ProgramStateJS) => {
             let program_details =
-              `  Program ${prog_state.name} (pid ${prog_state.pid}, clock ${prog_state.clock}):\n` +
+              `  *Program ${prog_state.name}* (pid ${prog_state.pid}, clock ${prog_state.clock}):\n` +
               `    pc: ${prog_state.instruction_pointer}\n` +
               `    stack: [${prog_state.memory.map(v => literal(v)).join(', ')}]`;
 
@@ -74,27 +74,26 @@ export const nodeToString = (n: Node): string => {
             let has_prog_channels = false;
             if (n.channels && n.channels.size > 0) {
               for (const [key, value] of n.channels.entries()) {
-                // Assuming key is [program_id: number, channel_name: string]
                 if (Array.isArray(key) && key.length === 2 && key[0] === prog_state.pid) {
                   if (!has_prog_channels) {
-                    program_channels_output += '\n    Program Channels:\n';
+                    program_channels_output += '\n    *Channels:*\n';
                     has_prog_channels = true;
                   }
                   const channelName = key[1];
                   program_channels_output += `      ${channelName} <- ${
                     Array.isArray(value) ? value.map(l => literal(l)).join(',') : String(value)
-                  }\n`;
+                  }`;
                 }
               }
             }
-            if (!has_prog_channels && program_channels_output === '') {
-              program_channels_output = '\n    Program Channels:\n      No active input channels for this program.';
+            if (!has_prog_channels) {
+              program_channels_output = '\n    *Channels:*\n      _No active input channels._';
             }
             
             return program_details + program_channels_output;
           }
-        ).join('\n\n') // Add an extra newline between programs for readability
-      : 'No running programs'
+        ).join('\n\n')
+      : '  _No running programs_'
   );
   
   const result = globals_label + locals_and_channels_label;
