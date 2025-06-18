@@ -1,6 +1,6 @@
 /** @jsxImportSource solid-js */
 import vis from "vis-network/dist/vis-network.esm";
-import { createSignal, onCleanup, onMount } from "solid-js"
+import { createSignal, onCleanup, createEffect } from "solid-js"
 import {nodeToString} from "./Node";
 import GraphToolbar from "./GraphToolbar.jsx";
 
@@ -70,23 +70,25 @@ const searchSenderNode = (graphNodes, receivingEvent, msgNum, broadcast) => {
 
 
 
-export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
+export const renderMessageFlowGraph = (commGraphData, vm_states) => {
   //returns div element to display the message flow graph and the vm states popup on click
   //prog_list = array of program names (strings)
   //commGraphData = array of communication events
   let container!: HTMLDivElement;
   let network: vis.Network | null = null;
   const [maximized, setMaximized] = createSignal(false);
-
-  if (!commGraphData || commGraphData.length === 0) {
-    return <pre>The communication graph will appear here (if any communication events are recorded).</pre>;
-  }
-
   let [popupVisible, setPopupVisible] = createSignal(false);
   let [popupContent, setPopupContent] = createSignal("");
   let [popupPosition, setPopupPosition] = createSignal({ x: 0, y: 0 });
 
-  onMount(() => {
+  if (!commGraphData || commGraphData.length === 0) {
+    return (<pre>The communication graph will appear here (if any communication events are recorded).</pre>);
+  }
+
+  createEffect(() => {
+
+    // Clear matchedSendNodeIds for each new graph
+    matchedSendNodeIds.clear();
 
     const nodes= new vis.DataSet();
     const edges = new vis.DataSet();
