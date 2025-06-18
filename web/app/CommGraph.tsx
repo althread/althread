@@ -7,6 +7,28 @@ import GraphToolbar from "./GraphToolbar.jsx";
 import { createGraphToolbarHandlers } from "./visHelpers";
 import { useGraphMaximizeHotkeys } from "./hooks/useGraphMaximizeHotkeys";
 
+interface MessageFlowEvent {
+    sender: number, // id of the sending process
+    receiver: number,  // id of the receiving process
+    evt_type: number, //send or receive
+    message: string, // for SEND: channel name, for RECV: message content
+    number: number, // message sequence number (nmsg_sent for SEND, clock for RECV)
+    actor_prog_name: string, // Name of the program performing this action
+    vm_state: any
+};
+
+interface MessageNode {
+  id: string;
+  y: number;
+  x: number;
+  shape: string;
+  size: number;
+  event: MessageFlowEvent | null; 
+  broadcast: boolean | null;
+  color: string;
+  vm_state: string;
+}
+
 
 
 export const printCommGrapEventList = (eventl: any) => {
