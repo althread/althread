@@ -25,17 +25,18 @@ pub fn compile(source: &str) -> Result<String, JsValue> {
     println!("{}", &ast);
 
     let compiled_project = ast.compile().map_err(error_to_js)?;
-
+    println!("{}", compiled_project.to_string());
     Ok(format!("{}", compiled_project))
 }
 
 pub struct MessageFlowEvent<'a> {
-    sender: usize, // id of the sending process
-    receiver: Option<usize>,  // id of the receiving process
-    evt_type: u8, //send or receive
-    message: String, // the channel
-    number: usize, // number of the message
-    vm_state: VM<'a>, //vm state associated with this event
+    pub sender: usize, // id of the sending process
+    pub receiver: usize,  // id of the receiving process
+    pub evt_type: u8, //send or receive
+    pub message: String, // for SEND: channel name, for RECV: message content
+    pub number: usize, // message sequence number (nmsg_sent for SEND, clock for RECV)
+    pub actor_prog_name: String, // Name of the program performing this action
+    pub vm_state: VM<'a>, //vm state associated with this event
 }
 
 pub struct RunResult<'a> {
@@ -43,7 +44,6 @@ pub struct RunResult<'a> {
     stdout: Vec<String>,
     message_flow_graph: Vec<MessageFlowEvent<'a>>,
     vm_states: Vec<VM<'a>>,
-
 }
 
 impl <'a> Serialize for MessageFlowEvent<'a> {
@@ -51,12 +51,14 @@ impl <'a> Serialize for MessageFlowEvent<'a> {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("MessageFlowEvent", 6)?;
+        // Updated field count to 7
+        let mut state = serializer.serialize_struct("MessageFlowEvent", 7)?;
         state.serialize_field("sender", &self.sender)?;
         state.serialize_field("receiver", &self.receiver)?;
         state.serialize_field("evt_type", &self.evt_type)?;
         state.serialize_field("message", &self.message)?;
         state.serialize_field("number", &self.number)?;
+        state.serialize_field("actor_prog_name", &self.actor_prog_name)?; // Added new field
         state.serialize_field("vm_state", &self.vm_state)?;
         state.end()
     }
@@ -67,8 +69,8 @@ impl <'a> Serialize for RunResult<'a> {
     where
         S: Serializer,
     {
-        // 3 is the number of fields in the struct.
-        let mut state = serializer.serialize_struct("RunResult", 3)?;
+        // Corrected field count to 4
+        let mut state = serializer.serialize_struct("RunResult", 4)?;
         state.serialize_field("debug", &self.debug)?;
         state.serialize_field("stdout", &self.stdout)?;
         state.serialize_field("message_flow_graph", &self.message_flow_graph)?;
@@ -95,7 +97,6 @@ pub fn run(source: &str) -> Result<JsValue, JsValue> {
     let mut result = String::new();
     let mut stdout = vec![];
     let mut message_flow_graph = Vec::new();
-    let mut nmsg_sent:usize = 0;
     let mut vm_states = Vec::new();
     let mut i = 0; //index for vm_states
 
@@ -106,66 +107,97 @@ pub fn run(source: &str) -> Result<JsValue, JsValue> {
         }
         let info = vm.next_random().map_err(error_to_js)?;
         vm_states.push(vm.clone());
+
+        let pid = info.prog_id;
+
+        // Helper to get program name by ID
+        let get_prog_name = |prog_id: usize, vm_instance: &VM| -> String {
+            vm_instance.running_programs
+                .iter()
+                .find(|p| p.id == prog_id)
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| format!("PID_{}", prog_id)) // Fallback
+        };
+
+        println!("{}", get_prog_name(info.prog_id, &vm));
+
         for inst in info.instructions.iter() {
             result.push_str(&format!("#{}: {}\n", info.prog_id, inst));
-            
-            if let InstructionType::ChannelPop(ref s) = &inst.control{
-                if i>0 { //first vm shouldn't be able to read anything 
-                    let previous_vm = vm_states.get(i-1);
-                    if let Some(chan_content) = previous_vm.unwrap().channels.get_states().get(&(info.prog_id, s.to_string())){
-                        if let Some(Literal::Tuple(ref msg)) = chan_content.get(0){ //messsage popped
-                            if let Some(Literal::Tuple(ref sender_info)) = msg.get(0){
-                                if let Some(Literal::Int(senderid)) = sender_info.get(0){ //sender id
-                                    if let Some(Literal::Int(clock)) = sender_info.get(1){
-                                        if let Some(content) = msg.get(1){ //message content
-                                            let event = MessageFlowEvent{
-                                                sender: *senderid as usize,
-                                                receiver: Some(info.prog_id),
-                                                evt_type: RECV,
-                                                message: content.to_string(),
-                                                number: *clock as usize,
-                                                vm_state: vm.clone(),
-                                            };
-                                            message_flow_graph.push(event);
+
+            if let InstructionType::ChannelPop(ref s) = &inst.control {
+                if i > 0 {
+                    let previous_vm_state = vm_states.get(i-1); // The state before this pop
+                    if let Some(prev_vm) = previous_vm_state {
+                        if let Some(chan_content_vec) = prev_vm.channels.get_states().get(&(info.prog_id, s.to_string())) {
+                            if let Some(Literal::Tuple(ref msg_tuple)) = chan_content_vec.get(0) { // Message popped
+                                if msg_tuple.len() >= 2 { // Ensure msg_tuple has at least sender_info and content
+                                    if let Some(Literal::Tuple(ref sender_info_tuple)) = msg_tuple.get(0) {
+                                        if sender_info_tuple.len() >= 2 { // Ensure sender_info_tuple has senderid and clock
+                                            if let (Some(Literal::Int(senderid)), Some(Literal::Int(received_clock))) = 
+                                                (sender_info_tuple.get(0), sender_info_tuple.get(1)) {
+                                                if let Some(actual_message_content) = msg_tuple.get(1) {
+                                                    let receiver_clock = vm.running_programs
+                                                        .iter()
+                                                        .find(|p| p.id == pid)
+                                                        .map(|p| p.clock)
+                                                        .unwrap_or(0);
+                                                    
+
+                                                    let max_clock = std::cmp::max(*received_clock as usize, receiver_clock as usize) + 1;
+
+                                                    vm.running_programs
+                                                        .iter_mut()
+                                                        .find(|p| p.id == pid)
+                                                        .map(|p| p.clock = max_clock);
+
+                                                    let receiver_name = get_prog_name(info.prog_id, &vm);
+                                                    let event = MessageFlowEvent {
+                                                        sender: *senderid as usize,
+                                                        receiver: pid,
+                                                        evt_type: RECV,
+                                                        message: actual_message_content.to_string(),
+                                                        number: max_clock, // Using max_clock as message number
+                                                        actor_prog_name: receiver_name,
+                                                        vm_state: vm.clone(), // State after receive
+                                                    };
+                                                    message_flow_graph.push(event);
+                                                }
+                                            }
                                         }
-                                    }  
+                                    }
                                 }
                             }
                         }
-                    }  
-                }       
-            }  
-        } //it didnt wanna work without the if let if let if let if let
-    
-        for p in info.actions.iter() {
-            if let GlobalAction::Print(s) = p {
-                stdout.push(s.clone());
-            }
-            match p{
-                GlobalAction::Send(s, Some(receiverinfos)) => {
-                                    nmsg_sent+=1;
-                                    let event = MessageFlowEvent {
-                                        sender: info.prog_id, 
-                                        receiver: Some(receiverinfos.program_id),
-                                        evt_type: SEND,
-                                        message: s.clone(), //channel name, just to fill the field
-                                        number : nmsg_sent,
-                                        vm_state: vm.clone(),
-                                    };
-                                    message_flow_graph.push(event);
+                    }
                 }
-                GlobalAction::Send(s, None) => { //broadcast
-                    nmsg_sent+=1;
+            }
+        }
+
+        for p in info.actions.iter() {
+            if let GlobalAction::Print(s_print) = p {
+                stdout.push(s_print.clone());
+            }
+            match p {
+                GlobalAction::Send(s_chan_name, opt_receiver_info) => {
+                    let sender_name = get_prog_name(info.prog_id, &vm);
+                    let receiver_id = opt_receiver_info.as_ref().map(|ri| ri.program_id).unwrap_or(0);
+
+                    let clock = vm.running_programs
+                        .iter()
+                        .find(|p| p.id == pid)
+                        .map(|p| p.clock)
+                        .unwrap_or(0);
+
                     let event = MessageFlowEvent {
-                        sender: info.prog_id,
-                        receiver: None,
+                        sender: pid, 
+                        receiver: receiver_id,
                         evt_type: SEND,
-                        message: s.clone(), //channel name,  just to fill the field
-                        number: nmsg_sent,
-                        vm_state: vm.clone(),
+                        message: s_chan_name.clone(), // Channel name for SEND
+                        number: clock,
+                        actor_prog_name: sender_name,
+                        vm_state: vm.clone(), // State after send
                     };
                     message_flow_graph.push(event);
-                    
                 }
                 _ => {}
             }
@@ -179,7 +211,7 @@ pub fn run(source: &str) -> Result<JsValue, JsValue> {
             ));
             break;
         }
-        i+=1;
+        i += 1;
     }
     
     Ok(serde_wasm_bindgen::to_value(&RunResult {
