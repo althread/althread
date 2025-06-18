@@ -91,25 +91,24 @@ export const renderMessageFlowGraph = (commGraphData, prog_list, vm_states) => {
     const nodes= new vis.DataSet();
     const edges = new vis.DataSet();
     const processLines = new Map(); //coordinates of start&end of each process line
-    const processes: string[] = [];
+    const processes: Map<number, string> = new Map();
 
     // extract processes name to make one line per process
-      processes.push("main");
-      prog_list.forEach(prog =>{
-        processes.push(prog);
-      });
-    
+    commGraphData.forEach((event: MessageFlowEvent) => {
+      if (event.message === "out") {
+        processes.set(event.sender, event.actor_prog_name);
+      } else {
+        processes.set(event.receiver, event.actor_prog_name);
+      }
+    });
 
     let ySpacing = 150; // space between processes vertically
-    let xStart = -50; 
-    let xEnd = 450; 
-    //console.log(nodes);
-
-    let nmsg_sent: number[] = [];
-    let nb_process = 0; 
+    let xStart = -50;
+    let xEnd = 450;
 
     // lines generation
-    [...processes].forEach((processName, index) => {
+    processes.forEach((processName, index) => {
+
       // define two nodes for each process (start and end of the line)
       let startNode = { id: `p${index}_start`, y: index * ySpacing, x: xStart, shape: "dot", size: 1, color: "white" };
       let endNode = { id: `p${index}_end`, y: index * ySpacing, x: xEnd, shape: "dot", size: 1, color: "white" };
