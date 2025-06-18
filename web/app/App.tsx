@@ -49,7 +49,6 @@ export default function App() {
   let [stdout, setStdout] = createSignal("The console output will appear here.");
   let [out, setOut] = createSignal("The execution output will appear here.");
   let [commgraphout, setCommGraphOut] = createSignal([]); //messageflow graph
-  let [prog_list, setProgList] = createSignal<any[]>([]); //for the messageflow graph
   let [vm_states, setVmStates] = createSignal<any[]>([]); //to display vm states information
   let [activeAction, setActiveAction] = createSignal<string | null>(null);
   const [loadingAction, setLoadingAction] = createSignal<string | null>(null);
@@ -72,7 +71,7 @@ export default function App() {
       } else if (activeTab() === "msg_flow") {
         return (
           <div class="console">
-            {renderMessageFlowGraph(commgraphout(), prog_list(), vm_states())}
+            {renderMessageFlowGraph(commgraphout(), vm_states())}
           </div>
         );
       } else if (activeTab() === "vm_states") {
@@ -135,9 +134,6 @@ export default function App() {
                 try {
                   setIsRun(true);
                   let res = run(editor.editorView().state.doc.toString());
-                  let proglist = extractProgs(res.vm_states);
-                  setProgList(proglist);
-                  console.log(res.vm_states);
                   setOut(res.debug);
                   setCommGraphOut(res.message_flow_graph);
                   setVmStates(res.vm_states);
@@ -199,7 +195,7 @@ export default function App() {
                         label: name+'#'+pid+': '+lines.join(',')
                       });
                     })
-                    console.log(node_entirely(n[0]));
+                    // console.log(node_entirely(n[0]));
                   });
                   setEdges(edges);
                   setIsRun(false);
