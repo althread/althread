@@ -1,7 +1,7 @@
 /** @jsxImportSource solid-js */
 import vis from "vis-network/dist/vis-network.esm";
-import { createSignal, onCleanup, createEffect } from "solid-js"
-import {nodeToString} from "./Node";
+import { createSignal, onCleanup, createEffect, For, Show } from "solid-js"
+import {nodeToString, literal, Node, ProgramStateJS} from "./Node";
 import GraphToolbar from "./GraphToolbar.jsx";
 
 import { createGraphToolbarHandlers } from "./visHelpers";
@@ -26,9 +26,94 @@ interface MessageNode {
   event: MessageFlowEvent | null; 
   broadcast: boolean | null;
   color: string;
-  vm_state: string;
 }
 
+const VmStatePopup = (props: { event: MessageFlowEvent }) => {
+  const [activeTab, setActiveTab] = createSignal('details');
+  const vmState: Node = props.event.vm_state;
+
+  if (!vmState) {
+    return <div>VM state is not available.</div>;
+  }
+
+  const eventType = String.fromCharCode(props.event.evt_type);
+
+  return (
+    <div class="vm-state-popup-content">
+      <div class="popup-tabs">
+        <button
+          class={`popup-tab-button ${activeTab() === 'details' ? 'active' : ''}`}
+          onClick={() => setActiveTab('details')}
+        >
+          Event Details
+        </button>
+        <button
+          class={`popup-tab-button ${activeTab() === 'vmState' ? 'active' : ''}`}
+          onClick={() => setActiveTab('vmState')}
+        >
+          VM State
+        </button>
+      </div>
+      <div class="popup-tab-content">
+        <Show when={activeTab() === 'details'}>
+          <p><strong>Type:</strong> {eventType === 's' ? 'Send' : 'Receive'}</p>
+          <p><strong>Sender:</strong> {props.event.sender}</p>
+          <p><strong>Receiver:</strong> {props.event.receiver ?? 'Broadcast'}</p>
+          <p><strong>Message:</strong> {props.event.message}</p>
+        </Show>
+        <Show when={activeTab() === 'vmState'}>
+          <div>
+            <strong>Globals:</strong>
+            {vmState.globals && vmState.globals.size > 0 ? (
+              <ul>
+                {[...Array.from(vmState.globals.entries()).map(
+                  ([k, v]) => <li>{String(k)} = {literal(v)}</li>
+                )]}
+              </ul>
+            ) : (
+              <p style={{"padding-left": "1rem", "font-style": "italic"}}>No global variables.</p>
+            )}
+          </div>
+          <div>
+            <strong>Program States & Channels:</strong>
+            {vmState.locals && vmState.locals.length > 0 ? (
+              vmState.locals.map((prog_state: ProgramStateJS) => (
+                <div class="program-state">
+                  <p>
+                    <strong>Program {prog_state.name}</strong> (pid {prog_state.pid}, clock {prog_state.clock})
+                  </p>
+                  <ul>
+                    <li><strong>pc:</strong> {prog_state.instruction_pointer}</li>
+                    <li><strong>stack:</strong> [{prog_state.memory.map(v => literal(v)).join(', ')}]</li>
+                    <li>
+                      <strong>Channels:</strong>
+                      {(() => {
+                        const programChannels: any[] = [];
+                        if (vmState.channels && vmState.channels.size > 0) {
+                          for (const [key, value] of vmState.channels.entries()) {
+                            if (Array.isArray(key) && key.length === 2 && key[0] === prog_state.pid) {
+                              const channelName = key[1];
+                              programChannels.push(
+                                <li>{channelName} &lt;- {Array.isArray(value) ? value.map(l => literal(l)).join(',') : String(value)}</li>
+                              );
+                            }
+                          }
+                        }
+                        return programChannels.length > 0 ? <ul>{programChannels}</ul> : <p style={{"padding-left": "1rem", "font-style": "italic"}}>No active input channels.</p>;
+                      })()}
+                    </li>
+                  </ul>
+                </div>
+              ))
+            ) : (
+              <p style={{"padding-left": "1rem", "font-style": "italic"}}>No running programs</p>
+            )}
+          </div>
+        </Show>
+      </div>
+    </div>
+  );
+};
 
 
 export const printCommGrapEventList = (eventl: any) => {
@@ -97,10 +182,16 @@ export const renderMessageFlowGraph = (commGraphData, vm_states) => {
   //commGraphData = array of communication events
   let container!: HTMLDivElement;
   let network: vis.Network | null = null;
+  let popupRef: HTMLDivElement;
   const [maximized, setMaximized] = createSignal(false);
   let [popupVisible, setPopupVisible] = createSignal(false);
-  let [popupContent, setPopupContent] = createSignal("");
+  let [popupContent, setPopupContent] = createSignal<MessageFlowEvent | null>(null);
   let [popupPosition, setPopupPosition] = createSignal({ x: 0, y: 0 });
+  const [finalPopupPosition, setFinalPopupPosition] = createSignal({ x: 0, y: 0 });
+  const [isPopupReady, setIsPopupReady] = createSignal(false);
+
+  // Add this state to remember alignment
+  const [popupAlignment, setPopupAlignment] = createSignal<{vertical: 'top'|'bottom', horizontal: 'left'|'right'}>({ vertical: 'bottom', horizontal: 'right' });
 
   if (!commGraphData || commGraphData.length === 0) {
     return (<pre>The communication graph will appear here (if any communication events are recorded).</pre>);
@@ -193,7 +284,7 @@ export const renderMessageFlowGraph = (commGraphData, vm_states) => {
       }
 
       let msgNode = { id: id_txt, y: yposLine * ySpacing, x: xStart+20+i*50, 
-                      shape: "dot", size: 5, color: "#cccccc", event: event, broadcast: broadcast, vm_state: nodeToString(event.vm_state) };
+                      shape: "dot", size: 5, color: "#cccccc", event: event, broadcast: broadcast };
       nodes.add(msgNode);
       i++;
     });
@@ -258,12 +349,15 @@ export const renderMessageFlowGraph = (commGraphData, vm_states) => {
         //popup creation & change node colour
         if(!(node_id.includes("_start") || node_id.includes("_end")
                   || node_id.includes("_number"))){ //clicked node is only one of the communication event
+          const node = nodes.get(node_id);
           let pos = event.pointer.DOM;
-          setPopupContent(nodes.get(node_id).vm_state);
+          setIsPopupReady(false);
+          setPopupContent(node.event);
           setPopupPosition({x: pos.x, y: pos.y});
+          setPopupAlignment({ vertical: 'bottom', horizontal: 'right' }); // <--- Reset alignment on new popup
           setPopupVisible(true);
           previous_node_id = node_id;
-          previous_node_colour = nodes.get(node_id).color;
+          previous_node_colour = node.color;
           nodes.update({id: node_id, color: "#0080ff"});
           
         }
@@ -274,6 +368,79 @@ export const renderMessageFlowGraph = (commGraphData, vm_states) => {
     );
 
     onCleanup(() => { if (network) network.destroy(); });
+  });
+
+  createEffect(() => {
+    if (popupVisible() && popupRef) {
+      const reposition = () => {
+        if (!popupRef || !container) return;
+        
+        const graphContainer = container;
+        const popupEl = popupRef;
+
+        const graphWidth = graphContainer.offsetWidth;
+        const graphHeight = graphContainer.offsetHeight;
+        const popupWidth = popupEl.offsetWidth;
+        const popupHeight = popupEl.offsetHeight;
+
+        const initialPos = popupPosition();
+        let finalX = initialPos.x + 15;
+        let finalY = initialPos.y + 15;
+
+        // Use current alignment as starting point
+        let { vertical, horizontal } = popupAlignment();
+
+        // Only change alignment if the popup would overflow
+        let changed = false;
+
+        // Horizontal
+        if (horizontal === 'right' && finalX + popupWidth > graphWidth) {
+          horizontal = 'left';
+          changed = true;
+        } else if (horizontal === 'left' && finalX < 0) {
+          horizontal = 'right';
+          changed = true;
+        }
+
+        // Vertical
+        if (vertical === 'bottom' && finalY + popupHeight > graphHeight) {
+          vertical = 'top';
+          changed = true;
+        } else if (vertical === 'top' && finalY < 0) {
+          vertical = 'bottom';
+          changed = true;
+        }
+
+        if (changed) setPopupAlignment({ vertical, horizontal });
+
+        // Recalculate position based on alignment
+        finalX = (horizontal === 'right')
+          ? initialPos.x + 15
+          : initialPos.x - popupWidth - 15;
+        finalY = (vertical === 'bottom')
+          ? initialPos.y + 15
+          : initialPos.y - popupHeight - 15;
+
+        // Clamp as fallback
+        if (finalX < 5) finalX = 5;
+        if (finalY < 5) finalY = 5;
+        if (finalX + popupWidth > graphWidth - 5) finalX = graphWidth - popupWidth - 5;
+        if (finalY + popupHeight > graphHeight - 5) finalY = graphHeight - popupHeight - 5;
+
+        setFinalPopupPosition({ x: finalX, y: finalY });
+        setIsPopupReady(true);
+      };
+
+      // Use a ResizeObserver to automatically reposition the popup when its size changes (e.g., switching tabs).
+      const observer = new ResizeObserver(reposition);
+      observer.observe(popupRef);
+
+      onCleanup(() => {
+        observer.disconnect();
+      });
+    } else {
+      setIsPopupReady(false);
+    }
   });
 
   useGraphMaximizeHotkeys(setMaximized);
@@ -299,21 +466,18 @@ export const renderMessageFlowGraph = (commGraphData, vm_states) => {
         onDownload={handleDownload}
         isFullscreen={maximized()}
       />
-        {popupVisible() && (
+        {popupVisible() && popupContent() && (
         <div
+          ref={popupRef!}
+          class="vm-state-popup"
           style={{
             position: "absolute",
-            top: `${popupPosition().y}px`,
-            left: `${popupPosition().x}px`,
-            background: "white",
-            color: "black",
-            padding: "0.1rem",
-            border: "1px solid black",
-            "box-shadow": "0px 2px 5px rgba(0, 0, 0, 0.3)",
-            "z-index": "10000",
+            top: `${finalPopupPosition().y}px`,
+            left: `${finalPopupPosition().x}px`,
+            visibility: isPopupReady() ? 'visible' : 'hidden',
           }}
         >
-          <pre style={{color: "black"}}>{popupContent()}</pre>
+          <VmStatePopup event={popupContent()!} />
         </div>
       )}
     </div>
