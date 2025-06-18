@@ -117,50 +117,45 @@ export const renderMessageFlowGraph = (commGraphData, vm_states) => {
       nodes.add([startNode, endNode]);
       edges.add({ from: startNode.id, to: endNode.id, color: "white", width: 2 }); // line for each process
       
-    let processNumberNode = {
-      id: `p${index}_number`,
-      y: index * ySpacing, 
-      x: xStart - 40,
-      label: `P${index} \n(${processName})`,
-      shape: "text",
-      size : 0,
-      color: "white",
-      font: { 
-        size: 18,
+      let processNumberNode = {
+        id: `p${index}_number`,
+        y: index * ySpacing, 
+        x: xStart - 40,
+        label: `P${index} \n(${processName})`,
+        shape: "text",
+        size : 0,
         color: "white",
-       },
-    };
+        font: { 
+          size: 18,
+          color: "white",
+        },
+      };
     
       nodes.add(processNumberNode); 
-      nb_process++;
-      nmsg_sent.push(0);
 
       processLines.set(index, { start: startNode.id, end: endNode.id });
     });
 
-    // message arrows 
-    let i:number = 0;
+    // message arrows
+    let i: number = 0;
     let broadcast: boolean = false;
 
-    console.log("commGraphData", commGraphData);
-
-    commGraphData.forEach(event => {
+    commGraphData.forEach((event: MessageFlowEvent) => {
       let yposLine = 0;
       let id_txt = "p";
       let evt_type = String.fromCharCode(event.evt_type);
-      
+            
       //lengthen the process lines for each new event so it doesnt go overboard
-      for(let j = 0; j<processes.length; ++j){
-        nodes.update({id: `p${j}_end`, x: 450+20+50*i});
-      }
+      processes.forEach((_, processNumber) => {
+        nodes.update({id: `p${processNumber}_end`, x: 500 + commGraphData.length * 1.5 * i});
+      });
       
-      
-      if ( evt_type === 'r') {
+      if (evt_type === 'r') { /// evt_type === 114
         yposLine = event.receiver; //reception -> node on receiver line
         id_txt += event.receiver.toString();
         id_txt += "_recv" + "_from" + event.sender + "_"  + event.number;
-       
       }
+
       else {
         let id_suite;
         yposLine = event.sender;
@@ -177,16 +172,24 @@ export const renderMessageFlowGraph = (commGraphData, vm_states) => {
       }
 
       let msgNode = { id: id_txt, y: yposLine * ySpacing, x: xStart+20+i*50, 
-                      shape: "dot", size: 5, color: "#cccccc", vm_state: nodeToString(event.vm_state) };
+                      shape: "dot", size: 5, color: "#cccccc", event: event, broadcast: broadcast, vm_state: nodeToString(event.vm_state) };
       nodes.add(msgNode);
-     
+      i++;
+    });
+
+
+    nodes.forEach((item, id) => {
+      // item is a node object, id is its id
+      let node: MessageNode = item as MessageNode;
+      let evt_type = node.event?.evt_type !== undefined ? String.fromCharCode(node.event.evt_type) : "";
+      
       if ((evt_type) === 'r'){
-        let sender = searchSenderNode(nodes, event, event.number, broadcast);
+        let sender = searchSenderNode(commGraphData.length, nodes, node.event, node.event.number, node.broadcast);
         if (sender){
           edges.add({
             from: sender.id,
-            to: msgNode.id,
-            label: event.message,
+            to: node.id,
+            label: node.event?.message + node.id,
             font:{
               size: 20,
               color: "white",
@@ -199,8 +202,8 @@ export const renderMessageFlowGraph = (commGraphData, vm_states) => {
           })
         }
       }
-      i++;
     });
+
     const data = { nodes: nodes.get(), edges: edges.get() };
 
     const options = {

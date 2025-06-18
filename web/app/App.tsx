@@ -10,7 +10,6 @@ import createEditor from './Editor';
 import Graph from "./Graph";
 import { Logo } from "./assets/images/Logo";
 import {renderMessageFlowGraph} from "./CommGraph";
-import { extractProgs } from "./vmUtils";
 import { rendervmStates } from "./vmStatesDisplay";
 import { nodeToString, node_entirely } from "./Node";
 
