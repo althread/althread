@@ -1,5 +1,4 @@
 use core::panic;
-use serde::ser::{Serialize, SerializeStruct, Serializer};
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fmt, hash::{Hash, Hasher}, rc::Rc
 };
@@ -9,6 +8,7 @@ use fastrand::Rng;
 
 use instruction::{Instruction, InstructionType, ProgramCode};
 use running_program::RunningProgramState;
+use serde::{ser::SerializeStruct, Serialize, Serializer};
 
 use crate::{
     ast::{
@@ -431,7 +431,7 @@ impl<'a> VM<'a> {
         Vec::<Literal>::new()
     }
 
-    pub fn current_state(&self) -> (&GlobalMemory, &ChannelsState, Vec<(&Vec<Literal>, usize)>) {
+    pub fn current_state(&self) -> (&GlobalMemory, &ChannelsState, Vec<(&Vec<Literal>, usize, usize)>) {
         let local_states = self
             .running_programs
             .iter()
@@ -557,17 +557,47 @@ impl std::cmp::PartialEq for VM<'_> {
 
 impl std::cmp::Eq for VM<'_> {}
 
+#[derive(Serialize)]
+struct SerializableRunningProgramStateForJs<'b> {
+    pid: usize,
+    name: &'b str,
+    memory: &'b Vec<Literal>,    // The program's stack
+    instruction_pointer: usize, // The program's PC
+    clock: usize,               // Program's logical clock (if you have one)
+    // Add any other per-program fields you want to expose
+}
+
 impl<'a> Serialize for VM<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let (globals, channels, locals) = self.current_state();
-        // 3 is the number of fields in the struct.
-        let mut state = serializer.serialize_struct("VM", 3)?;
-        state.serialize_field("globals", globals)?;
-        state.serialize_field("channels", channels)?;
-        state.serialize_field("locals", &locals)?;
-        state.end()
+
+        let (globals, channels, _locals) = self.current_state();
+
+        // Number of fields in the serialized VM struct (globals, channels)
+        let mut s = serializer.serialize_struct("VM_JS", 3)?; // Using "VM_JS" for clarity
+
+        s.serialize_field("globals", globals)?;
+        s.serialize_field("channels", channels)?;
+
+        let serializable_program_states: Vec<SerializableRunningProgramStateForJs> = self
+            .running_programs // Iterate over all currently running programs
+            .iter()
+            .map(|prog_state| {
+                let (memory, instruction_pointer, clock) = prog_state.current_state();
+                SerializableRunningProgramStateForJs {
+                    pid: prog_state.id,
+                    name: &prog_state.name,
+                    memory,
+                    instruction_pointer,
+                    clock
+                }
+            })
+            .collect();
+
+        s.serialize_field("locals", &serializable_program_states)?;
+
+        s.end()
     }
 }

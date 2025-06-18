@@ -93,8 +93,8 @@ impl<'a> RunningProgramState<'a> {
         }
     }
 
-    pub fn current_state(&self) -> (&Memory, usize) {
-        (&self.memory, self.instruction_pointer)
+    pub fn current_state(&self) -> (&Memory, usize, usize) {
+        (&self.memory, self.instruction_pointer, self.clock)
     }
 
     pub fn current_instruction(&self) -> AlthreadResult<&Instruction> {
