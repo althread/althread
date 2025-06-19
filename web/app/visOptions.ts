@@ -1,3 +1,6 @@
+// Use the theme's primary color for consistency with CSS
+const THEME_PRIMARY = "hsla(29.329, 66.552%, 52.544%)";
+
 const baseOptions = {
   edges: {
     arrows: "to",
@@ -24,10 +27,10 @@ const lightTheme = {
   nodes: {
     color: {
       highlight: {
-        border: "#6FA6F9"
+        border: THEME_PRIMARY // was "#6FA6F9"
       },
       hover: {
-        border: "#228be6"
+        border: THEME_PRIMARY // was "#228be6"
       }
     },
     borderWidth: 2,
@@ -66,11 +69,11 @@ const darkTheme = {
         border: '#444',
         highlight: {
             background: '#3c3c42',
-            border: '#9cdcfe'
+            border: THEME_PRIMARY // was '#9cdcfe'
         },
         hover: {
             background: '#3c3c42',
-            border: '#6FA6F9'
+            border: THEME_PRIMARY // was '#6FA6F9'
         }
     },
     font: {
@@ -79,7 +82,7 @@ const darkTheme = {
         size: 12,
         align: 'left',
         multi: 'markdown',
-        bold: { color: '#9cdcfe' },
+        bold: { color: THEME_PRIMARY }, // was '#9cdcfe'
         ital: { color: '#a0a0a0', size: 11 },
     },
     widthConstraint: { minimum: 50 },

@@ -310,7 +310,7 @@ export const renderMessageFlowGraph = (commGraphData, vm_states) => {
               strokeWidth: 0,
             },
             arrows: "to",
-            color: "green",
+            color: "hsla(29.329, 66.552%, 52.544%)", // theme orange
           })
         }
       }

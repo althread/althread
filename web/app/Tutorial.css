@@ -1,13 +1,3 @@
-:root {
-  --ifm-color-primary-lightest: hsla(28.766, 79.806%, 62.207%);
-  --ifm-color-primary-lighter: hsla(29.409, 74.725%, 58.813%);
-  --ifm-color-primary-light: hsla(29.344, 70.337%, 55.704%);
-  --ifm-color-primary: hsla(29.329, 66.552%, 52.544%);
-  --ifm-color-primary-dark: hsla(28.876, 64.273%, 49.816%);
-  --ifm-color-primary-darker: hsla(28.979, 69.4%, 46.923%);
-  --ifm-color-primary-darkest: hsla(29.062, 74.06%, 44.061%);
-}
-
 .tutorial-page-container {
   display: flex;
   flex-direction: column;
@@ -201,15 +191,6 @@
   height: 100%;
   padding-bottom: 1rem;
   overflow-y: scroll;
-}
-
-.editor-instance-wrapper .cm-editor {
-  height: 100%;
-  min-height: 0;
-  max-height: 100%;
-  box-sizing: border-box;
-  /* Optional: hide vertical scrollbar */
-  overflow-y: hidden;
 }
 
 .output-pane {

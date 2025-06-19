@@ -173,13 +173,23 @@ export default function App() {
                     const {level, predecessor, successors} = n[1];
                     nodes[label] = i;
                     const isViolationNode = colored_path.includes(label) || (colored_path.length > 0 && level == 0);
+                    const background = isViolationNode ? "#4d3131" : "#314d31";
+                    const border = isViolationNode ? "#ec9999" : "#a6dfa6";
                     return {
                       id: i,
                       level,
                       label,
                       color: {
-                        border: isViolationNode ? "#ec9999" : "#a6dfa6",
-                        background: isViolationNode ? "#4d3131" : "#314d31"
+                        border,
+                        background,
+                        highlight: {
+                          border: "hsla(29.329, 66.552%, 52.544%)", // theme primary
+                          background // keep original background
+                        },
+                        hover: {
+                          border: "hsla(29.329, 66.552%, 52.544%)",
+                          background
+                        }
                       }
                     }
                   }));
@@ -255,7 +265,7 @@ export default function App() {
         <Resizable.Panel class="editor-panel"
           initialSize={0.55}
           minSize={0.2}>
-          <div ref={editor.ref} />
+          <div class="editor-instance-wrapper" ref={editor.ref} />
         </Resizable.Panel>
         <Resizable.Handle class="Resizable-handle"/>
         <Resizable.Panel class="right-panel"

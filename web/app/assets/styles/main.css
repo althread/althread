@@ -1,4 +1,12 @@
 :root {
+  --ifm-color-primary-lightest: hsla(28.766, 79.806%, 62.207%);
+  --ifm-color-primary-lighter: hsla(29.409, 74.725%, 58.813%);
+  --ifm-color-primary-light: hsla(29.344, 70.337%, 55.704%);
+  --ifm-color-primary: hsla(29.329, 66.552%, 52.544%);
+  --ifm-color-primary-dark: hsla(28.876, 64.273%, 49.816%);
+  --ifm-color-primary-darker: hsla(28.979, 69.4%, 46.923%);
+  --ifm-color-primary-darkest: hsla(29.062, 74.06%, 44.061%);
+  --background-graphics: #1e1e1e;
     background-color: #242A3B;
     color: white;
     font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol";
@@ -30,8 +38,17 @@ body {
     overflow: auto;
 }
 .editor-panel {
-    overflow: scroll;
+     overflow: hidden;
 }
+
+.editor-instance-wrapper .cm-editor {
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  box-sizing: border-box;
+  overflow-y: hidden;
+}
+
 .right-panel {
   display: flex;
   flex-direction: column;
@@ -295,7 +312,7 @@ body {
 }
 
 .vm-state-popup {
-  background: #2a2a2e;
+  background: #232323;
   color: #cccccc;
   padding: 0;
   border: 1px solid #444;
@@ -337,7 +354,7 @@ body {
 }
 
 .vm-state-popup-content strong {
-  color: #9cdcfe;
+  color: var(--ifm-color-primary);
 }
 
 .vm-state-popup-content ul {
@@ -384,7 +401,7 @@ body {
 
 .popup-tab-button.active {
   color: #ffffff;
-  border-bottom-color: #9cdcfe;
+  border-bottom-color: var(--ifm-color-primary);
 }
 
 .popup-tab-content {
