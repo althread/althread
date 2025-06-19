@@ -10,10 +10,11 @@ import  { compile, run, check } from '../pkg/althread_web';
 import { tutorial as tutorialStep1 } from './tutorials/TutorialStep1_Variables';
 import { tutorial as tutorialStep2 } from './tutorials/TutorialStep2_IfElse';
 import { tutorial as tutorialStep3 } from './tutorials/TutorialStep3_ForLoops';
-import { tutorial as tutorialStep4 } from './tutorials/TutorialStep4_SharedBlocks';
-import { tutorial as tutorialStep5 } from './tutorials/TutorialStep5_Programs';
-import { tutorial as tutorialStep6 } from './tutorials/TutorialStep6_Wait';
-import { tutorial as tutorialStep7 } from './tutorials/TutorialStep7_Channels';
+import { tutorial as tutorialStep4 } from './tutorials/TutorialStep4_Functions';
+import { tutorial as tutorialStep5 } from './tutorials/TutorialStep5_SharedBlocks';
+import { tutorial as tutorialStep6 } from './tutorials/TutorialStep6_Programs';
+import { tutorial as tutorialStep7 } from './tutorials/TutorialStep7_Wait';
+import { tutorial as tutorialStep8 } from './tutorials/TutorialStep8_Channels';
 import { A } from '@solidjs/router';
 
 export interface TutorialStep {
@@ -28,20 +29,22 @@ const tutorials: Record<string, TutorialStep> = {
   TutorialStep1_Variables: tutorialStep1,
   TutorialStep2_IfElse: tutorialStep2,
   TutorialStep3_ForLoops: tutorialStep3,
-  TutorialStep4_SharedBlocks: tutorialStep4,
-  TutorialStep5_Programs: tutorialStep5,
-  TutorialStep6_Wait: tutorialStep6,
-  TutorialStep7_Channels: tutorialStep7,
+  TutorialStep4_Functions: tutorialStep4,
+  TutorialStep5_SharedBlocks: tutorialStep5,
+  TutorialStep6_Programs: tutorialStep6,
+  TutorialStep7_Wait: tutorialStep7,
+  TutorialStep8_Channels: tutorialStep8,
 };
 
 const tutorialOrder: string[] = [
   'TutorialStep1_Variables',
   'TutorialStep2_IfElse',
   'TutorialStep3_ForLoops',
-  'TutorialStep4_SharedBlocks',
-  'TutorialStep5_Programs',
-  'TutorialStep6_Wait',
-  'TutorialStep7_Channels',
+  'TutorialStep4_Functions',
+  'TutorialStep5_SharedBlocks',
+  'TutorialStep6_Programs',
+  'TutorialStep7_Wait',
+  'TutorialStep8_Channels',
 ];
 
 const Tutorial: Component = () => {
