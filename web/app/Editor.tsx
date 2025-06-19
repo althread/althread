@@ -1,4 +1,3 @@
-
 import { createCodeMirror } from "solid-codemirror";
 import { createSignal, onMount } from "solid-js";
 import editor_lang from "./editor-lang";
@@ -11,14 +10,12 @@ import {keymap, highlightSpecialChars, drawSelection, highlightActiveLine, dropC
 import {Extension, EditorState} from "@codemirror/state"
 import {defaultHighlightStyle, syntaxHighlighting, indentOnInput, bracketMatching,
     foldGutter, foldKeymap} from "@codemirror/language"
-import {defaultKeymap, history, historyKeymap} from "@codemirror/commands"
+import {defaultKeymap, history, historyKeymap, toggleComment} from "@codemirror/commands"
 import {searchKeymap, highlightSelectionMatches} from "@codemirror/search"
 import {autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap} from "@codemirror/autocomplete"
 import {lintKeymap, lintGutter} from "@codemirror/lint"
 import {indentWithTab} from "@codemirror/commands"
-import {oneDark} from "@codemirror/theme-one-dark"
 import { tags as t } from '@lezer/highlight';
-import customStyle from "./custom-style";
 
 import {linter, Diagnostic} from "@codemirror/lint"
 
@@ -119,21 +116,70 @@ const createEditor = ({
     //onTransactionDispatched: (tr: Transaction, view: EditorView) => console.log("Transaction", tr)
   });
 
-  const baseTheme = EditorView.theme({
+  // --- START: "One Dark Pro Night Flat" inspired theme ---
+
+  const uiTheme = EditorView.theme({
     '&': {
-      textAlign: 'left',
-      fontSize: '18px',
-      background: '#242A3B',
+      color: '#abb2bf', // Default text color
+      backgroundColor: '#1e1e1e', // One Dark Pro background
     },
-    '.cm-editor.cm-focused': {
-      background: '#242A3B',
+    '.cm-content': {
+      caretColor: '#528bff', // Blinking cursor color
+    },
+    '.cm-cursor, .cm-dropCursor': {
+      borderLeft: '2px solid #528bff'
+    },
+    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
+      backgroundColor: '#3e4451' // A more visible selection color
+    },
+    '.cm-gutters': {
+      backgroundColor: '#1e1e1e',
+      color: '#5c6370', // Gutter text color
+      borderRight: '1px solid #333'
+    },
+    '.cm-activeLineGutter': {
+      backgroundColor: '#282c34' // Subtle dark highlight from One Dark Pro
+    },
+    '.cm-activeLine': {
+      backgroundColor: '#282c34' // Matching the gutter for a unified look
+    },
+    '.cm-scroller': {
+        fontFamily: "'Menlo', 'Monaco', 'Courier New', monospace",
+        fontSize: '13px',
+        lineHeight: '1.5'
     }
-  });
-  editor.createExtension(baseTheme);
+  }, {dark: true});
+
+  const uiHighlightStyle = HighlightStyle.define([
+    { tag: [t.keyword, t.controlKeyword, t.definitionKeyword, t.moduleKeyword, t.operatorKeyword], color: '#c678dd' }, // Magenta for keywords
+    { tag: [t.string, t.special(t.string)], color: '#98c379' }, // Green for strings
+    { tag: [t.number, t.bool, t.null], color: '#d19a66' }, // Orange for literals
+    { tag: t.comment, color: '#5c6370', fontStyle: 'italic' }, // Gray for comments
+    { tag: [t.className, t.typeName], color: '#e5c07b' }, // Yellow for types/classes
+    { tag: t.macroName, color: '#61afef' }, // Blue for functions/macros
+    { tag: t.variableName, color: '#abb2bf' }, // Light gray for variables
+    { tag: t.propertyName, color: '#e06c75' }, // Red for properties
+    { tag: [t.separator, t.punctuation], color: '#abb2bf' },
+    { tag: t.invalid, color: '#f44747', borderBottom: '1px dotted #f44747' }
+  ]);
+
+  // --- END: Theme ---
+
+  // Remove or comment out the old theme extensions
+  // editor.createExtension(baseTheme);
+  // editor.createExtension(modifiedTheme);
+  // editor.createExtension(oneDark);
+
   editor.createExtension(basicSetup);
-  editor.createExtension(keymap.of([indentWithTab]));
+  editor.createExtension(keymap.of([
+    indentWithTab,
+    { key: "Mod-/", run: toggleComment }
+  ]));
   editor.createExtension(editor_lang());
 
+  // Add the new theme and syntax highlighting
+  editor.createExtension(uiTheme);
+  editor.createExtension(syntaxHighlighting(uiHighlightStyle, { fallback: true }));
 
   const debugTheme = EditorView.theme({
     ".cm-gutters": {
@@ -169,17 +215,6 @@ const createEditor = ({
 
 
   
-  const highlightStyle = HighlightStyle.define(customStyle);  
-  const modifiedTheme = [EditorView.theme({
-    ".cm-gutters": {
-      borderRight: "#383e48 solid 2px",
-    }
-  }), syntaxHighlighting(highlightStyle)];
-
-  editor.createExtension(modifiedTheme);
-  editor.createExtension(oneDark);
-
-
   const regexpLinter = linter(view => {
     console.log('linting');
     let diagnostics: Diagnostic[] = []

@@ -7,7 +7,7 @@
   --ifm-color-primary-darker: hsla(28.979, 69.4%, 46.923%);
   --ifm-color-primary-darkest: hsla(29.062, 74.06%, 44.061%);
   --background-graphics: #1e1e1e;
-    background-color: #242A3B;
+    background-color: var(--background-graphics);
     color: white;
     font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol";
 }
@@ -178,7 +178,7 @@ body {
     width: 1px;
     border: 0;
     margin: 0;
-    background: transparent;
+    background: #1e1e1e;
     cursor: col-resize;
     transition: all 0.2s ease;
     position: relative;

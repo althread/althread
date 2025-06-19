@@ -1,4 +1,3 @@
-
 // Lezer parser compiled with pnpm run prepare
 import {parser} from "../lezer/parser.js"
 import {foldNodeProp, foldInside, indentNodeProp} from "@codemirror/language"
@@ -26,7 +25,7 @@ props: [
 export const exampleLanguage = LRLanguage.define({
     parser: parserWithMetadata,
     languageData: {
-      commentTokens: {line: ";"}
+      commentTokens: {line: "//"}
     }
   })
   
