@@ -105,11 +105,7 @@ receive_expression = { RECEIVE_KW ~ object_identifier? ~ pattern_list ~ ("=>" ~ 
 
 /// ### Expressions
 /// Expressions evaluate values based on arithmetic and logical operations, following standard precedence rules.
-expression = {
-  fn_call
-  | binary_expression
-  | primary_expression
-}
+expression = { binary_expression }
 
 tuple_expression = {
  ("(" ~ ")") | ("(" ~ expression ~ ("," ~ expression)* ~ ")")
@@ -118,7 +114,7 @@ range_expression = {
 	(expression ~ LIST_OP ~ expression)
 }
 
-primary_expression = _{ literal | identifier | "(" ~ expression ~ ")" }
+primary_expression = _{ fn_call | literal | identifier | "(" ~ expression ~ ")" }
 
 unary_expression = _{ unary_operator? ~ primary_expression }
 unary_operator   =  { POS_OP | NEG_OP | NOT_OP }

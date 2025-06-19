@@ -246,6 +246,18 @@ impl<'a> RunningProgramState<'a> {
                 self.memory.push(lit);
                 1
             }
+            InstructionType::ExpressionAndCleanup { expression, unstack_len } => {
+                let lit = expression.eval(&mut self.memory).map_err(|msg| {
+                    AlthreadError::new(ErrorType::ExpressionError, cur_inst.pos, msg)
+                })?;
+                // Pop the temporary values from function calls from the stack.
+                for _ in 0..*unstack_len {
+                    self.memory.pop();
+                }
+                // Push the final result of the expression.
+                self.memory.push(lit);
+                1
+            }
             InstructionType::MakeTupleAndCleanup { elements, unstack_len } => {
                 let mut evaluated_elements = Vec::new();
 
@@ -507,7 +519,7 @@ impl<'a> RunningProgramState<'a> {
                                 }
                             };
 
-                            
+                            // store the current state in the call stack
                             self.call_stack.push(StackFrame {
                                 return_ip: self.instruction_pointer + 1,
                                 caller_fp: self.frame_pointer,

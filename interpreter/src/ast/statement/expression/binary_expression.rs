@@ -153,7 +153,7 @@ impl LocalBinaryExpressionNode {
             BinaryOperator::LessThan => left.less_than(&right),
             BinaryOperator::LessThanOrEqual => left.less_than_or_equal(&right),
             BinaryOperator::GreaterThan => left.greater_than(&right),
-            BinaryOperator::GreaterThanOrEqual => right.greater_than_or_equal(&right),
+            BinaryOperator::GreaterThanOrEqual => left.greater_than_or_equal(&right),
             BinaryOperator::And => left.and(&right),
             BinaryOperator::Or => left.or(&right),
         }

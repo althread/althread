@@ -12,6 +12,10 @@ use crate::{
 pub enum InstructionType {
     Empty,
     Expression(LocalExpressionNode),
+    ExpressionAndCleanup {
+        expression: LocalExpressionNode,
+        unstack_len: usize,
+    },
     MakeTupleAndCleanup {
         elements: Vec<LocalExpressionNode>,
         unstack_len: usize
@@ -95,6 +99,9 @@ impl fmt::Display for InstructionType {
         match self {
             Self::Empty => write!(f, "EMPTY")?,
             Self::Expression(a) => write!(f, "eval {}", a)?,
+            Self::ExpressionAndCleanup { expression, unstack_len } => {
+                write!(f, "eval {} and cleanup (unstack {})", expression, unstack_len)
+            }?,
             Self::MakeTupleAndCleanup { elements, unstack_len } => write!(
                 f,
                 "make tuple ({}) and cleanup (unstack {})",
@@ -210,6 +217,7 @@ impl InstructionType {
             | Self::Wait {..}
             | Self::Empty
             | Self::Expression(_)
+            | Self::ExpressionAndCleanup {..}
             | Self::MakeTupleAndCleanup {..}
             | Self::LocalAssignment {..}
             | Self::JumpIf {..}

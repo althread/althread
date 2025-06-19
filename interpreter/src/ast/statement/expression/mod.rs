@@ -273,6 +273,25 @@ impl LocalExpressionNode {
         };
         Ok(root)
     }
+
+    pub fn contains_fn_call(&self) -> bool {
+        match self {
+            LocalExpressionNode::FnCall(_) => true,
+            LocalExpressionNode::Binary(n) => {
+                n.left.contains_fn_call() || n.right.contains_fn_call()
+            }
+            LocalExpressionNode::Unary(n) => n.operand.contains_fn_call(),
+            LocalExpressionNode::Primary(n) => match n {
+                LocalPrimaryExpressionNode::Expression(e) => e.contains_fn_call(),
+                _ => false,
+            },
+            LocalExpressionNode::Tuple(n) => n.values.iter().any(|e| e.contains_fn_call()),
+            LocalExpressionNode::Range(n) => {
+                n.expression_start.contains_fn_call() || n.expression_end.contains_fn_call()
+            }
+        }
+    }
+
     pub fn datatype(&self, state: &CompilerState) -> Result<DataType, String> {
         match self {
             Self::Binary(node) => node.datatype(state),
@@ -345,20 +364,20 @@ impl InstructionBuilder for Node<Expression> {
 
         vars.retain(|var| state.global_table.contains_key(var));
 
-        for var in vars.iter() {
-            let global_var = state.global_table.get(var).expect(&format!(
-                "Error: Variable '{}' not found in global table",
-                var
-            ));
-            state.program_stack.push(Variable {
-                name: var.clone(),
-                depth: state.current_stack_depth,
-                mutable: false,
-                datatype: global_var.datatype.clone(),
-                declare_pos: global_var.declare_pos,
-            });
-        }
-        if vars.len() > 0 {
+        if !vars.is_empty() {
+            for var in vars.iter() {
+                let global_var = state.global_table.get(var).expect(&format!(
+                    "Error: Variable '{}' not found in global table",
+                    var
+                ));
+                state.program_stack.push(Variable {
+                    name: var.clone(),
+                    depth: state.current_stack_depth,
+                    mutable: false,
+                    datatype: global_var.datatype.clone(),
+                    declare_pos: global_var.declare_pos,
+                });
+            }
             instructions.push(Instruction {
                 pos: Some(self.pos),
                 control: InstructionType::GlobalReads {
@@ -369,7 +388,7 @@ impl InstructionBuilder for Node<Expression> {
         }
 
         let local_expr = LocalExpressionNode::from_expression(&self.value, &state.program_stack)?;
-        
+
         let result_type = local_expr.datatype(state).map_err(|err| {
             AlthreadError::new(
                 ErrorType::ExpressionError,
@@ -378,105 +397,231 @@ impl InstructionBuilder for Node<Expression> {
             )
         })?;
 
-        let mut is_direct_fn_call_expression = false;
-
-        match &local_expr {
-            LocalExpressionNode::FnCall(node) => {
-                is_direct_fn_call_expression = true;
-                let builder = node.compile(state)?;
-                instructions.extend(builder.instructions);
-            },
-            LocalExpressionNode::Tuple(node) => {
-                let mut contains_fn_call = false;
-
-                // check if the tuple contains a function call
-                for element in &node.values {
-                    match element {
-                        LocalExpressionNode::FnCall(_) => {
-                            contains_fn_call = true;
-                            break;
-                        }
-                        _ => {}
+        if !local_expr.contains_fn_call() {
+            instructions.push(Instruction {
+                pos: Some(self.pos),
+                control: InstructionType::Expression(local_expr),
+            });
+        } else {
+            fn shift_var_indices(expr: &LocalExpressionNode, shift: usize) -> LocalExpressionNode {
+                match expr {
+                    LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(var)) => {
+                        LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(LocalVarNode {
+                            index: var.index + shift,
+                        }))
                     }
+                    LocalExpressionNode::Binary(node) => {
+                        LocalExpressionNode::Binary(LocalBinaryExpressionNode {
+                            left: Box::new(shift_var_indices(&node.left, shift)),
+                            operator: node.operator.clone(),
+                            right: Box::new(shift_var_indices(&node.right, shift)),
+                        })
+                    }
+                    LocalExpressionNode::Unary(node) => {
+                        LocalExpressionNode::Unary(LocalUnaryExpressionNode {
+                            operand: Box::new(shift_var_indices(&node.operand, shift)),
+                            operator: node.operator.clone(),
+                        })
+                    }
+                    LocalExpressionNode::Tuple(node) => LocalExpressionNode::Tuple(
+                        LocalTupleExpressionNode {
+                            values: node.values.iter().map(|v| shift_var_indices(v, shift)).collect(),
+                        },
+                    ),
+                    LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Expression(
+                        expr,
+                    )) => LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Expression(
+                        Box::new(shift_var_indices(expr, shift)),
+                    )),
+                    LocalExpressionNode::Range(node) => {
+                        LocalExpressionNode::Range(LocalRangeListExpressionNode {
+                            expression_start: Box::new(shift_var_indices(
+                                &node.expression_start,
+                                shift,
+                            )),
+                            expression_end: Box::new(shift_var_indices(&node.expression_end, shift)),
+                        })
+                    }
+                    _ => expr.clone(),
                 }
+            }
 
-                if contains_fn_call {
-                    let mut compiled_args: Vec<LocalExpressionNode> = Vec::new();
-                    let total_fn_calls_in_tuple = node.values.iter().filter(|e| matches!(e, LocalExpressionNode::FnCall(_))).count();
-                    let mut direct_fn_children_processed_count = 0;
-                    
-                    // if we have nested method calls, we need to keep track of the object on which
-                    // the method is called, so we can pass it as an argument to the method call
-                    let outer_method_call_stack_offset = state.method_call_stack_offset;
+            fn compile_recursive(
+                expr: &LocalExpressionNode,
+                state: &mut CompilerState,
+            ) -> AlthreadResult<(LocalExpressionNode, InstructionBuilderOk, usize)> {
+                match expr {
+                    LocalExpressionNode::FnCall(node) => {
+                        let builder = node.compile(state)?;
+                        state.program_stack.pop();
+                        let placeholder = LocalExpressionNode::Primary(
+                            LocalPrimaryExpressionNode::Var(LocalVarNode { index: 0 }),
+                        );
+                        Ok((placeholder, builder, 1))
+                    }
+                    LocalExpressionNode::Binary(node) => {
+                        // Compile left side first, to match execution order.
+                        let (left_expr, mut left_builder, left_calls) =
+                            compile_recursive(&node.left, state)?;
 
-                    for element in &node.values {
-                        match element {
-                            LocalExpressionNode::FnCall(node) => {
-                                // method calls use this to find the object on which the method is called
-                                state.method_call_stack_offset = outer_method_call_stack_offset + direct_fn_children_processed_count;
+                        // Temporarily update the compiler's stack to account for the
+                        // return values from the left side's function calls.
+                        let temp_vars_added = left_calls;
+                        for _ in 0..temp_vars_added {
+                            state.program_stack.push(Variable {
+                                name: "<temp_fn_return>".to_string(),
+                                depth: state.current_stack_depth,
+                                mutable: false,
+                                // Using a placeholder type. The actual type is unknown here,
+                                // but it's only needed to adjust stack indices.
+                                datatype: DataType::Void,
+                                declare_pos: None,
+                            });
+                        }
 
-                                let builder = node.compile(state)?;
-                                instructions.extend(builder.instructions);
+                        // Compile the right side with the adjusted stack.
+                        let (right_expr, right_builder, right_calls) =
+                            compile_recursive(&node.right, state)?;
 
-                                // we need to know the index of the variable to keep the result of the function call
-                                let runtime_stack_offset = total_fn_calls_in_tuple - 1 - direct_fn_children_processed_count;
-                                compiled_args.push(LocalExpressionNode::Primary(
-                                    LocalPrimaryExpressionNode::Var(LocalVarNode {
-                                        index: runtime_stack_offset,
-                                    }),
-                                ));
-                                direct_fn_children_processed_count += 1;
-                                state.program_stack.pop();
-                            }
-                            _ => {
-                                // If it's not a function call, we just clone the element
-                                // and push it to the compiled_args
-                                compiled_args.push(element.clone());
+                        // Restore the compiler's stack.
+                        for _ in 0..temp_vars_added {
+                            state.program_stack.pop();
+                        }
+
+                        // Combine the instructions.
+                        left_builder.extend(right_builder);
+
+                        // The placeholder for the left result must be shifted by the number
+                        // of results from the right side.
+                        let shifted_left = if right_calls > 0 {
+                            shift_var_indices(&left_expr, right_calls)
+                        } else {
+                            left_expr
+                        };
+
+                        let new_expr = LocalExpressionNode::Binary(LocalBinaryExpressionNode {
+                            left: Box::new(shifted_left),
+                            right: Box::new(right_expr),
+                            operator: node.operator.clone(),
+                        });
+
+                        Ok((new_expr, left_builder, left_calls + right_calls))
+                    }
+                    LocalExpressionNode::Unary(node) => {
+                        let (operand_expr, builder, calls) =
+                            compile_recursive(&node.operand, state)?;
+                        let new_expr = LocalExpressionNode::Unary(LocalUnaryExpressionNode {
+                            operand: Box::new(operand_expr),
+                            operator: node.operator.clone(),
+                        });
+                        Ok((new_expr, builder, calls))
+                    }
+                    LocalExpressionNode::Tuple(node) => {
+                        let mut compiled_elements = Vec::new();
+                        let mut builder = InstructionBuilderOk::new();
+                        let mut total_calls = 0;
+                        let mut elements_with_calls = Vec::new();
+
+                        for element in node.values.iter().rev() {
+                            let (new_elem, new_builder, num_calls) =
+                                compile_recursive(element, state)?;
+                            elements_with_calls.push((new_elem, num_calls));
+                            builder.extend(new_builder);
+                            total_calls += num_calls;
+                        }
+                        elements_with_calls.reverse();
+
+                        let mut calls_processed = 0;
+                        for (elem, calls) in elements_with_calls {
+                            if calls > 0 {
+                                let shifted_elem =
+                                    shift_var_indices(&elem, total_calls - calls_processed - calls);
+                                compiled_elements.push(shifted_elem);
+                                calls_processed += calls;
+                            } else {
+                                compiled_elements.push(elem);
                             }
                         }
-                    }
-                    
-                    state.method_call_stack_offset = outer_method_call_stack_offset;
 
-                    // we create a tuple with the compiled arguments
-                    // and cleanup the stack afterwards
-                    // the cleanup is necessary because we have pushed the variables on the stack
-                    // and we need to remove them after the tuple is created
+                        let new_tuple = LocalExpressionNode::Tuple(LocalTupleExpressionNode {
+                            values: compiled_elements,
+                        });
+                        Ok((new_tuple, builder, total_calls))
+                    }
+                    LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Expression(
+                        expr,
+                    )) => {
+                        let (new_expr, builder, calls) = compile_recursive(expr, state)?;
+                        let new_primary = LocalExpressionNode::Primary(
+                            LocalPrimaryExpressionNode::Expression(Box::new(new_expr)),
+                        );
+                        Ok((new_primary, builder, calls))
+                    }
+                    LocalExpressionNode::Range(node) => {
+                        let (end_expr, end_builder, end_calls) =
+                            compile_recursive(&node.expression_end, state)?;
+                        let (start_expr, mut start_builder, start_calls) =
+                            compile_recursive(&node.expression_start, state)?;
+
+                        start_builder.extend(end_builder);
+
+                        let shifted_start = if start_calls > 0 {
+                            shift_var_indices(&start_expr, end_calls)
+                        } else {
+                            start_expr
+                        };
+
+                        let new_expr =
+                            LocalExpressionNode::Range(LocalRangeListExpressionNode {
+                                expression_start: Box::new(shifted_start),
+                                expression_end: Box::new(end_expr),
+                            });
+
+                        Ok((new_expr, start_builder, start_calls + end_calls))
+                    }
+                    _ => Ok((expr.clone(), InstructionBuilderOk::new(), 0)),
+                }
+            }
+
+            let (final_expr, builder, fn_call_count) = compile_recursive(&local_expr, state)?;
+            instructions.extend(builder.instructions);
+
+            if fn_call_count > 0 {
+                if let Expression::FnCall(_) = self.value {
+                     // It's a direct function call statement, FnCall instruction handles the stack
+                } else if let Expression::Tuple(_) = self.value {
                     instructions.push(Instruction {
                         pos: Some(self.pos),
                         control: InstructionType::MakeTupleAndCleanup {
-                            elements: compiled_args,
-                            unstack_len: total_fn_calls_in_tuple
-                        }
-                    });
-
-                } else {
-                    instructions.push(Instruction {
-                    pos: Some(self.pos),
-                    control: InstructionType::Expression(local_expr),
+                            elements: if let LocalExpressionNode::Tuple(t) = final_expr { t.values } else { vec![] },
+                            unstack_len: fn_call_count,
+                        },
                     });
                 }
-            },
-            _ => {        
-                instructions.push(Instruction {
-                pos: Some(self.pos),
-                control: InstructionType::Expression(local_expr),
+                else {
+                    instructions.push(Instruction {
+                        pos: Some(self.pos),
+                        control: InstructionType::ExpressionAndCleanup {
+                            expression: final_expr,
+                            unstack_len: fn_call_count,
+                        },
+                    });
+                }
+            } else {
+                 instructions.push(Instruction {
+                    pos: Some(self.pos),
+                    control: InstructionType::Expression(final_expr),
                 });
             }
         }
 
-        // if the expression is a function call, we don't need to push a variable on the stack
-        // because the function call will handle the return value
-        // otherwise, we push a variable on the stack with the result type
-        if !is_direct_fn_call_expression {
-            state.program_stack.push(Variable {
-                name: "".to_string(),
-                depth: state.current_stack_depth,
-                mutable: false,
-                datatype: result_type,
-                declare_pos: None,
-            });
-        }
+        state.program_stack.push(Variable {
+            name: "".to_string(),
+            depth: state.current_stack_depth,
+            mutable: false,
+            datatype: result_type,
+            declare_pos: None,
+        });
 
         Ok(InstructionBuilderOk::from_instructions(instructions))
     }
