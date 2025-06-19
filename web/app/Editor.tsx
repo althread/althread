@@ -173,7 +173,16 @@ const createEditor = ({
   editor.createExtension(basicSetup);
   editor.createExtension(keymap.of([
     indentWithTab,
-    { key: "Mod-/", run: toggleComment }
+    { key: "Mod-/", run: toggleComment },
+    {
+      key: "Mod-s",
+      preventDefault: true,
+      run: () => {
+        // Your custom save logic here, or just prevent default
+        // For example: compile(editor.state.doc.toString());
+        return true; // returning true prevents further handling
+      }
+    }
   ]));
   editor.createExtension(editor_lang());
 
