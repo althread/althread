@@ -251,10 +251,9 @@ export default function App() {
               Tutorials
             </button>
             <button
-              class={`vscode-button${loadingAction() === "docs" ? " active" : ""}`}
+              class="vscode-button"
               onClick={() => {
-                setLoadingAction("docs");
-                navigate('/docs/guide/intro');
+                window.location.href = "https://althread.github.io/en/docs/guide/intro/";
               }}>
               <i class="codicon codicon-repo"></i>
               Documentation
