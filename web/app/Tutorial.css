@@ -1,48 +1,113 @@
-.tutorial-container {
+:root {
+  --ifm-color-primary-lightest: hsla(28.766, 79.806%, 62.207%);
+  --ifm-color-primary-lighter: hsla(29.409, 74.725%, 58.813%);
+  --ifm-color-primary-light: hsla(29.344, 70.337%, 55.704%);
+  --ifm-color-primary: hsla(29.329, 66.552%, 52.544%);
+  --ifm-color-primary-dark: hsla(28.876, 64.273%, 49.816%);
+  --ifm-color-primary-darker: hsla(28.979, 69.4%, 46.923%);
+  --ifm-color-primary-darkest: hsla(29.062, 74.06%, 44.061%);
+}
+
+.tutorial-page-container {
   display: flex;
+  flex-direction: column;
   height: 100vh;
-  font-family: sans-serif;
-  background-color: #1e1e1e; /* Dark background for the whole page */
-  color: #d4d4d4; /* Light text color */
+  overflow: hidden;
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol";
+}
+
+#tutorial-content-area {
+  flex-grow: 1;
+  height: calc(100vh - 30px - 2rem); /* Adjust based on header height */
+}
+
+.tutorial-header {
+  margin:0;
+  height:30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 1rem 1rem 1rem 0.5rem;
+  background-color: #1e1e1e;
+  border-bottom: 1px solid #333;
+}
+
+.tutorial-header .brand {
+    display: flex;
+    align-items: center;
+    /* flex: 1; */
+}
+
+.tutorial-step-selector-wrapper {
+    /* flex-grow: 2; */
+    display: flex;
+    justify-content: center;
+}
+
+.tutorial-header .actions-placeholder {
+    /* flex: 1; */
+}
+
+.tutorial-header select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23cccccc'%3E%3Cpath d='M12.78 5.22a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L3.22 6.28a.75.75 0 0 1 1.06-1.06L8 8.94l3.72-3.72a.75.75 0 0 1 1.06 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 1em;
+  padding: 4px 28px 4px 12px;
+  border: 1px solid #3d3d3d;
+  background-color: #2d2d2d;
+  color: #cccccc;
+  font-size: 13px;
+  min-width: 250px;
+  max-width: 400px;
+  width: 100%;
+  transition: border-color 0.2s;
+}
+
+.tutorial-header select:hover {
+  border-color: #5e5e5e;
+}
+
+.tutorial-header select:focus {
+  outline: none;
+  border-color: var(--ifm-color-primary-light);
 }
 
 .explanation-pane {
-  flex: 1;
-  padding: 20px 20px 0; /* pas de padding en bas pour éviter l'espace sous la barre sticky */
-  border-right: 1px solid #333; /* Darker border */
+  padding: 20px;
   overflow-y: auto;
-  background-color: #252526; /* Slightly lighter dark for left pane */
+  background-color: #1e1e1e;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
-/* Was .tutorial-step-selector, now .tutorial-header to contain the select dropdown */
-.tutorial-header {
-  margin-bottom: 20px;
-  /* Removed padding and background-color, select is styled directly */
-}
-
-/* Styling for the select element within .tutorial-header */
-.tutorial-header select {
-  padding: 8px 12px;
-  border-radius: 4px;
-  border: 1px solid #555;
-  background-color: #3c3c3c;
-  color: #d4d4d4;
-  font-size: 1em;
-  width: 100%; /* Make dropdown full width of its container */
-}
-
-/* Was .explanation-content, now .tutorial-content */
 .tutorial-content {
-  flex-grow: 1; /* Allows content to take available space */
+  flex-grow: 1;
 }
 
-/* Styles for elements within .tutorial-content (formerly .explanation-content) */
 .tutorial-content h1, .tutorial-content h2, .tutorial-content h3 {
-  color: #569cd6; /* Light blue for headers */
+  color: var(--ifm-color-primary-darkest);
   border-bottom: 1px solid #444;
   padding-bottom: 0.3em;
+}
+
+.tutorial-content h1 {
+  font-size: 1.7em;
+}
+
+.tutorial-content h2 {
+  font-size: 1.3em;
+}
+
+.tutorial-content h3 {
+  font-size: 1.15em;
 }
 
 .tutorial-content p {
@@ -51,175 +116,131 @@
 }
 
 .tutorial-content code {
-  background-color: #333;
+  background-color: #2d2d2d;
   padding: 0.2em 0.4em;
-  border-radius: 3px;
-  font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
-  color: #ce9178; /* Orange-ish for inline code */
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  color: var(--ifm-color-primary-lightest);
+}
+
+.tutorial-content pre {
+    background-color: #1e1e1e;
+    border: 1px solid #333;
+    padding: 1rem;
+    overflow-x: auto;
 }
 
 .tutorial-content pre code {
-  display: block;
-  padding: 10px;
-  background-color: #1e1e1e; /* Match editor background */
-  border-radius: 4px;
-  overflow-x: auto;
+  padding: 0;
+  background: none;
+  border: none;
 }
 
-/* Was .tutorial-navigation-bottom, now .navigation-buttons */
 .navigation-buttons {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   padding-top: 20px;
   border-top: 1px solid #333;
-  margin-top: 0; /* override previous auto for sticky behavior */
-  position: sticky;
-  bottom: 0; /* coller la barre sticky en bas */
-  padding-bottom: 20px; /* espace interne bas pour marger les boutons */
-  background-color: #252526; /* match pane background */
-  width: 100%; /* couvrer toute la largeur interne */
-  z-index: 2; /* placer au-dessus du contenu déroulant */
+  margin-top: auto;
+  background-color: #1e1e1e;
 }
 
-.navigation-buttons button {
-  padding: 10px 20px;
-  background-color: #007acc; /* VS Code blue */
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 1em;
-  transition: background-color 0.2s ease;
+.editor-toolbar-actions .action-buttons-center {
+    display: flex;
+    gap: 8px;
 }
 
-.navigation-buttons button:hover:not(:disabled) {
-  background-color: #005a99;
+.editor-toolbar-actions .validate-button {
+  background-color: #314d31;
+  border-color: #a6dfa6;
+  color: #a6dfa6;
 }
 
-.navigation-buttons button:disabled {
-  background-color: #555;
-  cursor: not-allowed;
-}
-
-/* Updated selector for validate-button */
-.navigation-buttons .validate-button {
-  background-color: #4CAF50; /* Green for validate */
-}
-
-.navigation-buttons .validate-button:hover:not(:disabled) {
-  background-color: #388E3C;
+.editor-toolbar-actions .validate-button:hover:not(:disabled) {
+  background-color: #3f613f;
 }
 
 .editor-output-panes {
-  flex: 2;
+  padding-left: 20px;
+  padding-right: 1rem;
   display: flex;
   flex-direction: column;
-  background-color: #1e1e1e; /* Editor-like background */
+  background-color: #1e1e1e;
 }
 
 .editor-pane-area {
-  flex: 1; /* Takes up top half */
-  padding: 20px;
+  flex: 2;
+  padding-top: 20px;
   display: flex;
   flex-direction: column;
-  border-bottom: 1px solid #333;
+  min-height: 0;
 }
 
-.editor-pane-area h3 {
-  margin-top: 0;
-  margin-bottom: 10px;
-  color: #569cd6;
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  gap: 1.5rem;
+}
+
+.editor-toolbar h3 {
+  margin: 0;
+  font-size: 13px;
+  color: #cccccc;
+  font-weight: normal;
+}
+
+.editor-toolbar-actions {
+  display: flex;
+  gap: 10px;
 }
 
 .editor-instance-wrapper {
   flex-grow: 1;
-  border: 1px solid #3c3c3c; /* Darker border for editor */
-  height: calc(100% - 40px); /* Adjust if h3 margin changes */
+  height: 100%;
+  padding-bottom: 1rem;
+  overflow-y: scroll;
 }
 
-/* Was .output-area, now .output-pane */
+.editor-instance-wrapper .cm-editor {
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  box-sizing: border-box;
+  /* Optional: hide vertical scrollbar */
+  overflow-y: hidden;
+}
+
 .output-pane {
-  flex: 1; /* Takes up bottom half */
-  padding: 0 20px 20px 20px; /* No top padding, handled by tabs */
+  flex: 1;
+  padding: 0;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
-/* Was .tab-controls, now .output-tabs */
-.output-tabs {
-  display: flex;
-  border-bottom: 1px solid #333;
-  margin-bottom: 10px; /* Space between tabs and content */
-}
-
-/* Styles for buttons directly within .output-tabs */
-.output-tabs button {
-  padding: 10px 15px;
-  cursor: pointer;
-  border: none;
-  background-color: transparent;
-  color: #ccc;
-  border-bottom: 2px solid transparent; /* For active state */
-  margin-right: 5px;
-  font-size: 0.95em;
-}
-
-.output-tabs button.active {
-  color: #569cd6; /* Active tab text color */
-  border-bottom: 2px solid #007acc; /* Active tab underline */
-}
-
-.output-tabs button:hover {
-  background-color: #2a2d2e;
-}
-
-/* Was .tab-content, now .output-content */
-.output-content {
-  flex-grow: 1;
-  overflow-y: auto;
-  background-color: #252526; /* Match output pre background for consistency */
-  padding: 15px;
-  border-radius: 4px;
-  border: 1px solid #3c3c3c;
-}
-
-/* Styling for validation messages */
 .validation-message {
-  padding: 10px;
-  border-radius: 4px;
-  white-space: pre-wrap; /* Allow wrapping */
-  word-wrap: break-word; /* Break long words */
+  padding: 1rem;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
 }
 
 .validation-message.success {
-  background-color: #28a745; /* Green background for success */
-  color: #fff; /* White text for success */
-  border: 1px solid #1e7e34;
+  background-color: #314d31;
+  color: #a6dfa6;
+  border: 1px solid #a6dfa6;
 }
 
 .validation-message.error {
-  background-color: #dc3545; /* Red background for error */
-  color: #fff; /* White text for error */
-  border: 1px solid #b21f2d;
+  background-color: #4d3131;
+  color: #ec9999;
+  border: 1px solid #ec9999;
 }
 
-/* Remove old .tab-content pre style if .output-content now handles background and padding */
-/* If pre is still used inside .output-content for other things, adjust this: */
-.output-content pre {
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  /* background-color: #252526; */ /* Handled by .output-content */
-  /* padding: 15px; */ /* Handled by .output-content */
-  /* border-radius: 4px; */ /* Handled by .output-content */
-  color: #d4d4d4;
-  font-size: 0.9em;
-  /* border: 1px solid #3c3c3c; */ /* Handled by .output-content */
-  margin: 0; /* Reset margin if pre is direct child */
-}
-
-/* Styling for result-output */
-.result-output {
-  white-space: pre-wrap; /* Preserve newlines and wrap lines */
-  word-wrap: break-word;
-  font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+.console pre {
+    padding: 1rem;
+    margin: 0;
 }

@@ -10,7 +10,7 @@ const app = document.getElementById('app');
 if (app) {
   render(() => 
     <HashRouter>
-      <Route path="/tutorial" component={Tutorial} />
+      <Route path="/tutorials" component={Tutorial} />
       <Route path="/" component={App} />
     </HashRouter>, app);
 }

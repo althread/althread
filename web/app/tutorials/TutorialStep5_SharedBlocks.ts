@@ -2,9 +2,9 @@ import { type TutorialStep } from '../Tutorial';
 
 export const tutorial: TutorialStep = {
   name: "sharedBlocks",
-  displayName: "4. Shared Blocks",
+  displayName: "5. Shared Blocks",
   content: `
-# 4. Shared Blocks & Shared Variables
+# 5. Shared Blocks & Shared Variables
 
 As introduced earlier, \`shared\` blocks are crucial for concurrent programming in Althread. They define variables that can be accessed and modified by multiple processes simultaneously.
 

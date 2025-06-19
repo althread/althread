@@ -235,10 +235,19 @@ export default function App() {
               class={`vscode-button${loadingAction() === "tutorial" ? " active" : ""}`}
               onClick={() => {
                 setLoadingAction("tutorial");
-                navigate('/tutorial');
+                navigate('/tutorials');
               }}>
               <i class="codicon codicon-book"></i>
               Tutorials
+            </button>
+            <button
+              class={`vscode-button${loadingAction() === "docs" ? " active" : ""}`}
+              onClick={() => {
+                setLoadingAction("docs");
+                navigate('/docs/guide/intro');
+              }}>
+              <i class="codicon codicon-repo"></i>
+              Documentation
             </button>
           </div>
       </div>

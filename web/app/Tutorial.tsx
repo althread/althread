@@ -3,6 +3,7 @@ import type { Component } from "solid-js";
 import createEditor from './Editor';
 import { marked } from 'marked';
 import './Tutorial.css';
+import Resizable from '@corvu/resizable';
 
 import  { compile, run, check } from '../pkg/althread_web';
 
@@ -15,7 +16,8 @@ import { tutorial as tutorialStep5 } from './tutorials/TutorialStep5_SharedBlock
 import { tutorial as tutorialStep6 } from './tutorials/TutorialStep6_Programs';
 import { tutorial as tutorialStep7 } from './tutorials/TutorialStep7_Wait';
 import { tutorial as tutorialStep8 } from './tutorials/TutorialStep8_Channels';
-import { A } from '@solidjs/router';
+import { A, useNavigate } from '@solidjs/router';
+import { Logo } from './assets/images/Logo';
 
 export interface TutorialStep {
   name: string; // e.g., "Variables", "IfElse"
@@ -69,6 +71,8 @@ const Tutorial: Component = () => {
     console.error("Attempted to get localStorage key with out-of-bounds index:", index);
     return `althread_tutorial_invalid_${index}`;
   };
+
+  const navigate = useNavigate();
 
   // Effect to update content and code when currentTutorialIndex changes
   createEffect(() => {
@@ -162,82 +166,107 @@ const Tutorial: Component = () => {
   };
 
   return (
-    <div class="tutorial-container">
-      <div class="explanation-pane">
-        <div class="tutorial-header">
-          <A href="/" 
-            class="vscode-button" style="margin-right:8px; margin-bottom:8px">
-            <i class="codicon codicon-home"></i> Home
-          </A>
-          <select
-            value={tutorialOrder[currentTutorialIndex()]}
-            onChange={(e) => {
-              const selectedStepKey = (e.currentTarget as HTMLSelectElement).value;
-              const newIndex = tutorialOrder.indexOf(selectedStepKey);
-              if (newIndex !== -1) {
-                setCurrentTutorialIndex(newIndex);
-              }
-            }}
-          >
-            <For each={tutorialOrder}>{(stepKey) => {
-              const tutorial = tutorials[stepKey];
-              return <option value={stepKey}>{tutorial ? tutorial.displayName : `Loading: ${stepKey}`}</option>;
-            }}</For>
-          </select>
+    <div class="tutorial-page-container">
+      <div class="tutorial-header">
+        <div class="brand">
+            <Logo />
+            <h3>Althread</h3>
         </div>
-        <div
-          class="tutorial-content"
-          innerHTML={currentTutorial()?.content ? marked(currentTutorial()!.content) as string : 'Loading tutorial content...'}
-        ></div>
-        <div class="navigation-buttons">
-          <button onClick={handlePreviousTutorial} disabled={currentTutorialIndex() === 0}>
-            &larr; Previous
-          </button>
-          <button onClick={handleValidateCode} class="validate-button">
-            Validate Code
-          </button>
-          <button onClick={handleRunCode} class="run-button">
-             Run Code
-          </button>
-          <button onClick={handleNextTutorial} disabled={currentTutorialIndex() === tutorialOrder.length - 1}>
-            Next &rarr;
+        <div class="tutorial-step-selector-wrapper">
+            <select
+                value={tutorialOrder[currentTutorialIndex()]}
+                onChange={(e) => {
+                const selectedStepKey = (e.currentTarget as HTMLSelectElement).value;
+                const newIndex = tutorialOrder.indexOf(selectedStepKey);
+                if (newIndex !== -1) {
+                    setCurrentTutorialIndex(newIndex);
+                }
+                }}
+            >
+                <For each={tutorialOrder}>{(stepKey) => {
+                const tutorial = tutorials[stepKey];
+                return <option value={stepKey}>{tutorial ? tutorial.displayName : `Loading: ${stepKey}`}</option>;
+                }}</For>
+            </select>
+        </div>
+        {/* Placeholder for right-aligned actions if needed */}
+        <div class="actions-placeholder">
+          <button onClick={() => {
+            navigate('/');
+          }} class="vscode-button">
+              <i class="codicon codicon-terminal-tmux"></i> Back to Editor
           </button>
         </div>
       </div>
-      <div class="editor-output-panes">
-        <div class="editor-pane-area">
-          <h3>Editor</h3>
-          <div ref={editorInstance.ref} class="editor-instance-wrapper"></div>
-        </div>
-        <div class="output-pane">
-          <div class="output-tabs">
-            <button
-              class={activeTab() === 'validation' ? 'active' : ''}
-              onClick={() => setActiveTab('validation')}
-            >
-              Validation Output
-            </button>
-            <button
-              class={activeTab() === 'result' ? 'active' : ''}
-              onClick={() => setActiveTab('result')}
-            >
-              Result (Placeholder)
-            </button>
-          </div>
-          <div class="output-content">
-            {activeTab() === 'validation' && validationOutput() && (
-              <div class={`validation-message ${validationOutput()?.success ? 'success' : 'error'}`}>
-                {validationOutput()?.message}
+      <Resizable id="tutorial-content-area">
+        <Resizable.Panel class="explanation-pane" initialSize={0.4} minSize={0.2}>
+            <div
+            class="tutorial-content"
+            innerHTML={currentTutorial()?.content ? marked(currentTutorial()!.content) as string : 'Loading tutorial content...'}
+            ></div>
+            <div class="navigation-buttons">
+                <button class="vscode-button" onClick={handlePreviousTutorial} disabled={currentTutorialIndex() === 0}>
+                    <i class="codicon codicon-arrow-left"></i> Previous
+                </button>
+                <button class="vscode-button" onClick={handleNextTutorial} disabled={currentTutorialIndex() === tutorialOrder.length - 1}>
+                    Next <i class="codicon codicon-arrow-right"></i>
+                </button>
+            </div>
+        </Resizable.Panel>
+        <Resizable.Handle class="Resizable-handle"/>
+        <Resizable.Panel class="editor-output-panes" initialSize={0.6} minSize={0.2}>
+            <div class="editor-pane-area">
+              <div class="editor-toolbar">
+                <h3>Editor</h3>
+                <div class="action-buttons-center editor-toolbar-actions">
+                    <button onClick={handleValidateCode} class="vscode-button validate-button">
+                        <i class="codicon codicon-check"></i> Validate
+                    </button>
+                    <button onClick={handleRunCode} class="vscode-button">
+                        <i class="codicon codicon-play"></i> Run
+                    </button>
+                </div>
               </div>
-            )}
-            {activeTab() === 'result' && (
-              <div class="result-output">
-                {executionResult()}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+              <div ref={editorInstance.ref} class="editor-instance-wrapper"></div>
+            </div>
+            <div class="output-pane">
+                <div class="tab">
+                    <button
+                    class={`tab_button ${activeTab() === 'validation' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('validation')}
+                    >
+                    <h3>Validation</h3>
+                    </button>
+                    <button
+                    class={`tab_button ${activeTab() === 'result' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('result')}
+                    >
+                    <h3>Result</h3>
+                    </button>
+                </div>
+                <div class="tab-content">
+                  <div class="console">
+                    {activeTab() === 'validation' && (
+                      <div class={`validation-message ${validationOutput() ? (validationOutput()!.success ? 'success' : 'error') : ''}`}>
+                        {validationOutput()
+                          ? validationOutput()!.message
+                          : "No validation output yet."
+                        }
+                      </div>
+                    )}
+                    {activeTab() === 'result' && (
+                      <div class="validation-message">
+                        {executionResult()
+                          ? executionResult()
+                          : "No execution output yet."
+                        }
+                      </div>
+                    )}
+                  </div>
+                </div>
+            </div>
+        </Resizable.Panel>
+      </Resizable>
     </div>
   );
 };
