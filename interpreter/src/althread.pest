@@ -124,7 +124,7 @@ binary_operator     = _{ or_operator | and_operator | equality_operator | compar
 or_operator         =  { OR_OP }
 and_operator        =  { AND_OP }
 equality_operator   =  { EQ_OP | NE_OP }
-comparison_operator =  { LT_OP | GT_OP | LE_OP | GE_OP }
+comparison_operator =  { LE_OP | GE_OP | LT_OP | GT_OP }
 term_operator       =  { ADD_OP | SUB_OP }
 factor_operator     =  { MUL_OP | DIV_OP | MOD_OP }
 
