@@ -80,7 +80,8 @@ pub enum ErrorType {
     FunctionArgumentTypeMismatch,
     FunctionNotFound,
     FunctionMissingReturnStatement,
-    FunctionReturnTypeMismatch
+    FunctionReturnTypeMismatch,
+    AssertionFailed
 }
 
 impl fmt::Display for ErrorType {
@@ -107,6 +108,7 @@ impl fmt::Display for ErrorType {
             ErrorType::FunctionNotFound => write!(f, "Function not found"),
             ErrorType::FunctionMissingReturnStatement => write!(f, "Function missing return statement"),
             ErrorType::FunctionReturnTypeMismatch => write!(f, "Function return type mismatch"),
+            ErrorType::AssertionFailed => write!(f, "Assertion failed"),
         }
     }
 }

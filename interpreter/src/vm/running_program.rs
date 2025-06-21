@@ -481,69 +481,97 @@ impl<'a> RunningProgramState<'a> {
 
                     1
                 } else {
-                    if name == "print" {
-                        let lit = self
-                            .memory
-                            .last()
-                            .expect("Panic: stack is empty, cannot perform function call")
-                            .clone();
+                    match name.as_str() {
+                        "print"  => {
+                            let lit = self
+                                .memory
+                                .last()
+                                .expect("Panic: stack is empty, cannot perform function call")
+                                .clone();
 
-                        for _ in 0..*unstack_len {
-                            self.memory.pop();
+                            for _ in 0..*unstack_len {
+                                self.memory.pop();
+                            }
+                                                    
+                            let str_val = lit.into_tuple().unwrap_or_default()
+                                .iter()
+                                .map(|lit| lit.to_string())
+                                .collect::<Vec<_>>()
+                                .join(" ");
+                            println!("{}", str_val);
+                            action = Some(GlobalAction::Print(str_val));
+                            self.memory.push(Literal::Null);
+
+                            1
                         }
-                                                
-                        let str_val = lit.into_tuple().unwrap_or_default()
-                            .iter()
-                            .map(|lit| lit.to_string())
-                            .collect::<Vec<_>>()
-                            .join(" ");
-                        println!("{}", str_val);
-                        action = Some(GlobalAction::Print(str_val));
-                        self.memory.push(Literal::Null);
+                        "assert" => {
+                            let lit = self
+                                .memory
+                                .last()
+                                .expect("Panic: stack is empty, cannot perform function call.")
+                                .clone();
 
-                        1
-                    } else {
-                        if let Some(func_def) = self.user_functions.get(name) {
-                        
-
-                            let args_tuple_lit = self.memory.pop().unwrap();
-
-                            let arg_values = match args_tuple_lit {
-                                Literal::Tuple(v) => v,
-                                _ => {
-                                    return Err(AlthreadError::new(
-                                        ErrorType::RuntimeError,
-                                        cur_inst.pos,
-                                        format!("function {} expects a tuple as argument", name),
-                                    ));
-                                }
-                            };
-
-                            // store the current state in the call stack
-                            self.call_stack.push(StackFrame {
-                                return_ip: self.instruction_pointer + 1,
-                                caller_fp: self.frame_pointer,
-                                caller_code: self.current_code,
-                                expected_return_type: func_def.return_type.clone(),
-                            });
-
-                            self.frame_pointer = self.memory.len();
-
-
-                            for arg in arg_values {
-                                self.memory.push(arg);
+                            for _ in 0..*unstack_len {
+                                self.memory.pop();
                             }
 
-                            self.current_code = &func_def.body;
-                            self.instruction_pointer = 0;
+                            let args = lit.into_tuple().expect("assert expects a tuple as argument");
+                            let condition = &args[0];
+                            let message = &args[1];
+
+                            if !condition.is_true() {
+                                return Err(AlthreadError::new(
+                                    ErrorType::AssertionFailed,
+                                    cur_inst.pos,
+                                    format!("{}", message),
+                                ));
+                            }
+                            self.memory.push(Literal::Null);
+                            1
+                        }
+                        _ => {
+                            if let Some(func_def) = self.user_functions.get(name) {
                             
-                            0
-                        } else {
-                            return Err(AlthreadError::new(
-                                ErrorType::UndefinedFunction,
-                                cur_inst.pos,
-                                format!("undefined function {}", name),
-                            ));
+
+                                let args_tuple_lit = self.memory.pop().unwrap();
+
+                                let arg_values = match args_tuple_lit {
+                                    Literal::Tuple(v) => v,
+                                    _ => {
+                                        return Err(AlthreadError::new(
+                                            ErrorType::RuntimeError,
+                                            cur_inst.pos,
+                                            format!("function {} expects a tuple as argument", name),
+                                        ));
+                                    }
+                                };
+
+                                // store the current state in the call stack
+                                self.call_stack.push(StackFrame {
+                                    return_ip: self.instruction_pointer + 1,
+                                    caller_fp: self.frame_pointer,
+                                    caller_code: self.current_code,
+                                    expected_return_type: func_def.return_type.clone(),
+                                });
+
+                                self.frame_pointer = self.memory.len();
+
+
+                                for arg in arg_values {
+                                    self.memory.push(arg);
+                                }
+
+                                self.current_code = &func_def.body;
+                                self.instruction_pointer = 0;
+                                
+                                0
+                            } else {
+                                return Err(AlthreadError::new(
+                                    ErrorType::UndefinedFunction,
+                                    cur_inst.pos,
+                                    format!("undefined function {}", name),
+                                ));
+                            }
                         }
                     }
                 }

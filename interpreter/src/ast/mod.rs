@@ -260,7 +260,7 @@ impl Ast {
             state.user_functions.insert(func_name.clone(), func_def);
         }
 
-
+        // now compile the function bodies
         for (func_name, (args_list, return_datatype, func_block)) in &self.function_blocks {
 
             state.in_function = true;

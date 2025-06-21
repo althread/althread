@@ -157,31 +157,78 @@ impl InstructionBuilder for Node<FnCall> {
                     pos: Some(self.pos),
                 });
 
-            } else if basename == "print" {
+            } else {
 
-                let provided_arg_types = args_on_stack_var.datatype.tuple_unwrap();
+                let return_type = match basename.as_str() {
+                    "print" => {
+                        let provided_arg_types = args_on_stack_var.datatype.tuple_unwrap();
 
-                for (idx, arg_type) in provided_arg_types.iter().enumerate() {
-                    if *arg_type == DataType::Void {
-                        
-                        state.unstack_current_depth();
+                        for (idx, arg_type) in provided_arg_types.iter().enumerate() {
+                            if *arg_type == DataType::Void {
+                                
+                                state.unstack_current_depth();
+                                return Err(AlthreadError::new(
+                                    ErrorType::FunctionArgumentTypeMismatch,
+                                    Some(self.pos),
+                                    format!(
+                                        "Function 'print' can't accept argument {} of type Void.",
+                                        idx + 1
+                                    ),
+                                ));
+                            }
+                        }
+                        DataType::Void
+                    }
+                    "assert" => {
+                        let provided_arg_types = args_on_stack_var.datatype.tuple_unwrap();
+
+                        if provided_arg_types.len() != 2 {
+                            state.unstack_current_depth();
+                            return Err(AlthreadError::new(
+                                ErrorType::FunctionArgumentCountError,
+                                Some(self.pos),
+                                "Function 'assert' expects exactly 2 arguments.".to_string(),
+                            ));
+                        }
+
+                        if provided_arg_types[0] != DataType::Boolean {
+                            state.unstack_current_depth();
+                            return Err(AlthreadError::new(
+                                ErrorType::FunctionArgumentTypeMismatch,
+                                Some(self.pos),
+                                format!("Function 'assert' expects the first argument to be of type bool, but got {}.",
+                                        provided_arg_types[0]
+                                    ),
+                            ));
+                        }
+
+                        if provided_arg_types[1] != DataType::String {
+                            state.unstack_current_depth();
+                            return Err(AlthreadError::new(
+                                ErrorType::FunctionArgumentTypeMismatch,
+                                Some(self.pos),
+                                format!("Function 'assert' expects the second argument to be of type string, but got {}.",
+                                        provided_arg_types[1]
+                                    ),
+                            ));
+                        }
+                        DataType::Void
+                    }
+                    _ => {
                         return Err(AlthreadError::new(
-                            ErrorType::FunctionArgumentTypeMismatch,
+                            ErrorType::UndefinedFunction,
                             Some(self.pos),
-                            format!(
-                                "Function 'print' can't accept argument {} of type Void.",
-                                idx + 1
-                            ),
+                            format!("undefined function {}", basename),
                         ));
                     }
-                }
+                };
 
                 let unstack_len = state.unstack_current_depth();
 
                 state.program_stack.push(Variable {
                     mutable: true,
                     name: "".to_string(),
-                    datatype: DataType::Void,
+                    datatype: return_type,
                     depth: state.current_stack_depth,
                     declare_pos: Some(self.pos),
                 });
@@ -196,13 +243,6 @@ impl InstructionBuilder for Node<FnCall> {
                     pos: Some(self.pos),
                 });
 
-            } else {
-
-                return Err(AlthreadError::new(
-                    ErrorType::UndefinedFunction,
-                    Some(self.pos),
-                    format!("undefined function {}", basename),
-                ));
             }
 
         } else {
