@@ -48,7 +48,7 @@ In this example, the `always` block ensures that the variable `X` is always less
 It is not possible to use test blocks for variables local to a process.
 :::
 
-## The `assert` Function (Not Yet Implemented)
+## The `assert` Function
 
 The `assert` function is used to verify if a condition is satisfied. If the condition is not met, the test fails and displays an error message.
 

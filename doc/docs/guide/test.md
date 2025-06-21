@@ -47,7 +47,7 @@ Ici, le bloc `always` vérifie que la variable `X` est toujours inférieure à 1
 Il n'est pas possible d'utiliser le bloc de test pour des variables locales à un processus.
 :::
 
-## Fonction assert (non implémentée)
+## Fonction assert
 
 La fonction assert permet de vérifier si une condition est remplie. Si la condition n'est pas remplie, le test échoue et affiche un message d'erreur.
 
