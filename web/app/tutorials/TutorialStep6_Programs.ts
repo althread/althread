@@ -2,9 +2,9 @@ import { type TutorialStep } from '../Tutorial';
 
 export const tutorial: TutorialStep = {
   name: "programs",
-  displayName: "5. Programs (Creation & Execution)",
+  displayName: "6. Programs (Creation & Execution)",
   content: `
-# 5. Programs: Creation and Execution
+# 6. Programs: Creation and Execution
 
 In Althread, concurrent units of execution are called **programs**. You define a program using the \`program\` keyword, followed by its name, its arguments, and a block of code.
 

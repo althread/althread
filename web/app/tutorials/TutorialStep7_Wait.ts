@@ -2,9 +2,9 @@ import { type TutorialStep } from '../Tutorial';
 
 export const tutorial: TutorialStep = {
   name: "wait",
-  displayName: "6. Awaiting Conditions (wait until)",
+  displayName: "7. Awaiting Conditions (wait until)",
   content: `
-# 6. Awaiting Conditions: \`await condition\`
+# 7. Awaiting Conditions: \`await condition\`
 
 The \`await\` statement is a powerful construct in Althread for synchronization. It allows a program to pause its execution until a specific condition becomes true. This is often used with shared variables.
 

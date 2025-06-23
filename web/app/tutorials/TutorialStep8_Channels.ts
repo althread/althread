@@ -2,9 +2,9 @@ import { type TutorialStep } from '../Tutorial';
 
 export const tutorial: TutorialStep = {
   name: "channels",
-  displayName: "7. Channels (Declaration, Send, Receive)",
+  displayName: "8. Channels (Declaration, Send, Receive)",
   content: `
-# 7. Channels: Communication Between Programs
+# 8. Channels: Communication Between Programs
 
 Channels provide a way for Althread programs to communicate by sending and receiving messages. They are typed, meaning a channel is declared to carry messages of a specific type.
 
