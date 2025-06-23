@@ -71,7 +71,7 @@ main {
     const issues = [];
 
     // Helper function to escape strings for RegExp constructor
-    const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\$&');
+    const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\$&');
 
     // 1. Validate Sender program and capture its out-port name
     const senderProgramRegex = /program\s+Sender\s*\(\s*\)\s*\{[^}]*send\s+(\w+)\s*\(\s*\"Ping\"\s*\)\s*;[^}]*print\s*\(\s*\"Sender: sent \'Ping\'\"\s*\)\s*;[^}]*\}/s;
