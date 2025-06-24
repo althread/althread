@@ -1,5 +1,6 @@
 pub mod block;
 pub mod condition_block;
+pub mod import_block;
 pub mod display;
 pub mod node;
 pub mod statement;
@@ -14,6 +15,7 @@ use std::{
 
 use block::Block;
 use condition_block::ConditionBlock;
+use import_block::ImportBlock;
 use display::{AstDisplay, Prefix};
 use node::{InstructionBuilder, Node};
 use pest::iterators::Pairs;
@@ -21,15 +23,10 @@ use statement::Statement;
 use token::{args_list::ArgsList, condition_keyword::ConditionKeyword, datatype::DataType, identifier::Identifier};
 
 use crate::{
-    compiler::{CompiledProject, CompilerState, FunctionDefinition, Variable},
-    error::{AlthreadError, AlthreadResult, ErrorType},
-    no_rule,
-    parser::Rule,
-    vm::{
+    analysis::control_flow_graph::ControlFlowGraph, compiler::{CompiledProject, CompilerState, FunctionDefinition, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule, vm::{
         instruction::{Instruction, InstructionType, ProgramCode},
         VM,
-    },
-    analysis::control_flow_graph::ControlFlowGraph,
+    }
 };
 
 #[derive(Debug)]
@@ -38,6 +35,7 @@ pub struct Ast {
     pub condition_blocks: HashMap<ConditionKeyword, Node<ConditionBlock>>,
     pub global_block: Option<Node<Block>>,
     pub function_blocks: HashMap<String, (Node<ArgsList>, DataType, Node<Block>)>,
+    pub import_block: Option<Node<ImportBlock>>
 }
 
 pub fn check_function_returns(func_name: &str,  func_body: &Node<Block>, return_type: &DataType) -> AlthreadResult<()> {
@@ -75,6 +73,7 @@ impl Ast {
             condition_blocks: HashMap::new(),
             global_block: None,
             function_blocks: HashMap::new(),
+            import_block: None,
         }
     }
     /// 
@@ -82,6 +81,18 @@ impl Ast {
         let mut ast = Self::new();
         for pair in pairs {
             match pair.as_rule() {
+                Rule::import_block => {
+                    if ast.import_block.is_some() {
+                        return Err(AlthreadError::new(
+                            ErrorType::SyntaxError,
+                            Some(pair.as_span().into()),
+                            "Only one import block is allowed per file.".to_string(),
+                        ));
+                    }
+
+                    let import_block = Node::build(pair)?;
+                    ast.import_block = Some(import_block);
+                }
                 Rule::main_block => {
                     let mut pairs = pair.into_inner();
 
@@ -533,6 +544,11 @@ impl fmt::Display for Ast {
 
 impl AstDisplay for Ast {
     fn ast_fmt(&self, f: &mut Formatter, prefix: &Prefix) -> fmt::Result {
+        if let Some(import_block) = &self.import_block {
+            import_block.ast_fmt(f, prefix)?;
+            writeln!(f, "")?;
+        }
+
         if let Some(global_node) = &self.global_block {
             writeln!(f, "{}shared", prefix)?;
             global_node.ast_fmt(f, &prefix.add_branch())?;
