@@ -66,7 +66,7 @@ return_statement = { RETURN_KW ~ expression? ~ ";" }
 
 // Import block definition
 import_block = { IMPORT_KW ~ "[" ~ import_list ~ "]" }
-import_list = { import_item ~ ("," ~ import_item)* }
+import_list = { import_item ~ ("," ~ import_item)* ~ ","? }
 import_item = { import_path ~ (AS_KW ~ identifier)? }
 import_path = { identifier ~ ("/" ~ identifier)* }
 
