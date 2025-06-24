@@ -10,7 +10,7 @@ program = _{ SOI ~ blocks* ~ EOI }
 /// - **Condition Block**: Monitors conditions at each atomic step (e.g., always, never, eventually).
 /// - **Program Block**: Encapsulates code that runs concurrently in parallel processes.
 /// - **Function Block**: User-defined functions
-blocks = _{ main_block | global_block | condition_block | program_block | function_block }
+blocks = _{ import_block | main_block | global_block | condition_block | program_block | function_block }
 
 global_block    = { GLOBAL_KW ~ code_block }
 condition_block = { condition_keywords ~ expression_block }
@@ -62,6 +62,14 @@ channel_declaration_statement = _{ channel_declaration ~ ";" }
 // Functions
 function_block = { FN_KW ~ identifier ~ arg_list ~ RARROW ~ datatype ~ code_block }
 return_statement = { RETURN_KW ~ expression? ~ ";" }
+
+
+// Import block definition
+import_block = { IMPORT_KW ~ "[" ~ import_list ~ "]" }
+import_list = { import_item ~ ("," ~ import_item)* }
+import_item = { import_path ~ (AS_KW ~ identifier)? }
+import_path = { identifier ~ ("/" ~ identifier)* }
+
 
 fn_call  = { object_identifier ~ tuple_expression }
 run_call = { RUN_KW ~ identifier ~ tuple_expression }
@@ -164,6 +172,8 @@ KEYWORDS = _{
   | WHILE_KW
   | FN_KW
   | RETURN_KW
+  | IMPORT_KW
+  | AS_KW
   | BOOL
   | INT_TYPE
   | FLOAT_TYPE
@@ -208,6 +218,9 @@ ATOMIC_KW = _{ "atomic" }
 FN_KW = _{ "fn" }
 RETURN_KW = _{ "return" }
 RARROW = { "->" }
+
+IMPORT_KW = _{ "import" }
+AS_KW = _{ "as" }
 
 /// ### Operators
 /// Operators are used for arithmetic, logical operations, and assignments.
