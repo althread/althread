@@ -1,6 +1,6 @@
-use std::fmt;
+use std::{collections::{HashSet}, fmt};
 
-use pest::iterators::Pairs;
+use pest::{iterators::Pairs};
 
 use crate::{
     ast::{
@@ -9,7 +9,7 @@ use crate::{
         token::identifier::Identifier,
     },
     compiler::{CompilerState, InstructionBuilderOk},
-    error::AlthreadResult,
+    error::{AlthreadError, AlthreadResult, ErrorType},
     no_rule,
     parser::Rule,
 };
@@ -34,6 +34,10 @@ impl ImportPath {
     pub fn to_string(&self) -> String {
         self.segments.join("/")
     }
+
+    pub fn last_segment(&self) -> &str {
+        self.segments.last().map(|s| s.as_str()).unwrap_or("")
+    }
 }
 
 impl NodeBuilder for ImportBlock {
@@ -52,7 +56,36 @@ impl NodeBuilder for ImportBlock {
             }
         }
 
+        Self::validate_import_names(&imports)?;
+
         Ok(Self { imports })
+    }
+}
+
+impl ImportBlock {
+    fn validate_import_names(imports: &[Node<ImportItem>]) -> AlthreadResult<()> {
+        let mut used_names = HashSet::new();
+
+        for import in imports {
+            let import_name = if let Some(alias) = &import.value.alias {
+                alias.value.value.clone()
+            } else {
+                import.value.path.last_segment().to_string()
+            };
+
+            if used_names.contains(&import_name) {
+                return Err(AlthreadError::new(
+                    ErrorType::ImportNameConflict,
+                    Some(import.pos),
+                    format!("'{}' is already imported. Use 'as' to provide a unique alias.",
+                    import_name,
+                    ),
+                ))
+            }
+
+            used_names.insert(import_name);
+        }
+        Ok(())
     }
 }
 
