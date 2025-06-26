@@ -1,8 +1,5 @@
 use std::{
-    collections::HashSet,
-    fs,
-    io::{stdin, Read},
-    process::exit,
+    collections::HashSet, fs, io::{stdin, Read}, path::{PathBuf}, process::exit
 };
 
 mod args;
@@ -25,13 +22,19 @@ fn main() {
 
 pub fn compile_command(cli_args: &CompileCommand) {
     // Read file
-    let source = match cli_args.common.input.clone() {
+    let (source, path) = match cli_args.common.input.clone() {
         args::Input::Stdin => {
             let mut buf = Vec::new();
             let _ = std::io::stdin().read_to_end(&mut buf);
-            String::from_utf8(buf).expect("Could not read stdin")
+            (
+                String::from_utf8(buf).expect("Could not read stdin"),
+                PathBuf::from("./stdin.alt")
+            )
         }
-        args::Input::Path(path) => fs::read_to_string(&path).expect("Could not read file"),
+        args::Input::Path(path) => (
+            fs::read_to_string(&path).expect("Could not read file"),
+            path
+        )
     };
 
     // parse code with pest
@@ -47,7 +50,7 @@ pub fn compile_command(cli_args: &CompileCommand) {
 
     println!("{}", &ast);
 
-    let compiled_project = ast.compile().unwrap_or_else(|e| {
+    let compiled_project = ast.compile(&path).unwrap_or_else(|e| {
         e.report(&source);
         exit(1);
     });
@@ -57,13 +60,19 @@ pub fn compile_command(cli_args: &CompileCommand) {
 
 pub fn check_command(cli_args: &CheckCommand) {
     // Read file
-    let source = match cli_args.common.input.clone() {
+    let (source, path) = match cli_args.common.input.clone() {
         args::Input::Stdin => {
             let mut buf = Vec::new();
             let _ = std::io::stdin().read_to_end(&mut buf);
-            String::from_utf8(buf).expect("Could not read stdin")
+            (
+                String::from_utf8(buf).expect("Could not read stdin"),
+                PathBuf::from("./stdin.alt")
+            )
         }
-        args::Input::Path(path) => fs::read_to_string(&path).expect("Could not read file"),
+        args::Input::Path(path) => (
+            fs::read_to_string(&path).expect("Could not read file"),
+            path
+        )
     };
 
     // parse code with pest
@@ -77,7 +86,7 @@ pub fn check_command(cli_args: &CheckCommand) {
         exit(1);
     });
 
-    let compiled_project = ast.compile().unwrap_or_else(|e| {
+    let compiled_project = ast.compile(&path).unwrap_or_else(|e| {
         e.report(&source);
         exit(1);
     });
@@ -175,13 +184,19 @@ pub fn run_interactive(source: String, compiled_project: althread::compiler::Com
 
 pub fn run_command(cli_args: &RunCommand) {
     // Read file
-    let source = match cli_args.common.input.clone() {
+    let (source, path) = match cli_args.common.input.clone() {
         args::Input::Stdin => {
             let mut buf = Vec::new();
             let _ = std::io::stdin().read_to_end(&mut buf);
-            String::from_utf8(buf).expect("Could not read stdin")
+            (
+                String::from_utf8(buf).expect("Could not read stdin"),
+                PathBuf::from("./stdin.alt")
+            )
         }
-        args::Input::Path(path) => fs::read_to_string(&path).expect("Could not read file"),
+        args::Input::Path(path) =>  (
+            fs::read_to_string(&path).expect("Could not read file"),
+            path
+        )
     };
 
     // parse code with pest
@@ -195,7 +210,7 @@ pub fn run_command(cli_args: &RunCommand) {
         exit(1);
     });
 
-    let compiled_project = ast.compile().unwrap_or_else(|e| {
+    let compiled_project = ast.compile(&path).unwrap_or_else(|e| {
         e.report(&source);
         exit(1);
     });
@@ -299,13 +314,19 @@ pub fn run_command(cli_args: &RunCommand) {
 
 pub fn random_search_command(cli_args: &RandomSearchCommand) {
     // Read file
-    let source = match cli_args.common.input.clone() {
+    let (source, path) = match cli_args.common.input.clone() {
         args::Input::Stdin => {
             let mut buf = Vec::new();
             let _ = std::io::stdin().read_to_end(&mut buf);
-            String::from_utf8(buf).expect("Could not read stdin")
+            (
+                String::from_utf8(buf).expect("Could not read stdin"),
+                PathBuf::from("./stdin.alt")
+            )
         }
-        args::Input::Path(path) => fs::read_to_string(&path).expect("Could not read file"),
+        args::Input::Path(path) => (
+            fs::read_to_string(&path).expect("Could not read file"),
+            path
+    )
     };
 
     // parse code with pest
@@ -319,7 +340,7 @@ pub fn random_search_command(cli_args: &RandomSearchCommand) {
         exit(1);
     });
 
-    let compiled_project = ast.compile().unwrap_or_else(|e| {
+    let compiled_project = ast.compile(&path).unwrap_or_else(|e| {
         e.report(&source);
         exit(1);
     });

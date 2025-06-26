@@ -8,9 +8,7 @@ pub mod token;
 
 use core::panic;
 use std::{
-    collections::{BTreeMap, HashMap},
-    fmt::{self, Formatter},
-    rc::Rc,
+    collections::{BTreeMap, HashMap}, fmt::{self, Formatter}, fs, path::{Path}, rc::Rc
 };
 
 use block::Block;
@@ -18,12 +16,12 @@ use condition_block::ConditionBlock;
 use import_block::ImportBlock;
 use display::{AstDisplay, Prefix};
 use node::{InstructionBuilder, Node};
-use pest::iterators::Pairs;
+use pest::{iterators::Pairs};
 use statement::Statement;
 use token::{args_list::ArgsList, condition_keyword::ConditionKeyword, datatype::DataType, identifier::Identifier};
 
 use crate::{
-    analysis::control_flow_graph::ControlFlowGraph, compiler::{CompiledProject, CompilerState, FunctionDefinition, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule, vm::{
+    analysis::control_flow_graph::ControlFlowGraph, compiler::{CompiledProject, CompilerState, FunctionDefinition, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, module_resolver::module_resolver::ModuleResolver, no_rule, parser::{self, Rule}, vm::{
         instruction::{Instruction, InstructionType, ProgramCode},
         VM,
     }
@@ -165,10 +163,82 @@ impl Ast {
         Ok(ast)
     }
 
-    pub fn compile(&self) -> AlthreadResult<CompiledProject> {
+    pub fn compile(&self, current_file_path: &Path) -> AlthreadResult<CompiledProject> {
         // "compile" the "shared" block to retrieve the set of
         // shared variables
         let mut state = CompilerState::new();
+
+        if let Some(import_block) = &self.import_block {
+            let mut module_resolver = ModuleResolver::new(current_file_path);
+            module_resolver.resolve_imports(&import_block.value)?;
+
+            for (name, resolved_module) in module_resolver.resolved_modules {
+                let module_content = fs::read_to_string(&resolved_module.path)
+                    .map_err(|e| AlthreadError::new(
+                        ErrorType::ModuleNotFound,
+                        Some(import_block.pos),
+                        format!("Failed to read module '{}': {}", resolved_module.name, e),
+                    ))?;
+
+                let pairs = parser::parse(&module_content).map_err(|e| {
+                    AlthreadError::new(
+                        ErrorType::SyntaxError,
+                        Some(import_block.pos),
+                        format!("Failed to parse module '{}': {:?}", resolved_module.name, e),
+                    )
+                })?;
+
+                let module_ast = Ast::build(pairs).map_err(|e| {
+                    AlthreadError::new(
+                        ErrorType::SyntaxError,
+                        Some(import_block.pos),
+                        format!("Failed to build AST for module '{}': {:?}", resolved_module.name, e),
+                    )
+                })?;
+
+                if module_ast.process_blocks.contains_key("main") {
+                    return Err(AlthreadError::new(
+                        ErrorType::ImportMainConflict,
+                        Some(import_block.pos),
+                        format!("'{}' defines a 'main' block. Imported modules cannot define a 'main' block.", resolved_module.name),
+                    ));
+                }
+
+                // println!("AST for module '{}':\n{}", resolved_module.name, module_ast);
+
+                let compiled_module = module_ast.compile(&resolved_module.path).map_err(|e| {
+                    AlthreadError::new(
+                        ErrorType::SyntaxError,
+                        Some(import_block.pos),
+                        format!("Failed to compile module '{}': {:?}", resolved_module.name, e),
+                    )
+                })?;
+
+                // println!("Compiled module '{}': {:?}", resolved_module.name, compiled_module);
+
+                for (func_name, func_def) in compiled_module.user_functions {
+
+                    let new_func_name = format!("{}.{}", name, func_name);
+                    if state.user_functions.contains_key(&new_func_name) {
+                        return Err(AlthreadError::new(
+                            ErrorType::FunctionAlreadyDefined,
+                            Some(func_def.pos),
+                            format!("Function '{}' from module '{}' is already defined", func_name, name),
+                        ));
+                    }
+                    
+                    let mut new_func_def = func_def.clone();
+                    new_func_def.name = new_func_name.clone();
+                    state.user_functions.insert(new_func_name, new_func_def);
+                }
+            }
+        }
+
+
+
+
+
+
         let mut global_memory = BTreeMap::new();
         let mut global_table = HashMap::new();
         state.current_stack_depth = 1;
@@ -363,9 +433,11 @@ impl Ast {
         let mut programs_code = HashMap::new();
         // start with the main program
 
-        let code = self.compile_program("main", &mut state)?;
-        programs_code.insert("main".to_string(), code);
-        assert!(state.current_stack_depth == 0);
+        if self.process_blocks.contains_key("main") {
+            let code = self.compile_program("main", &mut state)?;
+            programs_code.insert("main".to_string(), code);
+            assert!(state.current_stack_depth == 0);
+        }
 
         for name in self.process_blocks.keys() {
             if name == "main" {

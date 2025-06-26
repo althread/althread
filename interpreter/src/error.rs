@@ -83,6 +83,8 @@ pub enum ErrorType {
     FunctionReturnTypeMismatch,
     AssertionFailed,
     ImportNameConflict,
+    ModuleNotFound,
+    ImportMainConflict
 }
 
 impl fmt::Display for ErrorType {
@@ -111,6 +113,8 @@ impl fmt::Display for ErrorType {
             ErrorType::FunctionReturnTypeMismatch => write!(f, "Function return type mismatch"),
             ErrorType::AssertionFailed => write!(f, "Assertion failed"),
             ErrorType::ImportNameConflict => write!(f, "Import name conflict"),
+            ErrorType::ModuleNotFound => write!(f, "Module not found"),
+            ErrorType::ImportMainConflict => write!(f, "Import main conflict"),
         }
     }
 }
