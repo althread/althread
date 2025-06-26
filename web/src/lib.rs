@@ -24,7 +24,7 @@ pub fn compile(source: &str) -> Result<String, JsValue> {
 
     println!("{}", &ast);
 
-    let compiled_project = ast.compile().map_err(error_to_js)?;
+    let compiled_project = ast.compile(std::path::Path::new("")).map_err(error_to_js)?;
     println!("{}", compiled_project.to_string());
     Ok(format!("{}", compiled_project))
 }
@@ -88,7 +88,7 @@ pub fn run(source: &str) -> Result<JsValue, JsValue> {
 
     println!("{}", &ast);
 
-    let compiled_project = ast.compile().map_err(error_to_js)?;
+    let compiled_project = ast.compile(std::path::Path::new("")).map_err(error_to_js)?;
 
     let mut vm = althread::vm::VM::new(&compiled_project);
 
@@ -232,7 +232,7 @@ pub fn check(source: &str) -> Result<JsValue, JsValue> {
 
     println!("{}", &ast);
 
-    let compiled_project = ast.compile().map_err(error_to_js)?;
+    let compiled_project = ast.compile(std::path::Path::new("")).map_err(error_to_js)?;
 
     let checked = checker::check_program(&compiled_project).map_err(error_to_js)?;
 
