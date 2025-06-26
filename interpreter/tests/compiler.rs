@@ -146,7 +146,7 @@ main {
 
     let ast = Ast::build(pairs).unwrap();
 
-    let compiled_project = ast.compile().unwrap();
+    let compiled_project = ast.compile(std::path::Path::new("")).unwrap();
 
     assert_eq!(
         compiled_project
@@ -384,7 +384,7 @@ main {
 
     let ast = Ast::build(pairs).unwrap();
 
-    let compiled_project = ast.compile().unwrap();
+    let compiled_project = ast.compile(std::path::Path::new("")).unwrap();
 
     assert_eq!(
         compiled_project
