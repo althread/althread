@@ -23,6 +23,13 @@ pub struct FnCall {
 }
 
 impl FnCall {
+    pub fn fn_name_to_string(&self) -> String {
+        self.fn_name
+            .iter()
+            .map(|n| n.value.value.clone())
+            .collect::<Vec<String>>()
+            .join(".")
+    }
     pub fn add_dependencies(&self, dependencies: &mut WaitDependency) {
         for ident in &self.fn_name {
             dependencies.variables.insert(ident.value.value.clone());
@@ -69,6 +76,7 @@ impl InstructionBuilder for Node<FnCall> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
 
         let mut builder = InstructionBuilderOk::new();
+        let full_name = self.value.fn_name_to_string();
         state.current_stack_depth += 1;
 
 
@@ -85,9 +93,14 @@ impl InstructionBuilder for Node<FnCall> {
 
 
         // get the function's basename (the last identifier in the fn_name)
-        let basename = &self.value.fn_name[0].value.value;
+        let basename = if state.user_functions.contains_key(&full_name) {
+            &full_name
+        } else {
+            &self.value.fn_name[0].value.value
+        };
+        // println!("Function call: {}", basename);
 
-        if self.value.fn_name.len() == 1 {
+        if state.user_functions.contains_key(&full_name) || self.value.fn_name.len() == 1 {
 
             if let Some(func_def) = state.user_functions.get(basename).cloned() {
 

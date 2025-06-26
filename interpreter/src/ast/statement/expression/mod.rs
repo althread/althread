@@ -301,8 +301,14 @@ impl LocalExpressionNode {
             Self::Range(node) => node.datatype(state),
             Self::FnCall(node) => {
                 // the datatype of a function call is the return type of the function
-                if node.value.fn_name.len() == 1 {
-                    let fn_name = &node.value.fn_name[0].value.value;
+                let full_name = node.value.fn_name_to_string();
+
+                if state.user_functions.contains_key(&full_name) || node.value.fn_name.len() == 1 {
+                    let fn_name = if state.user_functions.contains_key(&full_name) {
+                        &full_name
+                    } else {
+                        &node.value.fn_name[0].value.value
+                    };
 
                     if let Some(func_def) = state.user_functions.get(fn_name) {
                         Ok(func_def.return_type.clone())
