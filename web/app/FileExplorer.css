@@ -1,0 +1,105 @@
+.file-explorer {
+  background-color: #1e1e1e;
+  color: #cccccc;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+}
+
+.file-explorer-header {
+  padding: 8px 12px;
+  text-transform: uppercase;
+  font-size: 10px;
+  color: #cccccc;
+  flex-shrink: 0;
+  border-bottom: 1px solid #333333;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.file-explorer-header h3 {
+    margin: 0;
+    font-weight: normal;
+}
+
+.file-explorer-actions button {
+    background: none;
+    border: none;
+    color: #cccccc;
+    cursor: pointer;
+    padding: 2px;
+    margin-left: 4px;
+    font-size: 16px;
+    line-height: 1;
+}
+
+.file-explorer-actions button:hover {
+    background-color: #3c3c3c;
+}
+
+.file-explorer-actions button:disabled {
+    opacity: 0.5;
+    cursor: default;
+    background-color: transparent;
+}
+
+.file-explorer-content {
+  padding: 5px 0;
+  overflow-y: auto;
+  flex-grow: 1;
+}
+
+.file, .directory-header {
+  display: flex;
+  align-items: center;
+  padding: 4px 10px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.file:hover, .directory-header:hover {
+  background-color: #2a2d2e;
+}
+
+.file .codicon, .directory-header .codicon {
+  margin-right: 6px;
+}
+
+.directory-header {
+    padding-left: 10px;
+}
+
+.directory-children {
+  padding-left: 10px; /* Indent children */
+}
+
+.directory-children .file, .directory-children .directory-header {
+    padding-left: 20px;
+}
+
+.file-entry-input {
+  display: flex;
+  align-items: center;
+  /* Adjust vertical padding to compensate for the input's border */
+  padding: 1.5px 10px; 
+}
+
+.file-entry-input .codicon {
+  margin-right: 6px;
+}
+
+.file-entry-input input {
+  background-color: #1e1e1e;
+  color: #cccccc;
+  border: 1px solid var(--ifm-color-primary);
+  outline: none;
+  width: 100%;
+  padding: 2px 4px;
+  font-family: inherit;
+  font-size: inherit;
+}

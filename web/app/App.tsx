@@ -1,6 +1,6 @@
 // @refresh granular
 /** @jsxImportSource solid-js */
-import { createSignal } from "solid-js";
+import { createSignal, createEffect } from "solid-js";
 import Resizable from '@corvu/resizable'
 import { Example1 } from "./examples/example1";
 import { useNavigate } from "@solidjs/router";
@@ -9,11 +9,13 @@ import init, { compile, run, check } from '../pkg/althread_web';
 import createEditor from './Editor';
 import Graph from "./Graph";
 import { Logo } from "./assets/images/Logo";
-import {renderMessageFlowGraph} from "./CommGraph";
+import { renderMessageFlowGraph } from "./CommGraph";
 import { rendervmStates } from "./vmStatesDisplay";
 import { nodeToString, node_entirely } from "./Node";
-
-
+import FileExplorer from './FileExplorer';
+import type { FileSystemEntry } from './FileExplorer';
+import './FileExplorer.css';
+import FileTabs from "./FileTabs";
 
 init().then(() => {
   console.log('loaded');
@@ -21,23 +23,275 @@ init().then(() => {
 
 const animationTimeOut = 100; //ms
 
-export default function App() {
+const STORAGE_KEYS = {
+  FILE_SYSTEM: 'althread-file-system',
+  FILE_CONTENT_PREFIX: 'althread-file-content-'
+};
 
+const saveFileSystem = (fileSystem: FileSystemEntry[]) => {
+  localStorage.setItem(STORAGE_KEYS.FILE_SYSTEM, JSON.stringify(fileSystem));
+};
+
+const loadFileSystem = (): FileSystemEntry[] => {
+  const stored = localStorage.getItem(STORAGE_KEYS.FILE_SYSTEM);
+  if (stored) {
+    return JSON.parse(stored);
+  }
+  // Default file system if nothing stored
+  return [
+    { name: 'main.alt', type: 'file' },
+    {
+      name: 'utils',
+      type: 'directory',
+      children: [
+        { name: 'helpers.alt', type: 'file' },
+        { name: 'math.alt', type: 'file' },
+      ],
+    },
+    { name: 'README.md', type: 'file' }
+  ];
+};
+
+const saveFileContent = (fileName: string, content: string) => {
+  localStorage.setItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + fileName, content);
+};
+
+const loadFileContent = (fileName: string): string => {
+  const content = localStorage.getItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + fileName);
+  if (content !== null) {
+    return content;
+  }
+  
+  // Default content for specific files
+  if (fileName === 'main.alt') {
+    return Example1;
+  }
+  if (fileName === 'README.md') {
+    return '# Project README\n\nThis is your project documentation.';
+  }
+  if (fileName === 'helpers.alt' || fileName === 'math.alt') {
+    return '// Helper functions\n';
+  }
+  
+  return '// New file\n';
+};
+
+const getFilePathFromEntry = (entry: FileSystemEntry, fileSystem: FileSystemEntry[], currentPath: string = ''): string => {
+  for (const item of fileSystem) {
+    const itemPath = currentPath ? `${currentPath}/${item.name}` : item.name;
+    
+    console.log("Checking item:", itemPath, "against entry:", entry.name);
+
+    if (item === entry) {
+      return itemPath;
+    }
+    
+    if (item.type === 'directory' && item.children) {
+      const found = getFilePathFromEntry(entry, item.children, itemPath);
+      if (found) return found;
+    }
+  }
+  return entry.name; // fallback
+};
+
+export default function App() {
   const navigate = useNavigate();
 
-  let defaultValue =  Example1;
-  if(localStorage.getItem('source-code')) {
-    defaultValue = localStorage.getItem('source-code')!;
-  }
+  // Load file system from localStorage
+  const [mockFileSystem, setMockFileSystem] = createSignal<FileSystemEntry[]>(loadFileSystem());
 
+  // Initialize editor with main.alt content
+  const mainContent = loadFileContent('main.alt');
   let editor = createEditor({
     compile, 
-    defaultValue,
-    onValueChange: (value) => {localStorage.setItem('source-code', value);}
+    defaultValue: mainContent,
+    fileName: 'main.alt', // Pass the initial filename
+    onValueChange: (value) => {
+      // Save current file content when editor changes
+      if (activeFile()) {
+        const filePath = getFilePathFromEntry(activeFile()!, mockFileSystem());
+        saveFileContent(filePath, value);
+      }
+    }
+  });
+
+  // Add state for open files and active file
+  const [openFiles, setOpenFiles] = createSignal<FileSystemEntry[]>([
+    { name: 'main.alt', type: 'file' } // Start with main.alt open
+  ]);
+  const [activeFile, setActiveFile] = createSignal<FileSystemEntry | null>(
+    { name: 'main.alt', type: 'file' }
+  );
+
+  const findFileByPath = (files: FileSystemEntry[], targetPath: string): FileSystemEntry | null => {
+    for (const file of files) {
+      if (file.name === targetPath && file.type === 'file') {
+        return file;
+      }
+      if (file.type === 'directory' && file.children) {
+        const pathParts = targetPath.split('/');
+        if (pathParts[0] === file.name && pathParts.length > 1) {
+          const remainingPath = pathParts.slice(1).join('/');
+          const found = findFileByPath(file.children, remainingPath);
+          if (found) return found;
+        }
+      }
+    }
+    return null;
+  };
+
+  const handleFileSelect = (path: string) => {
+    console.log("File selected:", path);
+    
+    const file = findFileByPath(mockFileSystem(), path);
+    if (file) {
+      // Add to open files if not already open
+      if (!openFiles().find(f => getFilePathFromEntry(f, mockFileSystem()) === path)) {
+        setOpenFiles([...openFiles(), file]);
+      }
+      setActiveFile(file);
+      
+      // Load file content into editor first
+      const content = loadFileContent(path);
+      const update = editor.editorView().state.update({
+        changes: {
+          from: 0, 
+          to: editor.editorView().state.doc.length,
+          insert: content
+        }
+      });
+      editor.editorView().update([update]);
+      
+      // Then update language (after content is loaded)
+      setTimeout(() => {
+        editor.updateLanguage(file.name);
+      }, 10);
+    }
+  };
+
+  const handleFileTabClick = (file: FileSystemEntry) => {
+    setActiveFile(file);
+    
+    // Load file content into editor first
+    const filePath = getFilePathFromEntry(file, mockFileSystem());
+    const content = loadFileContent(filePath);
+    const update = editor.editorView().state.update({
+      changes: {
+        from: 0, 
+        to: editor.editorView().state.doc.length,
+        insert: content
+      }
+    });
+    editor.editorView().update([update]);
+    
+    // Then update language (after content is loaded)
+    setTimeout(() => {
+      editor.updateLanguage(file.name);
+    }, 10);
+  };
+
+  const handleTabClose = (file: FileSystemEntry) => {
+    const newOpenFiles = openFiles().filter(f => f.name !== file.name);
+    setOpenFiles(newOpenFiles);
+    
+    // If we closed the active file, switch to another open file or null
+    if (activeFile()?.name === file.name) {
+      const newActiveFile = newOpenFiles.length > 0 ? newOpenFiles[newOpenFiles.length - 1] : null;
+      setActiveFile(newActiveFile);
+      
+      if (newActiveFile) {
+        // Load the new active file's content
+        const filePath = getFilePathFromEntry(newActiveFile, mockFileSystem());
+        const content = loadFileContent(filePath);
+        const update = editor.editorView().state.update({
+          changes: {
+            from: 0, 
+            to: editor.editorView().state.doc.length,
+            insert: content
+          }
+        });
+        editor.editorView().update([update]);
+        
+        // Update language
+        setTimeout(() => {
+          editor.updateLanguage(newActiveFile.name);
+        }, 10);
+      }
+    }
+  };
+
+  const handleNewFile = (name: string) => {
+    const newFile: FileSystemEntry = { name, type: 'file' };
+    const updatedFileSystem = [...mockFileSystem(), newFile];
+    setMockFileSystem(updatedFileSystem);
+    saveFileSystem(updatedFileSystem);
+    
+    // Save empty content for new file
+    const defaultContent = getDefaultContentForFile(name);
+    saveFileContent(name, defaultContent);
+    
+    // Automatically open the new file
+    setOpenFiles([...openFiles(), newFile]);
+    setActiveFile(newFile);
+    
+    // Load content first
+    const update = editor.editorView().state.update({
+      changes: {
+        from: 0, 
+        to: editor.editorView().state.doc.length,
+        insert: defaultContent
+      }
+    });
+    editor.editorView().update([update]);
+    
+    // Then update language
+    setTimeout(() => {
+      editor.updateLanguage(name);
+    }, 10);
+  };
+
+  // Helper function to get default content based on file type
+  const getDefaultContentForFile = (fileName: string): string => {
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    
+    switch (extension) {
+      case 'js':
+      case 'jsx':
+        return '// JavaScript file\nconsole.log("Hello, World!");';
+      case 'ts':
+      case 'tsx':
+        return '// TypeScript file\nconsole.log("Hello, World!");';
+      case 'py':
+        return '# Python file\nprint("Hello, World!")';
+      case 'html':
+        return '<!DOCTYPE html>\n<html>\n<head>\n    <title>Document</title>\n</head>\n<body>\n    \n</body>\n</html>';
+      case 'css':
+        return '/* CSS file */\nbody {\n    margin: 0;\n    padding: 0;\n}';
+      case 'json':
+        return '{\n    "name": "example",\n    "version": "1.0.0"\n}';
+      case 'md':
+        return '# Markdown File\n\nThis is a markdown document.';
+      case 'alt':
+        return '// Althread file\n';
+      default:
+        return '// New file\n';
+    }
+  };
+
+  const handleNewFolder = (name: string) => {
+    const newFolder: FileSystemEntry = { name, type: 'directory', children: [] };
+    const updatedFileSystem = [...mockFileSystem(), newFolder];
+    setMockFileSystem(updatedFileSystem);
+    saveFileSystem(updatedFileSystem);
+  };
+
+  // Save file system whenever it changes
+  createEffect(() => {
+    saveFileSystem(mockFileSystem());
   });
 
   let [activeTab, setActiveTab] = createSignal("console");
-  const handleTabClick = (tab: string) => {
+  const handleExecutionTabClick = (tab: string) => {
     setActiveTab(tab);
   };
 
@@ -261,47 +515,61 @@ export default function App() {
           </div>
       </div>
       <Resizable id="content">
-        <Resizable.Panel class="editor-panel"
-          initialSize={0.55}
-          minSize={0.2}>
-          <div class="editor-instance-wrapper" ref={editor.ref} />
+        <Resizable.Panel initialSize={0.15} minSize={0.1}>
+            <FileExplorer 
+                files={mockFileSystem()} 
+                onFileSelect={handleFileSelect}
+                onNewFile={handleNewFile}
+                onNewFolder={handleNewFolder}
+            />
         </Resizable.Panel>
         <Resizable.Handle class="Resizable-handle"/>
-        <Resizable.Panel class="right-panel"
-          initialSize={0.45}
+          <Resizable.Panel class="editor-panel"
+          initialSize={0.55}
           minSize={0.2}>
+          <FileTabs 
+            openFiles={openFiles()}
+            activeFile={activeFile()}
+            onTabClick={handleFileTabClick}
+            onTabClose={handleTabClose}
+          />
+          <div class="editor-instance-wrapper" ref={editor.ref} />
+          </Resizable.Panel>
+        <Resizable.Handle class="Resizable-handle"/>
+        <Resizable.Panel class="right-panel"
+initialSize={0.30}
+minSize={0.2}>
+    <div class="execution-content">
+    <div class="tab">
+        <button class={`tab_button ${activeTab() === "console" ? "active" : ""}`}
+                onclick={() => handleExecutionTabClick("console")}
+                disabled={!isRun()}
+        >
+        <h3>Console</h3>
+        </button>
+        <button class={`tab_button ${activeTab() === "execution" ? "active" : ""}`}
+                onclick={() => handleExecutionTabClick("execution")}
+                disabled={!isRun()}
+        >
+        <h3>Execution</h3>
+        </button>
+        <button class={`tab_button ${activeTab() === "msg_flow" ? "active" : ""}`}
+                onclick={() => handleExecutionTabClick("msg_flow")}
+                disabled={!isRun()}
+        >
+        <h3>Message flow</h3>
+        </button>
+        <button class={`tab_button ${activeTab() === "vm_states" ? "active" : ""}`}
+                onclick={() => handleExecutionTabClick("vm_states")}
+        >
+        <h3>VM states</h3>
+        </button>
+    </div>
 
-            <div class="execution-content">
-              <div class="tab">
-                <button class={`tab_button ${activeTab() === "console" ? "active" : ""}`}
-                        onclick={() => handleTabClick("console")}
-                        disabled={!isRun()}
-                >
-                  <h3>Console</h3>
-                </button>
-                <button class={`tab_button ${activeTab() === "execution" ? "active" : ""}`}
-                        onclick={() => handleTabClick("execution")}
-                        disabled={!isRun()}
-                >
-                  <h3>Execution</h3>
-                </button>
-                <button class={`tab_button ${activeTab() === "msg_flow" ? "active" : ""}`}
-                        onclick={() => handleTabClick("msg_flow")}
-                        disabled={!isRun()}
-                >
-                  <h3>Message flow</h3>
-                </button>
-                <button class={`tab_button ${activeTab() === "vm_states" ? "active" : ""}`}
-                        onclick={() => handleTabClick("vm_states")}
-                >
-                  <h3>VM states</h3>
-                </button>
-              </div>
-
-              <div class="tab-content">
-                {renderExecContent()}
-              </div>
-            </div>
+    <div class="tab-content">
+        {renderExecContent()}
+    </div>
+    </div>
 
 </Resizable.Panel>
       </Resizable>
