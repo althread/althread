@@ -21,7 +21,7 @@ use statement::Statement;
 use token::{args_list::ArgsList, condition_keyword::ConditionKeyword, datatype::DataType, identifier::Identifier};
 
 use crate::{
-    analysis::control_flow_graph::ControlFlowGraph, compiler::{CompiledProject, CompilerState, FunctionDefinition, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, module_resolver::module_resolver::ModuleResolver, no_rule, parser::{self, Rule}, vm::{
+    analysis::control_flow_graph::ControlFlowGraph, compiler::{stdlib, CompiledProject, CompilerState, FunctionDefinition, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, module_resolver::module_resolver::ModuleResolver, no_rule, parser::{self, Rule}, vm::{
         instruction::{Instruction, InstructionType, ProgramCode},
         VM,
     }
@@ -167,6 +167,22 @@ impl Ast {
         // "compile" the "shared" block to retrieve the set of
         // shared variables
         let mut state = CompilerState::new();
+
+
+        if  self.process_blocks.is_empty() &&
+            self.global_block.as_ref().map_or(true, |block| block.value.children.is_empty()) &&
+            self.function_blocks.is_empty() &&
+            self.import_block.is_none() &&
+            self.condition_blocks.is_empty() {
+                return Ok(CompiledProject {
+                    global_memory: BTreeMap::new(),
+                    user_functions: HashMap::new(),
+                    programs_code: HashMap::new(),
+                    always_conditions: Vec::new(),
+                    eventually_conditions: Vec::new(),
+                    stdlib: Rc::new(stdlib::Stdlib::new()),
+                });
+            }
 
         if let Some(import_block) = &self.import_block {
             let mut module_resolver = ModuleResolver::new(current_file_path);
