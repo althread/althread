@@ -87,7 +87,7 @@
 }
 
 .directory-children {
-  /* padding-left: 10px; Indent children */
+  /* Nested directory structure */
 }
 
 .directory-children .file, .directory-children .directory-header {
@@ -114,4 +114,60 @@
   padding: 2px 4px;
   font-family: inherit;
   font-size: inherit;
+}
+
+/* Drag and drop styles */
+.file-explorer.drag-over {
+  outline: 2px dashed #3794ff;
+  outline-offset: -2px;
+}
+
+.directory.drag-over {
+  background-color: #2a2d2e;
+  border-left: 3px solid #3794ff;
+}
+
+.file.dragging,
+.directory.dragging {
+  opacity: 0.5;
+}
+
+/* Multi-select styles */
+.file.selected,
+.directory.selected .directory-header {
+  background-color: #094771;
+  border-color: #3794ff;
+}
+
+.file.selected:hover,
+.directory.selected .directory-header:hover {
+  background-color: #0e5a8a;
+}
+
+/* Improve chevron click area */
+.directory-header .codicon-chevron-down,
+.directory-header .codicon-chevron-right {
+  padding: 2px;
+  border-radius: 2px;
+  margin-right: 4px;
+  cursor: pointer;
+}
+
+.directory-header .codicon-chevron-down:hover,
+.directory-header .codicon-chevron-right:hover {
+  background-color: #3c3c3c;
+}
+
+/* Make directory header more responsive */
+.directory-header {
+  cursor: pointer;
+  user-select: none;
+}
+
+.directory-header:hover {
+  background-color: #2d2d2d;
+}
+
+.directory-header.selected {
+  background-color: #094771;
 }

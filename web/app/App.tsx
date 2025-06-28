@@ -11,7 +11,7 @@ import Graph from "./Graph";
 import { Logo } from "./assets/images/Logo";
 import { renderMessageFlowGraph } from "./CommGraph";
 import { rendervmStates } from "./vmStatesDisplay";
-import { nodeToString, node_entirely } from "./Node";
+import { nodeToString } from "./Node";
 import FileExplorer from './FileExplorer';
 import type { FileSystemEntry } from './FileExplorer';
 import './FileExplorer.css';
@@ -127,6 +127,7 @@ export default function App() {
   // Add state for open files and active file
   const [openFiles, setOpenFiles] = createSignal<FileSystemEntry[]>([]);
   const [activeFile, setActiveFile] = createSignal<FileSystemEntry | null>(null);
+  const [selectedFiles, setSelectedFiles] = createSignal<string[]>([]);
 
   // Initialize with main.alt file after the file system is loaded
   createEffect(() => {
@@ -318,6 +319,175 @@ export default function App() {
     const updatedFileSystem = [...mockFileSystem(), newFolder];
     setMockFileSystem(updatedFileSystem);
     saveFileSystem(updatedFileSystem);
+  };
+
+  const handleMoveEntry = (sourcePath: string, destPath: string) => {
+    console.log(`Moving ${sourcePath} to ${destPath}`);
+    
+    // Prevent moving into itself or into a child directory
+    if (destPath.startsWith(sourcePath + '/') || sourcePath === destPath) {
+      console.warn('Cannot move into itself or child directory');
+      return;
+    }
+
+    // If sourcePath and destPath are the same, do nothing
+    if (sourcePath.startsWith(destPath + '/') || sourcePath === destPath) {
+      console.warn('Source and destination paths are the same');
+      return;
+    }
+    
+    // Deep copy the file system to avoid mutation issues
+    let newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
+
+    // Helper to find an entry and its parent recursively
+    const findEntryAndParent = (fs: FileSystemEntry[], path: string, parentArray: FileSystemEntry[] | null = null): { entry: FileSystemEntry, parent: FileSystemEntry[] | null, index: number } | null => {
+      if (path === '') return null;
+      
+      const parts = path.split('/');
+      let currentLevel = fs;
+      let currentParent: FileSystemEntry[] | null = parentArray;
+
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        const entryIndex = currentLevel.findIndex(e => e.name === part);
+        if (entryIndex === -1) return null;
+
+        const entry = currentLevel[entryIndex];
+        
+        if (i === parts.length - 1) {
+          // Found the target entry
+          return { entry, parent: currentParent || fs, index: entryIndex };
+        }
+
+        if (entry.type === 'directory' && entry.children) {
+          currentParent = currentLevel;
+          currentLevel = entry.children;
+        } else {
+          return null; // Path goes through a file
+        }
+      }
+      return null;
+    };
+
+    // Find and remove the source entry
+    const sourceInfo = findEntryAndParent(newFileSystem, sourcePath);
+    if (!sourceInfo) {
+      console.error("Source not found:", sourcePath);
+      return;
+    }
+
+    const [movedEntry] = sourceInfo.parent!.splice(sourceInfo.index, 1);
+
+    // Find destination and add the entry
+    if (destPath === '') { 
+      // Moving to root
+      newFileSystem.push(movedEntry);
+    } else {
+      const destInfo = findEntryAndParent(newFileSystem, destPath);
+      if (!destInfo || destInfo.entry.type !== 'directory') {
+        console.error("Destination not found or is not a directory:", destPath);
+        // Re-add the entry to its original position if dest is invalid
+        sourceInfo.parent!.splice(sourceInfo.index, 0, movedEntry);
+        return;
+      }
+      
+      if (!destInfo.entry.children) {
+        destInfo.entry.children = [];
+      }
+      destInfo.entry.children.push(movedEntry);
+    }
+
+    setMockFileSystem(newFileSystem);
+
+    // Move file content in localStorage if it's a file or folder
+    function moveFileContent(entry: FileSystemEntry, oldPath: string, newPath: string) {
+      if (entry.type === 'file') {
+        const oldKey = STORAGE_KEYS.FILE_CONTENT_PREFIX + oldPath;
+        const newKey = STORAGE_KEYS.FILE_CONTENT_PREFIX + newPath;
+        const content = localStorage.getItem(oldKey);
+        if (content !== null) {
+          localStorage.setItem(newKey, content);
+          localStorage.removeItem(oldKey);
+        }
+      } else if (entry.type === 'directory' && entry.children) {
+        entry.children.forEach(child => {
+          const childOldPath = oldPath + '/' + child.name;
+          const childNewPath = newPath + '/' + child.name;
+          moveFileContent(child, childOldPath, childNewPath);
+        });
+      }
+    }
+
+    // Only move content if the path actually changed
+    if (sourcePath !== (destPath === '' ? movedEntry.name : `${destPath}/${movedEntry.name}`)) {
+      moveFileContent(
+        movedEntry,
+        sourcePath,
+        destPath === '' ? movedEntry.name : `${destPath}/${movedEntry.name}`
+      );
+    }
+
+    console.log("File system after move:", newFileSystem);
+    saveFileSystem(newFileSystem);
+    
+    // Update openFiles to reference the moved entry at its new location
+    const oldPath = sourcePath;
+    const newPath = destPath === '' ? movedEntry.name : `${destPath}/${movedEntry.name}`;
+    setOpenFiles(openFiles().map(f => {
+      const filePath = getFilePathFromEntry(f, mockFileSystem());
+      // If this open file matches the old path, find the new entry in the updated file system
+      if (filePath === oldPath) {
+        // Find the new entry by path in the updated file system
+        const updatedEntry = findFileByPath(newFileSystem, newPath);
+        return updatedEntry ? updatedEntry : f;
+      }
+      return f;
+    }));
+
+    // Update activeFile if it was the moved file
+    if (activeFile() && getFilePathFromEntry(activeFile()!, mockFileSystem()) === oldPath) {
+      const updatedActiveFile = findFileByPath(newFileSystem, newPath);
+      setActiveFile(updatedActiveFile ? updatedActiveFile : null);
+    }
+  };
+
+  const handleFileUpload = async (files: File[], destPath: string) => {
+    let newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
+
+    for (const file of files) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = e.target?.result as string;
+        const newFile: FileSystemEntry = { name: file.name, type: 'file' };
+        
+        // Save content with full path as key
+        const fullPath = destPath === '' ? file.name : `${destPath}/${file.name}`;
+        saveFileContent(fullPath, content);
+
+        // Helper to find destination directory recursively
+        const findDestinationDir = (fs: FileSystemEntry[], path: string): FileSystemEntry[] | null => {
+          if (path === '') return fs; // Root directory
+          
+          const parts = path.split('/');
+          let currentLevel = fs;
+          
+          for (const part of parts) {
+            const dir = currentLevel.find(e => e.name === part && e.type === 'directory');
+            if (!dir || !dir.children) return null;
+            currentLevel = dir.children;
+          }
+          return currentLevel;
+        };
+
+        const destDir = findDestinationDir(newFileSystem, destPath);
+        if (destDir) {
+          destDir.push(newFile);
+          setMockFileSystem([...newFileSystem]);
+          saveFileSystem(newFileSystem);
+        }
+      };
+      reader.readAsText(file);
+    }
   };
 
   // Save file system whenever it changes
@@ -555,8 +725,12 @@ export default function App() {
                 onFileSelect={handleFileSelect}
                 onNewFile={handleNewFile}
                 onNewFolder={handleNewFolder}
+                onMoveEntry={handleMoveEntry}
+                onFileUpload={handleFileUpload}
                 activeFile={activeFile()}
                 getFilePath={(entry) => getFilePathFromEntry(entry, mockFileSystem())}
+                selectedFiles={selectedFiles()}
+                onSelectionChange={setSelectedFiles}
             />
         </Resizable.Panel>
         <Resizable.Handle class="Resizable-handle"/>
