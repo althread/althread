@@ -98,7 +98,16 @@ export default function App() {
   const navigate = useNavigate();
 
   // Load file system from localStorage
-  const [mockFileSystem, setMockFileSystem] = createSignal<FileSystemEntry[]>(loadFileSystem());
+  let initialFileSystem = loadFileSystem();
+  const utilsExists = initialFileSystem.some(entry => entry.name === 'utils' && entry.type === 'directory');
+
+  // If the loaded filesystem from local storage is old, reset it.
+  if (!utilsExists) {
+    localStorage.removeItem(STORAGE_KEYS.FILE_SYSTEM);
+    initialFileSystem = loadFileSystem();
+  }
+
+  const [mockFileSystem, setMockFileSystem] = createSignal<FileSystemEntry[]>(initialFileSystem);
 
   // Initialize editor with main.alt content
   const mainContent = loadFileContent('main.alt');
@@ -116,12 +125,19 @@ export default function App() {
   });
 
   // Add state for open files and active file
-  const [openFiles, setOpenFiles] = createSignal<FileSystemEntry[]>([
-    { name: 'main.alt', type: 'file' } // Start with main.alt open
-  ]);
-  const [activeFile, setActiveFile] = createSignal<FileSystemEntry | null>(
-    { name: 'main.alt', type: 'file' }
-  );
+  const [openFiles, setOpenFiles] = createSignal<FileSystemEntry[]>([]);
+  const [activeFile, setActiveFile] = createSignal<FileSystemEntry | null>(null);
+
+  // Initialize with main.alt file after the file system is loaded
+  createEffect(() => {
+    if (mockFileSystem().length > 0 && !activeFile()) {
+      const mainFile = findFileByPath(mockFileSystem(), 'main.alt');
+      if (mainFile) {
+        setOpenFiles([mainFile]);
+        setActiveFile(mainFile);
+      }
+    }
+  });
 
   const findFileByPath = (files: FileSystemEntry[], targetPath: string): FileSystemEntry | null => {
     for (const file of files) {
@@ -140,13 +156,31 @@ export default function App() {
     return null;
   };
 
+  const getFilePathFromEntry = (entry: FileSystemEntry, fileSystem: FileSystemEntry[], currentPath: string = ''): string => {
+    for (const item of fileSystem) {
+      const itemPath = currentPath ? `${currentPath}/${item.name}` : item.name;
+      
+      if (item === entry) {
+        return itemPath;
+      }
+      
+      if (item.type === 'directory' && item.children) {
+        const found = getFilePathFromEntry(entry, item.children, itemPath);
+        if (found) return found;
+      }
+    }
+    return entry.name; // fallback
+  }
+
+
   const handleFileSelect = (path: string) => {
     console.log("File selected:", path);
     
     const file = findFileByPath(mockFileSystem(), path);
     if (file) {
       // Add to open files if not already open
-      if (!openFiles().find(f => getFilePathFromEntry(f, mockFileSystem()) === path)) {
+      const isAlreadyOpen = openFiles().some(f => getFilePathFromEntry(f, mockFileSystem()) === path);
+      if (!isAlreadyOpen) {
         setOpenFiles([...openFiles(), file]);
       }
       setActiveFile(file);
@@ -191,18 +225,19 @@ export default function App() {
   };
 
   const handleTabClose = (file: FileSystemEntry) => {
-    const newOpenFiles = openFiles().filter(f => f.name !== file.name);
+    const filePath = getFilePathFromEntry(file, mockFileSystem());
+    const newOpenFiles = openFiles().filter(f => getFilePathFromEntry(f, mockFileSystem()) !== filePath);
     setOpenFiles(newOpenFiles);
     
     // If we closed the active file, switch to another open file or null
-    if (activeFile()?.name === file.name) {
+    if (activeFile() && getFilePathFromEntry(activeFile()!, mockFileSystem()) === filePath) {
       const newActiveFile = newOpenFiles.length > 0 ? newOpenFiles[newOpenFiles.length - 1] : null;
       setActiveFile(newActiveFile);
       
       if (newActiveFile) {
         // Load the new active file's content
-        const filePath = getFilePathFromEntry(newActiveFile, mockFileSystem());
-        const content = loadFileContent(filePath);
+        const newFilePath = getFilePathFromEntry(newActiveFile, mockFileSystem());
+        const content = loadFileContent(newFilePath);
         const update = editor.editorView().state.update({
           changes: {
             from: 0, 
@@ -343,7 +378,6 @@ export default function App() {
       );
     }
   };
-
 
   return (
     <>
@@ -521,6 +555,8 @@ export default function App() {
                 onFileSelect={handleFileSelect}
                 onNewFile={handleNewFile}
                 onNewFolder={handleNewFolder}
+                activeFile={activeFile()}
+                getFilePath={(entry) => getFilePathFromEntry(entry, mockFileSystem())}
             />
         </Resizable.Panel>
         <Resizable.Handle class="Resizable-handle"/>
@@ -530,6 +566,7 @@ export default function App() {
           <FileTabs 
             openFiles={openFiles()}
             activeFile={activeFile()}
+            getFilePath={(entry) => getFilePathFromEntry(entry, mockFileSystem())}
             onTabClick={handleFileTabClick}
             onTabClose={handleTabClose}
           />

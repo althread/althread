@@ -15,10 +15,12 @@ type FileExplorerProps = {
   onFileSelect: (path: string) => void;
   onNewFile: (name: string) => void;
   onNewFolder: (name: string) => void;
+  getFilePath: (entry: FileSystemEntry) => string;
+  activeFile: FileSystemEntry | null;
 };
 
-const FileEntry = (props: { entry: FileSystemEntry; path: string; onFileSelect: (path: string) => void }) => {
-  const { entry, path, onFileSelect } = props;
+const FileEntry = (props: { entry: FileSystemEntry; path: string; onFileSelect: (path: string) => void; getFilePath: (entry: FileSystemEntry) => string; activeFile: FileSystemEntry | null }) => {
+  const { entry, path, onFileSelect, getFilePath } = props;
   const currentPath = path ? `${path}/${entry.name}` : entry.name;
 
   if (entry.type === 'directory') {
@@ -34,7 +36,7 @@ const FileEntry = (props: { entry: FileSystemEntry; path: string; onFileSelect: 
         <Show when={isOpen()}>
             <div class="directory-children">
             <For each={entry.children}>
-                {(child) => <FileEntry entry={child} path={currentPath} onFileSelect={onFileSelect} />}
+                {(child) => <FileEntry entry={child} path={currentPath} onFileSelect={onFileSelect} getFilePath={getFilePath} activeFile={props.activeFile} />}
             </For>
             </div>
         </Show>
@@ -43,7 +45,9 @@ const FileEntry = (props: { entry: FileSystemEntry; path: string; onFileSelect: 
   }
 
   return (
-    <div class="file" onClick={() => onFileSelect(currentPath)}>
+    <div class="file" 
+      classList={{ active: props.activeFile !== null && props.getFilePath(props.activeFile) === currentPath }}
+      onClick={() => onFileSelect(currentPath)}>
       <i class="codicon codicon-file"></i>
       <span>{entry.name}</span>
     </div>
@@ -97,7 +101,7 @@ const FileExplorer = (props: FileExplorerProps) => {
       </div>
       <div class="file-explorer-content">
         <For each={props.files}>
-          {(entry) => <FileEntry entry={entry} path="" onFileSelect={props.onFileSelect} />}
+          {(entry) => <FileEntry entry={entry} path="" onFileSelect={props.onFileSelect} activeFile={props.activeFile} getFilePath={props.getFilePath} />}
         </For>
         <Show when={creating()}>
           <div class="file-entry-input">

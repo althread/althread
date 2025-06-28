@@ -63,7 +63,19 @@
 }
 
 .file:hover, .directory-header:hover {
-  background-color: #2a2d2e;
+  background-color: #2d2d2d;
+}
+
+.file {
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-left: 0;
+}
+
+.file.active {
+  background-color: #232323;
+  border: 1px solid #3c3c3c;
+  border-left: 0;
 }
 
 .file .codicon, .directory-header .codicon {
@@ -75,7 +87,7 @@
 }
 
 .directory-children {
-  padding-left: 10px; /* Indent children */
+  /* padding-left: 10px; Indent children */
 }
 
 .directory-children .file, .directory-children .directory-header {
