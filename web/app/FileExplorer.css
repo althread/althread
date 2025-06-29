@@ -98,7 +98,7 @@
   display: flex;
   align-items: center;
   /* Adjust vertical padding to compensate for the input's border */
-  padding: 1.5px 10px; 
+  padding: 1.5px 0 1.5px 10px;; 
 }
 
 .file-entry-input .codicon {
@@ -170,4 +170,21 @@
 
 .directory-header.selected {
   background-color: #094771;
+}
+
+.file-entry-error {
+  color: #d8d7d7;
+  background: #821910;
+  /* border-radius: 3px; */
+  border: 1px solid #e22a19;
+  padding: 4px 8px;
+  margin: -2px 0 0 32px;
+  font-size: 0.95em;
+  box-shadow: 0 2px 8px rgba(229,20,0,0.15);
+  position: relative;
+  z-index: 2;
+}
+
+.file-entry-input-wrapper:has(.file-entry-error) input {
+  border: 1px solid #e22a19;
 }

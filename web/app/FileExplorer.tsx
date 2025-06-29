@@ -21,6 +21,8 @@ type FileExplorerProps = {
   activeFile: FileSystemEntry | null;
   selectedFiles: string[];
   onSelectionChange: (selected: string[]) => void;
+  creationError?: string | null;
+  setCreationError?: (msg: string | null) => void;
 };
 
 const FileEntry = (props: { 
@@ -216,7 +218,7 @@ const FileExplorer = (props: FileExplorerProps) => {
 
   const handleCreateCommit = () => {
     if (!inputRef || !creating()) return;
-    
+
     const name = inputRef.value.trim();
     if (name) {
       if (creating()!.type === 'file') {
@@ -224,8 +226,15 @@ const FileExplorer = (props: FileExplorerProps) => {
       } else {
         props.onNewFolder(name);
       }
+      // Only close input if no error
+      if (!props.creationError) {
+        setCreating(null);
+        props.setCreationError && props.setCreationError(null); // Reset error on successful commit
+      }
+    } else {
+      setCreating(null);
+      props.setCreationError && props.setCreationError(null); // Reset error on cancel
     }
-    setCreating(null);
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -233,6 +242,7 @@ const FileExplorer = (props: FileExplorerProps) => {
       handleCreateCommit();
     } else if (e.key === 'Escape') {
       setCreating(null);
+      props.setCreationError && props.setCreationError(null); // Reset error on cancel
     }
   };
 
@@ -318,14 +328,20 @@ const FileExplorer = (props: FileExplorerProps) => {
           )}
         </For>
         <Show when={creating()}>
-          <div class="file-entry-input">
-            <i class={`codicon codicon-${creating()!.type === 'file' ? 'file' : 'folder'}`}></i>
-            <input
-              ref={inputRef}
-              type="text"
-              onKeyDown={handleKeyDown}
-              onBlur={handleCreateCommit}
-            />
+          <div class="file-entry-input-wrapper">
+            <div class="file-entry-input">
+              <i class={`codicon codicon-${creating()!.type === 'file' ? 'file' : 'folder'}`}></i>
+              <input
+                ref={inputRef}
+                type="text"
+                onKeyDown={handleKeyDown}
+                onBlur={handleCreateCommit}
+                onInput={() => props.setCreationError && props.setCreationError(null)}
+              />
+            </div>
+            <Show when={props.creationError}>
+              <div class="file-entry-error">{props.creationError}</div>
+            </Show>
           </div>
         </Show>
       </div>

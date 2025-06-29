@@ -258,6 +258,16 @@ export default function App() {
 
   const handleNewFile = (name: string) => {
     const newFile: FileSystemEntry = { name, type: 'file' };
+
+    // Check if file already exists in the same path
+    const existingFile = mockFileSystem().find(f => getFilePathFromEntry(f, mockFileSystem()) === name);
+
+    if (existingFile) {
+      setCreationError("A file or folder with this name already exists.");
+      return;
+    }
+    setCreationError(null);
+
     const updatedFileSystem = [...mockFileSystem(), newFile];
     setMockFileSystem(updatedFileSystem);
     saveFileSystem(updatedFileSystem);
@@ -315,6 +325,13 @@ export default function App() {
   };
 
   const handleNewFolder = (name: string) => {
+    const exists = mockFileSystem().some(f => getFilePathFromEntry(f, mockFileSystem()) === name);
+    if (exists) {
+      setCreationError("A file or folder with this name already exists.");
+      return;
+    }
+    setCreationError(null);
+
     const newFolder: FileSystemEntry = { name, type: 'directory', children: [] };
     const updatedFileSystem = [...mockFileSystem(), newFolder];
     setMockFileSystem(updatedFileSystem);
@@ -510,6 +527,7 @@ export default function App() {
   let [vm_states, setVmStates] = createSignal<any[]>([]); //to display vm states information
   let [activeAction, setActiveAction] = createSignal<string | null>(null);
   const [loadingAction, setLoadingAction] = createSignal<string | null>(null);
+  const [creationError, setCreationError] = createSignal<string | null>(null);
 
 
   const renderExecContent = () => {
@@ -731,6 +749,8 @@ export default function App() {
                 getFilePath={(entry) => getFilePathFromEntry(entry, mockFileSystem())}
                 selectedFiles={selectedFiles()}
                 onSelectionChange={setSelectedFiles}
+                creationError={creationError()}
+                setCreationError={setCreationError}
             />
         </Resizable.Panel>
         <Resizable.Handle class="Resizable-handle"/>
