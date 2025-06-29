@@ -34,31 +34,27 @@ const FileEntry = (props: {
   onSelectionChange: (selected: string[]) => void;
   onFileUpload: (files: File[], destPath: string) => void;
 }) => {
-  const { entry, path, onFileSelect, getFilePath, onMoveEntry, selectedFiles, onSelectionChange, onFileUpload } = props;
-  const currentPath = path ? `${path}/${entry.name}` : entry.name;
+  const currentPath = props.path ? `${props.path}/${props.entry.name}` : props.entry.name;
   const [isDragOver, setIsDragOver] = createSignal(false);
   const [isDragging, setIsDragging] = createSignal(false);
 
-  const isSelected = () => selectedFiles.includes(currentPath);
+  const isSelected = () => props.selectedFiles.includes(currentPath);
 
   const handleClick = (_e: MouseEvent) => {
-    // Single select only
-    onSelectionChange([currentPath]);
-    onFileSelect(currentPath);
+    props.onSelectionChange([currentPath]);
+    props.onFileSelect(currentPath);
   };
 
   const handleDragStart = (e: DragEvent) => {
     e.dataTransfer!.effectAllowed = 'move';
     setIsDragging(true);
-    
-    // If dragging a selected item, drag all selected items
+
     if (isSelected()) {
-      e.dataTransfer!.setData('text/plain', JSON.stringify(selectedFiles));
+      e.dataTransfer!.setData('text/plain', JSON.stringify(props.selectedFiles));
     } else {
       e.dataTransfer!.setData('text/plain', JSON.stringify([currentPath]));
     }
-    
-    // Prevent directory from collapsing when dragging
+
     e.stopPropagation();
   };
 
@@ -69,7 +65,6 @@ const FileEntry = (props: {
   const handleDragOver = (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // Show copy cursor for files, move for internal drags
     if (e.dataTransfer?.files.length) {
       e.dataTransfer!.dropEffect = 'copy';
     } else {
@@ -79,11 +74,10 @@ const FileEntry = (props: {
   };
 
   const handleDragLeave = (e: DragEvent) => {
-    // Only clear drag over if we're actually leaving this element
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const isInsideX = e.clientX >= rect.left && e.clientX <= rect.right;
     const isInsideY = e.clientY >= rect.top && e.clientY <= rect.bottom;
-    
+
     if (!isInsideX || !isInsideY) {
       setIsDragOver(false);
     }
@@ -96,48 +90,42 @@ const FileEntry = (props: {
 
     console.log('Drop event on:', currentPath, 'with data:', e.dataTransfer?.getData('text/plain'));
 
-    // Handle files from local machine
     if (e.dataTransfer?.files.length) {
-      if (entry.type === 'directory') {
-        onFileUpload(Array.from(e.dataTransfer.files), currentPath);
+      if (props.entry.type === 'directory') {
+        props.onFileUpload(Array.from(e.dataTransfer.files), currentPath);
       }
       return;
     }
 
-    // Handle internal moves
     const draggedData = e.dataTransfer!.getData('text/plain');
-    if (draggedData && entry.type === 'directory') {
+    if (draggedData && props.entry.type === 'directory') {
       try {
         const draggedPaths = JSON.parse(draggedData) as string[];
         console.log('Moving paths:', draggedPaths, 'to:', currentPath);
         draggedPaths.forEach(sourcePath => {
           if (sourcePath !== currentPath && !currentPath.startsWith(sourcePath + '/')) {
-            // Don't move into itself or into a child directory
-            onMoveEntry(sourcePath, currentPath);
+            props.onMoveEntry(sourcePath, currentPath);
           }
         });
       } catch (error) {
-        // Fallback for plain text (single item)
         console.log('Fallback: moving single item:', draggedData, 'to:', currentPath);
         if (draggedData !== currentPath && !currentPath.startsWith(draggedData + '/')) {
-          onMoveEntry(draggedData, currentPath);
+          props.onMoveEntry(draggedData, currentPath);
         }
       }
     }
   };
 
-  if (entry.type === 'directory') {
+  if (props.entry.type === 'directory') {
     const [isOpen, setIsOpen] = createSignal(true);
 
     const handleDirectoryClick = (e: MouseEvent) => {
-      // Check if the click was on the chevron icon
       const target = e.target as HTMLElement;
+      handleChevronClick(e);
       if (target.classList.contains('codicon-chevron-down') || target.classList.contains('codicon-chevron-right')) {
-        // Only toggle, don't do selection
         e.stopPropagation();
         setIsOpen(!isOpen());
       } else {
-        // Handle selection for the directory
         handleClick(e);
       }
     };
@@ -171,22 +159,22 @@ const FileEntry = (props: {
             onClick={handleChevronClick}
           ></i>
           <i class="codicon codicon-folder"></i>
-          <span>{entry.name}</span>
+          <span>{props.entry.name}</span>
         </div>
         <Show when={isOpen()}>
             <div class="directory-children">
-            <For each={entry.children}>
+            <For each={props.entry.children}>
                 {(child) => (
                   <FileEntry 
                     entry={child} 
                     path={currentPath} 
-                    onFileSelect={onFileSelect} 
-                    getFilePath={getFilePath} 
+                    onFileSelect={props.onFileSelect} 
+                    getFilePath={props.getFilePath} 
                     activeFile={props.activeFile} 
-                    onMoveEntry={onMoveEntry}
-                    selectedFiles={selectedFiles}
-                    onSelectionChange={onSelectionChange}
-                    onFileUpload={onFileUpload}
+                    onMoveEntry={props.onMoveEntry}
+                    selectedFiles={props.selectedFiles}
+                    onSelectionChange={props.onSelectionChange}
+                    onFileUpload={props.onFileUpload}
                   />
                 )}
             </For>
@@ -210,7 +198,7 @@ const FileEntry = (props: {
       onClick={handleClick}
     >
       <i class="codicon codicon-file"></i>
-      <span>{entry.name}</span>
+      <span>{props.entry.name}</span>
     </div>
   );
 };
