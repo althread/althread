@@ -4,6 +4,7 @@ import './FileExplorer.css';
 
 // Define a type for our file system entries
 export type FileSystemEntry = {
+  id: string; // Add this line
   name: string;
   type: 'file' | 'directory';
   children?: FileSystemEntry[];
@@ -282,9 +283,11 @@ const FileExplorer = (props: FileExplorerProps) => {
         console.log('Moving paths to root:', draggedPaths);
         draggedPaths.forEach(sourcePath => {
           // Move to root (empty string destination)
+          console.log('Moving:', sourcePath, 'to root');
           props.onMoveEntry(sourcePath, '');
         });
       } catch (error) {
+        console.log(error);
         // Fallback for plain text (single item)
         console.log('Fallback: moving single item to root:', draggedData);
         props.onMoveEntry(draggedData, '');

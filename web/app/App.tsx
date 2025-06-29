@@ -34,11 +34,21 @@ const saveFileSystem = (fileSystem: FileSystemEntry[]) => {
 
 const loadFileSystem = (): FileSystemEntry[] => {
   const stored = localStorage.getItem(STORAGE_KEYS.FILE_SYSTEM);
+  
+  // Helper to add unique IDs to entries if they don't have them
+  const addIds = (entries: any[]): FileSystemEntry[] => {
+    return entries.map(entry => ({
+      ...entry,
+      id: entry.id || crypto.randomUUID(),
+      children: entry.children ? addIds(entry.children) : undefined
+    }));
+  };
+
   if (stored) {
-    return JSON.parse(stored);
+    return addIds(JSON.parse(stored));
   }
   // Default file system if nothing stored
-  return [
+  return addIds([
     { name: 'main.alt', type: 'file' },
     {
       name: 'utils',
@@ -49,7 +59,7 @@ const loadFileSystem = (): FileSystemEntry[] => {
       ],
     },
     { name: 'README.md', type: 'file' }
-  ];
+  ]);
 };
 
 const saveFileContent = (fileName: string, content: string) => {
@@ -64,34 +74,23 @@ const loadFileContent = (fileName: string): string => {
   
   // Default content for specific files
   if (fileName === 'main.alt') {
-    return Example1;
+    localStorage.setItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + 'main.alt', Example1);
+    return localStorage.getItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + 'main.alt')!;
   }
   if (fileName === 'README.md') {
-    return '# Project README\n\nThis is your project documentation.';
+    localStorage.setItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + 'README.md', '# Project README\n\nThis is your project documentation.');
+    return localStorage.getItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + 'README.md')!;
   }
-  if (fileName === 'helpers.alt' || fileName === 'math.alt') {
-    return '// Helper functions\n';
+  if (fileName === 'utils/helpers.alt') {
+    localStorage.setItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + 'utils/helpers.alt', '// Helper functions\n');
+    return localStorage.getItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + 'utils/helpers.alt')!;
+  }
+  if (fileName === 'utils/math.alt') {
+    localStorage.setItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + 'utils/math.alt', '// Math functions\n');
+    return localStorage.getItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + 'utils/math.alt')!;
   }
   
   return '// New file\n';
-};
-
-const getFilePathFromEntry = (entry: FileSystemEntry, fileSystem: FileSystemEntry[], currentPath: string = ''): string => {
-  for (const item of fileSystem) {
-    const itemPath = currentPath ? `${currentPath}/${item.name}` : item.name;
-    
-    console.log("Checking item:", itemPath, "against entry:", entry.name);
-
-    if (item === entry) {
-      return itemPath;
-    }
-    
-    if (item.type === 'directory' && item.children) {
-      const found = getFilePathFromEntry(entry, item.children, itemPath);
-      if (found) return found;
-    }
-  }
-  return entry.name; // fallback
 };
 
 export default function App() {
@@ -128,6 +127,31 @@ export default function App() {
   const [openFiles, setOpenFiles] = createSignal<FileSystemEntry[]>([]);
   const [activeFile, setActiveFile] = createSignal<FileSystemEntry | null>(null);
   const [selectedFiles, setSelectedFiles] = createSignal<string[]>([]);
+
+  // New helper function to find an entry by ID
+  const findEntryById = (fs: FileSystemEntry[], id: string): FileSystemEntry | null => {
+    for (const entry of fs) {
+      if (entry.id === id) return entry;
+      if (entry.children) {
+        const found = findEntryById(entry.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  // New helper function to get a path from an ID
+  const getPathFromId = (fs: FileSystemEntry[], id: string, currentPath: string = ''): string | null => {
+    for (const entry of fs) {
+      const entryPath = currentPath ? `${currentPath}/${entry.name}` : entry.name;
+      if (entry.id === id) return entryPath;
+      if (entry.children) {
+        const foundPath = getPathFromId(entry.children, id, entryPath);
+        if (foundPath) return foundPath;
+      }
+    }
+    return null;
+  };
 
   // Initialize with main.alt file after the file system is loaded
   createEffect(() => {
@@ -257,10 +281,10 @@ export default function App() {
   };
 
   const handleNewFile = (name: string) => {
-    const newFile: FileSystemEntry = { name, type: 'file' };
+    const newFile: FileSystemEntry = { id: crypto.randomUUID(), name, type: 'file' };
 
     // Check if file already exists in the same path
-    const existingFile = mockFileSystem().find(f => getFilePathFromEntry(f, mockFileSystem()) === name);
+    const existingFile = mockFileSystem().find(f => f.name === name); // Simplified check for root
 
     if (existingFile) {
       setCreationError("A file or folder with this name already exists.");
@@ -325,14 +349,14 @@ export default function App() {
   };
 
   const handleNewFolder = (name: string) => {
-    const exists = mockFileSystem().some(f => getFilePathFromEntry(f, mockFileSystem()) === name);
+    const exists = mockFileSystem().some(f => f.name === name); // Simplified check for root
     if (exists) {
       setCreationError("A file or folder with this name already exists.");
       return;
     }
     setCreationError(null);
 
-    const newFolder: FileSystemEntry = { name, type: 'directory', children: [] };
+    const newFolder: FileSystemEntry = { id: crypto.randomUUID(), name, type: 'directory', children: [] };
     const updatedFileSystem = [...mockFileSystem(), newFolder];
     setMockFileSystem(updatedFileSystem);
     saveFileSystem(updatedFileSystem);
@@ -366,6 +390,7 @@ export default function App() {
 
       for (let i = 0; i < parts.length; i++) {
         const part = parts[i];
+
         const entryIndex = currentLevel.findIndex(e => e.name === part);
         if (entryIndex === -1) return null;
 
@@ -447,24 +472,24 @@ export default function App() {
     console.log("File system after move:", newFileSystem);
     saveFileSystem(newFileSystem);
     
-    // Update openFiles to reference the moved entry at its new location
-    const oldPath = sourcePath;
-    const newPath = destPath === '' ? movedEntry.name : `${destPath}/${movedEntry.name}`;
-    setOpenFiles(openFiles().map(f => {
-      const filePath = getFilePathFromEntry(f, mockFileSystem());
-      // If this open file matches the old path, find the new entry in the updated file system
-      if (filePath === oldPath) {
-        // Find the new entry by path in the updated file system
-        const updatedEntry = findFileByPath(newFileSystem, newPath);
-        return updatedEntry ? updatedEntry : f;
-      }
-      return f;
-    }));
+    // Get IDs of open files and active file before the move
+    const openFileIds = openFiles().map(f => f.id);
+    const activeFileId = activeFile()?.id;
 
-    // Update activeFile if it was the moved file
-    if (activeFile() && getFilePathFromEntry(activeFile()!, mockFileSystem()) === oldPath) {
-      const updatedActiveFile = findFileByPath(newFileSystem, newPath);
-      setActiveFile(updatedActiveFile ? updatedActiveFile : null);
+    // Update the file system state
+    setMockFileSystem(newFileSystem);
+
+    // Re-find open files in the new file system using their IDs
+    const newOpenFiles = openFileIds
+      .map(id => findEntryById(newFileSystem, id))
+      .filter(Boolean) as FileSystemEntry[];
+    
+    setOpenFiles(newOpenFiles);
+
+    // Re-find active file
+    if (activeFileId) {
+      const newActiveFile = findEntryById(newFileSystem, activeFileId);
+      setActiveFile(newActiveFile);
     }
   };
 
@@ -475,7 +500,7 @@ export default function App() {
       const reader = new FileReader();
       reader.onload = (e) => {
         const content = e.target?.result as string;
-        const newFile: FileSystemEntry = { name: file.name, type: 'file' };
+        const newFile: FileSystemEntry = { id: crypto.randomUUID(), name: file.name, type: 'file' };
         
         // Save content with full path as key
         const fullPath = destPath === '' ? file.name : `${destPath}/${file.name}`;
@@ -746,7 +771,7 @@ export default function App() {
                 onMoveEntry={handleMoveEntry}
                 onFileUpload={handleFileUpload}
                 activeFile={activeFile()}
-                getFilePath={(entry) => getFilePathFromEntry(entry, mockFileSystem())}
+                getFilePath={(entry) => getPathFromId(mockFileSystem(), entry.id) || entry.name}
                 selectedFiles={selectedFiles()}
                 onSelectionChange={setSelectedFiles}
                 creationError={creationError()}
@@ -760,7 +785,7 @@ export default function App() {
           <FileTabs 
             openFiles={openFiles()}
             activeFile={activeFile()}
-            getFilePath={(entry) => getFilePathFromEntry(entry, mockFileSystem())}
+            getFilePath={(entry) => getPathFromId(mockFileSystem(), entry.id) || entry.name}
             onTabClick={handleFileTabClick}
             onTabClose={handleTabClose}
           />
