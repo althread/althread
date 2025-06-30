@@ -24,6 +24,8 @@ type FileExplorerProps = {
   onSelectionChange: (selected: string[]) => void;
   creationError?: string | null;
   setCreationError?: (msg: string | null) => void;
+  checkNameConflict?: (destPath: string, movingName: string) => boolean;
+  showConfirmDialog?: (sourcePaths: string[], destPath: string, conflictingName: string) => void;
 };
 
 const FileEntry = (props: { 
@@ -36,6 +38,8 @@ const FileEntry = (props: {
   selectedFiles: string[];
   onSelectionChange: (selected: string[]) => void;
   onFileUpload: (files: File[], destPath: string) => void;
+  checkNameConflict: (destPath: string, movingName: string) => boolean;
+  showConfirmDialog: (sourcePaths: string[], destPath: string, conflictingName: string) => void;
 }) => {
   const currentPath = props.path ? `${props.path}/${props.entry.name}` : props.entry.name;
   const [isDragOver, setIsDragOver] = createSignal(false);
@@ -105,11 +109,33 @@ const FileEntry = (props: {
       try {
         const draggedPaths = JSON.parse(draggedData) as string[];
         console.log('Moving paths:', draggedPaths, 'to:', currentPath);
+        
+        // Check for conflicts
+        for (const sourcePath of draggedPaths) {
+          const movingName = sourcePath.split('/').pop()!;
+          if (props.checkNameConflict && props.checkNameConflict(currentPath, movingName)) {
+            // Show confirmation dialog
+            if (props.showConfirmDialog) {
+              props.showConfirmDialog(draggedPaths, currentPath, movingName);
+            }
+            return;
+          }
+        }
+        
+        // No conflicts, proceed with move
         draggedPaths.forEach(sourcePath => {
           props.onMoveEntry(sourcePath, currentPath);
         });
       } catch (error) {
         console.log('Fallback: moving single item:', draggedData, 'to:', currentPath);
+        const movingName = draggedData.split('/').pop()!;
+        if (props.checkNameConflict && props.checkNameConflict(currentPath, movingName)) {
+          // Show confirmation dialog
+          if (props.showConfirmDialog) {
+            props.showConfirmDialog([draggedData], currentPath, movingName);
+          }
+          return;
+        }
         props.onMoveEntry(draggedData, currentPath);
       }
     }
@@ -186,6 +212,8 @@ const FileEntry = (props: {
                     selectedFiles={props.selectedFiles}
                     onSelectionChange={props.onSelectionChange}
                     onFileUpload={props.onFileUpload}
+                    checkNameConflict={props.checkNameConflict}
+                    showConfirmDialog={props.showConfirmDialog}
                   />
                 )}
             </For>
@@ -301,6 +329,20 @@ const FileExplorer = (props: FileExplorerProps) => {
       try {
         const draggedPaths = JSON.parse(draggedData) as string[];
         console.log('Moving paths to root:', draggedPaths);
+        
+        // Check for conflicts
+        for (const sourcePath of draggedPaths) {
+          const movingName = sourcePath.split('/').pop()!;
+          if (props.checkNameConflict && props.checkNameConflict('', movingName)) {
+            // Show confirmation dialog
+            if (props.showConfirmDialog) {
+              props.showConfirmDialog(draggedPaths, '', movingName);
+            }
+            return;
+          }
+        }
+        
+        // No conflicts, proceed with move
         draggedPaths.forEach(sourcePath => {
           // Move to root (empty string destination)
           props.onMoveEntry(sourcePath, '');
@@ -310,6 +352,14 @@ const FileExplorer = (props: FileExplorerProps) => {
         // but not a JSON array. This case should ideally not happen with
         // the current drag logic, but it's good practice to handle it.
         console.log('Fallback: moving single item to root:', draggedData);
+        const movingName = draggedData.split('/').pop()!;
+        if (props.checkNameConflict && props.checkNameConflict('', movingName)) {
+          // Show confirmation dialog
+          if (props.showConfirmDialog) {
+            props.showConfirmDialog([draggedData], '', movingName);
+          }
+          return;
+        }
         props.onMoveEntry(draggedData, '');
       }
     }
@@ -347,6 +397,8 @@ const FileExplorer = (props: FileExplorerProps) => {
               selectedFiles={props.selectedFiles}
               onSelectionChange={props.onSelectionChange}
               onFileUpload={props.onFileUpload}
+              checkNameConflict={props.checkNameConflict || (() => false)}
+              showConfirmDialog={props.showConfirmDialog || (() => {})}
             />
           )}
         </For>

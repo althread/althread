@@ -1,6 +1,6 @@
 // @refresh granular
 /** @jsxImportSource solid-js */
-import { createSignal, createEffect } from "solid-js";
+import { createSignal, createEffect, Show } from "solid-js";
 import Resizable from '@corvu/resizable'
 import { Example1 } from "./examples/example1";
 import { useNavigate } from "@solidjs/router";
@@ -523,6 +523,210 @@ export default function App() {
     }
   };
 
+  // Conflict checking functions for file operations
+  const checkNameConflict = (destPath: string, movingName: string): boolean => {
+    if (destPath === '') {
+      // Moving to root
+      return mockFileSystem().some(entry => entry.name === movingName);
+    }
+    
+    // Find the destination directory
+    const findDirectory = (files: FileSystemEntry[], targetPath: string): FileSystemEntry | null => {
+      const parts = targetPath.split('/').filter(part => part !== '');
+      let currentLevel = files;
+      
+      for (const part of parts) {
+        const dir = currentLevel.find(e => e.name === part && e.type === 'directory');
+        if (!dir || !dir.children) return null;
+        currentLevel = dir.children;
+      }
+      
+      // Return a synthetic entry representing the directory
+      return { id: 'temp', name: '', type: 'directory', children: currentLevel };
+    };
+    
+    const destDir = findDirectory(mockFileSystem(), destPath);
+    return destDir?.children?.some(entry => entry.name === movingName) || false;
+  };
+
+  // Confirmation dialog state for file conflicts
+  const [moveConfirmation, setMoveConfirmation] = createSignal<{
+    isOpen: boolean;
+    sourcePaths: string[];
+    destPath: string;
+    conflictingName: string;
+  }>({
+    isOpen: false,
+    sourcePaths: [],
+    destPath: '',
+    conflictingName: ''
+  });
+
+  const showMoveConfirmDialog = (sourcePaths: string[], destPath: string, conflictingName: string) => {
+    setMoveConfirmation({
+      isOpen: true,
+      sourcePaths,
+      destPath,
+      conflictingName
+    });
+  };
+
+  const handleConfirmedMove = () => {
+    const confirmation = moveConfirmation();
+    
+    // Create a modified version of handleMoveEntry that handles replacement
+    const handleMoveWithReplacement = (sourcePath: string, destPath: string, conflictingName: string) => {
+      console.log(`Moving ${sourcePath} to ${destPath} with replacement of ${conflictingName}`);
+      
+      // Prevent moving into itself
+      if (sourcePath === destPath) {
+        console.warn('Cannot move into itself');
+        return;
+      }
+
+      // Prevent moving into a child directory (would create a cycle)
+      if (destPath.startsWith(sourcePath + '/')) {
+        console.warn('Cannot move into child directory');
+        return;
+      }
+      
+      // Deep copy the file system to avoid mutation issues
+      let newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
+
+      // Helper to find an entry and its parent recursively
+      const findEntryAndParent = (fs: FileSystemEntry[], path: string): { entry: FileSystemEntry, parent: FileSystemEntry[], index: number } | null => {
+        const parts = path.split('/').filter(part => part !== ''); // Remove empty parts
+        if (parts.length === 0) return null;
+        
+        let currentLevel = fs;
+        let parentLevel = fs;
+
+        // Navigate to the correct level
+        for (let i = 0; i < parts.length - 1; i++) {
+          const part = parts[i];
+          const dirEntry = currentLevel.find(e => e.name === part && e.type === 'directory');
+          if (!dirEntry || !dirEntry.children) return null;
+          
+          parentLevel = currentLevel;
+          currentLevel = dirEntry.children;
+        }
+
+        // Find the target entry in the current level
+        const targetName = parts[parts.length - 1];
+        const entryIndex = currentLevel.findIndex(e => e.name === targetName);
+        if (entryIndex === -1) return null;
+
+        const entry = currentLevel[entryIndex];
+        return { entry, parent: currentLevel, index: entryIndex };
+      };
+
+      // Find and remove the source entry
+      const sourceInfo = findEntryAndParent(newFileSystem, sourcePath);
+      if (!sourceInfo) {
+        console.error("Source not found:", sourcePath);
+        return;
+      }
+
+      const [movedEntry] = sourceInfo.parent.splice(sourceInfo.index, 1);
+
+      // Find destination and handle replacement
+      if (destPath === '') { 
+        // Moving to root - remove ALL existing conflicting items first
+        for (let i = newFileSystem.length - 1; i >= 0; i--) {
+          if (newFileSystem[i].name === conflictingName) {
+            newFileSystem.splice(i, 1);
+            // Remove conflicting item's content from localStorage
+            localStorage.removeItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + conflictingName);
+          }
+        }
+        newFileSystem.push(movedEntry);
+      } else {
+        const destInfo = findEntryAndParent(newFileSystem, destPath);
+        if (!destInfo || destInfo.entry.type !== 'directory') {
+          console.error("Destination not found or is not a directory:", destPath);
+          // Re-add the entry to its original position if dest is invalid
+          sourceInfo.parent.splice(sourceInfo.index, 0, movedEntry);
+          return;
+        }
+        
+        if (!destInfo.entry.children) {
+          destInfo.entry.children = [];
+        }
+        
+        // Remove ALL existing conflicting items from destination directory
+        for (let i = destInfo.entry.children.length - 1; i >= 0; i--) {
+          if (destInfo.entry.children[i].name === conflictingName) {
+            destInfo.entry.children.splice(i, 1);
+            // Remove conflicting item's content from localStorage
+            const conflictingPath = `${destPath}/${conflictingName}`;
+            localStorage.removeItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + conflictingPath);
+          }
+        }
+        
+        destInfo.entry.children.push(movedEntry);
+      }
+
+      // Move file content in localStorage if it's a file or folder
+      function moveFileContent(entry: FileSystemEntry, oldPath: string, newPath: string) {
+        if (entry.type === 'file') {
+          const oldKey = STORAGE_KEYS.FILE_CONTENT_PREFIX + oldPath;
+          const newKey = STORAGE_KEYS.FILE_CONTENT_PREFIX + newPath;
+          const content = localStorage.getItem(oldKey);
+          if (content !== null) {
+            localStorage.setItem(newKey, content);
+            localStorage.removeItem(oldKey);
+          }
+        } else if (entry.type === 'directory' && entry.children) {
+          entry.children.forEach(child => {
+            const childOldPath = oldPath + '/' + child.name;
+            const childNewPath = newPath + '/' + child.name;
+            moveFileContent(child, childOldPath, childNewPath);
+          });
+        }
+      }
+
+      // Only move content if the path actually changed
+      const newPath = destPath === '' ? movedEntry.name : `${destPath}/${movedEntry.name}`;
+      if (sourcePath !== newPath) {
+        moveFileContent(movedEntry, sourcePath, newPath);
+      }
+
+      console.log("File system after move with replacement:", newFileSystem);
+      saveFileSystem(newFileSystem);
+      
+      // Get IDs of open files and active file before the move
+      const openFileIds = openFiles().map(f => f.id);
+      const activeFileId = activeFile()?.id;
+
+      // Update the file system state
+      setMockFileSystem(newFileSystem);
+
+      // Re-find open files in the new file system using their IDs
+      const newOpenFiles = openFileIds
+        .map(id => findEntryById(newFileSystem, id))
+        .filter(Boolean) as FileSystemEntry[];
+      
+      setOpenFiles(newOpenFiles);
+
+      // Re-find active file
+      if (activeFileId) {
+        const newActiveFile = findEntryById(newFileSystem, activeFileId);
+        setActiveFile(newActiveFile);
+      }
+    };
+    
+    // Execute the move with replacement for each source path
+    confirmation.sourcePaths.forEach(sourcePath => {
+      handleMoveWithReplacement(sourcePath, confirmation.destPath, confirmation.conflictingName);
+    });
+    
+    setMoveConfirmation({ isOpen: false, sourcePaths: [], destPath: '', conflictingName: '' });
+  };
+
+  const handleCanceledMove = () => {
+    setMoveConfirmation({ isOpen: false, sourcePaths: [], destPath: '', conflictingName: '' });
+  };
+
   // Save file system whenever it changes
   createEffect(() => {
     saveFileSystem(mockFileSystem());
@@ -767,6 +971,8 @@ export default function App() {
                 onSelectionChange={setSelectedFiles}
                 creationError={creationError()}
                 setCreationError={setCreationError}
+                checkNameConflict={checkNameConflict}
+                showConfirmDialog={showMoveConfirmDialog}
             />
         </Resizable.Panel>
         <Resizable.Handle class="Resizable-handle"/>
@@ -820,7 +1026,53 @@ minSize={0.2}>
 
 </Resizable.Panel>
       </Resizable>
+
+      {/* Move Confirmation Dialog */}
+      <MoveConfirmationDialog
+        isOpen={moveConfirmation().isOpen}
+        title="Replace Existing Item"
+        message="An item with this name already exists in the destination folder. Do you want to replace it?"
+        fileName={moveConfirmation().conflictingName}
+        onConfirm={handleConfirmedMove}
+        onCancel={handleCanceledMove}
+      />
     </>
   );
 }
+
+// Confirmation Dialog Component for App
+const MoveConfirmationDialog = (props: {
+  isOpen: boolean;
+  title: string;
+  message: string;
+  fileName: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) => {
+  return (
+    <Show when={props.isOpen}>
+      <div class="confirmation-dialog-overlay" onClick={props.onCancel}>
+        <div class="confirmation-dialog" onClick={(e) => e.stopPropagation()}>
+          <div class="confirmation-dialog-header">
+            <i class="codicon codicon-warning"></i>
+            {props.title}
+          </div>
+          <div class="confirmation-dialog-body">
+            {props.message}
+            <br />
+            <span class="confirmation-dialog-file-name">{props.fileName}</span>
+          </div>
+          <div class="confirmation-dialog-actions">
+            <button class="button-secondary" onClick={props.onCancel}>
+              Cancel
+            </button>
+            <button class="button-primary" onClick={props.onConfirm}>
+              Replace
+            </button>
+          </div>
+        </div>
+      </div>
+    </Show>
+  );
+};
 
