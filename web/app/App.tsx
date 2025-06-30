@@ -203,8 +203,8 @@ export default function App() {
     
     const file = findFileByPath(mockFileSystem(), path);
     if (file) {
-      // Add to open files if not already open
-      const isAlreadyOpen = openFiles().some(f => getFilePathFromEntry(f, mockFileSystem()) === path);
+      // Check if file is already open using ID instead of path
+      const isAlreadyOpen = openFiles().some(f => f.id === file.id);
       if (!isAlreadyOpen) {
         setOpenFiles([...openFiles(), file]);
       }
@@ -250,12 +250,12 @@ export default function App() {
   };
 
   const handleTabClose = (file: FileSystemEntry) => {
-    const filePath = getFilePathFromEntry(file, mockFileSystem());
-    const newOpenFiles = openFiles().filter(f => getFilePathFromEntry(f, mockFileSystem()) !== filePath);
+    // Use ID-based filtering instead of path-based
+    const newOpenFiles = openFiles().filter(f => f.id !== file.id);
     setOpenFiles(newOpenFiles);
     
     // If we closed the active file, switch to another open file or null
-    if (activeFile() && getFilePathFromEntry(activeFile()!, mockFileSystem()) === filePath) {
+    if (activeFile() && activeFile()!.id === file.id) {
       const newActiveFile = newOpenFiles.length > 0 ? newOpenFiles[newOpenFiles.length - 1] : null;
       setActiveFile(newActiveFile);
       

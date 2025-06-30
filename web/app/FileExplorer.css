@@ -86,27 +86,51 @@
     padding-left: 10px;
 }
 
+/* Nested directory structure with CSS custom properties for unlimited depth */
 .directory-children {
-  /* Nested directory structure with progressive indentation */
+  --nesting-level: 1;
 }
 
-.directory-children .file, .directory-children .directory-header {
-    padding-left: 26px;
+.directory-children .file, 
+.directory-children .directory-header {
+  padding-left: calc(26px + (var(--nesting-level) * 16px));
 }
 
-.directory-children .directory-children .file, 
-.directory-children .directory-children .directory-header {
-    padding-left: 42px;
+/* Progressively increase nesting level for each nested directory */
+.directory-children .directory-children {
+  --nesting-level: 2;
 }
 
-.directory-children .directory-children .directory-children .file, 
-.directory-children .directory-children .directory-children .directory-header {
-    padding-left: 58px;
+.directory-children .directory-children .directory-children {
+  --nesting-level: 3;
 }
 
-.directory-children .directory-children .directory-children .directory-children .file, 
-.directory-children .directory-children .directory-children .directory-children .directory-header {
-    padding-left: 74px;
+.directory-children .directory-children .directory-children .directory-children {
+  --nesting-level: 4;
+}
+
+.directory-children .directory-children .directory-children .directory-children .directory-children {
+  --nesting-level: 5;
+}
+
+.directory-children .directory-children .directory-children .directory-children .directory-children .directory-children {
+  --nesting-level: 6;
+}
+
+.directory-children .directory-children .directory-children .directory-children .directory-children .directory-children .directory-children {
+  --nesting-level: 7;
+}
+
+.directory-children .directory-children .directory-children .directory-children .directory-children .directory-children .directory-children .directory-children {
+  --nesting-level: 8;
+}
+
+.directory-children .directory-children .directory-children .directory-children .directory-children .directory-children .directory-children .directory-children .directory-children {
+  --nesting-level: 9;
+}
+
+.directory-children .directory-children .directory-children .directory-children .directory-children .directory-children .directory-children .directory-children .directory-children .directory-children {
+  --nesting-level: 10;
 }
 
 .file-entry-input {
