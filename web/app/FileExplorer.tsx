@@ -40,6 +40,7 @@ const FileEntry = (props: {
   onFileUpload: (files: File[], destPath: string) => void;
   checkNameConflict: (destPath: string, movingName: string) => boolean;
   showConfirmDialog: (sourcePaths: string[], destPath: string, conflictingName: string) => void;
+  allVisibleFiles: string[]; // Add this for range selection
 }) => {
   const currentPath = props.path ? `${props.path}/${props.entry.name}` : props.entry.name;
   const [isDragOver, setIsDragOver] = createSignal(false);
@@ -47,19 +48,66 @@ const FileEntry = (props: {
 
   const isSelected = () => props.selectedFiles.includes(currentPath);
 
-  const handleClick = (_e: MouseEvent) => {
-    props.onSelectionChange([currentPath]);
-    props.onFileSelect(currentPath);
+  const handleClick = (e: MouseEvent) => {
+    // Handle multi-selection with Cmd/Ctrl and Shift
+    if (e.metaKey || e.ctrlKey) {
+      // Cmd/Ctrl click: toggle selection
+      const newSelection = isSelected() 
+        ? props.selectedFiles.filter(path => path !== currentPath)
+        : [...props.selectedFiles, currentPath];
+      props.onSelectionChange(newSelection);
+      
+      // Only call onFileSelect if this item is now selected
+      if (!isSelected()) {
+        props.onFileSelect(currentPath);
+      }
+    } else if (e.shiftKey && props.selectedFiles.length > 0) {
+      // Shift click: range selection
+      const lastSelected = props.selectedFiles[props.selectedFiles.length - 1];
+      const rangeSelection = getFileRange(lastSelected, currentPath);
+      props.onSelectionChange(rangeSelection);
+      props.onFileSelect(currentPath);
+    } else {
+      // Normal click: single selection
+      props.onSelectionChange([currentPath]);
+      props.onFileSelect(currentPath);
+    }
+  };
+
+  // Helper function to get range of files between two paths
+  const getFileRange = (startPath: string, endPath: string): string[] => {
+    // This is a simplified range selection - in a real implementation,
+    // you'd want to traverse the file tree in display order
+    const allFiles = getAllVisibleFiles();
+    const startIndex = allFiles.indexOf(startPath);
+    const endIndex = allFiles.indexOf(endPath);
+    
+    if (startIndex === -1 || endIndex === -1) {
+      return [endPath]; // Fallback to single selection
+    }
+    
+    const minIndex = Math.min(startIndex, endIndex);
+    const maxIndex = Math.max(startIndex, endIndex);
+    return allFiles.slice(minIndex, maxIndex + 1);
+  };
+
+  // Helper function to get all visible file paths in display order
+  const getAllVisibleFiles = (): string[] => {
+    return props.allVisibleFiles;
   };
 
   const handleDragStart = (e: DragEvent) => {
     e.dataTransfer!.effectAllowed = 'move';
     setIsDragging(true);
 
-    if (isSelected()) {
+    if (isSelected() && props.selectedFiles.length > 1) {
+      // If this file is part of a multi-selection, drag all selected files
       e.dataTransfer!.setData('text/plain', JSON.stringify(props.selectedFiles));
     } else {
+      // Single file drag (either not selected or only one file selected)
       e.dataTransfer!.setData('text/plain', JSON.stringify([currentPath]));
+      // Update selection to this single file
+      props.onSelectionChange([currentPath]);
     }
 
     e.stopPropagation();
@@ -158,7 +206,6 @@ const FileEntry = (props: {
 
     const handleDirectoryClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      handleChevronClick(e);
       if (target.classList.contains('codicon-chevron-down') || target.classList.contains('codicon-chevron-right')) {
         e.stopPropagation();
         setIsOpen(!isOpen());
@@ -214,6 +261,7 @@ const FileEntry = (props: {
                     onFileUpload={props.onFileUpload}
                     checkNameConflict={props.checkNameConflict}
                     showConfirmDialog={props.showConfirmDialog}
+                    allVisibleFiles={props.allVisibleFiles}
                   />
                 )}
             </For>
@@ -258,6 +306,54 @@ const FileExplorer = (props: FileExplorerProps) => {
       return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
     });
   };
+
+  // Generate list of all visible files in display order for range selection
+  const getAllVisibleFiles = (): string[] => {
+    const files: string[] = [];
+    
+    const addFiles = (entries: FileSystemEntry[], currentPath: string = '') => {
+      const sorted = sortEntries(entries);
+      for (const entry of sorted) {
+        const entryPath = currentPath ? `${currentPath}/${entry.name}` : entry.name;
+        files.push(entryPath);
+        if (entry.type === 'directory' && entry.children) {
+          // For now, assume all directories are open for simplicity
+          // In a more sophisticated implementation, you'd track open/closed state
+          addFiles(entry.children, entryPath);
+        }
+      }
+    };
+    
+    addFiles(props.files);
+    return files;
+  };
+
+  // Handle keyboard shortcuts
+  createEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle shortcuts when not creating a new file/folder
+      if (creating()) return;
+      
+      // Cmd/Ctrl + A: Select all files
+      if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+        e.preventDefault();
+        const allFiles = getAllVisibleFiles();
+        props.onSelectionChange(allFiles);
+      }
+      
+      // Escape: Clear selection
+      if (e.key === 'Escape') {
+        props.onSelectionChange([]);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    
+    // Cleanup
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  });
 
   createEffect(() => {
     if (creating() && inputRef) {
@@ -399,6 +495,7 @@ const FileExplorer = (props: FileExplorerProps) => {
               onFileUpload={props.onFileUpload}
               checkNameConflict={props.checkNameConflict || (() => false)}
               showConfirmDialog={props.showConfirmDialog || (() => {})}
+              allVisibleFiles={getAllVisibleFiles()}
             />
           )}
         </For>
