@@ -117,7 +117,7 @@ export default function App() {
     onValueChange: (value) => {
       // Save current file content when editor changes
       if (activeFile()) {
-        const filePath = getFilePathFromEntry(activeFile()!, mockFileSystem());
+        const filePath = getPathFromId(mockFileSystem(), activeFile()!.id) || activeFile()!.name;
         saveFileContent(filePath, value);
       }
     }
@@ -232,7 +232,7 @@ export default function App() {
     setActiveFile(file);
     
     // Load file content into editor first
-    const filePath = getFilePathFromEntry(file, mockFileSystem());
+    const filePath = getPathFromId(mockFileSystem(), file.id) || file.name;
     const content = loadFileContent(filePath);
     const update = editor.editorView().state.update({
       changes: {
@@ -261,7 +261,7 @@ export default function App() {
       
       if (newActiveFile) {
         // Load the new active file's content
-        const newFilePath = getFilePathFromEntry(newActiveFile, mockFileSystem());
+        const newFilePath = getPathFromId(mockFileSystem(), newActiveFile.id) || newActiveFile.name;
         const content = loadFileContent(newFilePath);
         const update = editor.editorView().state.update({
           changes: {
@@ -280,25 +280,53 @@ export default function App() {
     }
   };
 
-  const handleNewFile = (name: string) => {
+  const handleNewFile = (name: string, targetPath?: string) => {
     const newFile: FileSystemEntry = { id: crypto.randomUUID(), name, type: 'file' };
 
-    // Check if file already exists in the same path
-    const existingFile = mockFileSystem().find(f => f.name === name); // Simplified check for root
+    // Determine where to create the file
+    const createInPath = targetPath || '';
+    
+    // Deep copy to avoid mutation
+    let newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
+    
+    // Helper to find the target directory
+    const findTargetDirectory = (fs: FileSystemEntry[], path: string): FileSystemEntry[] | null => {
+      if (path === '') return fs; // Root directory
+      
+      const parts = path.split('/').filter(part => part !== '');
+      let currentLevel = fs;
+      
+      for (const part of parts) {
+        const dir = currentLevel.find(e => e.name === part && e.type === 'directory');
+        if (!dir || !dir.children) return null;
+        currentLevel = dir.children;
+      }
+      return currentLevel;
+    };
 
+    const targetDir = findTargetDirectory(newFileSystem, createInPath);
+    if (!targetDir) {
+      setCreationError("Target directory not found.");
+      return;
+    }
+
+    // Check if file already exists in the target directory
+    const existingFile = targetDir.find(f => f.name === name);
     if (existingFile) {
       setCreationError("A file or folder with this name already exists.");
       return;
     }
     setCreationError(null);
 
-    const updatedFileSystem = [...mockFileSystem(), newFile];
-    setMockFileSystem(updatedFileSystem);
-    saveFileSystem(updatedFileSystem);
+    // Add the new file to the target directory
+    targetDir.push(newFile);
+    setMockFileSystem(newFileSystem);
+    saveFileSystem(newFileSystem);
     
-    // Save empty content for new file
+    // Save empty content for new file with full path
+    const fullPath = createInPath === '' ? name : `${createInPath}/${name}`;
     const defaultContent = getDefaultContentForFile(name);
-    saveFileContent(name, defaultContent);
+    saveFileContent(fullPath, defaultContent);
     
     // Automatically open the new file
     setOpenFiles([...openFiles(), newFile]);
@@ -348,18 +376,48 @@ export default function App() {
     }
   };
 
-  const handleNewFolder = (name: string) => {
-    const exists = mockFileSystem().some(f => f.name === name); // Simplified check for root
-    if (exists) {
+  const handleNewFolder = (name: string, targetPath?: string) => {
+    const newFolder: FileSystemEntry = { id: crypto.randomUUID(), name, type: 'directory', children: [] };
+
+    // Determine where to create the folder
+    const createInPath = targetPath || '';
+    
+    // Deep copy to avoid mutation
+    let newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
+    
+    // Helper to find the target directory
+    const findTargetDirectory = (fs: FileSystemEntry[], path: string): FileSystemEntry[] | null => {
+      if (path === '') return fs; // Root directory
+      
+      const parts = path.split('/').filter(part => part !== '');
+      let currentLevel = fs;
+      
+      for (const part of parts) {
+        const dir = currentLevel.find(e => e.name === part && e.type === 'directory');
+        if (!dir || !dir.children) return null;
+        currentLevel = dir.children;
+      }
+      return currentLevel;
+    };
+
+    const targetDir = findTargetDirectory(newFileSystem, createInPath);
+    if (!targetDir) {
+      setCreationError("Target directory not found.");
+      return;
+    }
+
+    // Check if folder already exists in the target directory
+    const existingFolder = targetDir.find(f => f.name === name);
+    if (existingFolder) {
       setCreationError("A file or folder with this name already exists.");
       return;
     }
     setCreationError(null);
 
-    const newFolder: FileSystemEntry = { id: crypto.randomUUID(), name, type: 'directory', children: [] };
-    const updatedFileSystem = [...mockFileSystem(), newFolder];
-    setMockFileSystem(updatedFileSystem);
-    saveFileSystem(updatedFileSystem);
+    // Add the new folder to the target directory
+    targetDir.push(newFolder);
+    setMockFileSystem(newFileSystem);
+    saveFileSystem(newFileSystem);
   };
 
   const handleMoveEntry = (sourcePath: string, destPath: string) => {

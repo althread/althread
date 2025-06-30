@@ -14,8 +14,8 @@ export type FileSystemEntry = {
 type FileExplorerProps = {
   files: FileSystemEntry[];
   onFileSelect: (path: string, isMultiSelect?: boolean) => void;
-  onNewFile: (name: string) => void;
-  onNewFolder: (name: string) => void;
+  onNewFile: (name: string, targetPath?: string) => void;
+  onNewFolder: (name: string, targetPath?: string) => void;
   onMoveEntry: (sourcePath: string, destPath: string) => void;
   onFileUpload: (files: File[], destPath: string) => void;
   getFilePath: (entry: FileSystemEntry) => string;
@@ -40,7 +40,13 @@ const FileEntry = (props: {
   onFileUpload: (files: File[], destPath: string) => void;
   checkNameConflict: (destPath: string, movingName: string) => boolean;
   showConfirmDialog: (sourcePaths: string[], destPath: string, conflictingName: string) => void;
-  allVisibleFiles: string[]; // Add this for range selection
+  allVisibleFiles: string[];
+  creating: { type: 'file' | 'folder', parentPath: string } | null;
+  onCreateCommit: (name: string) => void;
+  onCreateCancel: () => void;
+  creationError: string | null;
+  setCreationError?: (msg: string | null) => void;
+  createCommitInProgress?: () => boolean;
 }) => {
   const currentPath = props.path ? `${props.path}/${props.entry.name}` : props.entry.name;
   const [isDragOver, setIsDragOver] = createSignal(false);
@@ -192,6 +198,13 @@ const FileEntry = (props: {
   if (props.entry.type === 'directory') {
     const [isOpen, setIsOpen] = createSignal(true);
 
+    // Auto-expand when creating inside this directory
+    createEffect(() => {
+      if (props.creating && props.creating.parentPath === currentPath) {
+        setIsOpen(true);
+      }
+    });
+
     // Helper function to sort files and folders alphabetically (same as main component)
     const sortEntries = (entries: FileSystemEntry[]): FileSystemEntry[] => {
       return [...entries].sort((a, b) => {
@@ -205,18 +218,10 @@ const FileEntry = (props: {
     };
 
     const handleDirectoryClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.classList.contains('codicon-chevron-down') || target.classList.contains('codicon-chevron-right')) {
-        e.stopPropagation();
-        setIsOpen(!isOpen());
-      } else {
-        handleClick(e);
-      }
-    };
-
-    const handleChevronClick = (e: MouseEvent) => {
-      e.stopPropagation();
+      // Always toggle the folder open/closed state when clicking anywhere on the directory row
       setIsOpen(!isOpen());
+      // Also handle selection
+      handleClick(e);
     };
 
     return (
@@ -240,7 +245,6 @@ const FileEntry = (props: {
         >
           <i 
             class={`codicon codicon-chevron-${isOpen() ? 'down' : 'right'}`}
-            onClick={handleChevronClick}
           ></i>
           <i class="codicon codicon-folder"></i>
           <span>{props.entry.name}</span>
@@ -262,9 +266,58 @@ const FileEntry = (props: {
                     checkNameConflict={props.checkNameConflict}
                     showConfirmDialog={props.showConfirmDialog}
                     allVisibleFiles={props.allVisibleFiles}
+                    creating={props.creating}
+                    onCreateCommit={props.onCreateCommit}
+                    onCreateCancel={props.onCreateCancel}
+                    creationError={props.creationError}
+                    setCreationError={props.setCreationError}
+                    createCommitInProgress={props.createCommitInProgress}
                   />
                 )}
             </For>
+            {/* Show creation input if this directory is the target */}
+            <Show when={props.creating && props.creating.parentPath === currentPath}>
+              <div class="file-entry-input-wrapper">
+                <div class="file-entry-input">
+                  <i class={`codicon codicon-${props.creating!.type === 'file' ? 'file' : 'folder'}`}></i>
+                  <input
+                    ref={(el) => {
+                      if (el && props.creating && props.creating.parentPath === currentPath) {
+                        // Auto-focus this input when it's created for this directory
+                        setTimeout(() => el.focus(), 10);
+                      }
+                    }}
+                    type="text"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const name = e.currentTarget.value.trim();
+                        props.onCreateCommit(name);
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        props.onCreateCancel();
+                      }
+                    }}
+                    onBlur={(e) => {
+                      // Only commit on blur if not already processing a commit
+                      if (!props.createCommitInProgress || !props.createCommitInProgress()) {
+                        const name = e.currentTarget.value.trim();
+                        props.onCreateCommit(name);
+                      }
+                    }}
+                    onInput={() => {
+                      // Clear error when user starts typing
+                      if (props.setCreationError) {
+                        props.setCreationError(null);
+                      }
+                    }}
+                  />
+                </div>
+                <Show when={props.creationError}>
+                  <div class="file-entry-error">{props.creationError}</div>
+                </Show>
+              </div>
+            </Show>
             </div>
         </Show>
       </div>
@@ -291,8 +344,7 @@ const FileEntry = (props: {
 };
 
 const FileExplorer = (props: FileExplorerProps) => {
-  const [creating, setCreating] = createSignal<{ type: 'file' | 'folder' } | null>(null);
-  let inputRef: HTMLInputElement | undefined;
+  const [creating, setCreating] = createSignal<{ type: 'file' | 'folder', parentPath: string } | null>(null);
   const [isDragOver, setIsDragOver] = createSignal(false);
 
   // Helper function to sort files and folders alphabetically
@@ -355,40 +407,88 @@ const FileExplorer = (props: FileExplorerProps) => {
     };
   });
 
-  createEffect(() => {
-    if (creating() && inputRef) {
-      inputRef.focus();
+  // Helper function to get create button title based on selection
+  const getCreateButtonTitle = (type: 'file' | 'folder'): string => {
+    const baseTitle = type === 'file' ? 'New File' : 'New Folder';
+    
+    // If there's a single selected item, show where it will be created
+    if (props.selectedFiles.length === 1) {
+      const selectedPath = props.selectedFiles[0];
+      const selectedEntry = findEntryByPath(props.files, selectedPath);
+      if (selectedEntry && selectedEntry.type === 'directory') {
+        return `${baseTitle} in ${selectedPath}`;
+      } else if (selectedEntry && selectedEntry.type === 'file') {
+        const pathParts = selectedPath.split('/');
+        if (pathParts.length > 1) {
+          pathParts.pop(); // Remove filename
+          const parentPath = pathParts.join('/');
+          return `${baseTitle} in ${parentPath}`;
+        } else {
+          return `${baseTitle} in root (same level as ${selectedEntry.name})`;
+        }
+      }
     }
-  });
+    
+    return `${baseTitle} in root`;
+  };
 
-  const handleCreateCommit = () => {
-    if (!inputRef || !creating()) return;
+  const [createCommitInProgress, setCreateCommitInProgress] = createSignal(false);
 
-    const name = inputRef.value.trim();
+  const handleCreateCommit = (name: string) => {
+    if (!creating() || createCommitInProgress()) return;
+
+    name = name.trim();
     if (name) {
-      if (creating()!.type === 'file') {
-        props.onNewFile(name);
+      const targetPath = creating()!.parentPath;
+      const creationType = creating()!.type;
+      
+      // Set flag to prevent double commits
+      setCreateCommitInProgress(true);
+      
+      if (creationType === 'file') {
+        props.onNewFile(name, targetPath);
       } else {
-        props.onNewFolder(name);
+        props.onNewFolder(name, targetPath);
       }
-      // Only close input if no error
-      if (!props.creationError) {
-        setCreating(null);
-        props.setCreationError && props.setCreationError(null); // Reset error on successful commit
-      }
+      
+      // Close the input and reset flag after a short delay to allow error processing
+      setTimeout(() => {
+        if (!props.creationError) {
+          setCreating(null);
+        }
+        setCreateCommitInProgress(false);
+      }, 50);
     } else {
       setCreating(null);
       props.setCreationError && props.setCreationError(null); // Reset error on cancel
     }
   };
 
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleCreateCommit();
-    } else if (e.key === 'Escape') {
-      setCreating(null);
-      props.setCreationError && props.setCreationError(null); // Reset error on cancel
+  // Helper function to find an entry by path
+  const findEntryByPath = (files: FileSystemEntry[], targetPath: string): FileSystemEntry | null => {
+    for (const file of files) {
+      if (file.name === targetPath && file.type === 'file') {
+        return file;
+      }
+      if (file.name === targetPath && file.type === 'directory') {
+        return file;
+      }
+      if (file.type === 'directory' && file.children) {
+        const pathParts = targetPath.split('/');
+        if (pathParts[0] === file.name && pathParts.length > 1) {
+          const remainingPath = pathParts.slice(1).join('/');
+          const found = findEntryByPath(file.children, remainingPath);
+          if (found) return found;
+        }
+      }
     }
+    return null;
+  };
+
+  const handleCreateCancel = () => {
+    setCreating(null);
+    setCreateCommitInProgress(false); // Reset the commit flag
+    props.setCreationError && props.setCreationError(null);
   };
 
   const handleDragOver = (e: DragEvent) => {
@@ -472,10 +572,64 @@ const FileExplorer = (props: FileExplorerProps) => {
       <div class="file-explorer-header">
         <h3>Explorer</h3>
         <div class="file-explorer-actions">
-            <button onClick={() => setCreating({ type: 'file' })} title="New File" disabled={!!creating()}>
+            <button 
+              onClick={() => {
+                // Determine parent path based on selection
+                let parentPath = '';
+                if (props.selectedFiles.length === 1) {
+                  const selectedPath = props.selectedFiles[0];
+                  const selectedEntry = findEntryByPath(props.files, selectedPath);
+                  if (selectedEntry && selectedEntry.type === 'directory') {
+                    // Selected item is a directory, create inside it
+                    parentPath = selectedPath;
+                  } else if (selectedEntry && selectedEntry.type === 'file') {
+                    // Selected item is a file, create in its parent directory
+                    const pathParts = selectedPath.split('/');
+                    if (pathParts.length > 1) {
+                      // Remove the last part (filename) to get parent directory
+                      pathParts.pop();
+                      parentPath = pathParts.join('/');
+                    }
+                    // If pathParts.length === 1, it's a root file, so parentPath stays ''
+                  }
+                }
+                // Clear any previous error when starting new creation
+                props.setCreationError && props.setCreationError(null);
+                setCreating({ type: 'file', parentPath });
+              }} 
+              title={getCreateButtonTitle('file')} 
+              disabled={!!creating()}
+            >
                 <i class="codicon codicon-new-file"></i>
             </button>
-            <button onClick={() => setCreating({ type: 'folder' })} title="New Folder" disabled={!!creating()}>
+            <button 
+              onClick={() => {
+                // Determine parent path based on selection
+                let parentPath = '';
+                if (props.selectedFiles.length === 1) {
+                  const selectedPath = props.selectedFiles[0];
+                  const selectedEntry = findEntryByPath(props.files, selectedPath);
+                  if (selectedEntry && selectedEntry.type === 'directory') {
+                    // Selected item is a directory, create inside it
+                    parentPath = selectedPath;
+                  } else if (selectedEntry && selectedEntry.type === 'file') {
+                    // Selected item is a file, create in its parent directory
+                    const pathParts = selectedPath.split('/');
+                    if (pathParts.length > 1) {
+                      // Remove the last part (filename) to get parent directory
+                      pathParts.pop();
+                      parentPath = pathParts.join('/');
+                    }
+                    // If pathParts.length === 1, it's a root file, so parentPath stays ''
+                  }
+                }
+                // Clear any previous error when starting new creation
+                props.setCreationError && props.setCreationError(null);
+                setCreating({ type: 'folder', parentPath });
+              }} 
+              title={getCreateButtonTitle('folder')} 
+              disabled={!!creating()}
+            >
                 <i class="codicon codicon-new-folder"></i>
             </button>
         </div>
@@ -496,18 +650,45 @@ const FileExplorer = (props: FileExplorerProps) => {
               checkNameConflict={props.checkNameConflict || (() => false)}
               showConfirmDialog={props.showConfirmDialog || (() => {})}
               allVisibleFiles={getAllVisibleFiles()}
+              creating={creating()}
+              onCreateCommit={handleCreateCommit}
+              onCreateCancel={handleCreateCancel}
+              creationError={props.creationError || null}
+              setCreationError={props.setCreationError}
+              createCommitInProgress={createCommitInProgress}
             />
           )}
         </For>
-        <Show when={creating()}>
+        {/* Show creation input at root if no parent path specified */}
+        <Show when={creating() && creating()!.parentPath === ''}>
           <div class="file-entry-input-wrapper">
             <div class="file-entry-input">
               <i class={`codicon codicon-${creating()!.type === 'file' ? 'file' : 'folder'}`}></i>
               <input
-                ref={inputRef}
+                ref={(el) => {
+                  if (el && creating() && creating()!.parentPath === '') {
+                    // Auto-focus this input when it's created at root
+                    setTimeout(() => el.focus(), 10);
+                  }
+                }}
                 type="text"
-                onKeyDown={handleKeyDown}
-                onBlur={handleCreateCommit}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const name = e.currentTarget.value.trim();
+                    handleCreateCommit(name);
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    handleCreateCancel();
+                  }
+                }}
+                onBlur={(e) => {
+                  // Only commit on blur if not already processing a commit
+                  if (!createCommitInProgress()) {
+                    const name = e.currentTarget.value.trim();
+                    handleCreateCommit(name);
+                  }
+                }}
                 onInput={() => props.setCreationError && props.setCreationError(null)}
               />
             </div>

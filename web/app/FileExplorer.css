@@ -136,8 +136,13 @@
 .file-entry-input {
   display: flex;
   align-items: center;
-  /* Adjust vertical padding to compensate for the input's border */
-  padding: 1.5px 0 1.5px 10px;; 
+  /* Use same padding as files and directory headers */
+  padding: 4px 10px;
+}
+
+/* Nested input should follow same pattern as files and directory headers */
+.directory-children .file-entry-input {
+  padding-left: calc(26px + (var(--nesting-level) * 16px));
 }
 
 .file-entry-input .codicon {
@@ -214,14 +219,19 @@
 .file-entry-error {
   color: #d8d7d7;
   background: #821910;
-  /* border-radius: 3px; */
   border: 1px solid #e22a19;
   padding: 4px 8px;
-  margin: -2px 0 0 32px;
+  margin: -2px 0 0 0;
+  margin-left: 32px; /* Align with input text */
   font-size: 0.95em;
   box-shadow: 0 2px 8px rgba(229,20,0,0.15);
   position: relative;
   z-index: 2;
+}
+
+/* Nested error should follow same pattern as input */
+.directory-children .file-entry-error {
+  margin-left: calc(32px + (var(--nesting-level) * 16px));
 }
 
 .file-entry-input-wrapper:has(.file-entry-error) input {
