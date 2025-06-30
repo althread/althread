@@ -365,15 +365,15 @@ export default function App() {
   const handleMoveEntry = (sourcePath: string, destPath: string) => {
     console.log(`Moving ${sourcePath} to ${destPath}`);
     
-    // Prevent moving into itself or into a child directory
-    if (destPath.startsWith(sourcePath + '/') || sourcePath === destPath) {
-      console.warn('Cannot move into itself or child directory');
+    // Prevent moving into itself
+    if (sourcePath === destPath) {
+      console.warn('Cannot move into itself');
       return;
     }
 
-    // If sourcePath and destPath are the same, do nothing
-    if (sourcePath.startsWith(destPath + '/') || sourcePath === destPath) {
-      console.warn('Source and destination paths are the same');
+    // Prevent moving into a child directory (would create a cycle)
+    if (destPath.startsWith(sourcePath + '/')) {
+      console.warn('Cannot move into child directory');
       return;
     }
     
@@ -381,34 +381,30 @@ export default function App() {
     let newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
 
     // Helper to find an entry and its parent recursively
-    const findEntryAndParent = (fs: FileSystemEntry[], path: string, parentArray: FileSystemEntry[] | null = null): { entry: FileSystemEntry, parent: FileSystemEntry[] | null, index: number } | null => {
-      if (path === '') return null;
+    const findEntryAndParent = (fs: FileSystemEntry[], path: string): { entry: FileSystemEntry, parent: FileSystemEntry[], index: number } | null => {
+      const parts = path.split('/').filter(part => part !== ''); // Remove empty parts
+      if (parts.length === 0) return null;
       
-      const parts = path.split('/');
       let currentLevel = fs;
-      let currentParent: FileSystemEntry[] | null = parentArray;
+      let parentLevel = fs;
 
-      for (let i = 0; i < parts.length; i++) {
+      // Navigate to the correct level
+      for (let i = 0; i < parts.length - 1; i++) {
         const part = parts[i];
-
-        const entryIndex = currentLevel.findIndex(e => e.name === part);
-        if (entryIndex === -1) return null;
-
-        const entry = currentLevel[entryIndex];
+        const dirEntry = currentLevel.find(e => e.name === part && e.type === 'directory');
+        if (!dirEntry || !dirEntry.children) return null;
         
-        if (i === parts.length - 1) {
-          // Found the target entry
-          return { entry, parent: currentParent || fs, index: entryIndex };
-        }
-
-        if (entry.type === 'directory' && entry.children) {
-          currentParent = currentLevel;
-          currentLevel = entry.children;
-        } else {
-          return null; // Path goes through a file
-        }
+        parentLevel = currentLevel;
+        currentLevel = dirEntry.children;
       }
-      return null;
+
+      // Find the target entry in the current level
+      const targetName = parts[parts.length - 1];
+      const entryIndex = currentLevel.findIndex(e => e.name === targetName);
+      if (entryIndex === -1) return null;
+
+      const entry = currentLevel[entryIndex];
+      return { entry, parent: currentLevel, index: entryIndex };
     };
 
     // Find and remove the source entry
@@ -418,7 +414,7 @@ export default function App() {
       return;
     }
 
-    const [movedEntry] = sourceInfo.parent!.splice(sourceInfo.index, 1);
+    const [movedEntry] = sourceInfo.parent.splice(sourceInfo.index, 1);
 
     // Find destination and add the entry
     if (destPath === '') { 
@@ -429,7 +425,7 @@ export default function App() {
       if (!destInfo || destInfo.entry.type !== 'directory') {
         console.error("Destination not found or is not a directory:", destPath);
         // Re-add the entry to its original position if dest is invalid
-        sourceInfo.parent!.splice(sourceInfo.index, 0, movedEntry);
+        sourceInfo.parent.splice(sourceInfo.index, 0, movedEntry);
         return;
       }
       
@@ -438,8 +434,6 @@ export default function App() {
       }
       destInfo.entry.children.push(movedEntry);
     }
-
-    setMockFileSystem(newFileSystem);
 
     // Move file content in localStorage if it's a file or folder
     function moveFileContent(entry: FileSystemEntry, oldPath: string, newPath: string) {
@@ -461,12 +455,9 @@ export default function App() {
     }
 
     // Only move content if the path actually changed
-    if (sourcePath !== (destPath === '' ? movedEntry.name : `${destPath}/${movedEntry.name}`)) {
-      moveFileContent(
-        movedEntry,
-        sourcePath,
-        destPath === '' ? movedEntry.name : `${destPath}/${movedEntry.name}`
-      );
+    const newPath = destPath === '' ? movedEntry.name : `${destPath}/${movedEntry.name}`;
+    if (sourcePath !== newPath) {
+      moveFileContent(movedEntry, sourcePath, newPath);
     }
 
     console.log("File system after move:", newFileSystem);

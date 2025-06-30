@@ -87,11 +87,26 @@
 }
 
 .directory-children {
-  /* Nested directory structure */
+  /* Nested directory structure with progressive indentation */
 }
 
 .directory-children .file, .directory-children .directory-header {
-    padding-left: 20px;
+    padding-left: 26px;
+}
+
+.directory-children .directory-children .file, 
+.directory-children .directory-children .directory-header {
+    padding-left: 42px;
+}
+
+.directory-children .directory-children .directory-children .file, 
+.directory-children .directory-children .directory-children .directory-header {
+    padding-left: 58px;
+}
+
+.directory-children .directory-children .directory-children .directory-children .file, 
+.directory-children .directory-children .directory-children .directory-children .directory-header {
+    padding-left: 74px;
 }
 
 .file-entry-input {
@@ -134,13 +149,13 @@
 
 /* Multi-select styles */
 .file.selected,
-.directory.selected .directory-header {
+.directory.selected > .directory-header {
   background-color: #094771;
   border-color: #3794ff;
 }
 
 .file.selected:hover,
-.directory.selected .directory-header:hover {
+.directory.selected > .directory-header:hover {
   background-color: #0e5a8a;
 }
 

@@ -106,21 +106,29 @@ const FileEntry = (props: {
         const draggedPaths = JSON.parse(draggedData) as string[];
         console.log('Moving paths:', draggedPaths, 'to:', currentPath);
         draggedPaths.forEach(sourcePath => {
-          if (sourcePath !== currentPath && !currentPath.startsWith(sourcePath + '/')) {
-            props.onMoveEntry(sourcePath, currentPath);
-          }
+          props.onMoveEntry(sourcePath, currentPath);
         });
       } catch (error) {
         console.log('Fallback: moving single item:', draggedData, 'to:', currentPath);
-        if (draggedData !== currentPath && !currentPath.startsWith(draggedData + '/')) {
-          props.onMoveEntry(draggedData, currentPath);
-        }
+        props.onMoveEntry(draggedData, currentPath);
       }
     }
   };
 
   if (props.entry.type === 'directory') {
     const [isOpen, setIsOpen] = createSignal(true);
+
+    // Helper function to sort files and folders alphabetically (same as main component)
+    const sortEntries = (entries: FileSystemEntry[]): FileSystemEntry[] => {
+      return [...entries].sort((a, b) => {
+        // Directories first, then files
+        if (a.type !== b.type) {
+          return a.type === 'directory' ? -1 : 1;
+        }
+        // Within same type, sort alphabetically (case-insensitive)
+        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+      });
+    };
 
     const handleDirectoryClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -166,7 +174,7 @@ const FileEntry = (props: {
         </div>
         <Show when={isOpen()}>
             <div class="directory-children">
-            <For each={props.entry.children}>
+            <For each={sortEntries(props.entry.children || [])}>
                 {(child) => (
                   <FileEntry 
                     entry={child} 
@@ -210,6 +218,18 @@ const FileExplorer = (props: FileExplorerProps) => {
   const [creating, setCreating] = createSignal<{ type: 'file' | 'folder' } | null>(null);
   let inputRef: HTMLInputElement | undefined;
   const [isDragOver, setIsDragOver] = createSignal(false);
+
+  // Helper function to sort files and folders alphabetically
+  const sortEntries = (entries: FileSystemEntry[]): FileSystemEntry[] => {
+    return [...entries].sort((a, b) => {
+      // Directories first, then files
+      if (a.type !== b.type) {
+        return a.type === 'directory' ? -1 : 1;
+      }
+      // Within same type, sort alphabetically (case-insensitive)
+      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    });
+  };
 
   createEffect(() => {
     if (creating() && inputRef) {
@@ -283,12 +303,12 @@ const FileExplorer = (props: FileExplorerProps) => {
         console.log('Moving paths to root:', draggedPaths);
         draggedPaths.forEach(sourcePath => {
           // Move to root (empty string destination)
-          console.log('Moving:', sourcePath, 'to root');
           props.onMoveEntry(sourcePath, '');
         });
       } catch (error) {
-        console.log(error);
-        // Fallback for plain text (single item)
+        // Fallback for plain text (single item) that might be a path
+        // but not a JSON array. This case should ideally not happen with
+        // the current drag logic, but it's good practice to handle it.
         console.log('Fallback: moving single item to root:', draggedData);
         props.onMoveEntry(draggedData, '');
       }
@@ -315,7 +335,7 @@ const FileExplorer = (props: FileExplorerProps) => {
         </div>
       </div>
       <div class="file-explorer-content">
-        <For each={props.files}>
+        <For each={sortEntries(props.files)}>
           {(entry) => (
             <FileEntry 
               entry={entry} 
