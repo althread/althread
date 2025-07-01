@@ -1,4 +1,4 @@
-import { type TutorialStep } from '../Tutorial';
+import { type TutorialStep } from '@components/tutorial/Tutorial';
 
 export const tutorial: TutorialStep = {
   name: "programs",

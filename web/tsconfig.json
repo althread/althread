@@ -13,7 +13,16 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "jsx": "preserve",
-    "jsxImportSource": "solid-js"
+    "jsxImportSource": "solid-js",
+    "baseUrl": "./app",
+    "paths": {
+      "@components/*": ["./components/*"],
+      "@hooks/*": ["./hooks/*"],
+      "@utils/*": ["./utils/*"],
+      "@assets/*": ["./assets/*"],
+      "@tutorials/*": ["./tutorials/*"],
+      "@examples/*": ["./examples/*"]
+    }
   },
   "include": ["./app", "./vis-network-esm.d.ts"]
 }

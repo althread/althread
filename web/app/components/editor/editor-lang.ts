@@ -1,12 +1,12 @@
 // Lezer parser compiled with pnpm run prepare
-import {parser} from "../lezer/parser.js"
+import {parser} from "../../../lezer/parser.js"
 import {foldNodeProp, foldInside, indentNodeProp} from "@codemirror/language"
 import {styleTags, tags as t} from "@lezer/highlight"
 
 import {LRLanguage} from "@codemirror/language"
 import {completeFromList} from "@codemirror/autocomplete"
   
-import {althreadHighlight} from "../lezer/highlight.js"
+import {althreadHighlight} from "../../../lezer/highlight.js"
 
 let parserWithMetadata = parser.configure(//{}); /*
     {

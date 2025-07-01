@@ -2,10 +2,10 @@
 import vis from "vis-network/dist/vis-network.esm";
 import { createSignal, onCleanup, createEffect, For, Show } from "solid-js"
 import {nodeToString, literal, Node, ProgramStateJS} from "./Node";
-import GraphToolbar from "./GraphToolbar.jsx";
+import GraphToolbar from "./GraphToolbar";
 
 import { createGraphToolbarHandlers } from "./visHelpers";
-import { useGraphMaximizeHotkeys } from "./hooks/useGraphMaximizeHotkeys";
+import { useGraphMaximizeHotkeys } from "@hooks/useGraphMaximizeHotkeys";
 
 interface MessageFlowEvent {
     sender: number, // id of the sending process

@@ -1,23 +1,23 @@
 import { createSignal, createEffect, For } from 'solid-js';
 import type { Component } from "solid-js";
-import createEditor from './Editor';
+import createEditor from '@components/editor/Editor';
 import { marked } from 'marked';
 import './Tutorial.css';
 import Resizable from '@corvu/resizable';
 
-import  { compile, run, check } from '../pkg/althread_web';
+import  { compile, run, check } from '../../../pkg/althread_web';
 
 // Import all tutorials
-import { tutorial as tutorialStep1 } from './tutorials/TutorialStep1_Variables';
-import { tutorial as tutorialStep2 } from './tutorials/TutorialStep2_IfElse';
-import { tutorial as tutorialStep3 } from './tutorials/TutorialStep3_ForLoops';
-import { tutorial as tutorialStep4 } from './tutorials/TutorialStep4_Functions';
-import { tutorial as tutorialStep5 } from './tutorials/TutorialStep5_SharedBlocks';
-import { tutorial as tutorialStep6 } from './tutorials/TutorialStep6_Programs';
-import { tutorial as tutorialStep7 } from './tutorials/TutorialStep7_Wait';
-import { tutorial as tutorialStep8 } from './tutorials/TutorialStep8_Channels';
-import { A, useNavigate } from '@solidjs/router';
-import { Logo } from './assets/images/Logo';
+import { tutorial as tutorialStep1 } from '@tutorials/TutorialStep1_Variables';
+import { tutorial as tutorialStep2 } from '@tutorials/TutorialStep2_IfElse';
+import { tutorial as tutorialStep3 } from '@tutorials/TutorialStep3_ForLoops';
+import { tutorial as tutorialStep4 } from '@tutorials/TutorialStep4_Functions';
+import { tutorial as tutorialStep5 } from '@tutorials/TutorialStep5_SharedBlocks';
+import { tutorial as tutorialStep6 } from '@tutorials/TutorialStep6_Programs';
+import { tutorial as tutorialStep7 } from '@tutorials/TutorialStep7_Wait';
+import { tutorial as tutorialStep8 } from '@tutorials/TutorialStep8_Channels';
+import { useNavigate } from '@solidjs/router';
+import { Logo } from '@assets/images/Logo';
 
 export interface TutorialStep {
   name: string; // e.g., "Variables", "IfElse"
