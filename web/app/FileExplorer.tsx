@@ -870,7 +870,15 @@ const FileExplorer = (props: FileExplorerProps) => {
             </button>
         </div>
       </div>
-      <div class="file-explorer-content">
+      <div 
+        class="file-explorer-content"
+        onClick={(e) => {
+          // Only clear selection if clicking on the content area itself, not on child elements
+          if (e.target === e.currentTarget) {
+            props.onSelectionChange([]);
+          }
+        }}
+      >
         <For each={sortEntries(props.files)}>
           {(entry) => (
             <FileEntry 
