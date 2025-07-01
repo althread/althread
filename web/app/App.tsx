@@ -55,10 +55,13 @@ export default function App() {
     fileName: 'main.alt',
     onValueChange: (value) => {
       // Save current file content when editor changes
-      if (editorManager.activeFile()) {
-        const filePath = getPathFromId(mockFileSystem(), editorManager.activeFile()!.id) || editorManager.activeFile()!.name;
-        saveFileContent(filePath, value);
-      }
+      // Use a delayed check since editorManager might not be initialized yet
+      setTimeout(() => {
+        if (editorManager && editorManager.activeFile && editorManager.activeFile()) {
+          const filePath = getPathFromId(mockFileSystem(), editorManager.activeFile()!.id) || editorManager.activeFile()!.name;
+          saveFileContent(filePath, value);
+        }
+      }, 0);
     }
   });
 
@@ -250,14 +253,19 @@ export default function App() {
               onClick={async () => {
                 setLoadingAction("load");
                 try {
-                let up = editor.editorView().state.update({
-                  changes: {
-                    from: 0, 
-                    to: editor.editorView().state.doc.length,
-                    insert: Example1
+                  if (editor && editor.safeUpdateContent) {
+                    editor.safeUpdateContent(Example1);
+                  } else {
+                    // Fallback for older editor instances
+                    const up = editor.editorView().state.update({
+                      changes: {
+                        from: 0, 
+                        to: editor.editorView().state.doc.length,
+                        insert: Example1
+                      }
+                    });
+                    editor.editorView().update([up]);
                   }
-                })
-                editor.editorView().update([up]);
               } catch (error) {
                 console.error("Error loading example:", error);
               } finally {

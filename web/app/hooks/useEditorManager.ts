@@ -19,43 +19,37 @@ export const createEditorManager = (editor: any) => {
       }
       setActiveFile(file);
       
-      // Load file content into editor first
-      const content = loadFileContent(path);
-      const update = editor.editorView().state.update({
-        changes: {
-          from: 0, 
-          to: editor.editorView().state.doc.length,
-          insert: content
-        }
-      });
-      editor.editorView().update([update]);
-      
-      // Then update language (after content is loaded)
-      setTimeout(() => {
-        editor.updateLanguage(file.name);
-      }, 10);
+      // Use safe content update
+      if (editor && editor.safeUpdateContent) {
+        const content = loadFileContent(path);
+        editor.safeUpdateContent(content);
+        
+        // Then update language (after content is loaded)
+        setTimeout(() => {
+          if (editor && editor.updateLanguage) {
+            editor.updateLanguage(file.name);
+          }
+        }, 10);
+      }
     }
   };
 
   const handleFileTabClick = (file: FileSystemEntry, mockFileSystem: FileSystemEntry[]) => {
     setActiveFile(file);
     
-    // Load file content into editor first
-    const filePath = getPathFromId(mockFileSystem, file.id) || file.name;
-    const content = loadFileContent(filePath);
-    const update = editor.editorView().state.update({
-      changes: {
-        from: 0, 
-        to: editor.editorView().state.doc.length,
-        insert: content
-      }
-    });
-    editor.editorView().update([update]);
-    
-    // Then update language (after content is loaded)
-    setTimeout(() => {
-      editor.updateLanguage(file.name);
-    }, 10);
+    // Use safe content update
+    if (editor && editor.safeUpdateContent) {
+      const filePath = getPathFromId(mockFileSystem, file.id) || file.name;
+      const content = loadFileContent(filePath);
+      editor.safeUpdateContent(content);
+      
+      // Then update language (after content is loaded)
+      setTimeout(() => {
+        if (editor && editor.updateLanguage) {
+          editor.updateLanguage(file.name);
+        }
+      }, 10);
+    }
   };
 
   const handleTabClose = (file: FileSystemEntry, mockFileSystem: FileSystemEntry[]) => {
@@ -68,22 +62,17 @@ export const createEditorManager = (editor: any) => {
       const newActiveFile = newOpenFiles.length > 0 ? newOpenFiles[newOpenFiles.length - 1] : null;
       setActiveFile(newActiveFile);
       
-      if (newActiveFile) {
+      if (newActiveFile && editor && editor.safeUpdateContent) {
         // Load the new active file's content
         const newFilePath = getPathFromId(mockFileSystem, newActiveFile.id) || newActiveFile.name;
         const content = loadFileContent(newFilePath);
-        const update = editor.editorView().state.update({
-          changes: {
-            from: 0, 
-            to: editor.editorView().state.doc.length,
-            insert: content
-          }
-        });
-        editor.editorView().update([update]);
+        editor.safeUpdateContent(content);
         
         // Update language
         setTimeout(() => {
-          editor.updateLanguage(newActiveFile.name);
+          if (editor && editor.updateLanguage) {
+            editor.updateLanguage(newActiveFile.name);
+          }
         }, 10);
       }
     }

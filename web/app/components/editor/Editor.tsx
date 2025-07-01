@@ -264,11 +264,45 @@ const createEditor = ({
   editor.createExtension(languageCompartment.of(getLanguageExtension(fileName)));
   editor.createExtension(linterCompartment.of(createLinterExtension(fileName)));
 
-  // Return editor with updateLanguage method
+  // Safe wrapper for editor view operations
+  const safeEditorView = () => {
+    try {
+      return editor.editorView && editor.editorView() ? editor.editorView() : null;
+    } catch (e) {
+      console.warn('Editor view not ready:', e);
+      return null;
+    }
+  };
+
+  // Safe content update function
+  const safeUpdateContent = (content: string) => {
+    const view = safeEditorView();
+    if (view) {
+      try {
+        const update = view.state.update({
+          changes: {
+            from: 0,
+            to: view.state.doc.length,
+            insert: content
+          }
+        });
+        view.update([update]);
+        return true;
+      } catch (e) {
+        console.warn('Failed to update editor content:', e);
+        return false;
+      }
+    }
+    return false;
+  };
+
+  // Return editor with updateLanguage method and safe wrappers
   return {
     ...editor,
     updateLanguage,
-    getCurrentFileName: () => currentFileName
+    getCurrentFileName: () => currentFileName,
+    safeEditorView,
+    safeUpdateContent
   };
 }
 

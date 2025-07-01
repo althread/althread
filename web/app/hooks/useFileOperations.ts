@@ -52,20 +52,17 @@ export const createFileOperationsHandlers = (
     setOpenFiles([...openFiles(), newFile]);
     setActiveFile(newFile);
     
-    // Load content first
-    const update = editor.editorView().state.update({
-      changes: {
-        from: 0, 
-        to: editor.editorView().state.doc.length,
-        insert: defaultContent
-      }
-    });
-    editor.editorView().update([update]);
-    
-    // Then update language
-    setTimeout(() => {
-      editor.updateLanguage(name);
-    }, 10);
+    // Load content using safe method
+    if (editor && editor.safeUpdateContent) {
+      editor.safeUpdateContent(defaultContent);
+      
+      // Then update language
+      setTimeout(() => {
+        if (editor && editor.updateLanguage) {
+          editor.updateLanguage(name);
+        }
+      }, 10);
+    }
   };
 
   const handleNewFolder = (name: string, targetPath?: string) => {
@@ -324,22 +321,17 @@ export const createFileOperationsHandlers = (
       const newActiveFile = newOpenFiles.length > 0 ? newOpenFiles[newOpenFiles.length - 1] : null;
       setActiveFile(newActiveFile);
       
-      if (newActiveFile) {
+      if (newActiveFile && editor && editor.safeUpdateContent) {
         // Load the new active file's content
         const newFilePath = getPathFromId(newFileSystem, newActiveFile.id) || newActiveFile.name;
         const content = loadFileContent(newFilePath);
-        const update = editor.editorView().state.update({
-          changes: {
-            from: 0, 
-            to: editor.editorView().state.doc.length,
-            insert: content
-          }
-        });
-        editor.editorView().update([update]);
+        editor.safeUpdateContent(content);
         
         // Update language
         setTimeout(() => {
-          editor.updateLanguage(newActiveFile.name);
+          if (editor && editor.updateLanguage) {
+            editor.updateLanguage(newActiveFile.name);
+          }
         }, 10);
       }
     }
@@ -450,22 +442,17 @@ export const createFileOperationsHandlers = (
         const newActiveFile = newOpenFiles.length > 0 ? newOpenFiles[newOpenFiles.length - 1] : null;
         setActiveFile(newActiveFile);
         
-        if (newActiveFile) {
+        if (newActiveFile && editor && editor.safeUpdateContent) {
           // Load the new active file's content
           const newFilePath = getPathFromId(newFileSystem, newActiveFile.id) || newActiveFile.name;
           const content = loadFileContent(newFilePath);
-          const update = editor.editorView().state.update({
-            changes: {
-              from: 0, 
-              to: editor.editorView().state.doc.length,
-              insert: content
-            }
-          });
-          editor.editorView().update([update]);
+          editor.safeUpdateContent(content);
           
           // Update language
           setTimeout(() => {
-            editor.updateLanguage(newActiveFile.name);
+            if (editor && editor.updateLanguage) {
+              editor.updateLanguage(newActiveFile.name);
+            }
           }, 10);
         }
       } else {
