@@ -56,10 +56,12 @@
 .file, .directory-header {
   display: flex;
   align-items: center;
-  padding: 4px 10px;
+  padding: 4px 0px 4px 10px;
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
+  height: 26px; /* FIXED height to prevent ANY changes during rename */
+  box-sizing: border-box;
 }
 
 .file:hover, .directory-header:hover {
@@ -137,11 +139,11 @@
   display: flex;
   align-items: center;
   /* Use same padding as files and directory headers */
-  padding: 4px 10px;
+  padding: 4px 0 4px 10px;
 }
 
 /* Nested input should follow same pattern as files and directory headers */
-.directory-children .file-entry-input {
+.directory-children > .file-entry-input {
   padding-left: calc(26px + (var(--nesting-level) * 16px));
 }
 
@@ -158,6 +160,22 @@
   padding: 2px 4px;
   font-family: inherit;
   font-size: inherit;
+}
+
+/* Rename input styling - use same as creation input */
+.rename-input {
+  background-color: #1e1e1e;
+  color: #cccccc;
+  border: 1px solid var(--ifm-color-primary);
+  outline: none;
+  width: 100%;
+  padding: 2px 4px;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.rename-input:focus {
+  border-color: var(--ifm-color-primary);
 }
 
 /* Drag and drop styles */
@@ -221,21 +239,66 @@
   background: #821910;
   border: 1px solid #e22a19;
   padding: 4px 8px;
-  margin: -2px 0 0 0;
-  margin-left: 32px; /* Align with input text */
   font-size: 0.95em;
   box-shadow: 0 2px 8px rgba(229,20,0,0.15);
-  position: relative;
-  z-index: 2;
+  position: absolute;
+  top: 100%; /* Position below the input */
+  z-index: 1000; /* Ensure it's above other content */
+  word-wrap: break-word; /* Allow text to wrap */
+  white-space: normal; /* Allow text to wrap */
 }
 
-/* Nested error should follow same pattern as input */
-.directory-children .file-entry-error {
-  margin-left: calc(32px + (var(--nesting-level) * 16px));
+/* Error positioning for creation inputs (with proper nesting) */
+.file-entry-input ~ .file-entry-error {
+  left: 32px; /* Align with creation input text (10px padding + 16px icon + 6px margin) */
+  right: 0;
+}
+
+/* Error positioning for rename inputs (no nesting, in-place) */
+.file-entry-rename-input ~ .file-entry-error {
+  left: 22px; /* Align with rename input text (0px padding + 16px icon + 6px margin) */
+  right: 0;
 }
 
 .file-entry-input-wrapper:has(.file-entry-error) input {
   border: 1px solid #e22a19;
+}
+
+/* File entry input wrapper (needed for error positioning) */
+.file-entry-input-wrapper {
+  position: relative;
+  /* Reset any padding that might be inherited from directory nesting */
+  padding: 0;
+  /* Take full width when renaming */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  /* Don't inherit directory nesting - rename in place */
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+}
+
+/* Only apply nesting to creation inputs, not rename inputs */
+.directory-children > .file-entry-input {
+  padding-left: calc(26px + (var(--nesting-level) * 16px));
+}
+
+/* Rename input container - same styling as creation but no nesting */
+.file-entry-rename-input {
+  display: flex;
+  align-items: center;
+  /* Use same padding as files and directory headers but no nesting */
+  padding: 4px 0 4px 0;
+}
+
+.file-entry-rename-input .codicon {
+  margin-right: 6px;
+}
+
+/* Override nesting for rename inputs specifically */
+.directory-children .file-entry-input-wrapper .file-entry-rename-input {
+  padding-left: 0 !important;
+  padding: 4px 0 4px 0 !important;
 }
 
 /* Confirmation Dialog Styles */
@@ -273,7 +336,7 @@
 
 .confirmation-dialog-header .codicon {
   margin-right: 8px;
-  color: #f1c40f;
+  color: #ffffff;
   font-size: 18px;
 }
 
@@ -322,4 +385,37 @@
 
 .confirmation-dialog-actions .button-secondary:hover {
   background-color: #4c4c4c;
+}
+
+/* Context Menu Styles */
+.context-menu {
+  background-color: #252526;
+  border: 1px solid #454545;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  min-width: 120px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.context-menu button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  color: #cccccc;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+
+.context-menu button:hover {
+  background-color: #094771;
+}
+
+.context-menu button i {
+  margin-right: 8px;
+  font-size: 14px;
 }

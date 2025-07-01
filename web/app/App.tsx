@@ -1,6 +1,6 @@
 // @refresh granular
 /** @jsxImportSource solid-js */
-import { createSignal, createEffect, Show } from "solid-js";
+import { createSignal, createEffect, Show, For } from "solid-js";
 import Resizable from '@corvu/resizable'
 import { Example1 } from "./examples/example1";
 import { useNavigate } from "@solidjs/router";
@@ -620,6 +620,15 @@ export default function App() {
     conflictingName: ''
   });
 
+  // Delete confirmation dialog state
+  const [deleteConfirmation, setDeleteConfirmation] = createSignal<{
+    isOpen: boolean;
+    paths: string[];
+  }>({
+    isOpen: false,
+    paths: []
+  });
+
   const showMoveConfirmDialog = (sourcePaths: string[], destPath: string, conflictingName: string) => {
     setMoveConfirmation({
       isOpen: true,
@@ -783,6 +792,210 @@ export default function App() {
 
   const handleCanceledMove = () => {
     setMoveConfirmation({ isOpen: false, sourcePaths: [], destPath: '', conflictingName: '' });
+  };
+
+  const handleRenameEntry = (oldPath: string, newName: string) => {
+    console.log(`Renaming ${oldPath} to ${newName}`);
+    
+    // Deep copy the file system to avoid mutation issues
+    let newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
+
+    // Helper to find an entry and its parent recursively
+    const findEntryAndParent = (fs: FileSystemEntry[], path: string): { entry: FileSystemEntry, parent: FileSystemEntry[], index: number } | null => {
+      const parts = path.split('/').filter(part => part !== '');
+      if (parts.length === 0) return null;
+      
+      let currentLevel = fs;
+
+      // Navigate to the correct level
+      for (let i = 0; i < parts.length - 1; i++) {
+        const part = parts[i];
+        const dirEntry = currentLevel.find(e => e.name === part && e.type === 'directory');
+        if (!dirEntry || !dirEntry.children) return null;
+        currentLevel = dirEntry.children;
+      }
+
+      // Find the target entry in the current level
+      const targetName = parts[parts.length - 1];
+      const entryIndex = currentLevel.findIndex(e => e.name === targetName);
+      if (entryIndex === -1) return null;
+
+      const entry = currentLevel[entryIndex];
+      return { entry, parent: currentLevel, index: entryIndex };
+    };
+
+    // Find the entry to rename
+    const entryInfo = findEntryAndParent(newFileSystem, oldPath);
+    if (!entryInfo) {
+      console.error("Entry not found for rename:", oldPath);
+      return;
+    }
+
+    // Update the name (conflict checking is done in FileExplorer)
+    entryInfo.entry.name = newName;
+
+    // Calculate new path
+    const pathParts = oldPath.split('/');
+    pathParts[pathParts.length - 1] = newName;
+    const newPath = pathParts.join('/');
+
+    // Move file content in localStorage if it's a file or folder
+    function moveFileContent(entry: FileSystemEntry, oldPath: string, newPath: string) {
+      if (entry.type === 'file') {
+        const oldKey = STORAGE_KEYS.FILE_CONTENT_PREFIX + oldPath;
+        const newKey = STORAGE_KEYS.FILE_CONTENT_PREFIX + newPath;
+        const content = localStorage.getItem(oldKey);
+        if (content !== null) {
+          localStorage.setItem(newKey, content);
+          localStorage.removeItem(oldKey);
+        }
+      } else if (entry.type === 'directory' && entry.children) {
+        entry.children.forEach(child => {
+          const childOldPath = oldPath + '/' + child.name;
+          const childNewPath = newPath + '/' + child.name;
+          moveFileContent(child, childOldPath, childNewPath);
+        });
+      }
+    }
+
+    // Move content if path changed
+    if (oldPath !== newPath) {
+      moveFileContent(entryInfo.entry, oldPath, newPath);
+    }
+
+    // Update the file system
+    setMockFileSystem(newFileSystem);
+    saveFileSystem(newFileSystem);
+
+    // Update open files and active file using IDs
+    const openFileIds = openFiles().map(f => f.id);
+    const activeFileId = activeFile()?.id;
+
+    // Re-find open files in the new file system using their IDs
+    const newOpenFiles = openFileIds
+      .map(id => findEntryById(newFileSystem, id))
+      .filter(Boolean) as FileSystemEntry[];
+    
+    setOpenFiles(newOpenFiles);
+
+    // Re-find active file
+    if (activeFileId) {
+      const newActiveFile = findEntryById(newFileSystem, activeFileId);
+      setActiveFile(newActiveFile);
+    }
+  };
+
+  const handleDeleteEntry = (path: string) => {
+    console.log(`Deleting ${path}`);
+    
+    // Deep copy the file system to avoid mutation issues
+    let newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
+
+    // Helper to find an entry and its parent recursively
+    const findEntryAndParent = (fs: FileSystemEntry[], path: string): { entry: FileSystemEntry, parent: FileSystemEntry[], index: number } | null => {
+      const parts = path.split('/').filter(part => part !== '');
+      if (parts.length === 0) return null;
+      
+      let currentLevel = fs;
+
+      // Navigate to the correct level
+      for (let i = 0; i < parts.length - 1; i++) {
+        const part = parts[i];
+        const dirEntry = currentLevel.find(e => e.name === part && e.type === 'directory');
+        if (!dirEntry || !dirEntry.children) return null;
+        currentLevel = dirEntry.children;
+      }
+
+      // Find the target entry in the current level
+      const targetName = parts[parts.length - 1];
+      const entryIndex = currentLevel.findIndex(e => e.name === targetName);
+      if (entryIndex === -1) return null;
+
+      const entry = currentLevel[entryIndex];
+      return { entry, parent: currentLevel, index: entryIndex };
+    };
+
+    // Find and remove the entry
+    const entryInfo = findEntryAndParent(newFileSystem, path);
+    if (!entryInfo) {
+      console.error("Entry not found for deletion:", path);
+      return;
+    }
+
+    // Remove from file system
+    entryInfo.parent.splice(entryInfo.index, 1);
+
+    // Remove file content from localStorage
+    function removeFileContent(entry: FileSystemEntry, path: string) {
+      if (entry.type === 'file') {
+        const key = STORAGE_KEYS.FILE_CONTENT_PREFIX + path;
+        localStorage.removeItem(key);
+      } else if (entry.type === 'directory' && entry.children) {
+        entry.children.forEach(child => {
+          const childPath = path + '/' + child.name;
+          removeFileContent(child, childPath);
+        });
+      }
+    }
+
+    removeFileContent(entryInfo.entry, path);
+
+    // Update the file system
+    setMockFileSystem(newFileSystem);
+    saveFileSystem(newFileSystem);
+
+    // Remove deleted files from open files and update active file
+    const deletedEntryId = entryInfo.entry.id;
+    const newOpenFiles = openFiles().filter(f => f.id !== deletedEntryId);
+    setOpenFiles(newOpenFiles);
+
+    // If the deleted file was active, switch to another file or null
+    if (activeFile() && activeFile()!.id === deletedEntryId) {
+      const newActiveFile = newOpenFiles.length > 0 ? newOpenFiles[newOpenFiles.length - 1] : null;
+      setActiveFile(newActiveFile);
+      
+      if (newActiveFile) {
+        // Load the new active file's content
+        const newFilePath = getPathFromId(newFileSystem, newActiveFile.id) || newActiveFile.name;
+        const content = loadFileContent(newFilePath);
+        const update = editor.editorView().state.update({
+          changes: {
+            from: 0, 
+            to: editor.editorView().state.doc.length,
+            insert: content
+          }
+        });
+        editor.editorView().update([update]);
+        
+        // Update language
+        setTimeout(() => {
+          editor.updateLanguage(newActiveFile.name);
+        }, 10);
+      }
+    }
+
+    // Clear selection if deleted items were selected
+    const newSelection = selectedFiles().filter(selectedPath => selectedPath !== path);
+    setSelectedFiles(newSelection);
+  };
+
+  const showDeleteConfirmDialog = (paths: string[]) => {
+    setDeleteConfirmation({
+      isOpen: true,
+      paths
+    });
+  };
+
+  const handleConfirmedDelete = () => {
+    const confirmation = deleteConfirmation();
+    confirmation.paths.forEach(path => {
+      handleDeleteEntry(path);
+    });
+    setDeleteConfirmation({ isOpen: false, paths: [] });
+  };
+
+  const handleCanceledDelete = () => {
+    setDeleteConfirmation({ isOpen: false, paths: [] });
   };
 
   // Save file system whenever it changes
@@ -1022,6 +1235,8 @@ export default function App() {
                 onNewFile={handleNewFile}
                 onNewFolder={handleNewFolder}
                 onMoveEntry={handleMoveEntry}
+                onRenameEntry={handleRenameEntry}
+                onDeleteEntry={handleDeleteEntry}
                 onFileUpload={handleFileUpload}
                 activeFile={activeFile()}
                 getFilePath={(entry) => getPathFromId(mockFileSystem(), entry.id) || entry.name}
@@ -1031,6 +1246,7 @@ export default function App() {
                 setCreationError={setCreationError}
                 checkNameConflict={checkNameConflict}
                 showConfirmDialog={showMoveConfirmDialog}
+                showDeleteConfirmDialog={showDeleteConfirmDialog}
             />
         </Resizable.Panel>
         <Resizable.Handle class="Resizable-handle"/>
@@ -1094,6 +1310,14 @@ minSize={0.2}>
         onConfirm={handleConfirmedMove}
         onCancel={handleCanceledMove}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        isOpen={deleteConfirmation().isOpen}
+        paths={deleteConfirmation().paths}
+        onConfirm={handleConfirmedDelete}
+        onCancel={handleCanceledDelete}
+      />
     </>
   );
 }
@@ -1126,6 +1350,60 @@ const MoveConfirmationDialog = (props: {
             </button>
             <button class="button-primary" onClick={props.onConfirm}>
               Replace
+            </button>
+          </div>
+        </div>
+      </div>
+    </Show>
+  );
+};
+
+// Delete Confirmation Dialog Component
+const DeleteConfirmationDialog = (props: {
+  isOpen: boolean;
+  paths: string[];
+  onConfirm: () => void;
+  onCancel: () => void;
+}) => {
+  const getDeleteMessage = () => {
+    const count = props.paths.length;
+    if (count === 1) {
+      return (
+        <>
+          Are you sure you want to delete <span class="confirmation-dialog-file-name">{props.paths[0]}</span>?
+        </>
+      );
+    } else {
+      return `Are you sure you want to delete ${count} items?`;
+    }
+  };
+
+  return (
+    <Show when={props.isOpen}>
+      <div class="confirmation-dialog-overlay" onClick={props.onCancel}>
+        <div class="confirmation-dialog" onClick={(e) => e.stopPropagation()}>
+          <div class="confirmation-dialog-header">
+            <i class="codicon codicon-trash"></i>
+            Delete {props.paths.length === 1 ? 'Item' : 'Items'}
+          </div>
+          <div class="confirmation-dialog-body">
+            {getDeleteMessage()}
+            <Show when={props.paths.length > 1}>
+              <br />
+              <br />
+              <div style="max-height: 120px; overflow-y: auto; font-size: 12px; color: #999;">
+                <For each={props.paths}>
+                  {(path) => <div>• <span class="confirmation-dialog-file-name">{path}</span></div>}
+                </For>
+              </div>
+            </Show>
+          </div>
+          <div class="confirmation-dialog-actions">
+            <button class="button-secondary" onClick={props.onCancel}>
+              Cancel
+            </button>
+            <button class="button-primary" onClick={props.onConfirm} style="background-color: #c74e39;">
+              Delete
             </button>
           </div>
         </div>

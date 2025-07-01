@@ -18,6 +18,8 @@ type FileExplorerProps = {
   onNewFolder: (name: string, targetPath?: string) => void;
   onMoveEntry: (sourcePath: string, destPath: string) => void;
   onFileUpload: (files: File[], destPath: string) => void;
+  onRenameEntry: (oldPath: string, newName: string) => void;
+  onDeleteEntry: (path: string) => void;
   getFilePath: (entry: FileSystemEntry) => string;
   activeFile: FileSystemEntry | null;
   selectedFiles: string[];
@@ -26,6 +28,7 @@ type FileExplorerProps = {
   setCreationError?: (msg: string | null) => void;
   checkNameConflict?: (destPath: string, movingName: string) => boolean;
   showConfirmDialog?: (sourcePaths: string[], destPath: string, conflictingName: string) => void;
+  showDeleteConfirmDialog?: (paths: string[]) => void;
 };
 
 const FileEntry = (props: { 
@@ -35,11 +38,14 @@ const FileEntry = (props: {
   getFilePath: (entry: FileSystemEntry) => string; 
   activeFile: FileSystemEntry | null; 
   onMoveEntry: (source: string, dest: string) => void;
+  onRenameEntry: (oldPath: string, newName: string) => void;
+  onDeleteEntry: (path: string) => void;
   selectedFiles: string[];
   onSelectionChange: (selected: string[]) => void;
   onFileUpload: (files: File[], destPath: string) => void;
   checkNameConflict: (destPath: string, movingName: string) => boolean;
   showConfirmDialog: (sourcePaths: string[], destPath: string, conflictingName: string) => void;
+  showDeleteConfirmDialog: (paths: string[]) => void;
   allVisibleFiles: string[];
   creating: { type: 'file' | 'folder', parentPath: string } | null;
   onCreateCommit: (name: string) => void;
@@ -47,10 +53,26 @@ const FileEntry = (props: {
   creationError: string | null;
   setCreationError?: (msg: string | null) => void;
   createCommitInProgress?: () => boolean;
+  // New props for edit state management
+  currentlyRenaming: string | null;
+  startRename: (path: string) => void;
 }) => {
   const currentPath = props.path ? `${props.path}/${props.entry.name}` : props.entry.name;
   const [isDragOver, setIsDragOver] = createSignal(false);
   const [isDragging, setIsDragging] = createSignal(false);
+  const [showContextMenu, setShowContextMenu] = createSignal(false);
+  const [contextMenuPos, setContextMenuPos] = createSignal({ x: 0, y: 0 });
+  const [renameError, setRenameError] = createSignal<string | null>(null);
+
+  // Check if this entry is currently being renamed
+  const isRenaming = () => props.currentlyRenaming === currentPath;
+
+  // Clear rename error when this entry is no longer being renamed
+  createEffect(() => {
+    if (!isRenaming() && renameError()) {
+      setRenameError(null);
+    }
+  });
 
   const isSelected = () => props.selectedFiles.includes(currentPath);
 
@@ -79,6 +101,71 @@ const FileEntry = (props: {
       props.onFileSelect(currentPath);
     }
   };
+
+  const handleRightClick = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Select the item if it's not already selected
+    if (!isSelected()) {
+      props.onSelectionChange([currentPath]);
+    }
+    
+    // Show context menu
+    setContextMenuPos({ x: e.clientX, y: e.clientY });
+    setShowContextMenu(true);
+  };
+
+  const handleRename = () => {
+    setShowContextMenu(false);
+    props.startRename(currentPath);
+  };
+
+  const handleDelete = () => {
+    setShowContextMenu(false);
+    if (props.selectedFiles.length > 1) {
+      // Multiple files selected
+      props.showDeleteConfirmDialog(props.selectedFiles);
+    } else {
+      // Single file
+      props.showDeleteConfirmDialog([currentPath]);
+    }
+  };
+
+  const handleRenameCommit = (newName: string) => {
+    newName = newName.trim();
+    if (newName && newName !== props.entry.name) {
+      // Check for name conflicts first
+      const pathParts = currentPath.split('/');
+      pathParts.pop(); // Remove current name
+      const parentPath = pathParts.join('/');
+      
+      if (props.checkNameConflict && props.checkNameConflict(parentPath, newName)) {
+        setRenameError("A file or folder with this name already exists.");
+        return;
+      }
+      
+      setRenameError(null);
+      props.onRenameEntry(currentPath, newName);
+    }
+    // Clear the rename state
+    props.startRename(''); // Empty string clears the rename state
+  };
+
+  const handleRenameCancel = () => {
+    props.startRename(''); // Empty string clears the rename state
+    setRenameError(null);
+  };
+
+  // Close context menu when clicking elsewhere
+  createEffect(() => {
+    const handleGlobalClick = () => setShowContextMenu(false);
+    if (showContextMenu()) {
+      document.addEventListener('click', handleGlobalClick);
+      return () => document.removeEventListener('click', handleGlobalClick);
+    }
+    return undefined;
+  });
 
   // Helper function to get range of files between two paths
   const getFileRange = (startPath: string, endPath: string): string[] => {
@@ -230,7 +317,7 @@ const FileEntry = (props: {
         classList={{ 
           'drag-over': isDragOver(),
           'dragging': isDragging(),
-          'selected': isSelected()
+          'selected': isSelected() && !isRenaming()
         }}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -239,6 +326,7 @@ const FileEntry = (props: {
         <div 
           class="directory-header" 
           onClick={handleDirectoryClick}
+          onContextMenu={handleRightClick}
           draggable="true" 
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
@@ -247,7 +335,39 @@ const FileEntry = (props: {
             class={`codicon codicon-chevron-${isOpen() ? 'down' : 'right'}`}
           ></i>
           <i class="codicon codicon-folder"></i>
-          <span>{props.entry.name}</span>
+          <Show when={isRenaming()} fallback={<span>{props.entry.name}</span>}>
+            <div class="file-entry-input-wrapper">
+              <div class="file-entry-rename-input">
+                <i class="codicon codicon-folder"></i>
+                <input
+                  class="rename-input"
+                  type="text"
+                  value={props.entry.name}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleRenameCommit(e.currentTarget.value);
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      handleRenameCancel();
+                    }
+                  }}
+                  onBlur={(e) => handleRenameCommit(e.currentTarget.value)}
+                  ref={(el) => {
+                    if (el) {
+                      setTimeout(() => {
+                        el.focus();
+                        el.select();
+                      }, 10);
+                    }
+                  }}
+                />
+              </div>
+              <Show when={renameError()}>
+                <div class="file-entry-error">{renameError()}</div>
+              </Show>
+            </div>
+          </Show>
         </div>
         <Show when={isOpen()}>
             <div class="directory-children">
@@ -260,11 +380,14 @@ const FileEntry = (props: {
                     getFilePath={props.getFilePath} 
                     activeFile={props.activeFile} 
                     onMoveEntry={props.onMoveEntry}
+                    onRenameEntry={props.onRenameEntry}
+                    onDeleteEntry={props.onDeleteEntry}
                     selectedFiles={props.selectedFiles}
                     onSelectionChange={props.onSelectionChange}
                     onFileUpload={props.onFileUpload}
                     checkNameConflict={props.checkNameConflict}
                     showConfirmDialog={props.showConfirmDialog}
+                    showDeleteConfirmDialog={props.showDeleteConfirmDialog}
                     allVisibleFiles={props.allVisibleFiles}
                     creating={props.creating}
                     onCreateCommit={props.onCreateCommit}
@@ -272,6 +395,8 @@ const FileEntry = (props: {
                     creationError={props.creationError}
                     setCreationError={props.setCreationError}
                     createCommitInProgress={props.createCommitInProgress}
+                    currentlyRenaming={props.currentlyRenaming}
+                    startRename={props.startRename}
                   />
                 )}
             </For>
@@ -320,6 +445,29 @@ const FileEntry = (props: {
             </Show>
             </div>
         </Show>
+        
+        {/* Context Menu */}
+        <Show when={showContextMenu()}>
+          <div 
+            class="context-menu"
+            style={{
+              position: 'fixed',
+              top: `${contextMenuPos().y}px`,
+              left: `${contextMenuPos().x}px`,
+              'z-index': 1000
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button onClick={handleRename}>
+              <i class="codicon codicon-edit"></i>
+              Rename
+            </button>
+            <button onClick={handleDelete}>
+              <i class="codicon codicon-trash"></i>
+              Delete
+            </button>
+          </div>
+        </Show>
       </div>
     );
   }
@@ -330,15 +478,75 @@ const FileEntry = (props: {
       draggable="true"
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      onContextMenu={handleRightClick}
       classList={{ 
         active: props.activeFile !== null && props.getFilePath(props.activeFile) === currentPath,
-        selected: isSelected(),
+        selected: isSelected() && !isRenaming(),
         dragging: isDragging()
       }}
       onClick={handleClick}
     >
-      <i class="codicon codicon-file"></i>
-      <span>{props.entry.name}</span>
+      <Show when={isRenaming()} fallback={
+        <>
+          <i class="codicon codicon-file"></i>
+          <span>{props.entry.name}</span>
+        </>
+      }>
+        <div class="file-entry-input-wrapper">
+          <div class="file-entry-rename-input">
+            <i class="codicon codicon-file"></i>
+            <input
+              class="rename-input"
+              type="text"
+              value={props.entry.name}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleRenameCommit(e.currentTarget.value);
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  handleRenameCancel();
+                }
+              }}
+              onBlur={(e) => handleRenameCommit(e.currentTarget.value)}
+              ref={(el) => {
+                if (el) {
+                  setTimeout(() => {
+                    el.focus();
+                    el.select();
+                  }, 10);
+                }
+              }}
+            />
+          </div>
+          <Show when={renameError()}>
+            <div class="file-entry-error">{renameError()}</div>
+          </Show>
+        </div>
+      </Show>
+      
+      {/* Context Menu */}
+      <Show when={showContextMenu()}>
+        <div 
+          class="context-menu"
+          style={{
+            position: 'fixed',
+            top: `${contextMenuPos().y}px`,
+            left: `${contextMenuPos().x}px`,
+            'z-index': 1000
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button onClick={handleRename}>
+            <i class="codicon codicon-edit"></i>
+            Rename
+          </button>
+          <button onClick={handleDelete}>
+            <i class="codicon codicon-trash"></i>
+            Delete
+          </button>
+        </div>
+      </Show>
     </div>
   );
 };
@@ -346,6 +554,33 @@ const FileEntry = (props: {
 const FileExplorer = (props: FileExplorerProps) => {
   const [creating, setCreating] = createSignal<{ type: 'file' | 'folder', parentPath: string } | null>(null);
   const [isDragOver, setIsDragOver] = createSignal(false);
+  
+  // Global edit state management - only one edit operation allowed at a time
+  const [currentlyRenaming, setCurrentlyRenaming] = createSignal<string | null>(null);
+
+  // Function to cancel all current edit operations
+  const cancelAllEdits = () => {
+    setCreating(null);
+    setCurrentlyRenaming(null);
+    props.setCreationError && props.setCreationError(null);
+  };
+
+  // Function to start a rename operation (cancels any existing edits)
+  const startRename = (path: string) => {
+    if (path === '') {
+      // Empty string means cancel rename
+      setCurrentlyRenaming(null);
+    } else {
+      cancelAllEdits();
+      setCurrentlyRenaming(path);
+    }
+  };
+
+  // Function to start creation (cancels any existing edits)
+  const startCreation = (type: 'file' | 'folder', parentPath: string) => {
+    cancelAllEdits();
+    setCreating({ type, parentPath });
+  };
 
   // Helper function to sort files and folders alphabetically
   const sortEntries = (entries: FileSystemEntry[]): FileSystemEntry[] => {
@@ -383,19 +618,26 @@ const FileExplorer = (props: FileExplorerProps) => {
   // Handle keyboard shortcuts
   createEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Only handle shortcuts when not creating a new file/folder
-      if (creating()) return;
+      // Handle escape key to cancel edits and clear selection
+      if (e.key === 'Escape') {
+        if (creating() || currentlyRenaming()) {
+          // Cancel any active edit operations
+          cancelAllEdits();
+        } else {
+          // Clear selection if no edits are active
+          props.onSelectionChange([]);
+        }
+        return;
+      }
+      
+      // Only handle other shortcuts when not creating a new file/folder or renaming
+      if (creating() || currentlyRenaming()) return;
       
       // Cmd/Ctrl + A: Select all files
       if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
         e.preventDefault();
         const allFiles = getAllVisibleFiles();
         props.onSelectionChange(allFiles);
-      }
-      
-      // Escape: Clear selection
-      if (e.key === 'Escape') {
-        props.onSelectionChange([]);
       }
     };
 
@@ -454,13 +696,12 @@ const FileExplorer = (props: FileExplorerProps) => {
       // Close the input and reset flag after a short delay to allow error processing
       setTimeout(() => {
         if (!props.creationError) {
-          setCreating(null);
+          cancelAllEdits();
         }
         setCreateCommitInProgress(false);
       }, 50);
     } else {
-      setCreating(null);
-      props.setCreationError && props.setCreationError(null); // Reset error on cancel
+      cancelAllEdits();
     }
   };
 
@@ -486,9 +727,8 @@ const FileExplorer = (props: FileExplorerProps) => {
   };
 
   const handleCreateCancel = () => {
-    setCreating(null);
+    cancelAllEdits();
     setCreateCommitInProgress(false); // Reset the commit flag
-    props.setCreationError && props.setCreationError(null);
   };
 
   const handleDragOver = (e: DragEvent) => {
@@ -593,12 +833,10 @@ const FileExplorer = (props: FileExplorerProps) => {
                     // If pathParts.length === 1, it's a root file, so parentPath stays ''
                   }
                 }
-                // Clear any previous error when starting new creation
-                props.setCreationError && props.setCreationError(null);
-                setCreating({ type: 'file', parentPath });
+                startCreation('file', parentPath);
               }} 
               title={getCreateButtonTitle('file')} 
-              disabled={!!creating()}
+              disabled={!!creating() || !!currentlyRenaming()}
             >
                 <i class="codicon codicon-new-file"></i>
             </button>
@@ -623,12 +861,10 @@ const FileExplorer = (props: FileExplorerProps) => {
                     // If pathParts.length === 1, it's a root file, so parentPath stays ''
                   }
                 }
-                // Clear any previous error when starting new creation
-                props.setCreationError && props.setCreationError(null);
-                setCreating({ type: 'folder', parentPath });
+                startCreation('folder', parentPath);
               }} 
               title={getCreateButtonTitle('folder')} 
-              disabled={!!creating()}
+              disabled={!!creating() || !!currentlyRenaming()}
             >
                 <i class="codicon codicon-new-folder"></i>
             </button>
@@ -644,11 +880,14 @@ const FileExplorer = (props: FileExplorerProps) => {
               activeFile={props.activeFile} 
               getFilePath={props.getFilePath} 
               onMoveEntry={props.onMoveEntry}
+              onRenameEntry={props.onRenameEntry}
+              onDeleteEntry={props.onDeleteEntry}
               selectedFiles={props.selectedFiles}
               onSelectionChange={props.onSelectionChange}
               onFileUpload={props.onFileUpload}
               checkNameConflict={props.checkNameConflict || (() => false)}
               showConfirmDialog={props.showConfirmDialog || (() => {})}
+              showDeleteConfirmDialog={props.showDeleteConfirmDialog || (() => {})}
               allVisibleFiles={getAllVisibleFiles()}
               creating={creating()}
               onCreateCommit={handleCreateCommit}
@@ -656,6 +895,8 @@ const FileExplorer = (props: FileExplorerProps) => {
               creationError={props.creationError || null}
               setCreationError={props.setCreationError}
               createCommitInProgress={createCommitInProgress}
+              currentlyRenaming={currentlyRenaming()}
+              startRename={startRename}
             />
           )}
         </For>
