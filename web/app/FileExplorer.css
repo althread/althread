@@ -143,7 +143,7 @@
 }
 
 /* Nested input should follow same pattern as files and directory headers */
-.directory-children > .file-entry-input {
+.directory-children .file-entry-input {
   padding-left: calc(26px + (var(--nesting-level) * 16px));
 }
 

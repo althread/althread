@@ -696,11 +696,28 @@ export default function App() {
 
       const [movedEntry] = sourceInfo.parent.splice(sourceInfo.index, 1);
 
+      // Helper function to collect all file IDs that should be removed from open files
+      const collectDeletedFileIds = (entry: FileSystemEntry): string[] => {
+        const ids: string[] = [];
+        if (entry.type === 'file') {
+          ids.push(entry.id!);
+        } else if (entry.type === 'directory' && entry.children) {
+          entry.children.forEach(child => {
+            ids.push(...collectDeletedFileIds(child));
+          });
+        }
+        return ids;
+      };
+
+      let removedFileIds: string[] = [];
+
       // Find destination and handle replacement
       if (destPath === '') { 
         // Moving to root - remove ALL existing conflicting items first
         for (let i = newFileSystem.length - 1; i >= 0; i--) {
           if (newFileSystem[i].name === conflictingName) {
+            // Collect IDs of files that will be removed
+            removedFileIds.push(...collectDeletedFileIds(newFileSystem[i]));
             newFileSystem.splice(i, 1);
             // Remove conflicting item's content from localStorage
             localStorage.removeItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + conflictingName);
@@ -723,6 +740,8 @@ export default function App() {
         // Remove ALL existing conflicting items from destination directory
         for (let i = destInfo.entry.children.length - 1; i >= 0; i--) {
           if (destInfo.entry.children[i].name === conflictingName) {
+            // Collect IDs of files that will be removed
+            removedFileIds.push(...collectDeletedFileIds(destInfo.entry.children[i]));
             destInfo.entry.children.splice(i, 1);
             // Remove conflicting item's content from localStorage
             const conflictingPath = `${destPath}/${conflictingName}`;
@@ -768,17 +787,43 @@ export default function App() {
       // Update the file system state
       setMockFileSystem(newFileSystem);
 
-      // Re-find open files in the new file system using their IDs
+      // Re-find open files in the new file system using their IDs, excluding removed files
       const newOpenFiles = openFileIds
+        .filter(id => !removedFileIds.includes(id!)) // Filter out removed files
         .map(id => findEntryById(newFileSystem, id))
         .filter(Boolean) as FileSystemEntry[];
       
       setOpenFiles(newOpenFiles);
 
-      // Re-find active file
+      // Re-find active file, or switch to another if the active file was removed
       if (activeFileId) {
-        const newActiveFile = findEntryById(newFileSystem, activeFileId);
-        setActiveFile(newActiveFile);
+        if (removedFileIds.includes(activeFileId)) {
+          // Active file was removed, switch to another file or null
+          const newActiveFile = newOpenFiles.length > 0 ? newOpenFiles[newOpenFiles.length - 1] : null;
+          setActiveFile(newActiveFile);
+          
+          if (newActiveFile) {
+            // Load the new active file's content
+            const newFilePath = getPathFromId(newFileSystem, newActiveFile.id) || newActiveFile.name;
+            const content = loadFileContent(newFilePath);
+            const update = editor.editorView().state.update({
+              changes: {
+                from: 0, 
+                to: editor.editorView().state.doc.length,
+                insert: content
+              }
+            });
+            editor.editorView().update([update]);
+            
+            // Update language
+            setTimeout(() => {
+              editor.updateLanguage(newActiveFile.name);
+            }, 10);
+          }
+        } else {
+          const newActiveFile = findEntryById(newFileSystem, activeFileId);
+          setActiveFile(newActiveFile);
+        }
       }
     };
     
@@ -944,13 +989,27 @@ export default function App() {
     setMockFileSystem(newFileSystem);
     saveFileSystem(newFileSystem);
 
+    // Helper function to collect all file IDs that should be removed from open files
+    const collectDeletedFileIds = (entry: FileSystemEntry): string[] => {
+      const ids: string[] = [];
+      if (entry.type === 'file') {
+        ids.push(entry.id!);
+      } else if (entry.type === 'directory' && entry.children) {
+        entry.children.forEach(child => {
+          ids.push(...collectDeletedFileIds(child));
+        });
+      }
+      return ids;
+    };
+
     // Remove deleted files from open files and update active file
-    const deletedEntryId = entryInfo.entry.id;
-    const newOpenFiles = openFiles().filter(f => f.id !== deletedEntryId);
+    const deletedFileIds = collectDeletedFileIds(entryInfo.entry);
+    const newOpenFiles = openFiles().filter(f => !deletedFileIds.includes(f.id!));
     setOpenFiles(newOpenFiles);
 
-    // If the deleted file was active, switch to another file or null
-    if (activeFile() && activeFile()!.id === deletedEntryId) {
+    // If the deleted file (or any file in a deleted directory) was active, switch to another file or null
+    const wasActiveFileDeleted = activeFile() && deletedFileIds.includes(activeFile()!.id!);
+    if (wasActiveFileDeleted) {
       const newActiveFile = newOpenFiles.length > 0 ? newOpenFiles[newOpenFiles.length - 1] : null;
       setActiveFile(newActiveFile);
       
