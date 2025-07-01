@@ -253,6 +253,13 @@ const FileEntry = (props: {
         
         // Check for conflicts
         for (const sourcePath of draggedPaths) {
+          // Skip if moving to the same destination (no actual move needed)
+          const sourceParent = sourcePath.split('/').slice(0, -1).join('/');
+          if (sourceParent === currentPath) {
+            console.log('Skipping move - already in destination:', sourcePath);
+            continue;
+          }
+          
           const movingName = sourcePath.split('/').pop()!;
           if (props.checkNameConflict && props.checkNameConflict(currentPath, movingName)) {
             // Show confirmation dialog
@@ -263,12 +270,23 @@ const FileEntry = (props: {
           }
         }
         
-        // No conflicts, proceed with move
+        // No conflicts, proceed with move (only for items that actually need to move)
         draggedPaths.forEach(sourcePath => {
-          props.onMoveEntry(sourcePath, currentPath);
+          const sourceParent = sourcePath.split('/').slice(0, -1).join('/');
+          if (sourceParent !== currentPath) {
+            props.onMoveEntry(sourcePath, currentPath);
+          }
         });
       } catch (error) {
         console.log('Fallback: moving single item:', draggedData, 'to:', currentPath);
+        
+        // Skip if moving to the same destination
+        const sourceParent = draggedData.split('/').slice(0, -1).join('/');
+        if (sourceParent === currentPath) {
+          console.log('Skipping move - already in destination:', draggedData);
+          return;
+        }
+        
         const movingName = draggedData.split('/').pop()!;
         if (props.checkNameConflict && props.checkNameConflict(currentPath, movingName)) {
           // Show confirmation dialog
@@ -768,6 +786,12 @@ const FileExplorer = (props: FileExplorerProps) => {
         
         // Check for conflicts
         for (const sourcePath of draggedPaths) {
+          // Skip if already at root (no parent path)
+          if (!sourcePath.includes('/')) {
+            console.log('Skipping move - already at root:', sourcePath);
+            continue;
+          }
+          
           const movingName = sourcePath.split('/').pop()!;
           if (props.checkNameConflict && props.checkNameConflict('', movingName)) {
             // Show confirmation dialog
@@ -778,16 +802,25 @@ const FileExplorer = (props: FileExplorerProps) => {
           }
         }
         
-        // No conflicts, proceed with move
+        // No conflicts, proceed with move (only for items that actually need to move)
         draggedPaths.forEach(sourcePath => {
-          // Move to root (empty string destination)
-          props.onMoveEntry(sourcePath, '');
+          // Only move if not already at root
+          if (sourcePath.includes('/')) {
+            props.onMoveEntry(sourcePath, '');
+          }
         });
       } catch (error) {
         // Fallback for plain text (single item) that might be a path
         // but not a JSON array. This case should ideally not happen with
         // the current drag logic, but it's good practice to handle it.
         console.log('Fallback: moving single item to root:', draggedData);
+        
+        // Skip if already at root
+        if (!draggedData.includes('/')) {
+          console.log('Skipping move - already at root:', draggedData);
+          return;
+        }
+        
         const movingName = draggedData.split('/').pop()!;
         if (props.checkNameConflict && props.checkNameConflict('', movingName)) {
           // Show confirmation dialog
