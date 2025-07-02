@@ -409,3 +409,54 @@ body {
   overflow-y: auto;
   flex-grow: 1;
 }
+
+/* Empty Editor Styles */
+.empty-editor {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  background-color: #1e1e1e;
+}
+
+.empty-editor-content {
+  justify-items: center;
+  padding: 2rem;
+  color: #abb2bf;
+}
+
+.empty-editor-icon {
+  margin-bottom: 1rem;
+}
+
+.empty-editor-icon .codicon {
+  font-size: 3rem;
+  color: #5c6370;
+}
+
+.empty-editor-content h3 {
+  margin: 1rem 0 0.5rem 0;
+  color: #abb2bf;
+  font-weight: 500;
+}
+
+.empty-editor-content p {
+  margin: 0 0 1.5rem 0;
+  color: #5c6370;
+}
+
+.empty-editor-content .vscode-button {
+  margin-top: 0.5rem;
+}
+
+.empty-editor-content .vscode-button.primary {
+  background-color: var(--ifm-color-primary);
+  color: white;
+  border: 1px solid var(--ifm-color-primary);
+}
+
+.empty-editor-content .vscode-button.primary:hover {
+  background-color: var(--ifm-color-primary-dark);
+  border-color: var(--ifm-color-primary-dark);
+}

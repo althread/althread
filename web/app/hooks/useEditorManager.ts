@@ -1,7 +1,7 @@
 import { createSignal } from 'solid-js';
 import type { FileSystemEntry } from '@components/fileexplorer/FileExplorer';
 import { findFileByPath, getPathFromId } from '@utils/fileSystemUtils';
-import { loadFileContent } from '@utils/storage';
+import { loadFileContent, saveFileContent } from '@utils/storage';
 
 export const createEditorManager = (editor: any) => {
   const [openFiles, setOpenFiles] = createSignal<FileSystemEntry[]>([]);
@@ -78,6 +78,32 @@ export const createEditorManager = (editor: any) => {
     }
   };
 
+  const createNewFileWithContent = (fileName: string, content: string, onFileOperations: any, mockFileSystem?: () => FileSystemEntry[]) => {
+    // Create the file using file operations
+    onFileOperations.handleNewFile(fileName);
+    
+    // Wait a bit for the file to be created and opened, then update content
+    setTimeout(() => {
+      if (editor && editor.safeUpdateContent) {
+        editor.safeUpdateContent(content);
+        
+        // Also save the content to localStorage immediately after a small delay
+        // to ensure the file system has been updated
+        setTimeout(() => {
+          const currentFile = activeFile();
+          if (currentFile && mockFileSystem) {
+            // Get the proper file path using the file system
+            const filePath = getPathFromId(mockFileSystem(), currentFile.id) || currentFile.name;
+            saveFileContent(filePath, content);
+          } else {
+            // Fallback to just the filename (for root directory files)
+            saveFileContent(fileName, content);
+          }
+        }, 10);
+      }
+    }, 50);
+  };
+
   return {
     openFiles,
     setOpenFiles,
@@ -85,6 +111,7 @@ export const createEditorManager = (editor: any) => {
     setActiveFile,
     handleFileSelect,
     handleFileTabClick,
-    handleTabClose
+    handleTabClose,
+    createNewFileWithContent
   };
 };

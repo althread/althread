@@ -23,6 +23,8 @@ import { getPathFromId } from '@utils/fileSystemUtils';
 import { createFileOperationsHandlers } from '@hooks/useFileOperations';
 import { createEditorManager } from '@hooks/useEditorManager';
 import { MoveConfirmationDialog, DeleteConfirmationDialog } from '@components/dialogs/ConfirmationDialogs';
+import { LoadExampleDialog } from '@components/dialogs/LoadExampleDialog';
+import { EmptyEditor } from '@components/editor/EmptyEditor';
 
 init().then(() => {
   console.log('loaded');
@@ -46,13 +48,15 @@ export default function App() {
   const [mockFileSystem, setMockFileSystem] = createSignal<FileSystemEntry[]>(initialFileSystem);
   const [selectedFiles, setSelectedFiles] = createSignal<string[]>([]);
   const [creationError, setCreationError] = createSignal<string | null>(null);
+  
+  // Global file creation state - shared between FileExplorer and EmptyEditor
+  const [globalFileCreation, setGlobalFileCreation] = createSignal<{ type: 'file' | 'folder', parentPath: string } | null>(null);
 
-  // Initialize editor with main.alt content
-  const mainContent = loadFileContent('main.alt');
+  // Initialize editor (no default file content)
   let editor = createEditor({
     compile, 
-    defaultValue: mainContent,
-    fileName: 'main.alt',
+    defaultValue: '// Welcome to Althread\n',
+    fileName: 'untitled.alt',
     onValueChange: (value) => {
       // Save current file content when editor changes
       // Use a delayed check since editorManager might not be initialized yet
@@ -83,12 +87,7 @@ export default function App() {
     loadFileContent
   );
 
-  // Initialize with main.alt file after the file system is loaded
-  createEffect(() => {
-    if (mockFileSystem().length > 0 && !editorManager.activeFile()) {
-      editorManager.handleFileSelect('main.alt', mockFileSystem());
-    }
-  });
+  // No automatic file opening - let user choose what to open
 
   // Conflict checking functions for file operations
   const checkNameConflict = (destPath: string, movingName: string): boolean => {
@@ -138,6 +137,13 @@ export default function App() {
     paths: []
   });
 
+  // Load example dialog state
+  const [loadExampleDialog, setLoadExampleDialog] = createSignal<{
+    isOpen: boolean;
+  }>({
+    isOpen: false
+  });
+
   const showMoveConfirmDialog = (sourcePaths: string[], destPath: string, conflictingName: string) => {
     setMoveConfirmation({
       isOpen: true,
@@ -179,6 +185,68 @@ export default function App() {
 
   const handleCanceledDelete = () => {
     setDeleteConfirmation({ isOpen: false, paths: [] });
+  };
+
+  // Load example dialog handlers
+  const handleLoadExampleClick = () => {
+    // If no file is active, directly create a new file with the example
+    if (!editorManager.activeFile()) {
+      const fileName = `example-${Date.now()}.alt`;
+      editorManager.createNewFileWithContent(fileName, Example1, fileOperations, mockFileSystem);
+      return;
+    }
+    
+    // Otherwise show the dialog to choose
+    setLoadExampleDialog({ isOpen: true });
+  };
+
+  const handleLoadInCurrentFile = () => {
+    setLoadExampleDialog({ isOpen: false });
+    
+    // If no file is active, create a new one
+    if (!editorManager.activeFile()) {
+      const fileName = `example-${Date.now()}.alt`;
+      editorManager.createNewFileWithContent(fileName, Example1, fileOperations, mockFileSystem);
+      return;
+    }
+    
+    // Load into current file - update both editor and saved content
+    if (editor && editor.safeUpdateContent) {
+      editor.safeUpdateContent(Example1);
+    } else {
+      // Fallback for older editor instances
+      const up = editor.editorView().state.update({
+        changes: {
+          from: 0, 
+          to: editor.editorView().state.doc.length,
+          insert: Example1
+        }
+      });
+      editor.editorView().update([up]);
+    }
+    
+    // Also update the saved content in localStorage
+    const activeFile = editorManager.activeFile();
+    if (activeFile) {
+      const filePath = getPathFromId(mockFileSystem(), activeFile.id) || activeFile.name;
+      saveFileContent(filePath, Example1);
+    }
+  };
+
+  const handleLoadInNewFile = () => {
+    setLoadExampleDialog({ isOpen: false });
+    const fileName = `example-${Date.now()}.alt`;
+    editorManager.createNewFileWithContent(fileName, Example1, fileOperations, mockFileSystem);
+  };
+
+  const handleCancelLoadExample = () => {
+    setLoadExampleDialog({ isOpen: false });
+  };
+
+  // New file prompt handlers
+  const handleNewFileClick = () => {
+    // Trigger global file creation state to show the inline input in FileExplorer
+    setGlobalFileCreation({ type: 'file', parentPath: '' });
   };
 
   // Save file system whenever it changes
@@ -253,21 +321,9 @@ export default function App() {
               onClick={async () => {
                 setLoadingAction("load");
                 try {
-                  if (editor && editor.safeUpdateContent) {
-                    editor.safeUpdateContent(Example1);
-                  } else {
-                    // Fallback for older editor instances
-                    const up = editor.editorView().state.update({
-                      changes: {
-                        from: 0, 
-                        to: editor.editorView().state.doc.length,
-                        insert: Example1
-                      }
-                    });
-                    editor.editorView().update([up]);
-                  }
+                  handleLoadExampleClick();
               } catch (error) {
-                console.error("Error loading example:", error);
+                console.error("Error showing load example dialog:", error);
               } finally {
                 setTimeout(() => {
                     setLoadingAction(null);
@@ -281,8 +337,10 @@ export default function App() {
 
             <button
               class={`vscode-button${loadingAction() === "run" ? " active" : ""}`}
-              disabled={loadingAction() === "run"}
+              disabled={loadingAction() === "run" || !editorManager.activeFile()}
               onClick={async () => {
+                if (!editorManager.activeFile()) return;
+                
                 setLoadingAction("run");
                 try {
                   setIsRun(true);
@@ -307,7 +365,10 @@ export default function App() {
 
             <button
               class={`vscode-button${activeAction() === "check" ? " active" : ""}`}
+              disabled={!editorManager.activeFile()}
               onClick={() => {
+                if (!editorManager.activeFile()) return;
+                
                 setActiveAction(activeAction() === "check" ? null : "check");
                 try {
                   let res = check(editor.editorView().state.doc.toString())
@@ -324,7 +385,7 @@ export default function App() {
                   let nodes: Record<string, number> = {};
                   setNodes(res[1].nodes.map((n: any, i: number) => {
                     let label = nodeToString(n[0]);
-                    const {level, successors} = n[1];
+                    const {level} = n[1];
                     nodes[label] = i;
                     const isViolationNode = colored_path.includes(label) || (colored_path.length > 0 && level == 0);
                     const background = isViolationNode ? "#4d3131" : "#314d31";
@@ -433,6 +494,8 @@ export default function App() {
                 checkNameConflict={checkNameConflict}
                 showConfirmDialog={showMoveConfirmDialog}
                 showDeleteConfirmDialog={showDeleteConfirmDialog}
+                globalFileCreation={globalFileCreation()}
+                setGlobalFileCreation={setGlobalFileCreation}
             />
         </Resizable.Panel>
         <Resizable.Handle class="Resizable-handle"/>
@@ -446,7 +509,11 @@ export default function App() {
             onTabClick={(file) => editorManager.handleFileTabClick(file, mockFileSystem())}
             onTabClose={(file) => editorManager.handleTabClose(file, mockFileSystem())}
           />
-          <div class="editor-instance-wrapper" ref={editor.ref} />
+          {editorManager.activeFile() ? (
+            <div class="editor-instance-wrapper" ref={editor.ref} />
+          ) : (
+            <EmptyEditor onNewFile={handleNewFileClick} />
+          )}
           </Resizable.Panel>
         <Resizable.Handle class="Resizable-handle"/>
         <Resizable.Panel class="right-panel"
@@ -503,6 +570,14 @@ minSize={0.2}>
         paths={deleteConfirmation().paths}
         onConfirm={handleConfirmedDelete}
         onCancel={handleCanceledDelete}
+      />
+
+      {/* Load Example Dialog */}
+      <LoadExampleDialog
+        isOpen={loadExampleDialog().isOpen}
+        onLoadInCurrent={handleLoadInCurrentFile}
+        onLoadInNew={handleLoadInNewFile}
+        onCancel={handleCancelLoadExample}
       />
     </>
   );

@@ -29,6 +29,8 @@ type FileExplorerProps = {
   checkNameConflict?: (destPath: string, movingName: string) => boolean;
   showConfirmDialog?: (sourcePaths: string[], destPath: string, conflictingName: string) => void;
   showDeleteConfirmDialog?: (paths: string[]) => void;
+  globalFileCreation?: { type: 'file' | 'folder', parentPath: string } | null;
+  setGlobalFileCreation?: (creation: { type: 'file' | 'folder', parentPath: string } | null) => void;
 };
 
 const FileEntry = (props: { 
@@ -570,7 +572,11 @@ const FileEntry = (props: {
 };
 
 const FileExplorer = (props: FileExplorerProps) => {
-  const [creating, setCreating] = createSignal<{ type: 'file' | 'folder', parentPath: string } | null>(null);
+  // Use global creation state if provided, otherwise use local state
+  const [localCreating, setLocalCreating] = createSignal<{ type: 'file' | 'folder', parentPath: string } | null>(null);
+  const creating = () => props.globalFileCreation !== undefined ? props.globalFileCreation : localCreating();
+  const setCreating = props.setGlobalFileCreation || setLocalCreating;
+  
   const [isDragOver, setIsDragOver] = createSignal(false);
   
   // Global edit state management - only one edit operation allowed at a time
