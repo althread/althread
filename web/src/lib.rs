@@ -1,11 +1,14 @@
+use std::collections::HashMap;
 use fastrand;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
+use serde_wasm_bindgen;
 use wasm_bindgen::prelude::*;
 
 use althread::{ast::Ast, checker, error::AlthreadError, vm::GlobalAction};
 use althread::{vm::instruction::InstructionType};
 use althread::{vm::VM};
 use althread::ast::token::literal::Literal;
+use althread::module_resolver::{VirtualFileSystem, StandardFileSystem};
 
 const SEND: u8 = b's';
 const RECV: u8 = b'r';
@@ -16,7 +19,15 @@ fn error_to_js(err: AlthreadError) -> JsValue {
 }
 
 #[wasm_bindgen]
-pub fn compile(source: &str) -> Result<String, JsValue> {
+pub fn compile(source: &str, virtual_fs: JsValue) -> Result<String, JsValue> {
+    // Convert the JS file system to a Rust HashMap
+    let fs_map: HashMap<String, String> = 
+        serde_wasm_bindgen::from_value(virtual_fs)
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
+    
+    // Create virtual filesystem
+    let virtual_filesystem = VirtualFileSystem::new(fs_map);
+
     // parse code with pest
     let pairs = althread::parser::parse(&source).map_err(error_to_js)?;
 
@@ -24,7 +35,11 @@ pub fn compile(source: &str) -> Result<String, JsValue> {
 
     println!("{}", &ast);
 
-    let compiled_project = ast.compile(std::path::Path::new("")).map_err(error_to_js)?;
+    let compiled_project = ast.compile_with_filesystem(
+        std::path::Path::new("main.alt"),
+        virtual_filesystem
+    ).map_err(error_to_js)?;
+    
     println!("{}", compiled_project.to_string());
     Ok(format!("{}", compiled_project))
 }
@@ -80,7 +95,15 @@ impl <'a> Serialize for RunResult<'a> {
 }
 
 #[wasm_bindgen]
-pub fn run(source: &str) -> Result<JsValue, JsValue> {
+pub fn run(source: &str, virtual_fs: JsValue) -> Result<JsValue, JsValue> {
+    // Convert the JS file system to a Rust HashMap
+    let fs_map: HashMap<String, String> = 
+        serde_wasm_bindgen::from_value(virtual_fs)
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
+    
+    // Create virtual filesystem
+    let virtual_filesystem = VirtualFileSystem::new(fs_map);
+
     // parse code with pest
     let pairs = althread::parser::parse(&source).map_err(error_to_js)?;
 
@@ -88,8 +111,13 @@ pub fn run(source: &str) -> Result<JsValue, JsValue> {
 
     println!("{}", &ast);
 
-    let compiled_project = ast.compile(std::path::Path::new("")).map_err(error_to_js)?;
+    // Use compile_with_filesystem instead of compile
+    let compiled_project = ast.compile_with_filesystem(
+        std::path::Path::new("main.alt"),
+        virtual_filesystem
+    ).map_err(error_to_js)?;
 
+    // Rest of the function stays exactly the same
     let mut vm = althread::vm::VM::new(&compiled_project);
 
     vm.start(fastrand::u64(0..(1 << 32)));
@@ -224,7 +252,15 @@ pub fn run(source: &str) -> Result<JsValue, JsValue> {
 }
 
 #[wasm_bindgen]
-pub fn check(source: &str) -> Result<JsValue, JsValue> {
+pub fn check(source: &str, virtual_fs: JsValue) -> Result<JsValue, JsValue> {
+    // Convert the JS file system to a Rust HashMap
+    let fs_map: HashMap<String, String> = 
+        serde_wasm_bindgen::from_value(virtual_fs)
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
+    
+    // Create virtual filesystem
+    let virtual_filesystem = VirtualFileSystem::new(fs_map);
+
     // parse code with pest
     let pairs = althread::parser::parse(&source).map_err(error_to_js)?;
 
@@ -232,7 +268,10 @@ pub fn check(source: &str) -> Result<JsValue, JsValue> {
 
     println!("{}", &ast);
 
-    let compiled_project = ast.compile(std::path::Path::new("")).map_err(error_to_js)?;
+    let compiled_project = ast.compile_with_filesystem(
+        std::path::Path::new("main.alt"),
+        virtual_filesystem
+    ).map_err(error_to_js)?;
 
     let checked = checker::check_program(&compiled_project).map_err(error_to_js)?;
 

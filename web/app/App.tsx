@@ -19,7 +19,7 @@ import FileTabs from "@components/fileexplorer/FileTabs";
 
 // Import our new modules
 import { STORAGE_KEYS, loadFileSystem, saveFileSystem, loadFileContent, saveFileContent } from '@utils/storage';
-import { getPathFromId } from '@utils/fileSystemUtils';
+import { getPathFromId, buildVirtualFileSystem } from '@utils/fileSystemUtils';  // Add buildVirtualFileSystem here
 import { createFileOperationsHandlers } from '@hooks/useFileOperations';
 import { createEditorManager } from '@hooks/useEditorManager';
 import { MoveConfirmationDialog, DeleteConfirmationDialog } from '@components/dialogs/ConfirmationDialogs';
@@ -54,7 +54,10 @@ export default function App() {
 
   // Initialize editor (no default file content)
   let editor = createEditor({
-    compile, 
+    compile: (source: string) => {
+      const virtualFS = buildVirtualFileSystem(mockFileSystem());
+      return compile(source, virtualFS); // Now compile expects virtual_fs parameter
+    }, 
     defaultValue: '// Welcome to Althread\n',
     fileName: 'untitled.alt',
     onValueChange: (value) => {
@@ -344,7 +347,10 @@ export default function App() {
                 setLoadingAction("run");
                 try {
                   setIsRun(true);
-                  let res = run(editor.editorView().state.doc.toString());
+                  
+                  const virtualFS = buildVirtualFileSystem(mockFileSystem());
+                  let res = run(editor.editorView().state.doc.toString(), virtualFS); // Pass virtualFS
+                  
                   setOut(res.debug);
                   setCommGraphOut(res.message_flow_graph);
                   setVmStates(res.vm_states);
@@ -371,7 +377,8 @@ export default function App() {
                 
                 setActiveAction(activeAction() === "check" ? null : "check");
                 try {
-                  let res = check(editor.editorView().state.doc.toString())
+                  const virtualFS = buildVirtualFileSystem(mockFileSystem());
+                  let res = check(editor.editorView().state.doc.toString(), virtualFS) // Add virtualFS parameter to check() call too
                   setOut(res);
                   
                   console.log(res);

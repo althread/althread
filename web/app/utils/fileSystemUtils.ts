@@ -1,4 +1,5 @@
 import type { FileSystemEntry } from '@components/fileexplorer/FileExplorer';
+import { loadFileContent } from './storage';
 
 export const findEntryById = (fs: FileSystemEntry[], id: string): FileSystemEntry | null => {
   for (const entry of fs) {
@@ -104,3 +105,24 @@ export const collectDeletedFileIds = (entry: FileSystemEntry): string[] => {
   }
   return ids;
 };
+
+// Convert your file explorer structure to virtual filesystem
+export function buildVirtualFileSystem(entries: FileSystemEntry[]): Record<string, string> {
+  const virtualFS: Record<string, string> = {};
+  
+  function processEntry(entry: FileSystemEntry, currentPath: string = '') {
+    const fullPath = currentPath ? `${currentPath}/${entry.name}` : entry.name;
+    
+    if (entry.type === 'file') {
+      // Load the actual file content from localStorage
+      const content = loadFileContent(fullPath);
+      virtualFS[fullPath] = content;
+    } else if (entry.type === 'directory' && entry.children) {
+      // Process all children recursively
+      entry.children.forEach(child => processEntry(child, fullPath));
+    }
+  }
+  
+  entries.forEach(entry => processEntry(entry));
+  return virtualFS;
+}
