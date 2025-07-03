@@ -1,4 +1,5 @@
-use std::{collections::HashMap, fs, path::{Path, PathBuf}};
+use std::{collections::HashMap, path::{Path, PathBuf}};
+use super::filesystem::FileSystem;
 
 use crate::{ast::import_block::{ImportBlock, ImportItem, ImportPath}, error::{AlthreadError, AlthreadResult, ErrorType, Pos}};
 
@@ -11,13 +12,14 @@ pub struct ResolvedModule {
 }
 
 #[derive(Debug)]
-pub struct ModuleResolver {
+pub struct ModuleResolver<F: FileSystem> {
     pub current_file_dir: PathBuf,
-    pub resolved_modules: HashMap<String, ResolvedModule>
+    pub resolved_modules: HashMap<String, ResolvedModule>,
+    pub filesystem: F,
 }
 
-impl ModuleResolver {
-    pub fn new(current_file: &Path) -> Self {
+impl <F: FileSystem> ModuleResolver<F> {
+    pub fn new(current_file: &Path, filesystem: F) -> Self {
         let current_file_dir = current_file.parent()
             .unwrap_or_else(|| Path::new("."))
             .to_path_buf();
@@ -25,6 +27,7 @@ impl ModuleResolver {
         Self {
             current_file_dir,
             resolved_modules: HashMap::new(),
+            filesystem
         }
     }
 
@@ -61,15 +64,9 @@ impl ModuleResolver {
 
         let path_with_extension = path.with_extension("alt");
 
-        if path_with_extension.is_file() {
-            return Ok(fs::canonicalize(path_with_extension)
-                .map_err(|e| AlthreadError::new(
-                    ErrorType::RuntimeError,
-                    Some(Pos::default()),
-                    format!("Failed to resolve module path: {}", e)
-                ))?);
+        if self.filesystem.is_file(&path_with_extension) {
+            return self.filesystem.canonicalize(&path_with_extension);
         }
-
 
         Err(AlthreadError::new(
             ErrorType::ModuleNotFound,

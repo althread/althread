@@ -8,7 +8,7 @@ pub mod token;
 
 use core::panic;
 use std::{
-    collections::{BTreeMap, HashMap}, fmt::{self, Formatter}, fs, path::{Path}, rc::Rc
+    collections::{BTreeMap, HashMap}, fmt::{self, Formatter}, path::Path, rc::Rc
 };
 
 use block::Block;
@@ -21,7 +21,7 @@ use statement::Statement;
 use token::{args_list::ArgsList, condition_keyword::ConditionKeyword, datatype::DataType, identifier::Identifier};
 
 use crate::{
-    analysis::control_flow_graph::ControlFlowGraph, compiler::{stdlib, CompiledProject, CompilerState, FunctionDefinition, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, module_resolver::module_resolver::ModuleResolver, no_rule, parser::{self, Rule}, vm::{
+    analysis::control_flow_graph::ControlFlowGraph, compiler::{stdlib, CompiledProject, CompilerState, FunctionDefinition, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, module_resolver::{module_resolver::ModuleResolver, FileSystem, StandardFileSystem}, no_rule, parser::{self, Rule}, vm::{
         instruction::{Instruction, InstructionType, ProgramCode},
         VM,
     }
@@ -163,9 +163,38 @@ impl Ast {
         Ok(ast)
     }
 
+    pub fn compile_with_filesystem<F: FileSystem>(
+        &self,
+        current_file: &Path,
+        filesystem: F
+    ) -> AlthreadResult<CompiledProject> {
+        self.compile_internal(current_file, Some(filesystem))
+    }
+
     pub fn compile(&self, current_file_path: &Path) -> AlthreadResult<CompiledProject> {
+        self.compile_internal(current_file_path, None::<StandardFileSystem>)
+    }
+
+    fn compile_with_standard_filesystem(&self, current_file_path: &Path) -> AlthreadResult<CompiledProject> {
+        self.compile_internal(current_file_path, Some(StandardFileSystem))
+    }
+
+    fn compile_internal<F: FileSystem>(
+        &self, 
+        current_file_path: &Path,
+        filesystem: Option<F>
+    ) -> AlthreadResult<CompiledProject> {
+
+        if filesystem.is_none() {
+            // Delegate to the standard filesystem version
+            return self.compile_with_standard_filesystem(current_file_path);
+        }
+
+        let filesystem = filesystem.unwrap();
+
         // "compile" the "shared" block to retrieve the set of
         // shared variables
+        println!("Compiling AST for file: {}", current_file_path.display());
         let mut state = CompilerState::new();
 
 
@@ -185,16 +214,12 @@ impl Ast {
             }
 
         if let Some(import_block) = &self.import_block {
-            let mut module_resolver = ModuleResolver::new(current_file_path);
+            let mut module_resolver = ModuleResolver::new(current_file_path, filesystem);
+
             module_resolver.resolve_imports(&import_block.value)?;
 
             for (name, resolved_module) in module_resolver.resolved_modules {
-                let module_content = fs::read_to_string(&resolved_module.path)
-                    .map_err(|e| AlthreadError::new(
-                        ErrorType::ModuleNotFound,
-                        Some(import_block.pos),
-                        format!("Failed to read module '{}': {}", resolved_module.name, e),
-                    ))?;
+                let module_content = module_resolver.filesystem.read_file(&resolved_module.path)?;
 
                 let pairs = parser::parse(&module_content).map_err(|e| {
                     AlthreadError::new(
