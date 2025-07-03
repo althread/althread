@@ -644,6 +644,32 @@ const FileExplorer = (props: FileExplorerProps) => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Handle escape key to cancel edits and clear selection
       if (e.key === 'Escape') {
+        // Don't handle Escape if user is typing in an input, textarea, contenteditable element, or CodeMirror editor
+        const target = e.target as HTMLElement;
+        
+        // Check for standard input elements
+        if (
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable
+        ) {
+          return; // Let the browser/editor handle Escape
+        }
+        
+        // Check if the target is within a CodeMirror editor
+        let element = target;
+        while (element && element !== document.body) {
+          if (
+            element.classList.contains('cm-editor') ||
+            element.classList.contains('cm-content') ||
+            element.classList.contains('cm-scroller') ||
+            element.closest('.cm-editor')
+          ) {
+            return; // Let CodeMirror handle Escape in the editor
+          }
+          element = element.parentElement as HTMLElement;
+        }
+        
         if (creating() || currentlyRenaming()) {
           // Cancel any active edit operations
           cancelAllEdits();
@@ -659,6 +685,32 @@ const FileExplorer = (props: FileExplorerProps) => {
       
       // Cmd/Ctrl + A: Select all files
       if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+        // Don't handle Ctrl+A if user is typing in an input, textarea, contenteditable element, or CodeMirror editor
+        const target = e.target as HTMLElement;
+        
+        // Check for standard input elements
+        if (
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable
+        ) {
+          return; // Let the browser handle Ctrl+A in these elements
+        }
+        
+        // Check if the target is within a CodeMirror editor
+        let element = target;
+        while (element && element !== document.body) {
+          if (
+            element.classList.contains('cm-editor') ||
+            element.classList.contains('cm-content') ||
+            element.classList.contains('cm-scroller') ||
+            element.closest('.cm-editor')
+          ) {
+            return; // Let CodeMirror handle Ctrl+A in the editor
+          }
+          element = element.parentElement as HTMLElement;
+        }
+        
         e.preventDefault();
         const allFiles = getAllVisibleFiles();
         props.onSelectionChange(allFiles);

@@ -8,7 +8,7 @@ use althread::{ast::Ast, checker, error::AlthreadError, vm::GlobalAction};
 use althread::{vm::instruction::InstructionType};
 use althread::{vm::VM};
 use althread::ast::token::literal::Literal;
-use althread::module_resolver::{VirtualFileSystem, StandardFileSystem};
+use althread::module_resolver::{VirtualFileSystem};
 
 const SEND: u8 = b's';
 const RECV: u8 = b'r';

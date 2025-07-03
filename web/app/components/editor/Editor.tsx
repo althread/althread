@@ -130,7 +130,7 @@ const createEditor = ({
       borderLeft: '2px solid #528bff'
     },
     '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
-      backgroundColor: '#3e4451'
+      backgroundColor: '#264f78 !important' // VS Code style selection
     },
     '.cm-gutters': {
       backgroundColor: '#1e1e1e',
@@ -148,10 +148,10 @@ const createEditor = ({
       textAlign: 'right'
     },
     '.cm-activeLineGutter': {
-      backgroundColor: '#282c34'
+      backgroundColor: '#3a3f4b' // More noticeable active line gutter
     },
     '.cm-activeLine': {
-      backgroundColor: '#282c34'
+      backgroundColor: '#3a3f4b' // More noticeable active line background
     },
     '.cm-foldGutter': {
       width: '16px', // Fixed width for fold gutter
