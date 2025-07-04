@@ -8,18 +8,17 @@ import {completeFromList} from "@codemirror/autocomplete"
   
 import {althreadHighlight} from "../../../lezer/highlight.js"
 
-let parserWithMetadata = parser.configure(//{}); /*
-    {
-props: [
-    althreadHighlight,
-    indentNodeProp.add({
-    Application: context => context.column(context.node.from) + context.unit
-    }),
-    foldNodeProp.add({
-    Application: foldInside
-    })
-]
-}); // */
+let parserWithMetadata = parser.configure({
+    props: [
+        althreadHighlight,
+        indentNodeProp.add({
+            Application: context => context.column(context.node.from) + context.unit
+        }),
+        foldNodeProp.add({
+            Application: foldInside
+        })
+    ]
+});
 
 
 export const exampleLanguage = LRLanguage.define({

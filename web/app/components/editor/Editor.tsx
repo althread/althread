@@ -17,6 +17,7 @@ import {lintKeymap, lintGutter} from "@codemirror/lint"
 import {indentWithTab} from "@codemirror/commands"
 import { tags as t } from '@lezer/highlight';
 import {linter, Diagnostic} from "@codemirror/lint"
+import { customSyntaxHighlighting } from "./custom-style";
 
 // Import additional language supports
 import { javascript } from "@codemirror/lang-javascript";
@@ -167,19 +168,6 @@ const createEditor = ({
     }
   }, {dark: true});
 
-  const uiHighlightStyle = HighlightStyle.define([
-    { tag: [t.keyword, t.controlKeyword, t.definitionKeyword, t.moduleKeyword, t.operatorKeyword], color: '#c678dd' },
-    { tag: [t.string, t.special(t.string)], color: '#98c379' },
-    { tag: [t.number, t.bool, t.null], color: '#d19a66' },
-    { tag: t.comment, color: '#5c6370', fontStyle: 'italic' },
-    { tag: [t.className, t.typeName], color: '#e5c07b' },
-    { tag: t.macroName, color: '#61afef' },
-    { tag: t.variableName, color: '#abb2bf' },
-    { tag: t.propertyName, color: '#e06c75' },
-    { tag: [t.separator, t.punctuation], color: '#abb2bf' },
-    { tag: t.invalid, color: '#f44747', borderBottom: '1px dotted #f44747' }
-  ]);
-
   // Create linter only for .alt files, but always include lintGutter for consistent spacing
   const createLinterExtension = (fileName: string): Extension => {
     if (fileName.endsWith('.alt')) {
@@ -258,7 +246,9 @@ const createEditor = ({
 
   // Add theme and syntax highlighting
   editor.createExtension(uiTheme);
-  editor.createExtension(syntaxHighlighting(uiHighlightStyle, { fallback: true }));
+  // This is the crucial line we are adding back.
+  // It tells the editor to use our custom color palette for syntax highlighting.
+  editor.createExtension(customSyntaxHighlighting);
 
   // Add compartments for dynamic extensions
   editor.createExtension(languageCompartment.of(getLanguageExtension(fileName)));

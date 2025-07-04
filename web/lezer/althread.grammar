@@ -24,7 +24,8 @@ project_block {
   MainBlock |
   ProgramBlock |
   ConditionBlock |
-  FunctionBlock
+  FunctionBlock | 
+  ImportBlock
 }
 
 GlobalBlock  { kw<"shared"> "{" shared_declaration* "}" }
@@ -32,6 +33,12 @@ MainBlock    { kw<"main"> code_block }
 ProgramBlock { kw<"program"> ProgName ArgList code_block }
 ConditionBlock { Condition expression_block }
 FunctionBlock { kw<"fn"> FnName ArgList ReturnType code_block }
+ImportBlock { kw<"import"> "[" ImportList "]" }
+
+ImportList { ImportItem ("," ImportItem)* ","? }
+ImportItem { ImportPath (kw<"as"> ImportAlias)? }
+ImportPath { identifier (ImportSlash identifier)* }
+ImportAlias { identifier }
 
 ReturnType {"->" Type}
 
@@ -178,7 +185,18 @@ pattern { LocalVariableName | Literal }
 call_statement {
    CallExpression ";"
 }
-CallExpression { FnName ArgList }
+CallExpression {
+  (FnName | MemberExpression) ArgList
+}
+
+MemberExpression {
+  // case 1: a.b.c…   (recurse on MemberExpression)
+  MemberExpression "." identifier
+| // case 2: x.y     (simple identifier)
+  identifier "." identifier
+| // case 3: (….) . z
+  ParenthesizedExpression "." identifier
+}
 
 
 //!expression
@@ -192,7 +210,9 @@ expression[@isGroup=Expression] {
   RegExp |
   UnaryExpression |
   ParenthesizedExpression |
-  BinaryExpression
+  BinaryExpression |
+  CallExpression |
+  MemberExpression
 }
 
 //!expression_misc
@@ -221,11 +241,6 @@ commaSep<content> {
   (content ("," content)*)?
 }
 
-commaSep1<content> {
-  content ("," content)*
-}
-
-
 
 Literal { String | Number }
 
@@ -251,7 +266,6 @@ semi { ";" }
 
 FnName { identifier }
 
-PropertyName { identifier }
 ProgName { identifier }
 
 identifier { non_global_identifer | global_identifer }
@@ -260,6 +274,8 @@ LocalVariableName { non_global_identifer }
 SharedVariableName { global_identifer }
 
 @tokens {
+
+  ImportSlash { "/" }
   
   // Identifiers
   identifierChar { @asciiLetter | $[_$\u{a1}-\u{10ffff}] }
@@ -320,8 +336,8 @@ SharedVariableName { global_identifer }
 
   LineComment { "//" ![\n]* }
   
-  @precedence { "/*", LineComment, ArithOp<"/"> }
+  @precedence { ImportSlash, "/*", LineComment, ArithOp<"/"> }
 
-  @precedence { "/*", LineComment, RegExp }
+  @precedence { ImportSlash, "/*", LineComment, RegExp }
   
 }

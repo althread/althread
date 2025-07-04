@@ -2,13 +2,37 @@ import { styleTags, tags as t } from "@lezer/highlight";
 import { ProgName } from "./parser.terms";
 
 export const althreadHighlight = styleTags({
+  // Control and keywords
   "atomic": t.modifier,
-  "while await if else receive send run for loop in return break continue":
-    t.controlKeyword,
-  "instanceof": t.operatorKeyword,
+  "while await if else receive send run for loop in return break continue": t.controlKeyword,
+  "instanceof as": t.operatorKeyword,
   "let const channel": t.definitionKeyword,
-  "program always eventually main shared fn": t.moduleKeyword,
-  //"with as new": t.keyword,
+  "program always eventually main shared fn import": t.moduleKeyword,
+  
+  // Function highlighting
+  "FunctionBlock/fn": t.keyword,
+  "FunctionBlock/FnName": t.function(t.definition(t.variableName)),
+  "CallExpression/FnName": t.function(t.variableName),
+  FnName: t.function(t.variableName),
+
+  "MemberExpression > identifier:first-child": t.namespace,
+  "CallExpression/MemberExpression > identifier:last-child": t.function(t.variableName),
+  "MemberExpression > identifier:last-child": t.propertyName,
+
+
+  "MemberExpression/object": t.namespace,
+  "CallExpression/MemberExpression/property": t.function(t.variableName),
+  "MemberExpression/property": t.propertyName,
+
+  // Import highlighting
+  "ImportBlock/import": t.moduleKeyword,
+  "ImportBlock/as": t.operatorKeyword,
+  "ImportBlock/ImportList/ImportItem/ImportPath": t.namespace,
+  "ImportBlock/ImportList/ImportItem/ImportAlias": t.namespace,
+  ImportPath: t.namespace,
+  ImportAlias: t.namespace,
+  ImportSlash: t.separator,
+  
   TemplateString: t.special(t.string),
   super: t.atom,
   BooleanLiteral: t.bool,
@@ -21,8 +45,8 @@ export const althreadHighlight = styleTags({
   LocalVariableName: t.variableName,
   SharedVariableName: t.propertyName,
   ProgName: t.className,
-  FnName: t.macroName,
-
+  
+  // Operators and punctuation
   UpdateOp: t.updateOperator,
   LineComment: t.lineComment,
   BlockComment: t.blockComment,
