@@ -12,10 +12,10 @@ import { Logo } from "@assets/images/Logo";
 import { renderMessageFlowGraph } from "@components/graph/CommGraph";
 import { rendervmStates } from "@components/graph/vmStatesDisplay";
 import { nodeToString } from "@components/graph/Node";
-import FileExplorer from '@components/fileexplorer/FileExplorer';
 import type { FileSystemEntry } from '@components/fileexplorer/FileExplorer';
 import '@components/fileexplorer/FileExplorer.css';
 import FileTabs from "@components/fileexplorer/FileTabs";
+import Sidebar from '@components/sidebar/Sidebar';
 
 // Import our new modules
 import { STORAGE_KEYS, loadFileSystem, saveFileSystem, loadFileContent, saveFileContent } from '@utils/storage';
@@ -24,8 +24,6 @@ import { createFileOperationsHandlers } from '@hooks/useFileOperations';
 import { createEditorManager } from '@hooks/useEditorManager';
 import { MoveConfirmationDialog, DeleteConfirmationDialog } from '@components/dialogs/ConfirmationDialogs';
 import { LoadExampleDialog } from '@components/dialogs/LoadExampleDialog';
-import PackageManagerDialog from '@components/dialogs/PackageManagerDialog';
-import '@components/dialogs/PackageManagerDialog.css';
 import { EmptyEditor } from '@components/editor/EmptyEditor';
 
 init().then(() => {
@@ -144,13 +142,6 @@ export default function App() {
 
   // Load example dialog state
   const [loadExampleDialog, setLoadExampleDialog] = createSignal<{
-    isOpen: boolean;
-  }>({
-    isOpen: false
-  });
-
-  // Package manager dialog state
-  const [packageManagerDialog, setPackageManagerDialog] = createSignal<{
     isOpen: boolean;
   }>({
     isOpen: false
@@ -337,15 +328,6 @@ export default function App() {
             </button>
 
             <button
-              class="vscode-button"
-              onClick={() => setPackageManagerDialog({ isOpen: true })}
-              title="Package Manager"
-            >
-              <i class="codicon codicon-package"></i>
-              Packages
-            </button>
-
-            <button
               class={`vscode-button${loadingAction() === "run" ? " active" : ""}`}
               disabled={loadingAction() === "run" || !editorManager.activeFile()}
               onClick={async () => {
@@ -489,8 +471,8 @@ export default function App() {
           </div>
       </div>
       <Resizable id="content">
-        <Resizable.Panel initialSize={0.15} minSize={0.1}>
-            <FileExplorer 
+        <Resizable.Panel initialSize={0.20} minSize={0.15}>
+            <Sidebar
                 files={mockFileSystem()} 
                 onFileSelect={(path) => editorManager.handleFileSelect(path, mockFileSystem())}
                 onNewFile={fileOperations.handleNewFile}
@@ -510,11 +492,12 @@ export default function App() {
                 showDeleteConfirmDialog={showDeleteConfirmDialog}
                 globalFileCreation={globalFileCreation()}
                 setGlobalFileCreation={setGlobalFileCreation}
+                setFileSystem={setMockFileSystem}
             />
         </Resizable.Panel>
         <Resizable.Handle class="Resizable-handle"/>
           <Resizable.Panel class="editor-panel"
-          initialSize={0.55}
+          initialSize={0.50}
           minSize={0.2}>
           <FileTabs 
             openFiles={editorManager.openFiles()}
@@ -592,14 +575,6 @@ minSize={0.2}>
         onLoadInCurrent={handleLoadInCurrentFile}
         onLoadInNew={handleLoadInNewFile}
         onCancel={handleCancelLoadExample}
-      />
-
-      {/* Package Manager Dialog */}
-      <PackageManagerDialog
-        isOpen={packageManagerDialog().isOpen}
-        onClose={() => setPackageManagerDialog({ isOpen: false })}
-        fileSystem={mockFileSystem()}
-        setFileSystem={setMockFileSystem}
       />
     </>
   );
