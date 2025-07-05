@@ -4,6 +4,7 @@ use crate::error::{AlthreadResult, ErrorType, Pos, AlthreadError};
 
 pub trait FileSystem {
     fn is_file(&self, path: &Path) -> bool;
+    fn is_dir(&self, path: &Path) -> bool;
     fn canonicalize(&self, path: &Path) -> AlthreadResult<PathBuf>;
     fn read_file(&self, path: &Path) -> AlthreadResult<String>;
 }
@@ -13,6 +14,10 @@ pub struct StandardFileSystem;
 impl FileSystem for StandardFileSystem {
     fn is_file(&self, path: &Path) -> bool {
         path.is_file()
+    }
+
+    fn is_dir(&self, path: &Path) -> bool {
+        path.is_dir()
     }
 
     fn canonicalize(&self, path: &Path) -> AlthreadResult<PathBuf> {
@@ -60,6 +65,18 @@ impl FileSystem for VirtualFileSystem {
         };
         
         self.files.contains_key(cleaned_path)
+    }
+
+    fn is_dir(&self, path: &Path) -> bool {
+        let path_str = path.to_string_lossy().to_string();
+        let prefix = if path_str.ends_with('/') {
+            path_str.clone()
+        } else {
+            format!("{}/", path_str)
+        };
+        
+        // Check if any file starts with this path as a directory
+        self.files.keys().any(|file_path| file_path.starts_with(&prefix))
     }
 
     fn canonicalize(&self, path: &Path) -> AlthreadResult<PathBuf> {

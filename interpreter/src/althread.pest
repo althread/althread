@@ -68,7 +68,10 @@ return_statement = { RETURN_KW ~ expression? ~ ";" }
 import_block = { IMPORT_KW ~ "[" ~ import_list ~ "]" }
 import_list = { import_item ~ ("," ~ import_item)* ~ ","? }
 import_item = { import_path ~ (AS_KW ~ identifier)? }
-import_path = { identifier ~ ("/" ~ identifier)* }
+import_path = { import_segment ~ ("/" ~ import_segment)* }
+import_segment = { domain_identifier | identifier }
+domain_identifier = @{ ASCII_ALPHA ~ domain_char* }
+domain_char = _{ ASCII_ALPHANUMERIC | "_" | "." | "-" }
 
 
 fn_call  = { object_identifier ~ tuple_expression }

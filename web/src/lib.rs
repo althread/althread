@@ -277,3 +277,99 @@ pub fn check(source: &str, virtual_fs: JsValue) -> Result<JsValue, JsValue> {
 
     Ok(serde_wasm_bindgen::to_value(&checked).unwrap())
 }
+
+// Package management utilities for web editor
+#[wasm_bindgen]
+pub fn create_alt_toml(package_name: &str, version: &str) -> String {
+    format!(
+        r#"[package]
+name = "{}"
+version = "{}"
+
+[dependencies]
+
+[dev-dependencies]
+
+"#,
+        package_name, version
+    )
+}
+
+#[wasm_bindgen]
+pub fn add_dependency_to_toml(toml_content: &str, package_name: &str, version: &str) -> Result<String, JsValue> {
+    let mut lines: Vec<&str> = toml_content.lines().collect();
+    let mut dependencies_section_found = false;
+    let mut insert_index = lines.len();
+    
+    // Find the [dependencies] section
+    for (i, line) in lines.iter().enumerate() {
+        if line.trim() == "[dependencies]" {
+            dependencies_section_found = true;
+            // Find where to insert (before next section or at end)
+            for j in (i + 1)..lines.len() {
+                if lines[j].trim().starts_with('[') {
+                    insert_index = j;
+                    break;
+                }
+            }
+            break;
+        }
+    }
+    
+    if !dependencies_section_found {
+        return Err(JsValue::from_str("No [dependencies] section found in alt.toml"));
+    }
+    
+    // Create the new dependency line
+    let new_dependency = format!(r#""{}" = "{}""#, package_name, version);
+    
+    // Insert the new dependency
+    lines.insert(insert_index, &new_dependency);
+    
+    Ok(lines.join("\n"))
+}
+
+#[wasm_bindgen]
+pub fn parse_dependencies_from_toml(toml_content: &str) -> Result<JsValue, JsValue> {
+    let mut dependencies = std::collections::HashMap::new();
+    let lines: Vec<&str> = toml_content.lines().collect();
+    let mut in_dependencies_section = false;
+    
+    for line in lines {
+        let trimmed = line.trim();
+        
+        if trimmed == "[dependencies]" {
+            in_dependencies_section = true;
+            continue;
+        }
+        
+        if trimmed.starts_with('[') && trimmed != "[dependencies]" {
+            in_dependencies_section = false;
+            continue;
+        }
+        
+        if in_dependencies_section && trimmed.contains('=') {
+            // Parse dependency line: "package.name" = "version"
+            let parts: Vec<&str> = trimmed.splitn(2, '=').collect();
+            if parts.len() == 2 {
+                let package_name = parts[0].trim().trim_matches('"').trim();
+                let version = parts[1].trim().trim_matches('"').trim();
+                dependencies.insert(package_name.to_string(), version.to_string());
+            }
+        }
+    }
+    
+    serde_wasm_bindgen::to_value(&dependencies)
+        .map_err(|e| JsValue::from_str(&format!("Failed to serialize dependencies: {}", e)))
+}
+
+#[wasm_bindgen]
+pub fn validate_package_name(package_name: &str) -> bool {
+    // Basic validation for package names like github.com/user/repo
+    if package_name.contains('/') {
+        let parts: Vec<&str> = package_name.split('/').collect();
+        return parts.len() >= 3 && !parts.iter().any(|p| p.is_empty());
+    }
+    // Allow simple names too
+    !package_name.is_empty() && !package_name.contains(' ')
+}

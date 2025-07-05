@@ -125,7 +125,13 @@ impl ImportPath {
         
         for pair in pairs {
             match pair.as_rule() {
+                Rule::import_segment => {
+                    segments.push(pair.as_str().to_string());
+                }
                 Rule::identifier => {
+                    segments.push(pair.as_str().to_string());
+                }
+                Rule::domain_identifier => {
                     segments.push(pair.as_str().to_string());
                 }
                 _ => return Err(no_rule!(pair, "ImportPath")),

@@ -24,6 +24,8 @@ import { createFileOperationsHandlers } from '@hooks/useFileOperations';
 import { createEditorManager } from '@hooks/useEditorManager';
 import { MoveConfirmationDialog, DeleteConfirmationDialog } from '@components/dialogs/ConfirmationDialogs';
 import { LoadExampleDialog } from '@components/dialogs/LoadExampleDialog';
+import PackageManagerDialog from '@components/dialogs/PackageManagerDialog';
+import '@components/dialogs/PackageManagerDialog.css';
 import { EmptyEditor } from '@components/editor/EmptyEditor';
 
 init().then(() => {
@@ -147,6 +149,13 @@ export default function App() {
     isOpen: false
   });
 
+  // Package manager dialog state
+  const [packageManagerDialog, setPackageManagerDialog] = createSignal<{
+    isOpen: boolean;
+  }>({
+    isOpen: false
+  });
+
   const showMoveConfirmDialog = (sourcePaths: string[], destPath: string, conflictingName: string) => {
     setMoveConfirmation({
       isOpen: true,
@@ -188,19 +197,6 @@ export default function App() {
 
   const handleCanceledDelete = () => {
     setDeleteConfirmation({ isOpen: false, paths: [] });
-  };
-
-  // Load example dialog handlers
-  const handleLoadExampleClick = () => {
-    // If no file is active, directly create a new file with the example
-    if (!editorManager.activeFile()) {
-      const fileName = `example-${Date.now()}.alt`;
-      editorManager.createNewFileWithContent(fileName, Example1, fileOperations, mockFileSystem);
-      return;
-    }
-    
-    // Otherwise show the dialog to choose
-    setLoadExampleDialog({ isOpen: true });
   };
 
   const handleLoadInCurrentFile = () => {
@@ -321,21 +317,32 @@ export default function App() {
           <div class="actions">
             <button
               class={`vscode-button${loadingAction() === "load" ? " active" : ""}`}
+              disabled={loadingAction() === "load"}
               onClick={async () => {
-                setLoadingAction("load");
                 try {
-                  handleLoadExampleClick();
-              } catch (error) {
-                console.error("Error showing load example dialog:", error);
-              } finally {
-                setTimeout(() => {
-                    setLoadingAction(null);
-                    setActiveAction(null);
-                }, animationTimeOut);
-              }
+                  setLoadingAction("load");
+                  
+                  // Show load example dialog
+                  setLoadExampleDialog({ isOpen: true });
+                  
+                } catch (error) {
+                  console.error("Error showing load example dialog:", error);
+                } finally {
+                  setLoadingAction(null);
+                  setActiveAction(null);
+                }
               }}>
               <i class={loadingAction() === "load" ? "codicon codicon-loading codicon-modifier-spin" : "codicon codicon-file"}></i>
               Load Example
+            </button>
+
+            <button
+              class="vscode-button"
+              onClick={() => setPackageManagerDialog({ isOpen: true })}
+              title="Package Manager"
+            >
+              <i class="codicon codicon-package"></i>
+              Packages
             </button>
 
             <button
@@ -585,6 +592,14 @@ minSize={0.2}>
         onLoadInCurrent={handleLoadInCurrentFile}
         onLoadInNew={handleLoadInNewFile}
         onCancel={handleCancelLoadExample}
+      />
+
+      {/* Package Manager Dialog */}
+      <PackageManagerDialog
+        isOpen={packageManagerDialog().isOpen}
+        onClose={() => setPackageManagerDialog({ isOpen: false })}
+        fileSystem={mockFileSystem()}
+        setFileSystem={setMockFileSystem}
       />
     </>
   );
