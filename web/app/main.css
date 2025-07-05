@@ -175,16 +175,18 @@ body {
   
 
   .Resizable-handle {
-    width: 1px;
+    width: 4px;
     border: 0;
     margin: 0;
-    background: #1e1e1e;
+    background: transparent;
     cursor: col-resize;
     transition: all 0.2s ease;
     position: relative;
+    z-index: 10;
   }
   
   .Resizable-handle::after {
+    content: '';
     position: absolute;
     left: 50%;
     top: 0;
@@ -192,6 +194,7 @@ body {
     width: 1px;
     background: rgba(127, 127, 127, 0.2);
     transition: all 0.2s ease;
+    transform: translateX(-50%);
   }
   
   .Resizable-handle::before {
@@ -202,22 +205,23 @@ body {
     transform: translate(-50%, -50%);
     width: 4px;
     height: 60px;
-    background: rgba(127, 127, 127, 0.2);
+    background: rgba(127, 127, 127, 0.1);
     transition: height 0.2s ease;
+    border-radius: 2px;
   }
   
   .Resizable-handle:hover::before {
     height: 100%;
-    background: rgba(127, 127, 127, 0.2);
+    background: rgba(127, 127, 127, 0.3);
   }
   
   .Resizable-handle:hover {
-    background: rgba(127, 127, 127, 0.2);
+    background: rgba(127, 127, 127, 0.1);
   }
   
   .Resizable-handle:hover::after {
     width: 2px;
-    background: rgba(127, 127, 127, 0.2);
+    background: rgba(127, 127, 127, 0.4);
   }
 
   .tab {

@@ -157,10 +157,46 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
     setSuccess(null);
   };
 
+  const openPackageUrl = (packageName: string) => {
+    // If it's a GitHub URL, open it directly
+    if (packageName.startsWith('github.com/')) {
+      const url = `https://${packageName}`;
+      window.open(url, '_blank');
+    } else if (packageName.startsWith('http://') || packageName.startsWith('https://')) {
+      window.open(packageName, '_blank');
+    } else {
+      // For other formats, try to construct a GitHub URL
+      const githubUrl = `https://github.com/${packageName}`;
+      window.open(githubUrl, '_blank');
+    }
+  };
+
   return (
     <div class="package-manager-view">
       <div class="package-manager-header">
         <h3>Package Manager</h3>
+        <div class="package-manager-actions">
+          <button 
+            title="Refresh packages"
+            onClick={loadCurrentState}
+            disabled={loading()}
+            class="header-action-btn"
+          >
+            <i class="codicon codicon-refresh"></i>
+            <span>Update</span>
+          </button>
+          <Show when={altTomlConfig()}>
+            <button 
+              title="Install all dependencies"
+              onClick={installDependencies}
+              disabled={loading() || Object.keys(altTomlConfig()?.dependencies || {}).length === 0}
+              class="header-action-btn"
+            >
+              <i class="codicon codicon-cloud-download"></i>
+              <span>Install All</span>
+            </button>
+          </Show>
+        </div>
       </div>
 
       <div class="package-manager-content">
@@ -242,63 +278,67 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
           <div class="add-dependency-section">
             <div class="section-header">
               <div class="section-icon">
-                <i class="codicon codicon-plus"></i>
+                <i class="codicon codicon-extensions"></i>
               </div>
               <h4>Add Dependency</h4>
             </div>
             
-            <div class="form-group">
-              <input
-                type="text"
-                value={packageName()}
-                onInput={(e) => setPackageName(e.target.value)}
-                placeholder="Package name (e.g., github.com/user/repo)"
-              />
+            <div class="add-dependency-form">
+              <div class="form-group">
+                <input
+                  type="text"
+                  value={packageName()}
+                  onInput={(e) => setPackageName(e.target.value)}
+                  placeholder="Package name (e.g., github.com/user/repo)"
+                />
+              </div>
+              
+              <div class="form-group">
+                <input
+                  type="text"
+                  value={packageVersion()}
+                  onInput={(e) => setPackageVersion(e.target.value)}
+                  placeholder="Version (e.g., latest, 1.0.0)"
+                />
+              </div>
+              
+              <div class="dependency-form-actions">
+                <button 
+                  class="btn btn-add-dependency"
+                  onClick={addDependency}
+                  disabled={loading()}
+                >
+                  <i class="codicon codicon-plus"></i>
+                  Add Dependency
+                </button>
+              </div>
             </div>
-            
-            <div class="form-group">
-              <input
-                type="text"
-                value={packageVersion()}
-                onInput={(e) => setPackageVersion(e.target.value)}
-                placeholder="Version (e.g., latest, 1.0.0)"
-              />
-            </div>
-            
-            <button 
-              class="btn btn-primary"
-              onClick={addDependency}
-              disabled={loading()}
-            >
-              <i class="codicon codicon-plus"></i>
-              Add Dependency
-            </button>
           </div>
 
           <div class="dependencies-section">
-            <div class="section-header">
-              <div class="section-icon">
-                <i class="codicon codicon-package"></i>
+            <div class="dependencies-section-header">
+              <div class="section-header">
+                <div class="section-icon">
+                  <i class="codicon codicon-package"></i>
+                </div>
+                <h4>Dependencies ({Object.keys(altTomlConfig()?.dependencies || {}).length})</h4>
               </div>
-              <h4>Dependencies ({Object.keys(altTomlConfig()?.dependencies || {}).length})</h4>
-              <Show when={Object.keys(altTomlConfig()?.dependencies || {}).length > 0}>
-                <button 
-                  class="btn btn-success btn-sm"
-                  onClick={installDependencies}
-                  disabled={loading()}
-                  title="Install all dependencies"
-                >
-                  <i class="codicon codicon-cloud-download"></i>
-                  Install All
-                </button>
-              </Show>
             </div>
 
             <Show when={Object.keys(altTomlConfig()?.dependencies || {}).length > 0}>
+              <div class="dependencies-install-hint">
+                <i class="codicon codicon-info"></i>
+                <span>Click "Install All" in the header to download and install all dependencies.</span>
+              </div>
+              
               <div class="dependency-list">
                 <For each={Object.entries(altTomlConfig()?.dependencies || {})}>
                   {([name, version]) => (
-                    <div class="dependency-item">
+                    <div 
+                      class="dependency-item" 
+                      onClick={() => openPackageUrl(name)}
+                      title={`Click to open ${name} in browser`}
+                    >
                       <div class="dependency-icon">
                         <i class="codicon codicon-package"></i>
                       </div>
@@ -307,8 +347,11 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
                         <div class="dependency-version">{version}</div>
                       </div>
                       <button 
-                        class="btn btn-danger btn-sm"
-                        onClick={() => removePackage(name)}
+                        class="btn btn-danger btn-sm btn-remove"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removePackage(name);
+                        }}
                         disabled={loading()}
                         title="Remove dependency"
                       >
@@ -340,7 +383,11 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
               <div class="cached-packages">
                 <For each={cachedPackages()}>
                   {(pkg) => (
-                    <div class="cached-package">
+                    <div 
+                      class="cached-package"
+                      onClick={() => openPackageUrl(pkg.name)}
+                      title={`Click to open ${pkg.name} in browser`}
+                    >
                       <div class="package-icon">
                         <i class="codicon codicon-package"></i>
                       </div>
