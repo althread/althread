@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet, env::var, error::Error, fs::{self, remove_dir_all}, io::{stdin, stdout, Read, Write}, path::{Path, PathBuf}, process::exit
+    collections::HashSet, env::{temp_dir, var}, error::Error, fmt::format, fs::{self, remove_dir_all}, io::{stdin, stdout, Read, Write}, path::{Path, PathBuf}, process::exit, str::from_utf8
 };
 
 mod args;
@@ -9,9 +9,12 @@ mod git;
 use args::{CheckCommand, CliArguments, Command, CompileCommand, RandomSearchCommand, RunCommand, 
           InitCommand, AddCommand, RemoveCommand, UpdateCommand, InstallCommand};
 use clap::Parser;
+use git2::{Repository, Tag};
 use owo_colors::{OwoColorize, Style};
 
-use althread::{ast::Ast, checker};
+use althread::{ast::Ast, checker, parser::parse};
+
+use crate::package::{DependencyInfo, DependencySpec, Package};
 
 fn main() {
     let cli_args = CliArguments::parse();
@@ -537,16 +540,69 @@ pub fn remove_command(cli_args: &RemoveCommand) {
 }
 
 pub fn update_command(cli_args: &UpdateCommand) {
-    if let Some(dep) = &cli_args.dependency {
-        println!("Updating dependency: {}", dep);
-    } else {
-        println!("Updating all dependencies...");
+    let alt_toml_path = Path::new("alt.toml");
+
+    if !alt_toml_path.exists() {
+        eprintln!("Error: No alt.toml found in current directory.");
+        exit(1);
     }
-    // TODO: Implement dependency updates
-    // 1. Check for newer versions
-    // 2. Update alt.toml
-    // 3. Refetch dependencies
-    eprintln!("update command not yet implemented");
+
+    let mut package = match Package::load_from_path(alt_toml_path) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Error reading alt.toml: {}", e);
+            exit(1);
+        }
+    };
+
+    let dependencies_to_update = if let Some(specific_dep) = &cli_args.dependency {
+        // Update only the specified dependency
+        vec![specific_dep.clone()]
+    } else {
+        // Update all dependencies
+        let mut all_deps = package.dependencies.keys().cloned().collect::<Vec<_>>();
+        all_deps.extend(package.dev_dependencies.keys().cloned());
+        all_deps
+    };
+
+    if dependencies_to_update.is_empty() {
+        println!("No dependencies to update.");
+        return;
+    }
+
+    println!("Updating {} dependencies...", dependencies_to_update.len());
+
+    let mut updated_count = 0;
+
+    for dep_name in dependencies_to_update {
+        match update_single_dependency(&mut package, &dep_name) {
+            Ok(updated) => {
+                if updated {
+                    updated_count += 1;
+                    println!("✓ Updated {}", dep_name);
+                } else {
+                    println!("- {} already up to date", dep_name);
+                }
+            }
+            Err(e) => {
+                eprintln!("✗ Failed to update {}: {}", dep_name, e);
+            }
+        }
+    }
+
+    if updated_count > 0 {
+        // Save the updated package
+        if let Err(e) = package.save_to_path(alt_toml_path) {
+            eprintln!("Error saving alt.toml: {}", e);
+            exit(1);
+        }
+
+        println!("✓ Updated {} dependencies in alt.toml", updated_count);
+        println!(" Run 'althread install' to fetch the updated dependencies");
+    } else {
+        println!("All dependencies are already up to date.");
+    }
+
 }
 
 pub fn install_command(cli_args: &InstallCommand) {
@@ -833,4 +889,186 @@ fn clean_dependency_cache(dependency: &str) -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+fn update_single_dependency(package: &mut Package, dep_name: &str) -> Result<bool, Box<dyn Error>> {
+    println!("Checking {} for updates...", dep_name);
+
+    // Check if the dependency is present
+    let current_spec = package.dependencies.get(dep_name)
+        .or_else(|| package.dev_dependencies.get(dep_name));
+
+    let current_spec = match current_spec {
+        Some(spec) => spec, 
+        None => {
+            return Err(format!("Dependency '{}' not found in alt.toml", dep_name).into());
+        }
+    };
+
+    let current_version = match current_spec {
+        DependencySpec::Simple(v) => v,
+        DependencySpec::Detailed { version, .. } => version,
+    };
+
+    println!("  Current version: {}", current_version);
+
+    let dep_info = DependencyInfo {
+        name: dep_name.split('/').last().unwrap_or(dep_name).to_string(),
+        url: dep_name.to_string(),
+        version: current_version.clone(),
+        is_local: false,
+    };
+
+    let latest_version = match get_latest_version(&dep_info) {
+        Ok(version) => {
+            println!("  Latest version: {}", version);
+            version
+        }
+        Err(e) => {
+            println!("  Warning: Could not check the latest version: {}", e);
+            return Ok(false);
+        }
+    };
+
+    let needs_update = should_update_dependency(current_version, &latest_version);
+    
+    if needs_update {
+        println!("  Update is available: {} -> {}", current_version, latest_version);
+
+        let new_spec = match current_spec {
+            DependencySpec::Simple(_) => {
+                DependencySpec::Simple(latest_version)
+            }
+            DependencySpec::Detailed { features, optional , ..} => {
+                DependencySpec::Detailed {
+                    version: latest_version,
+                    features: features.clone(),
+                    optional: *optional,
+                }
+            }
+        };
+
+        if package.dependencies.contains_key(dep_name) {
+            package.dependencies.insert(dep_name.to_string(), new_spec);
+        } else {
+            package.dev_dependencies.insert(dep_name.to_string(), new_spec);
+        }
+
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+fn should_update_dependency(current: &str, latest: &str) -> bool {
+    // If both are the same, no update needed
+    if current == latest {
+        return false;
+    }
+
+    // If current is * or 'latest', and latest is also 'latest, no update needed
+    if (current == "*" || current == "latest") && latest == "latest" {
+        return false;
+    }
+
+    // If current is * or 'latest', and we have a specific version, update
+    if (current == "*" || current == "latest") && latest != "latest" {
+        return true;
+    }
+
+    // If we have specific versions, compare them
+    if let (Ok(current_ver), Ok(latest_ver)) = (parse_version_tag(current), parse_version_tag(latest)) {
+        return latest_ver > current_ver;
+    }
+
+    current != latest
+}
+
+
+fn get_latest_version(dep_info: &package::DependencyInfo) -> Result<String, Box<dyn Error>> {
+    let git_url = git::GitRepository::url_from_import_path(&dep_info.url);
+
+    let temp_dir = temp_dir().join(format!("althread_version_check_{}",
+        dep_info.name.replace("/", "_").replace(".", "_")));
+
+    if temp_dir.exists() {
+        remove_dir_all(&temp_dir)?;
+    }
+
+    let git_repo = git::GitRepository::new(&git_url, temp_dir.clone());
+    git_repo.clone_if_needed()?;
+
+    let latest_version = get_latest_git_tag(&temp_dir)?;
+
+    remove_dir_all(&temp_dir)?;
+
+    Ok(latest_version)
+}
+
+fn get_latest_git_tag(repo_path: &Path) -> Result<String, Box<dyn Error>> {
+    let repo = git2::Repository::open(repo_path)?;
+
+    let mut tags = Vec::new();
+
+    repo.tag_foreach(|oid, name| {
+        if let Ok(name_str) = from_utf8(name) {
+            let tag_name = name_str.strip_prefix("refs/tags/").unwrap_or(name_str);
+
+            if let Ok(tag_obj) = repo.find_object(oid, Some(git2::ObjectType::Tag)) {
+                if let Some(tag) = tag_obj.as_tag() {
+                    let target_oid = tag.target_id();
+
+                    if let Ok(commit) = repo.find_commit(target_oid) {
+                        let commit_time = commit.time().seconds();
+                        tags.push((tag_name.to_string(), commit_time));
+                    }
+                }
+            } else if let Ok(commit) = repo.find_commit(oid) {
+                let commit_time = commit.time().seconds();
+                tags.push((tag_name.to_string(), commit_time));
+            }
+        }
+        true
+    })?;
+
+    if tags.is_empty() {
+        // No tags found - check the current commit hash of main/master branch
+        let head_commit = get_current_commit_hash(&repo)?;
+        return Ok(head_commit);
+    }
+
+    tags.sort_by(|a, b| b.1.cmp(&a.1));
+
+    let mut semantic_tags: Vec<(String, semver::Version)> = Vec::new();
+
+    for (tag_name, _) in &tags {
+        if let Ok(version) = parse_version_tag(tag_name) {
+            semantic_tags.push((tag_name.clone(), version));
+        }
+    }
+
+    if !semantic_tags.is_empty() {
+        semantic_tags.sort_by(|a, b| b.1.cmp(&a.1));
+        return Ok(semantic_tags[0].0.clone());
+    }
+
+    // Return the most recent tag
+    Ok(tags[0].0.clone())
+}
+
+fn get_current_commit_hash(repo: &git2::Repository) -> Result<String, Box<dyn Error>> {
+    let head = repo.head()?;
+    let commit = head.peel_to_commit()?;
+    Ok(commit.id().to_string()[..8].to_string()) // First 8 characters of commit hash
+}
+
+fn parse_version_tag(tag: &str) -> Result<semver::Version, semver::Error> {
+    let clean_tag = tag
+        .strip_prefix("v")
+        .or_else(|| tag.strip_prefix("V"))
+        .or_else(|| tag.strip_prefix("version"))
+        .or_else(|| tag.strip_prefix("release"))
+        .unwrap_or(tag);
+
+    semver::Version::parse(clean_tag)
 }
