@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet, fs, io::{stdin, Read}, path::{PathBuf}, process::exit
+    collections::HashSet, env::var, error::Error, fs::{self, remove_dir_all}, io::{stdin, stdout, Read, Write}, path::{Path, PathBuf}, process::exit
 };
 
 mod args;
@@ -497,10 +497,43 @@ pub fn add_command(cli_args: &AddCommand) {
 
 pub fn remove_command(cli_args: &RemoveCommand) {
     println!("Removing dependency: {}", cli_args.dependency);
-    // TODO: Implement dependency removal
-    // 1. Remove from alt.toml
-    // 2. Optionally clean up cached files
-    eprintln!("remove command not yet implemented");
+
+    let alt_toml_path = Path::new("alt.toml");
+
+    if !alt_toml_path.exists() {
+        eprintln!("Error: No alt.toml found in current directory.");
+        exit(1);
+    }
+
+    let mut package = match package::Package::load_from_path(alt_toml_path) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Error reading alt.toml: {}", e);
+            exit(1);
+        }
+    };
+
+    let removed = package.remove_dependency(&cli_args.dependency);
+    
+    if !removed {
+        eprintln!("Error: Dependency '{}' not found in alt.toml.", cli_args.dependency);
+        exit(1);
+    }
+
+    if let Err(e) = package.save_to_path(alt_toml_path) {
+        eprintln!("Error saving alt.toml : {}", e);
+        exit(1);
+    }
+
+    println!("✓ Removed dependency: {}", cli_args.dependency);
+
+    if should_clean_cache() {
+        if let Err(e) = clean_dependency_cache(&cli_args.dependency) {
+            eprintln!("Warning: Failed to clean cache: {}", e);
+        } else {
+            println!("✓ Cleaned up cached files");
+        }
+    }
 }
 
 pub fn update_command(cli_args: &UpdateCommand) {
@@ -771,4 +804,33 @@ fn find_alt_files(dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>, Box<
     }
     
     Ok(alt_files)
+}
+
+fn should_clean_cache() -> bool {
+    print!("Remove cached files for this dependency? (y/N): ");
+    stdout().flush().unwrap();
+
+    let mut input = String::new();
+    stdin().read_line(&mut input).unwrap();
+
+    let input = input.trim().to_lowercase();
+    input == "y" || input == "yes"
+}
+
+fn clean_dependency_cache(dependency: &str) -> Result<(), Box<dyn Error>> {
+    let home_dir = var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let cache_dir = PathBuf::from(home_dir).join(".althread/cache");
+
+    // if the dependency is a URL like "github.com/user/repo"
+    let sanitized_url = dependency.replace("://", "/");
+    let dep_cache_dir = cache_dir.join(&sanitized_url);
+
+    if dep_cache_dir.exists() {
+        remove_dir_all(&dep_cache_dir)?;
+        println!("✓ Removed cache directory: {}", dep_cache_dir.display());
+    } else {
+        println!("  No cache found for dependency: {}", dependency);
+    }
+
+    Ok(())
 }
