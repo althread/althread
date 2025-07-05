@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet, env::{temp_dir, var}, error::Error, fmt::format, fs::{self, remove_dir_all}, io::{stdin, stdout, Read, Write}, path::{Path, PathBuf}, process::exit, str::from_utf8
+    collections::HashSet, env::var, error::Error, fs::{self, remove_dir_all}, io::{stdin, stdout, Read, Write}, path::{Path, PathBuf}, process::exit
 };
 
 mod args;
@@ -9,12 +9,11 @@ mod git;
 use args::{CheckCommand, CliArguments, Command, CompileCommand, RandomSearchCommand, RunCommand, 
           InitCommand, AddCommand, RemoveCommand, UpdateCommand, InstallCommand};
 use clap::Parser;
-use git2::{Repository, Tag};
 use owo_colors::{OwoColorize, Style};
 
-use althread::{ast::Ast, checker, parser::parse};
+use althread::{ast::Ast, checker};
 
-use crate::package::{DependencyInfo, DependencySpec, Package};
+use crate::package::{DependencySpec, Package};
 
 fn main() {
     let cli_args = CliArguments::parse();
@@ -606,409 +605,112 @@ pub fn update_command(cli_args: &UpdateCommand) {
 }
 
 pub fn install_command(cli_args: &InstallCommand) {
-    use std::path::Path;
-    
     let alt_toml_path = Path::new("alt.toml");
     
-    // Check if alt.toml exists
     if !alt_toml_path.exists() {
         eprintln!("Error: No alt.toml found. Run 'althread init' or 'althread add <dependency>' first.");
-        std::process::exit(1);
+        exit(1);
     }
     
-    // Load package
-    let mut package = match package::Package::load_from_path(alt_toml_path) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("Error reading alt.toml: {}", e);
-            std::process::exit(1);
-        }
-    };
+    let mut package = load_package_or_exit(alt_toml_path);
     
     println!("Installing dependencies for package '{}'...", package.package.name);
     
-    // Create cache directory if it doesn't exist
-    let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let cache_dir = std::path::PathBuf::from(home_dir).join(".althread/cache");
-    
-    if let Err(e) = std::fs::create_dir_all(&cache_dir) {
-        eprintln!("Error creating cache directory: {}", e);
-        std::process::exit(1);
-    }
-    
-    // First, install all dependencies that we need to fetch
-    let mut to_install = Vec::new();
-    
-    // Collect runtime dependencies
-    for (name, spec) in &package.dependencies {
-        let dep_info = match spec_to_dependency_info(name, spec) {
-            Ok(info) => info,
-            Err(e) => {
-                eprintln!("Error parsing dependency {}: {}", name, e);
-                std::process::exit(1);
-            }
-        };
-        to_install.push(dep_info);
-    }
-    
-    // Collect dev dependencies  
-    for (name, spec) in &package.dev_dependencies {
-        let dep_info = match spec_to_dependency_info(name, spec) {
-            Ok(info) => info,
-            Err(e) => {
-                eprintln!("Error parsing dependency {}: {}", name, e);
-                std::process::exit(1);
-            }
-        };
-        to_install.push(dep_info);
-    }
-    
-    if to_install.is_empty() {
+    // Check if there are any dependencies to install
+    let dep_count = package.dependencies.len() + package.dev_dependencies.len();
+    if dep_count == 0 {
         println!("No dependencies to install.");
         return;
     }
     
-    // Track version changes during installation and actual versions installed
-    let mut version_changes = Vec::new();
-    let mut installed_versions = std::collections::HashMap::new();
-    
-    // Install each dependency
-    for dep in &to_install {
-        match fetch_and_cache_dependency(dep, cli_args.force, &cache_dir) {
-            Ok(Some(actual_version)) => {
-                // Version was changed during installation
-                version_changes.push((dep.url.clone(), dep.version.clone(), actual_version.clone()));
-                installed_versions.insert(dep.url.clone(), actual_version);
-            }
-            Ok(None) => {
-                // No version change - use the original version
-                installed_versions.insert(dep.url.clone(), dep.version.clone());
-            }
-            Err(e) => {
-                eprintln!("Error installing dependency {}: {}", dep.name, e);
-                std::process::exit(1);
-            }
-        }
-    }
-    
-    // Update alt.toml if any versions were changed
-    if !version_changes.is_empty() {
-        println!("Updating alt.toml with actual versions used...");
-        
-        for (dep_url, original_version, actual_version) in &version_changes {
-            println!("  {}: {} -> {}", dep_url, original_version, actual_version);
-            
-            // Update the dependency spec with the actual version
-            let new_spec = if package.dependencies.contains_key(dep_url) {
-                match package.dependencies.get(dep_url).unwrap() {
-                    DependencySpec::Simple(_) => DependencySpec::Simple(actual_version.clone()),
-                    DependencySpec::Detailed { features, optional, .. } => {
-                        DependencySpec::Detailed {
-                            version: actual_version.clone(),
-                            features: features.clone(),
-                            optional: *optional,
-                        }
-                    }
-                }
-            } else {
-                match package.dev_dependencies.get(dep_url).unwrap() {
-                    DependencySpec::Simple(_) => DependencySpec::Simple(actual_version.clone()),
-                    DependencySpec::Detailed { features, optional, .. } => {
-                        DependencySpec::Detailed {
-                            version: actual_version.clone(),
-                            features: features.clone(),
-                            optional: *optional,
-                        }
-                    }
-                }
-            };
-            
-            // Update the appropriate dependencies map
-            if package.dependencies.contains_key(dep_url) {
-                package.dependencies.insert(dep_url.clone(), new_spec);
-            } else {
-                package.dev_dependencies.insert(dep_url.clone(), new_spec);
-            }
-        }
-        
-        // Save the updated alt.toml
-        if let Err(e) = package.save_to_path(alt_toml_path) {
-            eprintln!("Error saving updated alt.toml: {}", e);
-            std::process::exit(1);
-        }
-        
-        println!("✓ Updated alt.toml with actual versions");
-    }
-    
-    // Display installed dependencies with their actual versions
-    println!("✓ Successfully installed {} dependencies:", to_install.len());
-    for dep in &to_install {
-        let actual_version = installed_versions.get(&dep.url).unwrap_or(&dep.version);
-        println!("  - {}@{}", dep.name, actual_version);
-    }
-    
-    // Now resolve dependencies to check for conflicts
+    // Use the resolver to handle both resolution and installation in a single pass
     let mut resolver = resolver::DependencyResolver::new();
-    match resolver.resolve_dependencies(&package) {
-        Ok(resolved_deps) => {
-            println!("✓ Dependency resolution successful");
-            if resolved_deps.len() != to_install.len() {
-                println!("  Note: Resolved {} total dependencies (including transitive)", resolved_deps.len());
+    match resolver.resolve_and_install_dependencies(&package, cli_args.force) {
+        Ok((resolved_deps, version_changes)) => {
+            // Update package versions if needed
+            if !version_changes.is_empty() {
+                update_package_versions(&mut package, &version_changes);
+                save_package_or_exit(&package, alt_toml_path);
+                println!("✓ Updated alt.toml with actual versions");
+            }
+            
+            // Display results
+            println!("✓ Successfully installed {} dependencies:", resolved_deps.len());
+            for resolved in &resolved_deps {
+                println!("  - {}@{}", resolved.name, resolved.version);
+            }
+            
+            if !resolved_deps.is_empty() {
+                println!("✓ Dependency resolution successful");
+                println!("  Resolved {} total dependencies (including transitive)", resolved_deps.len());
+                
+                // Show resolved dependencies
+                for resolved in &resolved_deps {
+                    println!("  {} @ {}", resolved.name, resolved.version);
+                }
             }
         }
         Err(e) => {
-            eprintln!("Warning: Dependency resolution failed: {}", e);
-            eprintln!("Dependencies were installed but may have conflicts");
+            eprintln!("Error during dependency resolution and installation: {}", e);
+            exit(1);
         }
     }
 }
 
-fn spec_to_dependency_info(name: &str, spec: &package::DependencySpec) -> Result<package::DependencyInfo, String> {
-    let version = match spec {
-        package::DependencySpec::Simple(v) => v.clone(),
-        package::DependencySpec::Detailed { version, .. } => version.clone(),
-    };
-
-    // The name is actually the full URL (e.g., "github.com/user/repo")
-    // Extract the actual package name from the URL
-    let package_name = name.split('/').last().unwrap_or(name).to_string();
-
-    Ok(package::DependencyInfo {
-        name: package_name,
-        url: name.to_string(), // name is the full URL
-        version,
-        is_local: false,
-    })
+// Helper functions to reduce repetitive code
+fn load_package_or_exit(alt_toml_path: &Path) -> Package {
+    match Package::load_from_path(alt_toml_path) {
+        Ok(package) => package,
+        Err(e) => {
+            eprintln!("Error reading alt.toml: {}", e);
+            exit(1);
+        }
+    }
 }
 
-fn fetch_and_cache_dependency(dep: &package::DependencyInfo, force: bool, cache_dir: &std::path::Path) -> Result<Option<String>, Box<dyn std::error::Error>> {
-    println!("Fetching {}@{}...", dep.name, dep.version);
-    
-    // Resolve version
-    let resolved_version = if dep.version == "*" || dep.version == "latest" {
-        "main".to_string()
-    } else {
-        dep.version.clone()
-    };
-    
-    // Create cache path structure: ~/.althread/cache/github.com/user/repo/v1.0.0
-    let sanitized_url = dep.url.replace("://", "/");
-    let repo_cache_dir = cache_dir.join(&sanitized_url);
-    
-    // We'll determine the actual version after checkout, so don't create version_cache_dir yet
-    
-    // Convert import URL to git URL
-    let git_url = git::GitRepository::url_from_import_path(&dep.url);
-    println!("  Cloning from: {}", git_url);
-    
-    // Create temporary clone location
-    let temp_clone_dir = repo_cache_dir.join("_temp_clone");
-    if temp_clone_dir.exists() {
-        std::fs::remove_dir_all(&temp_clone_dir)?;
+fn save_package_or_exit(package: &Package, alt_toml_path: &Path) {
+    if let Err(e) = package.save_to_path(alt_toml_path) {
+        eprintln!("Error saving alt.toml: {}", e);
+        exit(1);
     }
+}
+
+fn update_package_versions(package: &mut Package, version_changes: &[(String, String, String)]) {
+    println!("Updating alt.toml with actual versions used...");
     
-    // Clone the repository
-    let git_repo = git::GitRepository::new(&git_url, temp_clone_dir.clone());
-    git_repo.clone_if_needed()?;
-    
-    // Try to checkout the specific version, get the actual version used
-    let actual_version = match git_repo.checkout_version(&resolved_version) {
-        Ok(()) => {
-            // Check if the version we requested actually exists
-            if resolved_version != "main" && resolved_version != "master" {
-                // Try to verify the version exists by checking if it's a tag or commit
-                let repo = git2::Repository::open(&temp_clone_dir)?;
-                
-                // Check if it's a tag
-                let mut is_tag = false;
-                repo.tag_foreach(|_oid, name| {
-                    if let Ok(name_str) = std::str::from_utf8(name) {
-                        let tag_name = name_str.strip_prefix("refs/tags/").unwrap_or(name_str);
-                        if tag_name == resolved_version {
-                            is_tag = true;
-                            return false; // Found it, stop iteration
-                        }
+    for (dep_url, original_version, actual_version) in version_changes {
+        println!("  {}: {} -> {}", dep_url, original_version, actual_version);
+        
+        let new_spec = if package.dependencies.contains_key(dep_url) {
+            match package.dependencies.get(dep_url).unwrap() {
+                DependencySpec::Simple(_) => DependencySpec::Simple(actual_version.clone()),
+                DependencySpec::Detailed { features, optional, .. } => {
+                    DependencySpec::Detailed {
+                        version: actual_version.clone(),
+                        features: features.clone(),
+                        optional: *optional,
                     }
-                    true // Continue iteration
-                })?;
-                
-                // Check if it's a commit hash
-                let is_commit = if resolved_version.len() >= 8 {
-                    git2::Oid::from_str(&resolved_version).is_ok()
-                } else {
-                    false
-                };
-                
-                if is_tag || is_commit {
-                    // Version exists, use it
-                    resolved_version
-                } else {
-                    // The requested version doesn't exist, we fell back to main
-                    println!("  Warning: Version '{}' not found, using 'main' branch", resolved_version);
-                    let head_commit = get_current_commit_hash(&repo)?;
-                    println!("  Using commit: {}", head_commit);
-                    head_commit
                 }
-            } else {
-                // Already using main/master, get the commit hash
-                let repo = git2::Repository::open(&temp_clone_dir)?;
-                let head_commit = get_current_commit_hash(&repo)?;
-                head_commit
-            }
-        }
-        Err(e) => {
-            println!("  Warning: Could not checkout '{}': {}", resolved_version, e);
-            println!("  Falling back to 'main' branch");
-            
-            // Try to checkout main/master as fallback
-            match git_repo.checkout_version("main") {
-                Ok(()) => {
-                    let repo = git2::Repository::open(&temp_clone_dir)?;
-                    let head_commit = get_current_commit_hash(&repo)?;
-                    println!("  Using commit: {}", head_commit);
-                    head_commit
-                }
-                Err(_) => {
-                    // Try master as final fallback
-                    git_repo.checkout_version("master")?;
-                    let repo = git2::Repository::open(&temp_clone_dir)?;
-                    let head_commit = get_current_commit_hash(&repo)?;
-                    println!("  Using commit: {}", head_commit);
-                    head_commit
-                }
-            }
-        }
-    };
-    
-    // Now create the cache directory with the actual version
-    let actual_version_cache_dir = repo_cache_dir.join(&actual_version);
-    
-    // Check if already cached with the actual version
-    if actual_version_cache_dir.exists() && !force {
-        // Verify it has the necessary files
-        if actual_version_cache_dir.join("alt.toml").exists() {
-            println!("  Already cached at actual version, skipping (use --force to reinstall)");
-            // Clean up temp clone
-            std::fs::remove_dir_all(&temp_clone_dir)?;
-            
-            // Return the actual version if it's different from what was requested
-            if actual_version != dep.version {
-                return Ok(Some(actual_version));
-            } else {
-                return Ok(None);
             }
         } else {
-            println!("  Cache exists but is incomplete, re-fetching...");
-            std::fs::remove_dir_all(&actual_version_cache_dir)?;
-        }
-    }
-    
-    // Verify this is a valid Althread package
-    let alt_toml_path = temp_clone_dir.join("alt.toml");
-    if !alt_toml_path.exists() {
-        return Err(format!(
-            "Invalid Althread package: {} does not contain alt.toml", 
-            dep.url
-        ).into());
-    }
-    
-    // Create the actual version cache directory
-    std::fs::create_dir_all(&actual_version_cache_dir)?;
-    
-    // Copy the entire repository contents to the versioned cache
-    copy_dir_all(&temp_clone_dir, &actual_version_cache_dir)?;
-    
-    // Clean up temporary clone
-    std::fs::remove_dir_all(&temp_clone_dir)?;
-    
-    println!("  ✓ Cached to {}", actual_version_cache_dir.display());
-    
-    // Validate the package structure
-    validate_package_structure(&actual_version_cache_dir)?;
-    
-    // Return the actual version if it's different from what was requested
-    if actual_version != dep.version {
-        Ok(Some(actual_version))
-    } else {
-        Ok(None)
-    }
-}
-
-fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
-    std::fs::create_dir_all(dst)?;
-    
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let file_type = entry.file_type()?;
-        let src_path = entry.path();
-        let dst_path = dst.join(entry.file_name());
-        
-        // Skip .git directory and other hidden files
-        if let Some(name) = entry.file_name().to_str() {
-            if name.starts_with('.') {
-                continue;
+            match package.dev_dependencies.get(dep_url).unwrap() {
+                DependencySpec::Simple(_) => DependencySpec::Simple(actual_version.clone()),
+                DependencySpec::Detailed { features, optional, .. } => {
+                    DependencySpec::Detailed {
+                        version: actual_version.clone(),
+                        features: features.clone(),
+                        optional: *optional,
+                    }
+                }
             }
-        }
+        };
         
-        if file_type.is_dir() {
-            copy_dir_all(&src_path, &dst_path)?;
+        if package.dependencies.contains_key(dep_url) {
+            package.dependencies.insert(dep_url.clone(), new_spec);
         } else {
-            std::fs::copy(&src_path, &dst_path)?;
+            package.dev_dependencies.insert(dep_url.clone(), new_spec);
         }
     }
-    
-    Ok(())
-}
-
-fn validate_package_structure(package_dir: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
-    let alt_toml_path = package_dir.join("alt.toml");
-    
-    // Parse and validate alt.toml
-    let package = package::Package::load_from_path(&alt_toml_path)?;
-    
-    println!("  Package: {} v{}", package.package.name, package.package.version);
-    if let Some(desc) = &package.package.description {
-        println!("  Description: {}", desc);
-    }
-    
-    // Look for .alt files
-    let alt_files = find_alt_files(package_dir)?;
-    if alt_files.is_empty() {
-        println!("  Warning: No .alt files found in package");
-    } else {
-        println!("  Found {} .alt files", alt_files.len());
-        for file in alt_files.iter().take(5) { // Show first 5
-            let relative_path = file.strip_prefix(package_dir)
-                .unwrap_or(file)
-                .display();
-            println!("    - {}", relative_path);
-        }
-        if alt_files.len() > 5 {
-            println!("    ... and {} more", alt_files.len() - 5);
-        }
-    }
-    
-    Ok(())
-}
-
-fn find_alt_files(dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>, Box<dyn std::error::Error>> {
-    let mut alt_files = Vec::new();
-    
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        
-        if path.is_dir() {
-            // Recursively search subdirectories
-            alt_files.extend(find_alt_files(&path)?);
-        } else if let Some(extension) = path.extension() {
-            if extension == "alt" {
-                alt_files.push(path);
-            }
-        }
-    }
-    
-    Ok(alt_files)
 }
 
 fn should_clean_cache() -> bool {
@@ -1061,14 +763,7 @@ fn update_single_dependency(package: &mut Package, dep_name: &str) -> Result<boo
 
     println!("  Current version: {}", current_version);
 
-    let dep_info = DependencyInfo {
-        name: dep_name.split('/').last().unwrap_or(dep_name).to_string(),
-        url: dep_name.to_string(),
-        version: current_version.clone(),
-        is_local: false,
-    };
-
-    let latest_version = match get_latest_version(&dep_info) {
+    let latest_version = match resolver::VersionResolver::get_latest_version_from_repo(dep_name) {
         Ok(version) => {
             println!("  Latest version: {}", version);
             version
@@ -1146,7 +841,10 @@ fn should_update_dependency(current: &str, latest: &str) -> bool {
     }
 
     // If we have specific semantic versions, compare them
-    if let (Ok(current_ver), Ok(latest_ver)) = (parse_version_tag(current), parse_version_tag(latest)) {
+    if let (Ok(current_ver), Ok(latest_ver)) = (
+        resolver::VersionResolver::parse_version_tag(current), 
+        resolver::VersionResolver::parse_version_tag(latest)
+    ) {
         return latest_ver > current_ver;
     }
 
@@ -1158,95 +856,4 @@ fn is_commit_hash(s: &str) -> bool {
     // A commit hash is typically 8 characters (short hash) or 40 characters (full hash)
     // and contains only hexadecimal characters
     (s.len() == 8 || s.len() == 40) && s.chars().all(|c| c.is_ascii_hexdigit())
-}
-
-fn get_latest_version(dep_info: &package::DependencyInfo) -> Result<String, Box<dyn Error>> {
-    let git_url = git::GitRepository::url_from_import_path(&dep_info.url);
-
-    let temp_dir = temp_dir().join(format!("althread_version_check_{}",
-        dep_info.name.replace("/", "_").replace(".", "_")));
-
-    if temp_dir.exists() {
-        remove_dir_all(&temp_dir)?;
-    }
-
-    let git_repo = git::GitRepository::new(&git_url, temp_dir.clone());
-    git_repo.clone_if_needed()?;
-
-    let latest_version = get_latest_git_tag(&temp_dir)?;
-
-    remove_dir_all(&temp_dir)?;
-
-    Ok(latest_version)
-}
-
-fn get_latest_git_tag(repo_path: &Path) -> Result<String, Box<dyn Error>> {
-    let repo = git2::Repository::open(repo_path)?;
-
-    let mut tags = Vec::new();
-
-    repo.tag_foreach(|oid, name| {
-        if let Ok(name_str) = from_utf8(name) {
-            let tag_name = name_str.strip_prefix("refs/tags/").unwrap_or(name_str);
-
-            if let Ok(tag_obj) = repo.find_object(oid, Some(git2::ObjectType::Tag)) {
-                if let Some(tag) = tag_obj.as_tag() {
-                    let target_oid = tag.target_id();
-
-                    if let Ok(commit) = repo.find_commit(target_oid) {
-                        let commit_time = commit.time().seconds();
-                        tags.push((tag_name.to_string(), commit_time));
-                    }
-                }
-            } else if let Ok(commit) = repo.find_commit(oid) {
-                let commit_time = commit.time().seconds();
-                tags.push((tag_name.to_string(), commit_time));
-            }
-        }
-        true
-    })?;
-
-    if tags.is_empty() {
-        // No tags found - fallback to current commit hash
-        let head_commit = get_current_commit_hash(&repo)?;
-        println!("  No version tags found, using commit hash: {}", head_commit);
-        return Ok(head_commit);
-    }
-
-    tags.sort_by(|a, b| b.1.cmp(&a.1));
-
-    let mut semantic_tags: Vec<(String, semver::Version)> = Vec::new();
-
-    for (tag_name, _) in &tags {
-        if let Ok(version) = parse_version_tag(tag_name) {
-            semantic_tags.push((tag_name.clone(), version));
-        }
-    }
-
-    if !semantic_tags.is_empty() {
-        semantic_tags.sort_by(|a, b| b.1.cmp(&a.1));
-        println!("  Found semantic version tags, using: {}", semantic_tags[0].0);
-        return Ok(semantic_tags[0].0.clone());
-    }
-
-    // Return the most recent tag (even if not semantic)
-    println!("  No semantic version tags found, using most recent tag: {}", tags[0].0);
-    Ok(tags[0].0.clone())
-}
-
-fn get_current_commit_hash(repo: &git2::Repository) -> Result<String, Box<dyn Error>> {
-    let head = repo.head()?;
-    let commit = head.peel_to_commit()?;
-    Ok(commit.id().to_string()[..8].to_string()) // First 8 characters of commit hash
-}
-
-fn parse_version_tag(tag: &str) -> Result<semver::Version, semver::Error> {
-    let clean_tag = tag
-        .strip_prefix("v")
-        .or_else(|| tag.strip_prefix("V"))
-        .or_else(|| tag.strip_prefix("version"))
-        .or_else(|| tag.strip_prefix("release"))
-        .unwrap_or(tag);
-
-    semver::Version::parse(clean_tag)
 }

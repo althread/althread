@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 
 #[derive(Debug, Clone)]
@@ -95,24 +95,38 @@ impl GitRepository {
     fn try_checkout_strategies(&self, repo: &git2::Repository, version: &str) -> Result<(), String> {
         // Strategy 1: Try as a branch
         if let Ok(branch) = repo.find_branch(version, git2::BranchType::Local) {
+            println!("  Found local branch: {}", version);
             return self.checkout_branch(repo, &branch);
         }
 
         // Strategy 2: Try as a remote branch
         let remote_branch_name = format!("origin/{}", version);
         if let Ok(branch) = repo.find_branch(&remote_branch_name, git2::BranchType::Remote) {
+            println!("  Found remote branch: {}", version);
             return self.checkout_remote_branch(repo, &branch, version);
         }
 
         // Strategy 3: Try as a tag
         if let Ok(tag_ref) = repo.find_reference(&format!("refs/tags/{}", version)) {
+            println!("  Found tag: {}", version);
             return self.checkout_tag(repo, &tag_ref);
         }
 
         // Strategy 4: Try as a commit hash
         if let Ok(oid) = git2::Oid::from_str(version) {
             if let Ok(commit) = repo.find_commit(oid) {
+                println!("  Found commit (full hash): {}", version);
                 return self.checkout_commit(repo, &commit);
+            }
+        }
+        
+        // Strategy 4.1: Try as a partial commit hash (expand it)
+        if version.len() >= 4 && version.chars().all(|c| c.is_ascii_hexdigit()) {
+            if let Ok(oid) = self.find_commit_by_prefix(repo, version) {
+                if let Ok(commit) = repo.find_commit(oid) {
+                    println!("  Found commit (prefix hash): {} -> {}", version, oid);
+                    return self.checkout_commit(repo, &commit);
+                }
             }
         }
 
@@ -192,24 +206,36 @@ impl GitRepository {
         Ok(())
     }
 
-    /// Fetch latest changes from remote
-    pub fn fetch(&self) -> Result<(), String> {
-        if !self.local_path.exists() {
-            return Err("Repository not found. Clone first.".to_string());
+    fn find_commit_by_prefix(&self, repo: &git2::Repository, prefix: &str) -> Result<git2::Oid, String> {
+        // First try to parse as a full OID
+        if let Ok(oid) = git2::Oid::from_str(prefix) {
+            if repo.find_commit(oid).is_ok() {
+                return Ok(oid);
+            }
         }
-
-        let repo = git2::Repository::open(&self.local_path)
-            .map_err(|e| format!("Failed to open repository: {}", e))?;
-
-        let mut remote = repo.find_remote("origin")
-            .map_err(|e| format!("Failed to find origin remote: {}", e))?;
-
-        println!("  Fetching latest changes...");
-        remote.fetch(&[] as &[&str], None, None)
-            .map_err(|e| format!("Failed to fetch: {}", e))?;
-
-        println!("  ✓ Fetched latest changes");
-        Ok(())
+        
+        // If that fails, try to find by prefix
+        let mut walker = repo.revwalk()
+            .map_err(|e| format!("Failed to create revwalk: {}", e))?;
+        
+        // Walk all branches and tags
+        walker.push_glob("refs/heads/*")
+            .map_err(|e| format!("Failed to push heads glob: {}", e))?;
+        walker.push_glob("refs/tags/*")
+            .map_err(|e| format!("Failed to push tags glob: {}", e))?;
+        walker.push_glob("refs/remotes/*")
+            .map_err(|e| format!("Failed to push remotes glob: {}", e))?;
+        
+        for oid_result in walker {
+            let oid = oid_result.map_err(|e| format!("Failed to get oid: {}", e))?;
+            let oid_str = oid.to_string();
+            
+            if oid_str.starts_with(prefix) {
+                return Ok(oid);
+            }
+        }
+        
+        Err(format!("No commit found with prefix '{}'", prefix))
     }
 }
 
