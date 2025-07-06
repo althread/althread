@@ -4,13 +4,13 @@
   height: 100%;
   background-color: #1e1e1e;
   color: #cccccc;
-  border-right: 1px solid #333;
+  /* border-right: 1px solid #333; */
 }
 
 .sidebar-tabs {
   display: flex;
   flex-direction: column;
-  background-color: #252526;
+  background-color: #1e1e1e;
   border-right: 1px solid #333;
   width: 48px;
   flex-shrink: 0;
@@ -34,12 +34,13 @@
 .sidebar-tab:hover {
   background-color: #2d2d2d;
   color: #ffffff;
-  transform: scale(1.05);
+  transform: translateX(1px);
 }
 
 .sidebar-tab.active {
-  background-color: #1e1e1e;
+  background-color: #232323;
   color: #ffffff;
+  transform: translateX(2px);
 }
 
 .sidebar-tab.active::before {
@@ -88,14 +89,14 @@
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateX(-10px);
+    transform: translateY(5px);
   }
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: translateY(0);
   }
 }
 
 .sidebar-content > div {
-  animation: fadeIn 0.3s ease-out;
+  animation: fadeIn 0.25s ease-out;
 }

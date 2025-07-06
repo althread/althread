@@ -1,8 +1,7 @@
 .file-tabs-container {
-  padding-bottom: 0;
   display: flex;
   background-color: #1e1e1e;
-  height: 40px; /* Keep original height */
+  height: 40px;
   flex-shrink: 0;
   overflow-x: auto;
   overflow-y: hidden;
@@ -12,12 +11,7 @@
 
 /* VSCode-style scrollbar for file tabs */
 .file-tabs-container::-webkit-scrollbar {
-  height: 1px; /* This sets the scrollbar thickness */
-  transition: height 0.2s;
-}
-
-.file-tabs-container.scrollbar-hover::-webkit-scrollbar {
-  height: 5px; /* Thicker on hover */
+  height: 3px;
 }
 
 .file-tabs-container::-webkit-scrollbar-track {
@@ -26,14 +20,15 @@
 
 .file-tabs-container::-webkit-scrollbar-thumb {
   background: rgba(121, 121, 121, 0.4);
+  border-radius: 2px;
 }
 
 .file-tabs-container::-webkit-scrollbar-thumb:hover {
-  background: rgba(121, 121, 121, 0.4);
+  background: rgba(121, 121, 121, 0.6);
 }
 
 .file-tabs-container::-webkit-scrollbar-thumb:active {
-  background: rgba(121, 121, 121, 0.4);
+  background: rgba(121, 121, 121, 0.8);
 }
 
 .file-tabs-container::-webkit-scrollbar-corner {
@@ -53,9 +48,8 @@
   border-bottom: 2px solid transparent; /* Reserve space for bottom border */
   transition: background-color 0.2s, border-color 0.2s, color 0.2s;
   position: relative;
-  height: 37.5px; /* Reduced to make room for scrollbar */
+  height: 37px; /* Adjust height to accommodate scrollbar */
   box-sizing: border-box;
-  /* margin-bottom: 5px; Push scrollbar to bottom */
 }
 
 .file-tab:not(.active):hover {

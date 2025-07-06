@@ -141,11 +141,32 @@ body {
     border-radius: 2px;
     cursor: pointer;
     font-size: 13px;
-    transition: background-color 0.2s;
+    transition: background-color 0.2s, border-color 0.2s, opacity 0.2s;
   }
   
   .vscode-button:hover {
     background-color: #3d3d3d;
+    border-color: #5d5d5d;
+  }
+
+  .vscode-button:disabled {
+    opacity: 0.8;
+    cursor: not-allowed;
+    background-color: #1e1e1e;
+    border-color: #2d2d2d;
+    color: #555555;
+    pointer-events: none; /* Prevent any interaction */
+  }
+
+  .vscode-button:disabled:hover {
+    background-color: #1e1e1e;
+    border-color: #2d2d2d;
+    color: #555555;
+    transform: none; /* Prevent any transform effects */
+  }
+
+  .vscode-button:disabled .codicon {
+    opacity: 0.8;
   }
   
   .vscode-button .codicon {
@@ -178,6 +199,7 @@ body {
     width: 4px;
     border: 0;
     margin: 0;
+    padding: 0;
     background: transparent;
     cursor: col-resize;
     transition: all 0.2s ease;
@@ -206,17 +228,19 @@ body {
     width: 4px;
     height: 60px;
     background: rgba(127, 127, 127, 0.1);
-    transition: height 0.2s ease;
+    transition: all 0.2s ease;
     border-radius: 2px;
+    opacity: 0;
   }
   
   .Resizable-handle:hover::before {
     height: 100%;
     background: rgba(127, 127, 127, 0.3);
+    opacity: 1;
   }
   
   .Resizable-handle:hover {
-    background: rgba(127, 127, 127, 0.1);
+    background: rgba(127, 127, 127, 0.05);
   }
   
   .Resizable-handle:hover::after {
@@ -303,16 +327,18 @@ body {
 .graph-toolbar button {
   display: flex;
   padding: 0.5rem;
-  background: #232323;
-  border: 1px solid #444;
-  color: #ccc;
-  border-radius: 3px;
+  background: #2d2d2d;
+  border: 1px solid #3d3d3d;
+  color: #cccccc;
+  border-radius: 2px;
   cursor: pointer;
   font-size: 15px;
-  transition: background 0.2s;
+  transition: background-color 0.2s, border-color 0.2s;
 }
+
 .graph-toolbar button:hover {
-  background: #333;
+  background: #3d3d3d;
+  border-color: #5d5d5d;
 }
 
 .vm-state-popup {
@@ -417,7 +443,7 @@ body {
 /* Empty Editor Styles */
 .empty-editor {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   height: 100%;
   width: 100%;
@@ -425,7 +451,7 @@ body {
 }
 
 .empty-editor-content {
-  justify-items: center;
+  text-align: center;
   padding: 2rem;
   color: #abb2bf;
 }
@@ -463,4 +489,27 @@ body {
 .empty-editor-content .vscode-button.primary:hover {
   background-color: var(--ifm-color-primary-dark);
   border-color: var(--ifm-color-primary-dark);
+}
+
+/* Focus styles for accessibility */
+.vscode-button:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}
+
+.file-explorer-actions button:focus-visible,
+.package-manager-actions button:focus-visible,
+.sidebar-tab:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}
+
+.graph-toolbar button:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}
+
+.confirmation-dialog-actions button:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
 }

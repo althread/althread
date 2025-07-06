@@ -928,8 +928,10 @@ const FileExplorer = (props: FileExplorerProps) => {
               }} 
               title={getCreateButtonTitle('file')} 
               disabled={!!creating() || !!currentlyRenaming()}
+              class="header-action-btn"
             >
                 <i class="codicon codicon-new-file"></i>
+                <span>File</span>
             </button>
             <button 
               onClick={() => {
@@ -956,8 +958,10 @@ const FileExplorer = (props: FileExplorerProps) => {
               }} 
               title={getCreateButtonTitle('folder')} 
               disabled={!!creating() || !!currentlyRenaming()}
+              class="header-action-btn"
             >
                 <i class="codicon codicon-new-folder"></i>
+                <span>Folder</span>
             </button>
         </div>
       </div>

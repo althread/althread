@@ -79,6 +79,11 @@ export const createEditorManager = (editor: any) => {
   };
 
   const createNewFileWithContent = (fileName: string, content: string, onFileOperations: any, mockFileSystem?: () => FileSystemEntry[]) => {
+    // Auto-add .alt extension if not provided
+    if (!fileName.includes('.')) {
+      fileName = fileName + '.alt';
+    }
+    
     // Create the file using file operations
     onFileOperations.handleNewFile(fileName);
     

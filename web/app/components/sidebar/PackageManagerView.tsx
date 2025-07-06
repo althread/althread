@@ -174,7 +174,7 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
   return (
     <div class="package-manager-view">
       <div class="package-manager-header">
-        <h3>Package Manager</h3>
+        <h3>Packages</h3>
         <div class="package-manager-actions">
           <button 
             title="Refresh packages"
@@ -210,7 +210,7 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
         <Show when={error()}>
           <div class="error-message">
             <i class="codicon codicon-error"></i>
-            {error()}
+            <span>{error()}</span>
             <button class="close-msg" onClick={clearMessages}>×</button>
           </div>
         </Show>
@@ -218,7 +218,7 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
         <Show when={success()}>
           <div class="success-message">
             <i class="codicon codicon-check"></i>
-            {success()}
+            <span>{success()}</span>
             <button class="close-msg" onClick={clearMessages}>×</button>
           </div>
         </Show>
@@ -251,14 +251,17 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
               />
             </div>
             
-            <button 
-              class="btn btn-primary"
-              onClick={initializeProject}
-              disabled={loading()}
-            >
-              <i class="codicon codicon-rocket"></i>
-              Initialize Project
-            </button>
+            <div class="dependency-form-actions">
+              <label></label>
+              <button 
+                class="btn btn-add-dependency"
+                onClick={initializeProject}
+                disabled={loading()}
+              >
+                <i class="codicon codicon-rocket"></i>
+                Initialize Project
+              </button>
+            </div>
           </div>
         </Show>
 
@@ -355,7 +358,7 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
                         disabled={loading()}
                         title="Remove dependency"
                       >
-                        <i class="codicon codicon-trash"></i>
+                        <i class="codicon codicon-close"></i>
                       </button>
                     </div>
                   )}

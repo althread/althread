@@ -239,6 +239,13 @@ export default function App() {
     setGlobalFileCreation({ type: 'file', parentPath: '' });
   };
 
+  // Helper function to check if active file has .alt extension
+  const isAltFile = () => {
+    const activeFile = editorManager.activeFile();
+    if (!activeFile) return false;
+    return activeFile.name.endsWith('.alt');
+  };
+
   // Save file system whenever it changes
   createEffect(() => {
     saveFileSystem(mockFileSystem());
@@ -329,7 +336,7 @@ export default function App() {
 
             <button
               class={`vscode-button${loadingAction() === "run" ? " active" : ""}`}
-              disabled={loadingAction() === "run" || !editorManager.activeFile()}
+              disabled={loadingAction() === "run" || !editorManager.activeFile() || !isAltFile()}
               onClick={async () => {
                 if (!editorManager.activeFile()) return;
                 
@@ -360,7 +367,7 @@ export default function App() {
 
             <button
               class={`vscode-button${activeAction() === "check" ? " active" : ""}`}
-              disabled={!editorManager.activeFile()}
+              disabled={!editorManager.activeFile() || !isAltFile()}
               onClick={() => {
                 if (!editorManager.activeFile()) return;
                 
@@ -471,7 +478,7 @@ export default function App() {
           </div>
       </div>
       <Resizable id="content">
-        <Resizable.Panel initialSize={0.20} minSize={0.15}>
+        <Resizable.Panel initialSize={0.20} minSize={0.20}>
             <Sidebar
                 files={mockFileSystem()} 
                 onFileSelect={(path) => editorManager.handleFileSelect(path, mockFileSystem())}

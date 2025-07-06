@@ -1,5 +1,5 @@
 /** @jsxImportSource solid-js */
-import { For, createSignal } from 'solid-js';
+import { For } from 'solid-js';
 import type { FileSystemEntry } from './FileExplorer';
 import './FileTabs.css';
 
@@ -12,14 +12,8 @@ type FileTabsProps = {
 };
 
 const FileTabs = (props: FileTabsProps) => {
-  const [hovered, setHovered] = createSignal(false);
-
   return (
-    <div
-      class={`file-tabs-container${hovered() ? ' scrollbar-hover' : ''}`}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
+    <div class="file-tabs-container">
       <For each={props.openFiles}>
         {(file) => (
           <div class="file-tab"

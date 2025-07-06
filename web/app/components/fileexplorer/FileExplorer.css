@@ -19,11 +19,19 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  min-height: 32px;
 }
 
 .file-explorer-header h3 {
     margin: 0;
     font-weight: normal;
+    flex-shrink: 0;
+}
+
+.file-explorer-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .file-explorer-actions button {
@@ -32,9 +40,10 @@
     color: #cccccc;
     cursor: pointer;
     padding: 2px;
-    margin-left: 4px;
+    margin-left: 0;
     font-size: 16px;
     line-height: 1;
+    border-radius: 2px;
 }
 
 .file-explorer-actions button:hover {
@@ -53,6 +62,24 @@
   flex-grow: 1;
 }
 
+/* Custom scrollbar for File Explorer consistency */
+.file-explorer-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.file-explorer-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.file-explorer-content::-webkit-scrollbar-thumb {
+  background: rgba(121, 121, 121, 0.4);
+  border-radius: 4px;
+}
+
+.file-explorer-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(121, 121, 121, 0.6);
+}
+
 .file, .directory-header {
   display: flex;
   align-items: center;
@@ -62,16 +89,12 @@
   white-space: nowrap;
   height: 26px; /* FIXED height to prevent ANY changes during rename */
   box-sizing: border-box;
+  border: 1px solid transparent;
+  border-left: 0;
 }
 
 .file:hover, .directory-header:hover {
   background-color: #2d2d2d;
-}
-
-.file {
-  box-sizing: border-box;
-  border: 1px solid transparent;
-  border-left: 0;
 }
 
 .file.active {
@@ -82,10 +105,6 @@
 
 .file .codicon, .directory-header .codicon {
   margin-right: 6px;
-}
-
-.directory-header {
-    padding-left: 10px;
 }
 
 /* Nested directory structure with CSS custom properties for unlimited depth */
@@ -198,7 +217,22 @@
 .file.selected,
 .directory.selected > .directory-header {
   background-color: #094771;
-  border-color: #3794ff;
+  border: 1px solid #3794ff;
+  border-left: 0;
+}
+
+/* Keep transparent borders for consecutive selected items to prevent layout shift */
+.file.selected + .file.selected,
+.file.selected + .directory.selected > .directory-header,
+.directory.selected + .file.selected,
+.directory.selected + .directory.selected > .directory-header,
+.directory.selected .directory-children .file.selected:first-child,
+.directory.selected .directory-children .directory.selected:first-child > .directory-header,
+.directory:has(.directory-children .file.selected:last-child) + .file.selected,
+.directory:has(.directory-children .file.selected:last-child) + .directory.selected > .directory-header,
+.directory:has(.directory-children .directory.selected:last-child) + .file.selected,
+.directory:has(.directory-children .directory.selected:last-child) + .directory.selected > .directory-header {
+  border-top: 1px solid transparent;
 }
 
 .file.selected:hover,
@@ -220,19 +254,7 @@
   background-color: #3c3c3c;
 }
 
-/* Make directory header more responsive */
-.directory-header {
-  cursor: pointer;
-  user-select: none;
-}
 
-.directory-header:hover {
-  background-color: #2d2d2d;
-}
-
-.directory-header.selected {
-  background-color: #094771;
-}
 
 .file-entry-error {
   color: #d8d7d7;
@@ -418,4 +440,26 @@
 .context-menu button i {
   margin-right: 8px;
   font-size: 14px;
+}
+
+.header-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px !important;
+  font-size: 11px !important;
+  transition: background-color 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.header-action-btn span {
+  font-size: 10px;
+  font-weight: normal;
+  white-space: nowrap;
+}
+
+.header-action-btn i {
+  font-size: 12px;
+  flex-shrink: 0;
 }
