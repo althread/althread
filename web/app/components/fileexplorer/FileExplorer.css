@@ -463,3 +463,20 @@
   font-size: 12px;
   flex-shrink: 0;
 }
+
+/* Read-only items in deps directory */
+.file.read-only, 
+.directory-header.read-only {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.file.read-only:hover, 
+.directory-header.read-only:hover {
+  background-color: transparent;
+}
+
+.file.read-only .codicon, 
+.directory-header.read-only .codicon {
+  opacity: 0.6;
+}

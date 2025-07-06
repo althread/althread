@@ -19,10 +19,18 @@ export const createEditorManager = (editor: any) => {
       }
       setActiveFile(file);
       
+      // Check if file is in deps directory (read-only)
+      const isInDeps = path === 'deps' || path.startsWith('deps/');
+      
       // Use safe content update
       if (editor && editor.safeUpdateContent) {
         const content = loadFileContent(path);
         editor.safeUpdateContent(content);
+        
+        // Set read-only mode for deps files
+        if (editor.setReadOnly) {
+          editor.setReadOnly(isInDeps);
+        }
         
         // Then update language (after content is loaded)
         setTimeout(() => {
@@ -42,6 +50,14 @@ export const createEditorManager = (editor: any) => {
       const filePath = getPathFromId(mockFileSystem, file.id) || file.name;
       const content = loadFileContent(filePath);
       editor.safeUpdateContent(content);
+      
+      // Check if file is in deps directory (read-only)
+      const isInDeps = filePath === 'deps' || filePath.startsWith('deps/');
+      
+      // Set read-only mode for deps files
+      if (editor.setReadOnly) {
+        editor.setReadOnly(isInDeps);
+      }
       
       // Then update language (after content is loaded)
       setTimeout(() => {

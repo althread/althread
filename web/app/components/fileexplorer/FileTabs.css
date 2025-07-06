@@ -98,3 +98,26 @@
 .file-tab:hover .tab-close-button {
     opacity: 1;
 }
+
+/* Read-only file tab styling */
+.file-tab.read-only {
+  background-color: #2d2d2d;
+  opacity: 0.9;
+}
+
+.file-tab.read-only .tab-label {
+  font-style: italic;
+  color: #b0b0b0;
+}
+
+.file-tab.read-only.active {
+  background-color: #333333;
+  border-bottom-color: #858585;
+}
+
+.read-only-icon {
+  font-size: 11px;
+  color: #858585;
+  margin-left: 4px;
+  margin-right: 2px;
+}

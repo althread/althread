@@ -117,6 +117,7 @@ const createEditor = ({
   // Create compartments for dynamic extensions
   const languageCompartment = new Compartment();
   const linterCompartment = new Compartment();
+  const readOnlyCompartment = new Compartment();
 
   // Theme definitions with consistent line number width
   const uiTheme = EditorView.theme({
@@ -253,6 +254,7 @@ const createEditor = ({
   // Add compartments for dynamic extensions
   editor.createExtension(languageCompartment.of(getLanguageExtension(fileName)));
   editor.createExtension(linterCompartment.of(createLinterExtension(fileName)));
+  editor.createExtension(readOnlyCompartment.of([]));
 
   // Safe wrapper for editor view operations
   const safeEditorView = () => {
@@ -286,13 +288,32 @@ const createEditor = ({
     return false;
   };
 
+  // Function to toggle read-only mode
+  const setReadOnly = (isReadOnly: boolean) => {
+    const view = safeEditorView();
+    if (view) {
+      try {
+        const extension = isReadOnly ? EditorState.readOnly.of(true) : [];
+        view.dispatch({
+          effects: readOnlyCompartment.reconfigure(extension)
+        });
+        return true;
+      } catch (e) {
+        console.warn('Failed to set read-only mode:', e);
+        return false;
+      }
+    }
+    return false;
+  };
+
   // Return editor with updateLanguage method and safe wrappers
   return {
     ...editor,
     updateLanguage,
     getCurrentFileName: () => currentFileName,
     safeEditorView,
-    safeUpdateContent
+    safeUpdateContent,
+    setReadOnly
   };
 }
 

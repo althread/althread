@@ -472,7 +472,7 @@
 
 .package-version {
   font-size: 11px;
-  color: #858585;
+  color: var(--ifm-color-primary-light);
   font-family: monospace;
   overflow: hidden;
   text-overflow: ellipsis;

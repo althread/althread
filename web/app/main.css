@@ -49,6 +49,21 @@ body {
   overflow-y: hidden;
 }
 
+/* Read-only editor styling */
+.editor-instance-wrapper .cm-editor.cm-readonly {
+  background-color: #1a1a1a;
+  border-left: 3px solid #858585;
+}
+
+.editor-instance-wrapper .cm-editor.cm-readonly .cm-content {
+  opacity: 0.9;
+}
+
+.editor-instance-wrapper .cm-editor.cm-readonly .cm-gutters {
+  background-color: #1a1a1a;
+  border-right: 1px solid #404040;
+}
+
 .right-panel {
   display: flex;
   flex-direction: column;

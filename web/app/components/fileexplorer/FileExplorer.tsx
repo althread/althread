@@ -77,6 +77,11 @@ const FileEntry = (props: {
   });
 
   const isSelected = () => props.selectedFiles.includes(currentPath);
+  
+  // Helper function to check if a path is in the deps directory (read-only)
+  const isInDepsDirectory = (path: string) => {
+    return path === 'deps' || path.startsWith('deps/');
+  };
 
   const handleClick = (e: MouseEvent) => {
     // Handle multi-selection with Cmd/Ctrl and Shift
@@ -107,6 +112,11 @@ const FileEntry = (props: {
   const handleRightClick = (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    
+    // Don't show context menu for deps directory items
+    if (isInDepsDirectory(currentPath)) {
+      return;
+    }
     
     // Select the item if it's not already selected
     if (!isSelected()) {
@@ -192,12 +202,24 @@ const FileEntry = (props: {
   };
 
   const handleDragStart = (e: DragEvent) => {
+    // Prevent dragging items from deps directory
+    if (isInDepsDirectory(currentPath)) {
+      e.preventDefault();
+      return;
+    }
+
     e.dataTransfer!.effectAllowed = 'move';
     setIsDragging(true);
 
     if (isSelected() && props.selectedFiles.length > 1) {
       // If this file is part of a multi-selection, drag all selected files
-      e.dataTransfer!.setData('text/plain', JSON.stringify(props.selectedFiles));
+      // But only if none of them are in deps directory
+      const selectedPaths = props.selectedFiles;
+      if (selectedPaths.some(path => isInDepsDirectory(path))) {
+        e.preventDefault();
+        return;
+      }
+      e.dataTransfer!.setData('text/plain', JSON.stringify(selectedPaths));
     } else {
       // Single file drag (either not selected or only one file selected)
       e.dataTransfer!.setData('text/plain', JSON.stringify([currentPath]));
@@ -215,6 +237,13 @@ const FileEntry = (props: {
   const handleDragOver = (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    
+    // Prevent drag over visual feedback for deps directory
+    if (isInDepsDirectory(currentPath)) {
+      e.dataTransfer!.dropEffect = 'none';
+      return;
+    }
+    
     if (e.dataTransfer?.files.length) {
       e.dataTransfer!.dropEffect = 'copy';
     } else {
@@ -239,6 +268,11 @@ const FileEntry = (props: {
     setIsDragOver(false);
 
     console.log('Drop event on:', currentPath, 'with data:', e.dataTransfer?.getData('text/plain'));
+
+    // Prevent dropping into deps directory
+    if (isInDepsDirectory(currentPath)) {
+      return;
+    }
 
     if (e.dataTransfer?.files.length) {
       if (props.entry.type === 'directory') {
@@ -345,9 +379,12 @@ const FileEntry = (props: {
       >
         <div 
           class="directory-header" 
+          classList={{ 
+            'read-only': isInDepsDirectory(currentPath)
+          }}
           onClick={handleDirectoryClick}
           onContextMenu={handleRightClick}
-          draggable="true" 
+          draggable={!isInDepsDirectory(currentPath)}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
@@ -495,14 +532,15 @@ const FileEntry = (props: {
   return (
     <div 
       class="file" 
-      draggable="true"
+      draggable={!isInDepsDirectory(currentPath)}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onContextMenu={handleRightClick}
       classList={{ 
         active: props.activeFile !== null && props.getFilePath(props.activeFile) === currentPath,
         selected: isSelected() && !isRenaming(),
-        dragging: isDragging()
+        dragging: isDragging(),
+        'read-only': isInDepsDirectory(currentPath)
       }}
       onClick={handleClick}
     >
