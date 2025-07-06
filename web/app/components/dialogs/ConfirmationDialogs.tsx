@@ -25,9 +25,11 @@ export const MoveConfirmationDialog = (props: {
           </div>
           <div class="confirmation-dialog-actions">
             <button class="button-secondary" onClick={props.onCancel}>
+              <i class="codicon codicon-close"></i>
               Cancel
             </button>
             <button class="button-primary" onClick={props.onConfirm}>
+              <i class="codicon codicon-check"></i>
               Replace
             </button>
           </div>
@@ -79,9 +81,11 @@ export const DeleteConfirmationDialog = (props: {
           </div>
           <div class="confirmation-dialog-actions">
             <button class="button-secondary" onClick={props.onCancel}>
+              <i class="codicon codicon-close"></i>
               Cancel
             </button>
-            <button class="button-primary" onClick={props.onConfirm} style="background-color: #c74e39;">
+            <button class="button-destructive" onClick={props.onConfirm}>
+              <i class="codicon codicon-trash"></i>
               Delete
             </button>
           </div>
