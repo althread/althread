@@ -60,12 +60,14 @@ export default function HelpView(props: HelpViewProps) {
                 Back to Help
               </button>
             </div>
-            <ExampleSearch 
-              onLoadExample={(content, fileName) => {
-                props.onLoadExample?.(content, fileName);
-                setShowExamples(false); // Go back to help after loading
-              }}
-            />
+            <div class="example-search-content">
+              <ExampleSearch 
+                onLoadExample={(content, fileName) => {
+                  props.onLoadExample?.(content, fileName);
+                  setShowExamples(false); // Go back to help after loading
+                }}
+              />
+            </div>
           </div>
         </Show>
       </div>

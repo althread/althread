@@ -35,6 +35,7 @@ body {
 }
 .content-wrapper {
     height: calc( 100vh - 30px );
+    overflow: hidden; /* Prevent page-level scrolling */
 }
 
 .content-wrapper.sidebar-collapsed {
