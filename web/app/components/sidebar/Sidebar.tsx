@@ -4,9 +4,12 @@ import FileExplorer from '@components/fileexplorer/FileExplorer';
 import type { FileSystemEntry } from '@components/fileexplorer/FileExplorer';
 import PackageManagerView from './PackageManagerView';
 import HelpView from './HelpView';
+import SearchView from '@components/search/SearchView';
+import type { SearchResult } from '@components/search/SearchView';
+import { loadFileContent } from '@utils/storage';
 import './Sidebar.css';
 
-export type SidebarView = 'explorer' | 'packages' | 'help';
+export type SidebarView = 'explorer' | 'search' | 'packages' | 'help';
 
 interface SidebarProps {
   // File Explorer props
@@ -34,11 +37,43 @@ interface SidebarProps {
   setFileSystem: (fs: FileSystemEntry[]) => void;
   
   // Help View props
-  onLoadExample?: () => void;
+  onLoadExample?: (content: string, fileName: string) => void;
 }
 
 export default function Sidebar(props: SidebarProps) {
   const [activeView, setActiveView] = createSignal<SidebarView>('explorer');
+
+  // Create search results for files with content
+  const fileSearchResults = (): SearchResult[] => {
+    const results: SearchResult[] = [];
+    
+    const addFileToResults = (entry: FileSystemEntry, path: string = '') => {
+      const fullPath = path ? `${path}/${entry.name}` : entry.name;
+      
+      if (entry.type === 'file') {
+        // Load file content from localStorage for search
+        const fileContent = loadFileContent(fullPath);
+        
+        results.push({
+          id: entry.id,
+          title: entry.name,
+          subtitle: path || 'Root',
+          description: `File: ${fullPath}`, // Base description without content preview
+          content: fileContent, // Include content for search
+          path: fullPath,
+          icon: entry.name.endsWith('.alt') ? 'file-code' : 'file',
+          onClick: () => props.onFileSelect(fullPath)
+        });
+      }
+      
+      if (entry.children) {
+        entry.children.forEach(child => addFileToResults(child, fullPath));
+      }
+    };
+    
+    props.files.forEach(entry => addFileToResults(entry));
+    return results;
+  };
 
   return (
     <div class="sidebar">
@@ -49,6 +84,13 @@ export default function Sidebar(props: SidebarProps) {
           title="File Explorer (Ctrl+Shift+E)"
         >
           <i class="codicon codicon-files"></i>
+        </button>
+        <button 
+          class={`sidebar-tab ${activeView() === 'search' ? 'active' : ''}`}
+          onClick={() => setActiveView('search')}
+          title="Search (Ctrl+Shift+F)"
+        >
+          <i class="codicon codicon-search"></i>
         </button>
         <button 
           class={`sidebar-tab ${activeView() === 'packages' ? 'active' : ''}`}
@@ -88,6 +130,17 @@ export default function Sidebar(props: SidebarProps) {
             showDeleteConfirmDialog={props.showDeleteConfirmDialog}
             globalFileCreation={props.globalFileCreation}
             setGlobalFileCreation={props.setGlobalFileCreation}
+          />
+        </Show>
+        
+        <Show when={activeView() === 'search'}>
+          <SearchView 
+            placeholder="Search files..."
+            items={fileSearchResults()}
+            searchFields={['title', 'subtitle', 'description', 'content', 'path']}
+            emptyMessage="No files to search"
+            noResultsMessage="No files match your search"
+            showAllByDefault={false}
           />
         </Show>
         

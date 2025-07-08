@@ -1,0 +1,239 @@
+/* Search View Styles */
+.search-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.search-view-header {
+  padding: 8px 12px;
+  border-bottom: 1px solid #333333;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 32px;
+  flex-shrink: 0;
+  font-size: 10px;
+}
+
+.search-view-header h3 {
+  margin: 0;
+  font-weight: normal;
+  color: #cccccc;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.search-view-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.search-input-container {
+  padding: 12px;
+  border-bottom: 1px solid #333333;
+  flex-shrink: 0;
+}
+
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 8px;
+  font-size: 13px;
+  color: #999999;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.search-input {
+  width: 100%;
+  padding: 6px 28px 6px 28px;
+  background-color: #3c3c3c;
+  border: 1px solid #464647;
+  color: #cccccc;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.search-input:focus {
+  border-color: var(--ifm-color-primary, #007acc);
+}
+
+.search-input::placeholder {
+  color: #999999;
+}
+
+.search-clear {
+  position: absolute;
+  right: 4px;
+  background: none;
+  border: none;
+  color: #999999;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: color 0.2s, background-color 0.2s;
+}
+
+.search-clear:hover {
+  color: #cccccc;
+  background-color: #464647;
+}
+
+.search-results {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.search-result-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: #cccccc;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-radius: 0;
+}
+
+.search-result-item:hover {
+  background-color: #2d2d2d;
+}
+
+.search-result-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: #999999;
+}
+
+.search-result-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.search-result-title {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 2px;
+  color: #cccccc;
+  word-wrap: break-word;
+}
+
+.search-result-subtitle {
+  font-size: 10px;
+  color: var(--ifm-color-primary-light);
+  margin-bottom: 2px;
+  word-wrap: break-word;
+}
+
+.search-result-description {
+  font-size: 11px;
+  color: #888888;
+  line-height: 1.3;
+  word-wrap: break-word;
+  white-space: pre-wrap; /* Preserve newlines and spaces */
+}
+
+.search-highlight {
+  background-color: var(--ifm-color-primary);
+  color: #000000;
+  opacity: 0.8;
+  padding: 2px 0;
+}
+
+.search-empty,
+.search-no-results {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  text-align: center;
+  color: #999999;
+  height: 200px;
+}
+
+.search-empty i,
+.search-no-results i {
+  font-size: 32px;
+  margin-bottom: 12px;
+  color: #666666;
+}
+
+.search-empty p,
+.search-no-results p {
+  margin: 0 0 16px 0;
+  font-size: 13px;
+}
+
+.search-clear-btn {
+  background: none;
+  border: 1px solid #464647;
+  color: #cccccc;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.2s;
+}
+
+.search-clear-btn:hover {
+  background-color: #2d2d2d;
+  border-color: #666666;
+}
+
+/* Search Tips Styles */
+.search-tips {
+  margin-top: 16px;
+  text-align: left;
+  max-width: 250px;
+}
+
+.search-tips p {
+  font-size: 11px;
+  color: #cccccc;
+  margin: 0 0 8px 0;
+  font-weight: 500;
+}
+
+.search-tips ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.search-tips li {
+  font-size: 10px;
+  color: #999999;
+  margin: 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.search-tips code {
+  background-color: #3c3c3c;
+  padding: 2px 4px;
+  border-radius: 2px;
+  font-size: 9px;
+  color: #cccccc;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}

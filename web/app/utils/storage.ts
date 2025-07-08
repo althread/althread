@@ -1,5 +1,4 @@
 import type { FileSystemEntry } from '@components/fileexplorer/FileExplorer';
-import { Example1 } from '@examples/example1';
 
 export const STORAGE_KEYS = {
   FILE_SYSTEM: 'althread-file-system',
@@ -51,10 +50,6 @@ export const loadFileContent = (fileName: string): string => {
   }
   
   // Default content for specific files
-  if (fileName === 'main.alt') {
-    localStorage.setItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + 'main.alt', Example1);
-    return localStorage.getItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + 'main.alt')!;
-  }
   if (fileName === 'README.md') {
     localStorage.setItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + 'README.md', '# Project README\n\nThis is your project documentation.');
     return localStorage.getItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + 'README.md')!;

@@ -2,7 +2,6 @@
 /** @jsxImportSource solid-js */
 import { createSignal, createEffect } from "solid-js";
 import Resizable from '@corvu/resizable'
-import { Example1 } from "@examples/example1";
 
 import init, { compile, run, check } from '../pkg/althread_web';
 import createEditor from '@components/editor/Editor';
@@ -140,8 +139,12 @@ export default function App() {
   // Load example dialog state
   const [loadExampleDialog, setLoadExampleDialog] = createSignal<{
     isOpen: boolean;
+    content: string;
+    fileName: string;
   }>({
-    isOpen: false
+    isOpen: false,
+    content: '',
+    fileName: ''
   });
 
   const showMoveConfirmDialog = (sourcePaths: string[], destPath: string, conflictingName: string) => {
@@ -187,26 +190,37 @@ export default function App() {
     setDeleteConfirmation({ isOpen: false, paths: [] });
   };
 
+  // Load example handlers
+  const handleLoadExample = (content: string, fileName: string) => {
+    // Show the dialog with the loaded content
+    setLoadExampleDialog({
+      isOpen: true,
+      content,
+      fileName
+    });
+  };
+
   const handleLoadInCurrentFile = () => {
-    setLoadExampleDialog({ isOpen: false });
+    const dialog = loadExampleDialog();
+    setLoadExampleDialog({ isOpen: false, content: '', fileName: '' });
     
     // If no file is active, create a new one
     if (!editorManager.activeFile()) {
-      const fileName = `example-${Date.now()}.alt`;
-      editorManager.createNewFileWithContent(fileName, Example1, fileOperations, mockFileSystem);
+      const fileName = `${dialog.fileName.replace('.alt', '')}-${Date.now()}.alt`;
+      editorManager.createNewFileWithContent(fileName, dialog.content, fileOperations, mockFileSystem);
       return;
     }
     
     // Load into current file - update both editor and saved content
     if (editor && editor.safeUpdateContent) {
-      editor.safeUpdateContent(Example1);
+      editor.safeUpdateContent(dialog.content);
     } else {
       // Fallback for older editor instances
       const up = editor.editorView().state.update({
         changes: {
           from: 0, 
           to: editor.editorView().state.doc.length,
-          insert: Example1
+          insert: dialog.content
         }
       });
       editor.editorView().update([up]);
@@ -216,24 +230,19 @@ export default function App() {
     const activeFile = editorManager.activeFile();
     if (activeFile) {
       const filePath = getPathFromId(mockFileSystem(), activeFile.id) || activeFile.name;
-      saveFileContent(filePath, Example1);
+      saveFileContent(filePath, dialog.content);
     }
   };
 
   const handleLoadInNewFile = () => {
-    setLoadExampleDialog({ isOpen: false });
-    const fileName = `example-${Date.now()}.alt`;
-    editorManager.createNewFileWithContent(fileName, Example1, fileOperations, mockFileSystem);
+    const dialog = loadExampleDialog();
+    setLoadExampleDialog({ isOpen: false, content: '', fileName: '' });
+    const fileName = `${dialog.fileName.replace('.alt', '')}-${Date.now()}.alt`;
+    editorManager.createNewFileWithContent(fileName, dialog.content, fileOperations, mockFileSystem);
   };
 
   const handleCancelLoadExample = () => {
-    setLoadExampleDialog({ isOpen: false });
-  };
-
-  // Load example dialog handlers
-  const handleLoadExample = () => {
-    // Show load example dialog
-    setLoadExampleDialog({ isOpen: true });
+    setLoadExampleDialog({ isOpen: false, content: '', fileName: '' });
   };
 
   // New file prompt handlers

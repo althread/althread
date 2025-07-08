@@ -77,6 +77,7 @@ jobs:
         run: |
           cd web
           pnpm install
+          pnpm generate-examples # Generate examples from filesystem
           pnpm build-lezer # Build the Lezer parser
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "Building for production (main branch)"

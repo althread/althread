@@ -40,7 +40,6 @@
 .sidebar-tab.active {
   background-color: #232323;
   color: #ffffff;
-  transform: translateX(2px);
 }
 
 .sidebar-tab.active::before {
