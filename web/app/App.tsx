@@ -266,6 +266,7 @@ export default function App() {
   let [vm_states, setVmStates] = createSignal<any[]>([]); //to display vm states information
   let [activeAction, setActiveAction] = createSignal<string | null>(null);
   const [loadingAction, setLoadingAction] = createSignal<string | null>(null);
+  const [executionError, setExecutionError] = createSignal(false);
 
   const renderExecContent = () => {
     if (isRun()) {
@@ -278,7 +279,13 @@ export default function App() {
       } else if (activeTab() === "execution") {
         return (
           <div class="console">
-            <pre>{out()}</pre>
+            {executionError() ? (
+              <div class="execution-error-box">
+                <pre>{out()}</pre>
+              </div>
+            ) : (
+              <pre>{out()}</pre>
+            )}
           </div>
         );
       } else if (activeTab() === "msg_flow") {
@@ -339,7 +346,7 @@ export default function App() {
               disabled={loadingAction() === "run" || !editorManager.activeFile() || !isAltFile()}
               onClick={async () => {
                 if (!editorManager.activeFile()) return;
-                
+                setExecutionError(false);
                 setLoadingAction("run");
                 try {
                   setIsRun(true);
@@ -353,7 +360,14 @@ export default function App() {
                   setStdout(res.stdout.join('\n'));
                   setActiveTab("console");
                 } catch(e: any) {
+                  // show error in execution tab
                   setOut("ERROR: "+(e.pos && ('line '+e.pos.line))+"\n"+e.message);
+                  setActiveTab("execution");
+                  // reset other tabs to initial state
+                  setStdout("The console output will appear here.");
+                  setCommGraphOut([]);
+                  setVmStates([]);
+                  setExecutionError(true);
                 } finally {
                   setTimeout(() => {
                     setLoadingAction(null);
@@ -369,6 +383,7 @@ export default function App() {
               class={`vscode-button${activeAction() === "check" ? " active" : ""}`}
               disabled={!editorManager.activeFile() || !isAltFile()}
               onClick={() => {
+                setExecutionError(false);
                 if (!editorManager.activeFile()) return;
                 
                 setActiveAction(activeAction() === "check" ? null : "check");
@@ -429,7 +444,14 @@ export default function App() {
                   setIsRun(false);
 
                 } catch(e: any) {
+                  // show error in execution tab
                   setOut("ERROR: "+(e.pos && ('line '+e.pos.line))+"\n"+e.message);
+                  setActiveTab("execution");
+                  // reset other tabs to initial state
+                  setStdout("The console output will appear here.");
+                  setCommGraphOut([]);
+                  setVmStates([]);
+                  setExecutionError(true);
                 }
               }}>
               <i class="codicon codicon-check"></i>
@@ -439,6 +461,7 @@ export default function App() {
             <button
               class={`vscode-button${loadingAction() === "reset" ? " active" : ""}`}
               onClick={async () => {
+                setExecutionError(false);
                 setLoadingAction("reset");
                 try {
                   setIsRun(true);
@@ -531,9 +554,12 @@ minSize={0.2}>
         >
         <h3>Console</h3>
         </button>
-        <button class={`tab_button ${activeTab() === "execution" ? "active" : ""}`}
-                onclick={() => handleExecutionTabClick("execution")}
-                disabled={!isRun()}
+        <button
+          class={`tab_button 
+                   ${activeTab()   === "execution" ? "active"          : ""} 
+                   ${executionError()              ? "execution-error" : ""}`}
+          onclick={() => handleExecutionTabClick("execution")}
+          disabled={!isRun()}
         >
         <h3>Execution</h3>
         </button>

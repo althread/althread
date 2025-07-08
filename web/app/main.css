@@ -302,6 +302,14 @@ body {
   z-index: 1;
 }
 
+.tab_button.execution-error {
+  border-bottom: 2px solid #ec9999 !important;
+}
+
+.tab_button.execution-error h3 {
+  color: #ec9999 !important;
+}
+
 .tab_button h3 {
   margin: 0;
   font-size: 13px;
@@ -526,4 +534,10 @@ body {
 .confirmation-dialog-actions button:focus-visible {
   outline: 2px solid var(--ifm-color-primary);
   outline-offset: 2px;
+}
+
+.execution-error-box {
+  background-color: #2a1a1a;
+  border: 1px solid #ec9999;
+  color: #ec9999;
 }
