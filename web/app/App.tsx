@@ -255,6 +255,10 @@ export default function App() {
 
   // New file prompt handlers
   const handleNewFileClick = () => {
+    // If sidebar is collapsed, expand it first
+    if (sidebarCollapsed()) {
+      setSidebarCollapsed(false);
+    }
     // Switch to explorer view and trigger global file creation state
     setSidebarView('explorer');
     setGlobalFileCreation({ type: 'file', parentPath: '' });
