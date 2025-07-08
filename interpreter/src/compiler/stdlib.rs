@@ -80,12 +80,16 @@ impl Stdlib {
                     args: vec![DataType::Integer],
                     ret: t.as_ref().clone(),
                     f: Box::new(|list, v| {
-                        let v = v.to_integer().unwrap();
+                        let args = v.to_tuple().unwrap();
+                        if args.len() != 1 {
+                            panic!("Expected Tuple with one element.");
+                        }
+                        let idx = args[0].to_integer().unwrap();
                         if let Literal::List(_dtype, list) = list {
-                            if v < 0 || v as usize >= list.len() {
+                            if idx < 0 || idx as usize >= list.len() {
                                 panic!("Index out of bounds");
                             }
-                            return list.remove(v as usize);
+                            return list.remove(idx as usize);
                         } else {
                             panic!("Expected List")
                         }
