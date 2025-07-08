@@ -1,0 +1,78 @@
+/* Help View Styles */
+.help-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.help-view-header {
+  padding: 8px 12px;
+  border-bottom: 1px solid #333333;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 32px;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.help-view-header h3 {
+  margin: 0;
+  font-weight: normal;
+  color: #cccccc;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.help-view-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.help-links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.help-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: none;
+  border: none;
+  color: #cccccc;
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.help-link:hover {
+  background-color: #2d2d2d;
+  border-color: #404040;
+  color: #ffffff;
+}
+
+.help-link i {
+  font-size: 16px;
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+}
+
+.help-link-title {
+  font-weight: 500;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.help-link-desc {
+  font-size: 11px;
+  color: #999999;
+  line-height: 1.3;
+}

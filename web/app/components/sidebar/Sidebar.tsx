@@ -3,9 +3,10 @@ import { createSignal, Show } from 'solid-js';
 import FileExplorer from '@components/fileexplorer/FileExplorer';
 import type { FileSystemEntry } from '@components/fileexplorer/FileExplorer';
 import PackageManagerView from './PackageManagerView';
+import HelpView from './HelpView';
 import './Sidebar.css';
 
-export type SidebarView = 'explorer' | 'packages';
+export type SidebarView = 'explorer' | 'packages' | 'help';
 
 interface SidebarProps {
   // File Explorer props
@@ -31,6 +32,9 @@ interface SidebarProps {
   
   // Package Manager props
   setFileSystem: (fs: FileSystemEntry[]) => void;
+  
+  // Help View props
+  onLoadExample?: () => void;
 }
 
 export default function Sidebar(props: SidebarProps) {
@@ -52,6 +56,13 @@ export default function Sidebar(props: SidebarProps) {
           title="Package Manager (Ctrl+Shift+P)"
         >
           <i class="codicon codicon-package"></i>
+        </button>
+        <button
+          class={`sidebar-tab ${activeView() === 'help' ? 'active' : ''}`}
+          onClick={() => setActiveView('help')}
+          title="Help & Resources"
+        >
+          <i class="codicon codicon-question"></i>
         </button>
       </div>
       
@@ -85,6 +96,10 @@ export default function Sidebar(props: SidebarProps) {
             fileSystem={props.files}
             setFileSystem={props.setFileSystem}
           />
+        </Show>
+
+        <Show when={activeView() === 'help'}>
+          <HelpView onLoadExample={props.onLoadExample} />
         </Show>
       </div>
     </div>

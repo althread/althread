@@ -3,7 +3,6 @@
 import { createSignal, createEffect } from "solid-js";
 import Resizable from '@corvu/resizable'
 import { Example1 } from "@examples/example1";
-import { useNavigate } from "@solidjs/router";
 
 import init, { compile, run, check } from '../pkg/althread_web';
 import createEditor from '@components/editor/Editor';
@@ -33,8 +32,6 @@ init().then(() => {
 const animationTimeOut = 100; //ms
 
 export default function App() {
-  const navigate = useNavigate();
-
   // Load file system from localStorage
   let initialFileSystem = loadFileSystem();
   const utilsExists = initialFileSystem.some(entry => entry.name === 'utils' && entry.type === 'directory');
@@ -233,6 +230,12 @@ export default function App() {
     setLoadExampleDialog({ isOpen: false });
   };
 
+  // Load example dialog handlers
+  const handleLoadExample = () => {
+    // Show load example dialog
+    setLoadExampleDialog({ isOpen: true });
+  };
+
   // New file prompt handlers
   const handleNewFileClick = () => {
     // Trigger global file creation state to show the inline input in FileExplorer
@@ -320,27 +323,6 @@ export default function App() {
             <h3>Althread</h3>
           </div>
           <div class="actions">
-            <button
-              class={`vscode-button${loadingAction() === "load" ? " active" : ""}`}
-              disabled={loadingAction() === "load"}
-              onClick={async () => {
-                try {
-                  setLoadingAction("load");
-                  
-                  // Show load example dialog
-                  setLoadExampleDialog({ isOpen: true });
-                  
-                } catch (error) {
-                  console.error("Error showing load example dialog:", error);
-                } finally {
-                  setLoadingAction(null);
-                  setActiveAction(null);
-                }
-              }}>
-              <i class={loadingAction() === "load" ? "codicon codicon-loading codicon-modifier-spin" : "codicon codicon-file"}></i>
-              Load Example
-            </button>
-
             <button
               class={`vscode-button${loadingAction() === "run" ? " active" : ""}`}
               disabled={loadingAction() === "run" || !editorManager.activeFile() || !isAltFile()}
@@ -480,24 +462,6 @@ export default function App() {
               <i class={loadingAction() === "reset" ? "codicon codicon-loading codicon-modifier-spin" : "codicon codicon-clear-all"}></i>
               Reset
             </button>
-
-            <button
-              class={`vscode-button${loadingAction() === "tutorial" ? " active" : ""}`}
-              onClick={() => {
-                setLoadingAction("tutorial");
-                navigate('/tutorials');
-              }}>
-              <i class="codicon codicon-book"></i>
-              Tutorials
-            </button>
-            <button
-              class="vscode-button"
-              onClick={() => {
-                window.location.href = "https://althread.github.io/en/docs/guide/intro/";
-              }}>
-              <i class="codicon codicon-repo"></i>
-              Documentation
-            </button>
           </div>
       </div>
       <Resizable id="content">
@@ -523,6 +487,7 @@ export default function App() {
                 globalFileCreation={globalFileCreation()}
                 setGlobalFileCreation={setGlobalFileCreation}
                 setFileSystem={setMockFileSystem}
+                onLoadExample={handleLoadExample}
             />
         </Resizable.Panel>
         <Resizable.Handle class="Resizable-handle"/>
