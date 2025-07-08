@@ -100,7 +100,6 @@
   font-size: 11px;
   padding: 4px 0;
   cursor: pointer;
-  transition: color 0.2s;
 }
 
 .back-button:hover {
