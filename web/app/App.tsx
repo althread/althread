@@ -1,6 +1,6 @@
 // @refresh granular
 /** @jsxImportSource solid-js */
-import { createSignal, createEffect } from "solid-js";
+import { createSignal, createEffect, Show } from "solid-js";
 import Resizable from '@corvu/resizable'
 
 import init, { compile, run, check } from '../pkg/althread_web';
@@ -50,6 +50,11 @@ export default function App() {
 
   // Sidebar view state
   const [sidebarView, setSidebarView] = createSignal<SidebarView>('explorer');
+  const [sidebarCollapsed, setSidebarCollapsed] = createSignal(false);
+
+  const toggleSidebarCollapse = () => {
+    setSidebarCollapsed(prev => !prev);
+  };
 
   // Initialize editor (no default file content)
   let editor = createEditor({
@@ -267,6 +272,32 @@ export default function App() {
     saveFileSystem(mockFileSystem());
   });
 
+  // Reload active file content when sidebar state changes to preserve editor content
+  createEffect(() => {
+    // This effect runs whenever sidebarCollapsed changes
+    sidebarCollapsed(); // Read the signal to create dependency
+    
+    // Reload the active file content after the layout change
+    setTimeout(() => {
+      const activeFile = editorManager.activeFile();
+      if (activeFile && editor && editor.editorView) {
+        const filePath = getPathFromId(mockFileSystem(), activeFile.id) || activeFile.name;
+        const content = loadFileContent(filePath);
+        
+        // Update the editor content
+        const editorView = editor.editorView();
+        const transaction = editorView.state.update({
+          changes: {
+            from: 0,
+            to: editorView.state.doc.length,
+            insert: content
+          }
+        });
+        editorView.update([transaction]);
+      }
+    }, 50); // Small delay to ensure DOM is updated
+  });
+
   let [activeTab, setActiveTab] = createSignal("console");
   const handleExecutionTabClick = (tab: string) => {
     setActiveTab(tab);
@@ -477,92 +508,204 @@ export default function App() {
             </button>
           </div>
       </div>
-      <Resizable id="content">
-        <Resizable.Panel initialSize={0.20} minSize={0.20}>
-            <Sidebar
-                files={mockFileSystem()} 
-                onFileSelect={(path) => editorManager.handleFileSelect(path, mockFileSystem())}
-                onNewFile={fileOperations.handleNewFile}
-                onNewFolder={fileOperations.handleNewFolder}
-                onMoveEntry={fileOperations.handleMoveEntry}
-                onRenameEntry={fileOperations.handleRenameEntry}
-                onDeleteEntry={fileOperations.handleDeleteEntry}
-                onFileUpload={fileOperations.handleFileUpload}
-                activeFile={editorManager.activeFile()}
-                getFilePath={(entry) => getPathFromId(mockFileSystem(), entry.id) || entry.name}
-                selectedFiles={selectedFiles()}
-                onSelectionChange={setSelectedFiles}
-                creationError={creationError()}
-                setCreationError={setCreationError}
-                checkNameConflict={checkNameConflict}
-                showConfirmDialog={showMoveConfirmDialog}
-                showDeleteConfirmDialog={showDeleteConfirmDialog}
-                globalFileCreation={globalFileCreation()}
-                setGlobalFileCreation={setGlobalFileCreation}
-                setFileSystem={setMockFileSystem}
-                onLoadExample={handleLoadExample}
-                activeView={sidebarView()}
-                onViewChange={setSidebarView}
-            />
-        </Resizable.Panel>
-        <Resizable.Handle class="Resizable-handle"/>
-          <Resizable.Panel class="editor-panel"
-          initialSize={0.50}
-          minSize={0.2}>
-          <FileTabs 
-            openFiles={editorManager.openFiles()}
+      
+      {/* Collapsed sidebar positioned absolutely */}
+      {sidebarCollapsed() && (
+        <div class="collapsed-sidebar-container">
+          <Sidebar
+            files={mockFileSystem()} 
+            onFileSelect={(path) => editorManager.handleFileSelect(path, mockFileSystem())}
+            onNewFile={fileOperations.handleNewFile}
+            onNewFolder={fileOperations.handleNewFolder}
+            onMoveEntry={fileOperations.handleMoveEntry}
+            onRenameEntry={fileOperations.handleRenameEntry}
+            onDeleteEntry={fileOperations.handleDeleteEntry}
+            onFileUpload={fileOperations.handleFileUpload}
             activeFile={editorManager.activeFile()}
             getFilePath={(entry) => getPathFromId(mockFileSystem(), entry.id) || entry.name}
-            onTabClick={(file) => editorManager.handleFileTabClick(file, mockFileSystem())}
-            onTabClose={(file) => editorManager.handleTabClose(file, mockFileSystem())}
+            selectedFiles={selectedFiles()}
+            onSelectionChange={setSelectedFiles}
+            creationError={creationError()}
+            setCreationError={setCreationError}
+            checkNameConflict={checkNameConflict}
+            showConfirmDialog={showMoveConfirmDialog}
+            showDeleteConfirmDialog={showDeleteConfirmDialog}
+            globalFileCreation={globalFileCreation()}
+            setGlobalFileCreation={setGlobalFileCreation}
+            setFileSystem={setMockFileSystem}
+            onLoadExample={handleLoadExample}
+            activeView={sidebarView()}
+            onViewChange={setSidebarView}
+            isCollapsed={sidebarCollapsed()}
+            onToggleCollapse={toggleSidebarCollapse}
           />
-          {editorManager.activeFile() ? (
-            <div class="editor-instance-wrapper" ref={editor.ref} />
-          ) : (
-            <EmptyEditor onNewFile={handleNewFileClick} />
-          )}
-          </Resizable.Panel>
-        <Resizable.Handle class="Resizable-handle"/>
-        <Resizable.Panel class="right-panel"
-initialSize={0.30}
-minSize={0.2}>
-    <div class="execution-content">
-    <div class="tab">
-        <button class={`tab_button ${activeTab() === "console" ? "active" : ""}`}
-                onclick={() => handleExecutionTabClick("console")}
-                disabled={!isRun()}
-        >
-        <h3>Console</h3>
-        </button>
-        <button
-          class={`tab_button 
-                   ${activeTab()   === "execution" ? "active"          : ""} 
-                   ${executionError()              ? "execution-error" : ""}`}
-          onclick={() => handleExecutionTabClick("execution")}
-          disabled={!isRun()}
-        >
-        <h3>Execution</h3>
-        </button>
-        <button class={`tab_button ${activeTab() === "msg_flow" ? "active" : ""}`}
-                onclick={() => handleExecutionTabClick("msg_flow")}
-                disabled={!isRun()}
-        >
-        <h3>Message flow</h3>
-        </button>
-        <button class={`tab_button ${activeTab() === "vm_states" ? "active" : ""}`}
-                onclick={() => handleExecutionTabClick("vm_states")}
-        >
-        <h3>VM states</h3>
-        </button>
-    </div>
+        </div>
+      )}
 
-    <div class="tab-content">
-        {renderExecContent()}
-    </div>
-    </div>
+      <div class={`content-wrapper ${sidebarCollapsed() ? 'sidebar-collapsed' : ''}`}>
+        <Show when={sidebarCollapsed()} fallback={
+          // Expanded layout: 3 panels (sidebar + editor + right)
+          <Resizable id="content">
+            <Resizable.Panel initialSize={0.20} minSize={0.20}>
+                <Sidebar
+                    files={mockFileSystem()} 
+                    onFileSelect={(path) => editorManager.handleFileSelect(path, mockFileSystem())}
+                    onNewFile={fileOperations.handleNewFile}
+                    onNewFolder={fileOperations.handleNewFolder}
+                    onMoveEntry={fileOperations.handleMoveEntry}
+                    onRenameEntry={fileOperations.handleRenameEntry}
+                    onDeleteEntry={fileOperations.handleDeleteEntry}
+                    onFileUpload={fileOperations.handleFileUpload}
+                    activeFile={editorManager.activeFile()}
+                    getFilePath={(entry) => getPathFromId(mockFileSystem(), entry.id) || entry.name}
+                    selectedFiles={selectedFiles()}
+                    onSelectionChange={setSelectedFiles}
+                    creationError={creationError()}
+                    setCreationError={setCreationError}
+                    checkNameConflict={checkNameConflict}
+                    showConfirmDialog={showMoveConfirmDialog}
+                    showDeleteConfirmDialog={showDeleteConfirmDialog}
+                    globalFileCreation={globalFileCreation()}
+                    setGlobalFileCreation={setGlobalFileCreation}
+                    setFileSystem={setMockFileSystem}
+                    onLoadExample={handleLoadExample}
+                    activeView={sidebarView()}
+                    onViewChange={setSidebarView}
+                    isCollapsed={sidebarCollapsed()}
+                    onToggleCollapse={toggleSidebarCollapse}
+                />
+            </Resizable.Panel>
+            <Resizable.Handle class="Resizable-handle"/>
+            
+            <Resizable.Panel 
+              class="editor-panel"
+              initialSize={0.50}
+              minSize={0.2}
+            >
+              <FileTabs 
+                openFiles={editorManager.openFiles()}
+                activeFile={editorManager.activeFile()}
+                getFilePath={(entry) => getPathFromId(mockFileSystem(), entry.id) || entry.name}
+                onTabClick={(file) => editorManager.handleFileTabClick(file, mockFileSystem())}
+                onTabClose={(file) => editorManager.handleTabClose(file, mockFileSystem())}
+              />
+              {editorManager.activeFile() ? (
+                <div class="editor-instance-wrapper" ref={editor.ref} />
+              ) : (
+                <EmptyEditor onNewFile={handleNewFileClick} />
+              )}
+            </Resizable.Panel>
+            
+            <Resizable.Handle class="Resizable-handle"/>
+            
+            <Resizable.Panel 
+              class="right-panel"
+              initialSize={0.30}
+              minSize={0.2}
+            >
+              <div class="execution-content">
+                <div class="tab">
+                    <button class={`tab_button ${activeTab() === "console" ? "active" : ""}`}
+                            onclick={() => handleExecutionTabClick("console")}
+                            disabled={!isRun()}
+                    >
+                    <h3>Console</h3>
+                    </button>
+                    <button
+                      class={`tab_button 
+                               ${activeTab()   === "execution" ? "active"          : ""} 
+                               ${executionError()              ? "execution-error" : ""}`}
+                      onclick={() => handleExecutionTabClick("execution")}
+                      disabled={!isRun()}
+                    >
+                    <h3>Execution</h3>
+                    </button>
+                    <button class={`tab_button ${activeTab() === "msg_flow" ? "active" : ""}`}
+                            onclick={() => handleExecutionTabClick("msg_flow")}
+                            disabled={!isRun()}
+                    >
+                    <h3>Message flow</h3>
+                    </button>
+                    <button class={`tab_button ${activeTab() === "vm_states" ? "active" : ""}`}
+                            onclick={() => handleExecutionTabClick("vm_states")}
+                    >
+                    <h3>VM states</h3>
+                    </button>
+                </div>
 
-</Resizable.Panel>
-      </Resizable>
+                <div class="tab-content">
+                    {renderExecContent()}
+                </div>
+              </div>
+            </Resizable.Panel>
+          </Resizable>
+        }>
+          {/* Collapsed layout: 2 panels (editor + right) */}
+          <Resizable id="content-collapsed">
+            <Resizable.Panel 
+              class="editor-panel"
+              initialSize={0.70}
+              minSize={0.2}
+            >
+              <FileTabs 
+                openFiles={editorManager.openFiles()}
+                activeFile={editorManager.activeFile()}
+                getFilePath={(entry) => getPathFromId(mockFileSystem(), entry.id) || entry.name}
+                onTabClick={(file) => editorManager.handleFileTabClick(file, mockFileSystem())}
+                onTabClose={(file) => editorManager.handleTabClose(file, mockFileSystem())}
+              />
+              {editorManager.activeFile() ? (
+                <div class="editor-instance-wrapper" ref={editor.ref} />
+              ) : (
+                <EmptyEditor onNewFile={handleNewFileClick} />
+              )}
+            </Resizable.Panel>
+            
+            <Resizable.Handle class="Resizable-handle"/>
+            
+            <Resizable.Panel 
+              class="right-panel"
+              initialSize={0.30}
+              minSize={0.2}
+            >
+              <div class="execution-content">
+                <div class="tab">
+                    <button class={`tab_button ${activeTab() === "console" ? "active" : ""}`}
+                            onclick={() => handleExecutionTabClick("console")}
+                            disabled={!isRun()}
+                    >
+                    <h3>Console</h3>
+                    </button>
+                    <button
+                      class={`tab_button 
+                               ${activeTab()   === "execution" ? "active"          : ""} 
+                               ${executionError()              ? "execution-error" : ""}`}
+                      onclick={() => handleExecutionTabClick("execution")}
+                      disabled={!isRun()}
+                    >
+                    <h3>Execution</h3>
+                    </button>
+                    <button class={`tab_button ${activeTab() === "msg_flow" ? "active" : ""}`}
+                            onclick={() => handleExecutionTabClick("msg_flow")}
+                            disabled={!isRun()}
+                    >
+                    <h3>Message flow</h3>
+                    </button>
+                    <button class={`tab_button ${activeTab() === "vm_states" ? "active" : ""}`}
+                            onclick={() => handleExecutionTabClick("vm_states")}
+                    >
+                    <h3>VM states</h3>
+                    </button>
+                </div>
+
+                <div class="tab-content">
+                    {renderExecContent()}
+                </div>
+              </div>
+            </Resizable.Panel>
+          </Resizable>
+        </Show>
+      </div>
 
       {/* Move Confirmation Dialog */}
       <MoveConfirmationDialog

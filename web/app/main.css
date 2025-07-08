@@ -33,10 +33,32 @@ body {
     padding: 1rem 1rem 1rem 0.5rem;
     background-color: #1e1e1e;
 }
-#content {
+.content-wrapper {
     height: calc( 100vh - 30px );
+}
+
+.content-wrapper.sidebar-collapsed {
+    margin-left: 48px;
+}
+
+#content,
+#content-collapsed {
+    height: 100%;
     overflow: auto;
 }
+
+
+
+/* Collapsed sidebar container styles */
+.collapsed-sidebar-container {
+    position: absolute;
+    top: 62px; /* Height of header */
+    left: 0;
+    bottom: 0;
+    z-index: 1000;
+    pointer-events: auto;
+}
+
 .editor-panel {
      overflow: hidden;
 }
@@ -217,7 +239,6 @@ body {
     padding: 0;
     background: transparent;
     cursor: col-resize;
-    transition: all 0.2s ease;
     position: relative;
     z-index: 10;
   }
@@ -230,7 +251,6 @@ body {
     bottom: 0;
     width: 1px;
     background: rgba(127, 127, 127, 0.2);
-    transition: all 0.2s ease;
     transform: translateX(-50%);
   }
   
@@ -243,7 +263,6 @@ body {
     width: 4px;
     height: 60px;
     background: rgba(127, 127, 127, 0.1);
-    transition: all 0.2s ease;
     border-radius: 2px;
     opacity: 0;
   }
@@ -286,7 +305,6 @@ body {
   cursor: pointer;
   min-width: 0;
   min-height: 0;
-  transition: background-color 0.2s, border-color 0.2s;
   border-radius: 0;
   position: relative;
 }
@@ -356,7 +374,6 @@ body {
   border-radius: 2px;
   cursor: pointer;
   font-size: 15px;
-  transition: background-color 0.2s, border-color 0.2s;
 }
 
 .graph-toolbar button:hover {
@@ -444,7 +461,6 @@ body {
   font-size: 13px;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
-  transition: color 0.2s, border-color 0.2s;
   font-family: inherit;
 }
 

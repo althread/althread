@@ -42,6 +42,8 @@ interface SidebarProps {
   // Sidebar control
   activeView?: SidebarView;
   onViewChange?: (view: SidebarView) => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export default function Sidebar(props: SidebarProps) {
@@ -65,6 +67,21 @@ export default function Sidebar(props: SidebarProps) {
 
   const getModifierKey = () => isMac ? 'Cmd' : 'Ctrl';
 
+  // Handle tab clicks with collapse logic
+  const handleTabClick = (view: SidebarView) => {
+    if (props.isCollapsed && props.onToggleCollapse) {
+      // When collapsed, any tab click expands and sets that view
+      props.onToggleCollapse();
+      setActiveView(view);
+    } else if (activeView() === view && props.onToggleCollapse) {
+      // Clicking on active tab when expanded - collapse
+      props.onToggleCollapse();
+    } else {
+      // Normal tab switching when expanded
+      setActiveView(view);
+    }
+  };
+
   // Handle keyboard shortcuts for sidebar tabs
   createEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -76,19 +93,19 @@ export default function Sidebar(props: SidebarProps) {
         switch (e.key.toLowerCase()) {
           case 'e':
             e.preventDefault();
-            setActiveView('explorer');
+            handleTabClick('explorer');
             break;
           case 'f':
             e.preventDefault();
-            setActiveView('search');
+            handleTabClick('search');
             break;
           case 'p':
             e.preventDefault();
-            setActiveView('packages');
+            handleTabClick('packages');
             break;
           case 'i':
             e.preventDefault();
-            setActiveView('help');
+            handleTabClick('help');
             break;
         }
       }
@@ -134,85 +151,87 @@ export default function Sidebar(props: SidebarProps) {
   };
 
   return (
-    <div class="sidebar">
+    <div class={`sidebar ${props.isCollapsed ? 'collapsed' : ''}`}>
       <div class="sidebar-tabs">
         <button 
           class={`sidebar-tab ${activeView() === 'explorer' ? 'active' : ''}`}
-          onClick={() => setActiveView('explorer')}
+          onClick={() => handleTabClick('explorer')}
           title={`File Explorer (${getModifierKey()}+Shift+E)`}
         >
           <i class="codicon codicon-files"></i>
         </button>
         <button 
           class={`sidebar-tab ${activeView() === 'search' ? 'active' : ''}`}
-          onClick={() => setActiveView('search')}
+          onClick={() => handleTabClick('search')}
           title={`Search (${getModifierKey()}+Shift+F)`}
         >
           <i class="codicon codicon-search"></i>
         </button>
         <button 
           class={`sidebar-tab ${activeView() === 'packages' ? 'active' : ''}`}
-          onClick={() => setActiveView('packages')}
+          onClick={() => handleTabClick('packages')}
           title={`Package Manager (${getModifierKey()}+Shift+P)`}
         >
           <i class="codicon codicon-package"></i>
         </button>
         <button
           class={`sidebar-tab ${activeView() === 'help' ? 'active' : ''}`}
-          onClick={() => setActiveView('help')}
+          onClick={() => handleTabClick('help')}
           title={`Help & Resources (${getModifierKey()}+Shift+I)`}
         >
           <i class="codicon codicon-question"></i>
         </button>
       </div>
       
-      <div class="sidebar-content">
-        <Show when={activeView() === 'explorer'}>
-          <FileExplorer 
-            files={props.files}
-            onFileSelect={props.onFileSelect}
-            onNewFile={props.onNewFile}
-            onNewFolder={props.onNewFolder}
-            onMoveEntry={props.onMoveEntry}
-            onRenameEntry={props.onRenameEntry}
-            onDeleteEntry={props.onDeleteEntry}
-            onFileUpload={props.onFileUpload}
-            activeFile={props.activeFile}
-            getFilePath={props.getFilePath}
-            selectedFiles={props.selectedFiles}
-            onSelectionChange={props.onSelectionChange}
-            creationError={props.creationError}
-            setCreationError={props.setCreationError}
-            checkNameConflict={props.checkNameConflict}
-            showConfirmDialog={props.showConfirmDialog}
-            showDeleteConfirmDialog={props.showDeleteConfirmDialog}
-            globalFileCreation={props.globalFileCreation}
-            setGlobalFileCreation={props.setGlobalFileCreation}
-          />
-        </Show>
-        
-        <Show when={activeView() === 'search'}>
-          <SearchView 
-            placeholder="Search files..."
-            items={fileSearchResults()}
-            searchFields={['title', 'subtitle', 'description', 'content', 'path']}
-            emptyMessage="No files to search"
-            noResultsMessage="No files match your search"
-            showAllByDefault={false}
-          />
-        </Show>
-        
-        <Show when={activeView() === 'packages'}>
-          <PackageManagerView
-            fileSystem={props.files}
-            setFileSystem={props.setFileSystem}
-          />
-        </Show>
+      <Show when={!props.isCollapsed}>
+        <div class="sidebar-content">
+          <Show when={activeView() === 'explorer'}>
+            <FileExplorer 
+              files={props.files}
+              onFileSelect={props.onFileSelect}
+              onNewFile={props.onNewFile}
+              onNewFolder={props.onNewFolder}
+              onMoveEntry={props.onMoveEntry}
+              onRenameEntry={props.onRenameEntry}
+              onDeleteEntry={props.onDeleteEntry}
+              onFileUpload={props.onFileUpload}
+              activeFile={props.activeFile}
+              getFilePath={props.getFilePath}
+              selectedFiles={props.selectedFiles}
+              onSelectionChange={props.onSelectionChange}
+              creationError={props.creationError}
+              setCreationError={props.setCreationError}
+              checkNameConflict={props.checkNameConflict}
+              showConfirmDialog={props.showConfirmDialog}
+              showDeleteConfirmDialog={props.showDeleteConfirmDialog}
+              globalFileCreation={props.globalFileCreation}
+              setGlobalFileCreation={props.setGlobalFileCreation}
+            />
+          </Show>
+          
+          <Show when={activeView() === 'search'}>
+            <SearchView 
+              placeholder="Search files..."
+              items={fileSearchResults()}
+              searchFields={['title', 'subtitle', 'description', 'content', 'path']}
+              emptyMessage="No files to search"
+              noResultsMessage="No files match your search"
+              showAllByDefault={false}
+            />
+          </Show>
+          
+          <Show when={activeView() === 'packages'}>
+            <PackageManagerView
+              fileSystem={props.files}
+              setFileSystem={props.setFileSystem}
+            />
+          </Show>
 
-        <Show when={activeView() === 'help'}>
-          <HelpView onLoadExample={props.onLoadExample} />
-        </Show>
-      </div>
+          <Show when={activeView() === 'help'}>
+            <HelpView onLoadExample={props.onLoadExample} />
+          </Show>
+        </div>
+      </Show>
     </div>
   );
 }

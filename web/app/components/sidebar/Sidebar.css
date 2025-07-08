@@ -5,6 +5,33 @@
   background-color: #1e1e1e;
   color: #cccccc;
   /* border-right: 1px solid #333; */
+  transition: width 0.15s ease-out;
+}
+
+.sidebar.collapsed {
+  width: 48px;
+  z-index: 1001;
+}
+
+.sidebar.collapsed .sidebar-tab {
+  position: relative;
+}
+
+.sidebar.collapsed .sidebar-tab:hover::after {
+  content: attr(title);
+  position: absolute;
+  left: 48px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #2d2d2d;
+  color: #ffffff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 1001;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  border: 1px solid #333;
 }
 
 .sidebar-tabs {
