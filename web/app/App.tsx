@@ -13,7 +13,7 @@ import { nodeToString } from "@components/graph/Node";
 import type { FileSystemEntry } from '@components/fileexplorer/FileExplorer';
 import '@components/fileexplorer/FileExplorer.css';
 import FileTabs from "@components/fileexplorer/FileTabs";
-import Sidebar from '@components/sidebar/Sidebar';
+import Sidebar, { type SidebarView } from '@components/sidebar/Sidebar';
 
 // Import our new modules
 import { STORAGE_KEYS, loadFileSystem, saveFileSystem, loadFileContent, saveFileContent } from '@utils/storage';
@@ -47,6 +47,9 @@ export default function App() {
   
   // Global file creation state - shared between FileExplorer and EmptyEditor
   const [globalFileCreation, setGlobalFileCreation] = createSignal<{ type: 'file' | 'folder', parentPath: string } | null>(null);
+
+  // Sidebar view state
+  const [sidebarView, setSidebarView] = createSignal<SidebarView>('explorer');
 
   // Initialize editor (no default file content)
   let editor = createEditor({
@@ -247,7 +250,8 @@ export default function App() {
 
   // New file prompt handlers
   const handleNewFileClick = () => {
-    // Trigger global file creation state to show the inline input in FileExplorer
+    // Switch to explorer view and trigger global file creation state
+    setSidebarView('explorer');
     setGlobalFileCreation({ type: 'file', parentPath: '' });
   };
 
@@ -497,6 +501,8 @@ export default function App() {
                 setGlobalFileCreation={setGlobalFileCreation}
                 setFileSystem={setMockFileSystem}
                 onLoadExample={handleLoadExample}
+                activeView={sidebarView()}
+                onViewChange={setSidebarView}
             />
         </Resizable.Panel>
         <Resizable.Handle class="Resizable-handle"/>

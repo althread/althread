@@ -38,10 +38,24 @@ interface SidebarProps {
   
   // Help View props
   onLoadExample?: (content: string, fileName: string) => void;
+  
+  // Sidebar control
+  activeView?: SidebarView;
+  onViewChange?: (view: SidebarView) => void;
 }
 
 export default function Sidebar(props: SidebarProps) {
-  const [activeView, setActiveView] = createSignal<SidebarView>('explorer');
+  const [internalActiveView, setInternalActiveView] = createSignal<SidebarView>('explorer');
+  
+  // Use controlled or uncontrolled mode
+  const activeView = () => props.activeView !== undefined ? props.activeView : internalActiveView();
+  const setActiveView = (view: SidebarView) => {
+    if (props.onViewChange) {
+      props.onViewChange(view);
+    } else {
+      setInternalActiveView(view);
+    }
+  };
 
   const isMac = (() => {
     const userAgentData = (navigator as any).userAgentData;

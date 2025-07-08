@@ -466,8 +466,8 @@ body {
 /* Empty Editor Styles */
 .empty-editor {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;
+  justify-content: flex-start;
   height: 100%;
   width: 100%;
   background-color: #1e1e1e;
