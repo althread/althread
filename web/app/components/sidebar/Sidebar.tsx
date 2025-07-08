@@ -1,5 +1,5 @@
 /** @jsxImportSource solid-js */
-import { createSignal, Show } from 'solid-js';
+import { createSignal, Show, createEffect, onCleanup } from 'solid-js';
 import FileExplorer from '@components/fileexplorer/FileExplorer';
 import type { FileSystemEntry } from '@components/fileexplorer/FileExplorer';
 import PackageManagerView from './PackageManagerView';
@@ -43,6 +43,50 @@ interface SidebarProps {
 export default function Sidebar(props: SidebarProps) {
   const [activeView, setActiveView] = createSignal<SidebarView>('explorer');
 
+  const isMac = (() => {
+    const userAgentData = (navigator as any).userAgentData;
+    return userAgentData?.platform?.toLowerCase().includes('mac') || 
+           navigator.userAgent.toLowerCase().includes('mac');
+  })();
+
+  const getModifierKey = () => isMac ? 'Cmd' : 'Ctrl';
+
+  // Handle keyboard shortcuts for sidebar tabs
+  createEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Use Cmd on macOS, Ctrl on other platforms
+      const modifier = isMac ? e.metaKey : e.ctrlKey;
+      
+      // Check for Cmd+Shift (macOS) or Ctrl+Shift (other platforms) combinations
+      if (modifier && e.shiftKey) {
+        switch (e.key.toLowerCase()) {
+          case 'e':
+            e.preventDefault();
+            setActiveView('explorer');
+            break;
+          case 'f':
+            e.preventDefault();
+            setActiveView('search');
+            break;
+          case 'p':
+            e.preventDefault();
+            setActiveView('packages');
+            break;
+          case 'i':
+            e.preventDefault();
+            setActiveView('help');
+            break;
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    
+    onCleanup(() => {
+      document.removeEventListener('keydown', handleKeyDown);
+    });
+  });
+
   // Create search results for files with content
   const fileSearchResults = (): SearchResult[] => {
     const results: SearchResult[] = [];
@@ -81,28 +125,28 @@ export default function Sidebar(props: SidebarProps) {
         <button 
           class={`sidebar-tab ${activeView() === 'explorer' ? 'active' : ''}`}
           onClick={() => setActiveView('explorer')}
-          title="File Explorer (Ctrl+Shift+E)"
+          title={`File Explorer (${getModifierKey()}+Shift+E)`}
         >
           <i class="codicon codicon-files"></i>
         </button>
         <button 
           class={`sidebar-tab ${activeView() === 'search' ? 'active' : ''}`}
           onClick={() => setActiveView('search')}
-          title="Search (Ctrl+Shift+F)"
+          title={`Search (${getModifierKey()}+Shift+F)`}
         >
           <i class="codicon codicon-search"></i>
         </button>
         <button 
           class={`sidebar-tab ${activeView() === 'packages' ? 'active' : ''}`}
           onClick={() => setActiveView('packages')}
-          title="Package Manager (Ctrl+Shift+P)"
+          title={`Package Manager (${getModifierKey()}+Shift+P)`}
         >
           <i class="codicon codicon-package"></i>
         </button>
         <button
           class={`sidebar-tab ${activeView() === 'help' ? 'active' : ''}`}
           onClick={() => setActiveView('help')}
-          title="Help & Resources"
+          title={`Help & Resources (${getModifierKey()}+Shift+I)`}
         >
           <i class="codicon codicon-question"></i>
         </button>
