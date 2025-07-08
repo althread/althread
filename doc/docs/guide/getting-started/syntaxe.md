@@ -46,6 +46,10 @@ Les variables en althread peuvent prendre les types suivants :
 - **Chaîne de caractères** : `string`
 - **Processus exécutant un programme `A`** : `proc(A)`
 - **Tableau d'élement de type TYPE** : `list(TYPE)`
+:::tip Méthodes des listes
+Les listes disposent de méthodes intégrées comme `push()`, `len()`, `at()`, `set()` et `remove()`. 
+Consultez la [référence des méthodes de listes](../../api/listes.md) pour une documentation complète.
+:::
 
 
 ### Typage statique

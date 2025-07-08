@@ -18,5 +18,17 @@
   "sidebar.guideSidebar.category.Fonctionnement interne": {
     "message": "Internal Architecture",
     "description": "The label for category Fonctionnement interne in sidebar guideSidebar"
+  },
+  "sidebar.guideSidebar.category.Modularité": {
+    "message": "Modularity",
+    "description": "The label for category Modularité in sidebar guideSidebar"
+  },
+  "sidebar.apiSidebar.doc.api/built-in-functions": {
+    "message": "Built-in Functions",
+    "description": "The label for the Built-in Functions doc in the apiSidebar"
+  },
+  "sidebar.apiSidebar.doc.api/lists": {
+    "message": "Lists",
+    "description": "The label for the Lists doc in the apiSidebar"
   }
 }

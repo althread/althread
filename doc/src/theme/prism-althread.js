@@ -34,7 +34,7 @@
 		},
 
 		'function-definition': {
-			pattern: /\b(?:program|shared|main|program|always)\b/,
+			pattern: /\b(?:program|shared|main|program|always|fn)\b/,
 			lookbehind: true,
 			alias: 'system-block'
 		},

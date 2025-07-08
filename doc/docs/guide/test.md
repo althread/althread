@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 6
 ---
 
 # Créer des tests
@@ -47,34 +47,6 @@ Ici, le bloc `always` vérifie que la variable `X` est toujours inférieure à 1
 Il n'est pas possible d'utiliser le bloc de test pour des variables locales à un processus.
 :::
 
-## Fonction assert
-
-La fonction assert permet de vérifier si une condition est remplie. Si la condition n'est pas remplie, le test échoue et affiche un message d'erreur.
-
-Voici un exemple de l'utilisation de la fonction assert :
-```althread
-shared {
-    let X: int;
-}
-
-program A() {
-    X++;
-}
-
-program B() {
-    X--;
-}
-
-main {
-    atomic {
-        run A();
-        run B();
-    }
-    
-    assert(X < 1, "X doit être inférieur à 1");
-}
-```
-
-:::info
-Il est possible d'utiliser `assert`sur des variables locales à un processus.
+:::tip Fonction assert
+Pour des vérifications plus flexibles, consultez la documentation de la [fonction `assert()`](../api/fonctions-intégrées.md#assert-vérification) qui permet de tester des conditions avec des messages d'erreur personnalisés.
 :::

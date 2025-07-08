@@ -46,6 +46,10 @@ Variables in Althread can have the following types:
 - **String**: `string`
 - **Process running program `A`**: `proc(A)`
 - **Array of elements of type TYPE**: `list(TYPE)`
+:::tip List Methods
+Lists have built-in methods like `push()`, `len()`, `at()`, `set()` and `remove()`. 
+See the [list methods reference](../../api/lists.md) for complete documentation.
+:::
 
 ### Static Typing
 
