@@ -78,6 +78,28 @@
   position: relative;
 }
 
+/* Custom scrollbar for tutorial content - consistent with editor and file explorer, hover-only */
+.explanation-pane::-webkit-scrollbar {
+  width: 8px;
+}
+
+.explanation-pane::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.explanation-pane::-webkit-scrollbar-thumb {
+  background: transparent;
+  transition: background 0.2s ease;
+}
+
+.explanation-pane:hover::-webkit-scrollbar-thumb {
+  background: rgba(85, 85, 85, 0.6);
+}
+
+.explanation-pane::-webkit-scrollbar-thumb:hover {
+  background: rgba(102, 102, 102, 0.8);
+}
+
 .tutorial-content {
   flex-grow: 1;
 }
@@ -224,4 +246,62 @@
 .console pre {
     padding: 1rem;
     margin: 0;
+}
+
+/* Tutorial code block styling */
+.tutorial-code-block {
+  margin: 1rem 0;
+  border: 1px solid #333;
+  border-radius: 4px;
+  overflow: hidden;
+  background-color: #1e1e1e;
+}
+
+.tutorial-code-block .cm-editor {
+  border: none;
+  outline: none;
+}
+
+.tutorial-code-block .cm-focused {
+  outline: none;
+}
+
+.tutorial-code-block .cm-content {
+  padding: 0.5rem;
+}
+
+.tutorial-code-block .cm-gutters {
+  border-right: 1px solid #333;
+}
+
+/* Custom scrollbar for tutorial code blocks - consistent with main editor */
+.tutorial-code-block .cm-scroller::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.tutorial-code-block .cm-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tutorial-code-block .cm-scroller::-webkit-scrollbar-thumb {
+  background: transparent;
+  transition: background 0.2s ease;
+}
+
+.tutorial-code-block .cm-scroller:hover::-webkit-scrollbar-thumb {
+  background: rgba(85, 85, 85, 0.6);
+}
+
+.tutorial-code-block .cm-scroller::-webkit-scrollbar-thumb:hover {
+  background: rgba(102, 102, 102, 0.8);
+}
+
+/* Horizontal scrollbar styling */
+.tutorial-code-block .cm-scroller::-webkit-scrollbar:horizontal {
+  height: 8px;
+}
+
+.tutorial-code-block .cm-scroller::-webkit-scrollbar-corner {
+  background: transparent;
 }

@@ -72,6 +72,38 @@ body {
   overflow-y: hidden;
 }
 
+/* Custom scrollbar for editor - consistent with console, hover-only */
+.editor-instance-wrapper .cm-editor .cm-scroller::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.editor-instance-wrapper .cm-editor .cm-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.editor-instance-wrapper .cm-editor .cm-scroller::-webkit-scrollbar-thumb {
+  background: transparent;
+  transition: background 0.2s ease;
+}
+
+.editor-instance-wrapper .cm-editor .cm-scroller:hover::-webkit-scrollbar-thumb {
+  background: rgba(85, 85, 85, 0.6);
+}
+
+.editor-instance-wrapper .cm-editor .cm-scroller::-webkit-scrollbar-thumb:hover {
+  background: rgba(102, 102, 102, 0.8);
+}
+
+/* Horizontal scrollbar styling */
+.editor-instance-wrapper .cm-editor .cm-scroller::-webkit-scrollbar:horizontal {
+  height: 8px;
+}
+
+.editor-instance-wrapper .cm-editor .cm-scroller::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* Read-only editor styling */
 .editor-instance-wrapper .cm-editor.cm-readonly {
   background-color: #1a1a1a;
@@ -155,17 +187,15 @@ body {
 }
 
 .console::-webkit-scrollbar-track {
-  background: #2c2c2c;
-  border-radius: 4px;
+  background: rgba(44, 44, 44, 0.3);
 }
 
 .console::-webkit-scrollbar-thumb {
-  background: #555;
-  border-radius: 4px;
+  background: rgba(85, 85, 85, 0.5);
 }
 
 .console::-webkit-scrollbar-thumb:hover {
-  background: #666;
+  background: rgba(102, 102, 102, 0.7);
 }
 
 .vscode-button {

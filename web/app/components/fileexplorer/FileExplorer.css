@@ -62,7 +62,7 @@
   flex-grow: 1;
 }
 
-/* Custom scrollbar for File Explorer consistency */
+/* Custom scrollbar for File Explorer consistency - hover-only */
 .file-explorer-content::-webkit-scrollbar {
   width: 8px;
 }
@@ -72,12 +72,16 @@
 }
 
 .file-explorer-content::-webkit-scrollbar-thumb {
-  background: rgba(121, 121, 121, 0.4);
-  border-radius: 4px;
+  background: transparent;
+  transition: background 0.2s ease;
+}
+
+.file-explorer-content:hover::-webkit-scrollbar-thumb {
+  background: rgba(85, 85, 85, 0.6);
 }
 
 .file-explorer-content::-webkit-scrollbar-thumb:hover {
-  background: rgba(121, 121, 121, 0.6);
+  background: rgba(102, 102, 102, 0.8);
 }
 
 .file, .directory-header {

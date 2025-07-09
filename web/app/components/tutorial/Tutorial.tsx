@@ -1,4 +1,4 @@
-import { createSignal, createEffect, For } from 'solid-js';
+import { createSignal, createEffect, For, onMount } from 'solid-js';
 import type { Component } from "solid-js";
 import createEditor from '@components/editor/Editor';
 import { marked } from 'marked';
@@ -103,6 +103,74 @@ const Tutorial: Component = () => {
     }
   });
 
+  // Function to create and render tutorial content with embedded read-only CodeMirror editors
+  const renderTutorialContent = (markdownContent: string): string => {
+    // First, process the markdown to find code blocks
+    const codeBlockRegex = /```althread\n([\s\S]*?)\n```/g;
+    let processedContent = markdownContent;
+    const codeBlocks: { id: string; code: string }[] = [];
+    
+    // Extract code blocks and replace with placeholders
+    let match;
+    let blockIndex = 0;
+    while ((match = codeBlockRegex.exec(markdownContent)) !== null) {
+      const blockId = `code-block-${blockIndex}`;
+      const code = match[1];
+      codeBlocks.push({ id: blockId, code });
+      
+      // Replace the code block with a placeholder div
+      processedContent = processedContent.replace(
+        match[0],
+        `<div id="${blockId}" class="tutorial-code-block"></div>`
+      );
+      blockIndex++;
+    }
+    
+    // Convert markdown to HTML
+    const htmlContent = marked(processedContent) as string;
+    
+    // After the HTML is rendered to the DOM, create CodeMirror editors
+    setTimeout(() => {
+      codeBlocks.forEach(({ id, code }) => {
+        const container = document.getElementById(id);
+        if (container) {
+          // Clear any existing content
+          container.innerHTML = '';
+          
+          // Create a read-only editor instance
+          const readOnlyEditor = createEditor({
+            defaultValue: code,
+            onValueChange: undefined, // No change handler for read-only
+            compile: () => {}, // No compilation needed for read-only examples
+            fileName: 'example.alt'
+          });
+          
+          // Create a wrapper div to mount the editor
+          const editorWrapper = document.createElement('div');
+          container.appendChild(editorWrapper);
+          
+          // Use the ref setter to mount the editor
+          readOnlyEditor.ref(editorWrapper);
+          
+          // Set to read-only mode AFTER mounting
+          setTimeout(() => {
+            readOnlyEditor.setReadOnly(true);
+            
+            // Clear any selection that might occur on initialization
+            const view = readOnlyEditor.safeEditorView();
+            if (view) {
+              view.dispatch({
+                selection: { anchor: 0, head: 0 }
+              });
+            }
+          }, 50); // Increased delay to ensure editor is fully mounted
+        }
+      });
+    }, 10); // Small delay to ensure DOM is updated
+    
+    return htmlContent;
+  };
+
   const compileFromEditor = (currentEditorCode: string) => {
     // Create a simple virtual filesystem with just the tutorial code
     const virtualFS = {
@@ -206,7 +274,7 @@ const Tutorial: Component = () => {
         <Resizable.Panel class="explanation-pane" initialSize={0.4} minSize={0.2}>
             <div
             class="tutorial-content"
-            innerHTML={currentTutorial()?.content ? marked(currentTutorial()!.content) as string : 'Loading tutorial content...'}
+            innerHTML={currentTutorial()?.content ? renderTutorialContent(currentTutorial()!.content) : 'Loading tutorial content...'}
             ></div>
             <div class="navigation-buttons">
                 <button class="vscode-button" onClick={handlePreviousTutorial} disabled={currentTutorialIndex() === 0}>
