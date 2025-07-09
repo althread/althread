@@ -501,6 +501,7 @@ export default function App() {
                   setNodes([]);
                   setEdges([]);
                   setVmStates([]);
+                  setActiveAction(null); // Reset the active action state
                 } finally {
                   setTimeout(() => {
                     setLoadingAction(null);
