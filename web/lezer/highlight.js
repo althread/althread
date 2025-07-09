@@ -13,7 +13,7 @@ export const althreadHighlight = styleTags({
   "FunctionBlock/fn": t.keyword,
   "FunctionBlock/FnName": t.function(t.definition(t.variableName)),
   "CallExpression/FnName": t.function(t.variableName),
-  FnName: t.function(t.variableName),
+  "FnName": t.function(t.variableName),
 
   "MemberExpression > identifier:first-child": t.namespace,
   "CallExpression/MemberExpression > identifier:last-child": t.function(t.variableName),
@@ -48,8 +48,8 @@ export const althreadHighlight = styleTags({
   
   // Operators and punctuation
   UpdateOp: t.updateOperator,
-  LineComment: t.lineComment,
-  BlockComment: t.blockComment,
+  "LineComment": t.lineComment,
+  "BlockComment": t.blockComment,
   Number: t.number,
   String: t.string,
   ArithOp: t.arithmeticOperator,

@@ -336,8 +336,8 @@ SharedVariableName { global_identifer }
 
   LineComment { "//" ![\n]* }
   
-  @precedence { ImportSlash, "/*", LineComment, ArithOp<"/"> }
+  @precedence { LineComment, ImportSlash, "/*", ArithOp<"/"> }
 
-  @precedence { ImportSlash, "/*", LineComment, RegExp }
+  @precedence { LineComment, ImportSlash, "/*", RegExp }
   
 }

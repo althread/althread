@@ -5,7 +5,7 @@ import { marked } from 'marked';
 import './Tutorial.css';
 import Resizable from '@corvu/resizable';
 
-import  { compile, run, check } from '../../../pkg/althread_web';
+import  { compile, run } from '../../../pkg/althread_web';
 
 // Import all tutorials
 import { tutorial as tutorialStep1 } from '@tutorials/TutorialStep1_Variables';
@@ -104,11 +104,11 @@ const Tutorial: Component = () => {
   });
 
   const compileFromEditor = (currentEditorCode: string) => {
-    return compile(currentEditorCode);
-    // Placeholder for actual compilation/execution logic for the "Result" tab
-    // console.log("Compile/Execute called with:", currentEditorCode);
-    // setExecutionResult("Simulated execution output.");
-    return []; // Assuming this is for diagnostics or similar, adjust as needed
+    // Create a simple virtual filesystem with just the tutorial code
+    const virtualFS = {
+      'main.alt': currentEditorCode
+    };
+    return compile(currentEditorCode, virtualFS);
   };
 
   const editorInstance = createEditor({
@@ -146,7 +146,11 @@ const Tutorial: Component = () => {
 
   const handleRunCode = () => {
      const currentEditorCode = code();
-     const result = run(currentEditorCode);
+     // Create a simple virtual filesystem with just the tutorial code
+     const virtualFS = {
+       'main.alt': currentEditorCode
+     };
+     const result = run(currentEditorCode, virtualFS);
      setExecutionResult(result.stdout.join('\n'));
      setActiveTab('result');
   };

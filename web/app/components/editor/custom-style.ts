@@ -13,8 +13,9 @@ export const uiHighlightStyle = HighlightStyle.define([
     { tag: [t.string, t.special(t.string)], color: '#98c379' },
     { tag: [t.number, t.bool, t.null], color: '#d19a66' },
     
-    // Comments
-    { tag: t.comment, color: '#5c6370', fontStyle: 'italic' },
+    // Comments - use lower specificity to avoid overriding function names
+    { tag: t.lineComment, color: '#5c6370', fontStyle: 'italic' },
+    { tag: t.blockComment, color: '#5c6370', fontStyle: 'italic' },
     
     // Names: variables, functions, classes
     { tag: [t.className, t.typeName], color: '#e5c07b' },
