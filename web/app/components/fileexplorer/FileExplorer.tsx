@@ -20,6 +20,7 @@ type FileExplorerProps = {
   onFileUpload: (files: File[], destPath: string) => void;
   onRenameEntry: (oldPath: string, newName: string) => void;
   onDeleteEntry: (path: string) => void;
+  onCopyEntry: (sourcePath: string, destPath: string, newName: string) => void;
   getFilePath: (entry: FileSystemEntry) => string;
   activeFile: FileSystemEntry | null;
   selectedFiles: string[];
@@ -42,6 +43,9 @@ const FileEntry = (props: {
   onMoveEntry: (source: string, dest: string) => void;
   onRenameEntry: (oldPath: string, newName: string) => void;
   onDeleteEntry: (path: string) => void;
+  onCopy: (paths: string[]) => void;
+  onPaste: (destPath: string) => void;
+  isPasteEnabled: boolean;
   selectedFiles: string[];
   onSelectionChange: (selected: string[]) => void;
   onFileUpload: (files: File[], destPath: string) => void;
@@ -58,13 +62,20 @@ const FileEntry = (props: {
   // New props for edit state management
   currentlyRenaming: string | null;
   startRename: (path: string) => void;
+  // New prop for context menu management
+  isContextMenuOpenFor: string | null;
+  setContextMenuOpenFor: (path: string | null) => void;
 }) => {
   const currentPath = props.path ? `${props.path}/${props.entry.name}` : props.entry.name;
   const [isDragOver, setIsDragOver] = createSignal(false);
   const [isDragging, setIsDragging] = createSignal(false);
-  const [showContextMenu, setShowContextMenu] = createSignal(false);
   const [contextMenuPos, setContextMenuPos] = createSignal({ x: 0, y: 0 });
   const [renameError, setRenameError] = createSignal<string | null>(null);
+
+  const showContextMenu = () => props.isContextMenuOpenFor === currentPath;
+  const setShowContextMenu = (show: boolean) => {
+    props.setContextMenuOpenFor(show ? currentPath : null);
+  };
 
   // Check if this entry is currently being renamed
   const isRenaming = () => props.currentlyRenaming === currentPath;
@@ -128,6 +139,17 @@ const FileEntry = (props: {
     setShowContextMenu(true);
   };
 
+  const handleCopy = () => {
+    setShowContextMenu(false);
+    props.onCopy(props.selectedFiles);
+  };
+
+  const handlePaste = () => {
+    setShowContextMenu(false);
+    const destPath = props.entry.type === 'directory' ? currentPath : props.path;
+    props.onPaste(destPath);
+  };
+
   const handleRename = () => {
     setShowContextMenu(false);
     props.startRename(currentPath);
@@ -171,10 +193,16 @@ const FileEntry = (props: {
 
   // Close context menu when clicking elsewhere
   createEffect(() => {
-    const handleGlobalClick = () => setShowContextMenu(false);
+    const handleGlobalClick = (e: MouseEvent) => {
+      // If the click is outside the context menu, close it
+      const target = e.target as HTMLElement;
+      if (!target.closest('.context-menu')) {
+        setShowContextMenu(false);
+      }
+    };
     if (showContextMenu()) {
-      document.addEventListener('click', handleGlobalClick);
-      return () => document.removeEventListener('click', handleGlobalClick);
+      document.addEventListener('click', handleGlobalClick, { capture: true });
+      return () => document.removeEventListener('click', handleGlobalClick, { capture: true });
     }
     return undefined;
   });
@@ -439,6 +467,9 @@ const FileEntry = (props: {
                     onMoveEntry={props.onMoveEntry}
                     onRenameEntry={props.onRenameEntry}
                     onDeleteEntry={props.onDeleteEntry}
+                    onCopy={props.onCopy}
+                    onPaste={props.onPaste}
+                    isPasteEnabled={props.isPasteEnabled}
                     selectedFiles={props.selectedFiles}
                     onSelectionChange={props.onSelectionChange}
                     onFileUpload={props.onFileUpload}
@@ -454,6 +485,8 @@ const FileEntry = (props: {
                     createCommitInProgress={props.createCommitInProgress}
                     currentlyRenaming={props.currentlyRenaming}
                     startRename={props.startRename}
+                    isContextMenuOpenFor={props.isContextMenuOpenFor}
+                    setContextMenuOpenFor={props.setContextMenuOpenFor}
                   />
                 )}
             </For>
@@ -515,6 +548,15 @@ const FileEntry = (props: {
             }}
             onClick={(e) => e.stopPropagation()}
           >
+            <button onClick={handleCopy}>
+              <i class="codicon codicon-copy"></i>
+              Copy
+            </button>
+            <button onClick={handlePaste} disabled={!props.isPasteEnabled}>
+              <i class="codicon codicon-clippy"></i>
+              Paste
+            </button>
+            <div class="context-menu-separator"></div>
             <button onClick={handleRename}>
               <i class="codicon codicon-edit"></i>
               Rename
@@ -595,6 +637,15 @@ const FileEntry = (props: {
           }}
           onClick={(e) => e.stopPropagation()}
         >
+          <button onClick={handleCopy}>
+            <i class="codicon codicon-copy"></i>
+            Copy
+          </button>
+          <button onClick={handlePaste} disabled={!props.isPasteEnabled}>
+            <i class="codicon codicon-clippy"></i>
+            Paste
+          </button>
+          <div class="context-menu-separator"></div>
           <button onClick={handleRename}>
             <i class="codicon codicon-edit"></i>
             Rename
@@ -616,6 +667,8 @@ const FileExplorer = (props: FileExplorerProps) => {
   const setCreating = props.setGlobalFileCreation || setLocalCreating;
   
   const [isDragOver, setIsDragOver] = createSignal(false);
+  const [clipboard, setClipboard] = createSignal<string[] | null>(null);
+  const [isContextMenuOpenFor, setContextMenuOpenFor] = createSignal<string | null>(null);
   
   // Global edit state management - only one edit operation allowed at a time
   const [currentlyRenaming, setCurrentlyRenaming] = createSignal<string | null>(null);
@@ -642,6 +695,43 @@ const FileExplorer = (props: FileExplorerProps) => {
   const startCreation = (type: 'file' | 'folder', parentPath: string) => {
     cancelAllEdits();
     setCreating({ type, parentPath });
+  };
+
+  const isInDepsDirectory = (path: string) => {
+    return path === 'deps' || path.startsWith('deps/');
+  };
+
+  const handleCopy = (paths: string[]) => {
+    const pathsToCopy = paths.filter(p => !isInDepsDirectory(p));
+    if (pathsToCopy.length > 0) {
+      setClipboard(pathsToCopy);
+    }
+  };
+
+  const handlePaste = (destPath: string) => {
+    const sources = clipboard();
+    if (!sources) return;
+
+    for (const sourcePath of sources) {
+      const sourceName = sourcePath.split('/').pop()!;
+      
+      let newName = sourceName;
+      let counter = 1;
+      
+      const nameParts = sourceName.split('.');
+      const hasExtension = nameParts.length > 1 && nameParts[nameParts.length - 1].length > 0;
+      const extension = hasExtension ? `.${nameParts.pop()}` : '';
+      const baseName = nameParts.join('.');
+
+      if (props.checkNameConflict) {
+        while (props.checkNameConflict(destPath, newName)) {
+          newName = `${baseName} (${counter})${extension}`;
+          counter++;
+        }
+      }
+      
+      props.onCopyEntry(sourcePath, destPath, newName);
+    }
   };
 
   // Helper function to sort files and folders alphabetically
@@ -721,37 +811,66 @@ const FileExplorer = (props: FileExplorerProps) => {
       // Only handle other shortcuts when not creating a new file/folder or renaming
       if (creating() || currentlyRenaming()) return;
       
+      const target = e.target as HTMLElement;
+      const isInputFocused = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
+
+      // Check if the target is within a CodeMirror editor
+      let isCodeMirrorFocused = false;
+      let element = target;
+      while (element && element !== document.body) {
+        if (
+          element.classList.contains('cm-editor') ||
+          element.classList.contains('cm-content') ||
+          element.classList.contains('cm-scroller') ||
+          element.closest('.cm-editor')
+        ) {
+          isCodeMirrorFocused = true;
+          break;
+        }
+        element = element.parentElement as HTMLElement;
+      }
+
+      if (isInputFocused || isCodeMirrorFocused) {
+        return;
+      }
+
       // Cmd/Ctrl + A: Select all files
       if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
-        // Don't handle Ctrl+A if user is typing in an input, textarea, contenteditable element, or CodeMirror editor
-        const target = e.target as HTMLElement;
-        
-        // Check for standard input elements
-        if (
-          target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.isContentEditable
-        ) {
-          return; // Let the browser handle Ctrl+A in these elements
-        }
-        
-        // Check if the target is within a CodeMirror editor
-        let element = target;
-        while (element && element !== document.body) {
-          if (
-            element.classList.contains('cm-editor') ||
-            element.classList.contains('cm-content') ||
-            element.classList.contains('cm-scroller') ||
-            element.closest('.cm-editor')
-          ) {
-            return; // Let CodeMirror handle Ctrl+A in the editor
-          }
-          element = element.parentElement as HTMLElement;
-        }
-        
         e.preventDefault();
         const allFiles = getAllVisibleFiles();
         props.onSelectionChange(allFiles);
+      }
+
+      // Cmd/Ctrl + C: Copy
+      if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
+        e.preventDefault();
+        if (props.selectedFiles.length > 0) {
+          handleCopy(props.selectedFiles);
+        }
+      }
+
+      // Cmd/Ctrl + V: Paste
+      if ((e.metaKey || e.ctrlKey) && e.key === 'v') {
+        e.preventDefault();
+        if (clipboard()) {
+          let destPath = ''; // Default to root
+          if (props.selectedFiles.length === 1) {
+            const selectedPath = props.selectedFiles[0];
+            const selectedEntry = findEntryByPath(props.files, selectedPath);
+            if (selectedEntry) {
+              if (selectedEntry.type === 'directory') {
+                destPath = selectedPath;
+              } else {
+                const pathParts = selectedPath.split('/');
+                if (pathParts.length > 1) {
+                  pathParts.pop();
+                  destPath = pathParts.join('/');
+                }
+              }
+            }
+          }
+          handlePaste(destPath);
+        }
       }
     };
 
@@ -1023,6 +1142,9 @@ const FileExplorer = (props: FileExplorerProps) => {
               onMoveEntry={props.onMoveEntry}
               onRenameEntry={props.onRenameEntry}
               onDeleteEntry={props.onDeleteEntry}
+              onCopy={handleCopy}
+              onPaste={handlePaste}
+              isPasteEnabled={!!clipboard()}
               selectedFiles={props.selectedFiles}
               onSelectionChange={props.onSelectionChange}
               onFileUpload={props.onFileUpload}
@@ -1038,6 +1160,8 @@ const FileExplorer = (props: FileExplorerProps) => {
               createCommitInProgress={createCommitInProgress}
               currentlyRenaming={currentlyRenaming()}
               startRename={startRename}
+              isContextMenuOpenFor={isContextMenuOpenFor()}
+              setContextMenuOpenFor={setContextMenuOpenFor}
             />
           )}
         </For>

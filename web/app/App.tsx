@@ -525,6 +525,7 @@ export default function App() {
             onMoveEntry={fileOperations.handleMoveEntry}
             onRenameEntry={fileOperations.handleRenameEntry}
             onDeleteEntry={fileOperations.handleDeleteEntry}
+            onCopyEntry={fileOperations.handleCopyEntry}
             onFileUpload={fileOperations.handleFileUpload}
             activeFile={editorManager.activeFile()}
             getFilePath={(entry) => getPathFromId(mockFileSystem(), entry.id) || entry.name}
@@ -560,6 +561,7 @@ export default function App() {
                     onMoveEntry={fileOperations.handleMoveEntry}
                     onRenameEntry={fileOperations.handleRenameEntry}
                     onDeleteEntry={fileOperations.handleDeleteEntry}
+                    onCopyEntry={fileOperations.handleCopyEntry}
                     onFileUpload={fileOperations.handleFileUpload}
                     activeFile={editorManager.activeFile()}
                     getFilePath={(entry) => getPathFromId(mockFileSystem(), entry.id) || entry.name}

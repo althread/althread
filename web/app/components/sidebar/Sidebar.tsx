@@ -21,6 +21,7 @@ interface SidebarProps {
   onFileUpload: (files: File[], destPath: string) => void;
   onRenameEntry: (oldPath: string, newName: string) => void;
   onDeleteEntry: (path: string) => void;
+  onCopyEntry: (sourcePath: string, destPath: string, newName: string) => void;
   getFilePath: (entry: FileSystemEntry) => string;
   activeFile: FileSystemEntry | null;
   selectedFiles: string[];
@@ -194,6 +195,7 @@ export default function Sidebar(props: SidebarProps) {
               onMoveEntry={props.onMoveEntry}
               onRenameEntry={props.onRenameEntry}
               onDeleteEntry={props.onDeleteEntry}
+              onCopyEntry={props.onCopyEntry}
               onFileUpload={props.onFileUpload}
               activeFile={props.activeFile}
               getFilePath={props.getFilePath}

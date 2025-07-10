@@ -462,6 +462,79 @@ export const createFileOperationsHandlers = (
     }
   };
 
+  const handleCopyEntry = (sourcePath: string, destPath: string, newName: string) => {
+    console.log(`Copying ${sourcePath} to ${destPath}/${newName}`);
+    
+    // Deep copy the file system to avoid mutation issues
+    let newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
+
+    // Find the source entry to copy
+    const sourceInfo = findEntryAndParent(newFileSystem, sourcePath);
+    if (!sourceInfo) {
+      console.error("Source not found for copy:", sourcePath);
+      return;
+    }
+
+    // Create a deep copy of the source entry with new ID and name
+    const copyEntry = (entry: FileSystemEntry, name: string): FileSystemEntry => {
+      const newEntry: FileSystemEntry = {
+        id: crypto.randomUUID(),
+        name: name,
+        type: entry.type,
+        children: entry.type === 'directory' && entry.children 
+          ? entry.children.map(child => copyEntry(child, child.name))
+          : undefined
+      };
+      return newEntry;
+    };
+
+    const copiedEntry = copyEntry(sourceInfo.entry, newName);
+
+    // Find destination and add the copied entry
+    if (destPath === '') {
+      // Copying to root
+      newFileSystem.push(copiedEntry);
+    } else {
+      const destInfo = findEntryAndParent(newFileSystem, destPath);
+      if (!destInfo || destInfo.entry.type !== 'directory') {
+        console.error("Destination not found or is not a directory:", destPath);
+        return;
+      }
+      
+      if (!destInfo.entry.children) {
+        destInfo.entry.children = [];
+      }
+      destInfo.entry.children.push(copiedEntry);
+    }
+
+    // Copy file content recursively
+    const copyFileContent = (originalEntry: FileSystemEntry, copiedEntry: FileSystemEntry, originalPath: string, copiedPath: string) => {
+      if (originalEntry.type === 'file') {
+        const originalKey = STORAGE_KEYS.FILE_CONTENT_PREFIX + originalPath;
+        const copiedKey = STORAGE_KEYS.FILE_CONTENT_PREFIX + copiedPath;
+        const content = localStorage.getItem(originalKey);
+        if (content !== null) {
+          localStorage.setItem(copiedKey, content);
+        }
+      } else if (originalEntry.type === 'directory' && originalEntry.children && copiedEntry.children) {
+        for (let i = 0; i < originalEntry.children.length; i++) {
+          const originalChild = originalEntry.children[i];
+          const copiedChild = copiedEntry.children[i];
+          const originalChildPath = originalPath + '/' + originalChild.name;
+          const copiedChildPath = copiedPath + '/' + copiedChild.name;
+          copyFileContent(originalChild, copiedChild, originalChildPath, copiedChildPath);
+        }
+      }
+    };
+
+    const copiedPath = destPath === '' ? newName : `${destPath}/${newName}`;
+    copyFileContent(sourceInfo.entry, copiedEntry, sourcePath, copiedPath);
+
+    console.log("File system after copy:", newFileSystem);
+    saveFileSystem(newFileSystem);
+    setMockFileSystem(newFileSystem);
+  };
+
   return {
     handleNewFile,
     handleNewFolder,
@@ -469,6 +542,7 @@ export const createFileOperationsHandlers = (
     handleFileUpload,
     handleRenameEntry,
     handleDeleteEntry,
-    handleMoveWithReplacement
+    handleMoveWithReplacement,
+    handleCopyEntry
   };
 };

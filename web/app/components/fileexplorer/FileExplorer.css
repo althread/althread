@@ -59,6 +59,7 @@
 .file-explorer-content {
   padding: 5px 0;
   overflow-y: auto;
+  overflow-x: hidden;
   flex-grow: 1;
 }
 
@@ -544,6 +545,12 @@
 .context-menu button i {
   margin-right: 8px;
   font-size: 14px;
+}
+
+.context-menu-separator {
+  height: 1px;
+  background-color: #454545;
+  margin: 4px 0;
 }
 
 .header-action-btn {
