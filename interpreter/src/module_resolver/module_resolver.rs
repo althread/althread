@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::{Path, PathBuf}};
 use super::filesystem::FileSystem;
 
-use crate::{ast::import_block::{ImportBlock, ImportItem, ImportPath}, error::{AlthreadError, AlthreadResult, ErrorType}};
+use crate::{ast::{self, import_block::{ImportBlock, ImportItem, ImportPath}}, error::{AlthreadError, AlthreadResult, ErrorType}, parser};
 
 
 #[derive(Debug, Clone)]
@@ -34,7 +34,7 @@ pub struct ModuleResolver<F: FileSystem> {
     pub filesystem: F,
 }
 
-impl <F: FileSystem> ModuleResolver<F> {
+impl <F: FileSystem + Clone> ModuleResolver<F> {
     pub fn new(current_file: &Path, filesystem: F) -> Self {
         let current_file_dir = current_file.parent()
             .unwrap_or_else(|| Path::new("."))
@@ -71,15 +71,48 @@ impl <F: FileSystem> ModuleResolver<F> {
         None
     }
 
-    pub fn resolve_imports(&mut self, import_block: &ImportBlock) -> AlthreadResult<()> {
+    pub fn resolve_imports(&mut self, import_block: &ImportBlock, import_stack: &mut Vec<PathBuf>) -> AlthreadResult<()> {
         for import_item in &import_block.imports {
             let resolved = self.resolve_import_item(&import_item.value)?;
             let access_name = resolved.alias.clone().unwrap_or(resolved.name.clone());
+
+            // circular import check
+            if import_stack.contains(&resolved.path) {
+                return Err(AlthreadError::new(
+                    ErrorType::ImportNameConflict,
+                    None,
+                    format!("Circular import detected for '{}'. Import stack: {:?}", 
+                            resolved.name, import_stack)
+                ))
+            }
+
+            import_stack.push(resolved.path.clone());
+            let module_content = self.filesystem.read_file(&resolved.path)?;
+            let pairs = parser::parse(&module_content).map_err(|e| {
+                AlthreadError::new(
+                    ErrorType::SyntaxError,
+                    None,
+                    format!("Failed to parse module '{}': {:?}", resolved.name, e)
+                )
+            })?;
+            let module_ast = ast::Ast::build(pairs).map_err(|e| {
+                AlthreadError::new(
+                    ErrorType::SyntaxError,
+                    None,
+                    format!("Failed to build AST for module '{}': {:?}", resolved.name, e)
+                )
+            })?;
+            if let Some(import_block) = &module_ast.import_block {
+                let mut nested_resolver = Self::new(&resolved.path, self.filesystem.clone());
+                nested_resolver.resolve_imports(&import_block.value, import_stack)?;
+            }
+
 
             self.resolved_modules.insert(
                 access_name,
                 resolved
             );
+            import_stack.pop();
         }
 
         Ok(())

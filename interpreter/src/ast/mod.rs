@@ -210,8 +210,9 @@ impl Ast {
 
         if let Some(import_block) = &self.import_block {
             let mut module_resolver = ModuleResolver::new(current_file_path, filesystem.clone());
+            let mut import_stack = Vec::new();
 
-            module_resolver.resolve_imports(&import_block.value)?;
+            module_resolver.resolve_imports(&import_block.value, &mut import_stack)?;
 
             for (name, resolved_module) in module_resolver.resolved_modules {
                 let module_content = module_resolver.filesystem.read_file(&resolved_module.path)?;
