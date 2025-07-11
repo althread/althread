@@ -35,7 +35,7 @@ pub fn compile(source: &str, virtual_fs: JsValue) -> Result<String, JsValue> {
 
     println!("{}", &ast);
 
-    let compiled_project = ast.compile_with_filesystem(
+    let compiled_project = ast.compile(
         std::path::Path::new("main.alt"),
         virtual_filesystem
     ).map_err(error_to_js)?;
@@ -112,7 +112,7 @@ pub fn run(source: &str, virtual_fs: JsValue) -> Result<JsValue, JsValue> {
     println!("{}", &ast);
 
     // Use compile_with_filesystem instead of compile
-    let compiled_project = ast.compile_with_filesystem(
+    let compiled_project = ast.compile(
         std::path::Path::new("main.alt"),
         virtual_filesystem
     ).map_err(error_to_js)?;
@@ -268,7 +268,7 @@ pub fn check(source: &str, virtual_fs: JsValue) -> Result<JsValue, JsValue> {
 
     println!("{}", &ast);
 
-    let compiled_project = ast.compile_with_filesystem(
+    let compiled_project = ast.compile(
         std::path::Path::new("main.alt"),
         virtual_filesystem
     ).map_err(error_to_js)?;

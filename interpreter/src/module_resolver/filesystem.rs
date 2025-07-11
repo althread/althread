@@ -11,6 +11,12 @@ pub trait FileSystem {
 
 pub struct StandardFileSystem;
 
+impl Clone for StandardFileSystem {
+    fn clone(&self) -> Self {
+        StandardFileSystem
+    }
+}
+
 impl FileSystem for StandardFileSystem {
     fn is_file(&self, path: &Path) -> bool {
         path.is_file()
@@ -40,6 +46,14 @@ impl FileSystem for StandardFileSystem {
 
 pub struct VirtualFileSystem {
     files: HashMap<String, String>,
+}
+
+impl Clone for VirtualFileSystem {
+    fn clone(&self) -> Self {
+        VirtualFileSystem {
+            files: self.files.clone(),
+        }
+    }
 }
 
 impl VirtualFileSystem {

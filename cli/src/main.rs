@@ -11,7 +11,7 @@ use args::{CheckCommand, CliArguments, Command, CompileCommand, RandomSearchComm
 use clap::Parser;
 use owo_colors::{OwoColorize, Style};
 
-use althread::{ast::Ast, checker};
+use althread::{ast::Ast, checker, module_resolver::StandardFileSystem};
 
 use crate::package::{DependencySpec, Package};
 
@@ -61,7 +61,7 @@ pub fn compile_command(cli_args: &CompileCommand) {
 
     println!("{}", &ast);
 
-    let compiled_project = ast.compile(&path).unwrap_or_else(|e| {
+    let compiled_project = ast.compile(&path, StandardFileSystem).unwrap_or_else(|e| {
         e.report(&source);
         exit(1);
     });
@@ -97,7 +97,7 @@ pub fn check_command(cli_args: &CheckCommand) {
         exit(1);
     });
 
-    let compiled_project = ast.compile(&path).unwrap_or_else(|e| {
+    let compiled_project = ast.compile(&path, StandardFileSystem).unwrap_or_else(|e| {
         e.report(&source);
         exit(1);
     });
@@ -221,7 +221,7 @@ pub fn run_command(cli_args: &RunCommand) {
         exit(1);
     });
 
-    let compiled_project = ast.compile(&path).unwrap_or_else(|e| {
+    let compiled_project = ast.compile(&path, StandardFileSystem).unwrap_or_else(|e| {
         e.report(&source);
         exit(1);
     });
@@ -349,7 +349,7 @@ pub fn random_search_command(cli_args: &RandomSearchCommand) {
         exit(1);
     });
 
-    let compiled_project = ast.compile(&path).unwrap_or_else(|e| {
+    let compiled_project = ast.compile(&path, StandardFileSystem).unwrap_or_else(|e| {
         e.report(&source);
         exit(1);
     });

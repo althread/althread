@@ -1,21 +1,21 @@
 use std::{
-    collections::HashMap,
-    fmt::{self, Debug},
+    cell::RefCell, collections::HashMap, fmt::{self, Debug}, rc::Rc
 };
 
 use crate::ast::token::{datatype::DataType, literal::Literal};
 
+#[derive(Clone)]
 pub struct Interface {
     pub name: String,
     pub args: Vec<DataType>,
     pub ret: DataType,
     //pub f: Mutex<Box<dyn Fn(&mut Literal, &mut Literal) -> Literal + Send + Sync>>,
-    pub f: Box<dyn Fn(&mut Literal, &mut Literal) -> Literal>,
+    pub f: Rc<dyn Fn(&mut Literal, &mut Literal) -> Literal>,
 }
 
 #[derive(Debug)]
 pub struct Stdlib {
-    pub interfaces: HashMap<DataType, Vec<Interface>>,
+    pub interfaces: RefCell<HashMap<DataType, Vec<Interface>>>,
 }
 
 impl Debug for Interface {
@@ -31,34 +31,37 @@ impl Debug for Interface {
 impl Stdlib {
     pub fn new() -> Self {
         Self {
-            interfaces: HashMap::new(),
+            interfaces: RefCell::new(HashMap::new()),
         }
     }
-    pub fn get_interfaces(&self, dtype: &DataType) -> Option<&Vec<Interface>> {
-        self.interfaces.get(dtype)
+
+    pub fn get_interfaces(&self, dtype: &DataType) -> Option<Vec<Interface>> {
+        self.interfaces.borrow().get(dtype).cloned()
     }
-    pub fn interfaces(&mut self, dtype: &DataType) -> &Vec<Interface> {
-        if self.interfaces.contains_key(&dtype) {
-            return self.interfaces.get(&dtype).unwrap();
+
+    pub fn interfaces(&self, dtype: &DataType) -> Vec<Interface> {
+        if let Some(interfaces) = self.get_interfaces(dtype) {
+            return interfaces;
         }
+
+        let mut new_interfaces = vec![];
 
         match dtype.clone() {
             DataType::List(t) => {
-                let mut interfaces = vec![];
-                interfaces.push(Interface {
+                new_interfaces.push(Interface {
                     name: "len".to_string(),
                     args: vec![],
                     ret: DataType::Integer,
-                    f: Box::new(|list, _| match list {
+                    f: Rc::new(|list, _| match list {
                         Literal::List(_, v) => Literal::Int(v.len() as i64),
                         _ => panic!("Expected List"),
                     }),
                 });
-                interfaces.push(Interface {
+                new_interfaces.push(Interface {
                     name: "push".to_string(),
                     args: vec![t.as_ref().clone()],
                     ret: DataType::Void,
-                    f: Box::new(|list, v| {
+                    f: Rc::new(|list, v| {
                         let v = v.to_tuple().unwrap();
                         if let Literal::List(dtype, list) = list {
                             if v.len() != 1 {
@@ -75,11 +78,11 @@ impl Stdlib {
                         Literal::Null
                     }),
                 });
-                interfaces.push(Interface {
+                new_interfaces.push(Interface {
                     name: "remove".to_string(),
                     args: vec![DataType::Integer],
                     ret: t.as_ref().clone(),
-                    f: Box::new(|list, v| {
+                    f: Rc::new(|list, v| {
                         let args = v.to_tuple().unwrap();
                         if args.len() != 1 {
                             panic!("Expected Tuple with one element.");
@@ -95,11 +98,11 @@ impl Stdlib {
                         }
                     }),
                 });
-                interfaces.push(Interface {
+                new_interfaces.push(Interface {
                     name: "set".to_string(),
                     args: vec![DataType::Integer, t.as_ref().clone()],
                     ret: DataType::Void,
-                    f: Box::new(|list, v| {
+                    f: Rc::new(|list, v| {
                         let v = v.to_tuple().unwrap();
                         if v.len() != 2 {
                             panic!("Expected Tuple with two elements");
@@ -120,11 +123,11 @@ impl Stdlib {
                         Literal::Null
                     }),
                 });
-                interfaces.push(Interface {
+                new_interfaces.push(Interface {
                     name: "at".to_string(),
                     args: vec![DataType::Integer],
                     ret: t.as_ref().clone(),
-                    f: Box::new(|list, v| {
+                    f: Rc::new(|list, v| {
                         let v = v.to_tuple().unwrap();
                         let v = v.first().unwrap().to_integer().unwrap();
                         if let Literal::List(_dtype, list) = list {
@@ -137,12 +140,11 @@ impl Stdlib {
                         }
                     }),
                 });
-                self.interfaces.insert(dtype.clone(), interfaces);
             }
-            _ => {
-                self.interfaces.insert(dtype.clone(), vec![]);
-            }
+            _ => {}
         }
-        return self.interfaces.get(&dtype).unwrap();
+        
+        self.interfaces.borrow_mut().insert(dtype.clone(), new_interfaces.clone());
+        new_interfaces
     }
 }

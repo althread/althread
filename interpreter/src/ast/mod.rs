@@ -163,40 +163,34 @@ impl Ast {
         Ok(ast)
     }
 
-    pub fn compile_with_filesystem<F: FileSystem>(
+    pub fn compile<F: FileSystem + Clone>(
         &self,
-        current_file: &Path,
+        current_file_path: &Path,
         filesystem: F
     ) -> AlthreadResult<CompiledProject> {
-        self.compile_internal(current_file, Some(filesystem))
+        self.compile_internal(current_file_path, Some(filesystem), None)
     }
 
-    pub fn compile(&self, current_file_path: &Path) -> AlthreadResult<CompiledProject> {
-        self.compile_internal(current_file_path, None::<StandardFileSystem>)
-    }
-
-    fn compile_with_standard_filesystem(&self, current_file_path: &Path) -> AlthreadResult<CompiledProject> {
-        self.compile_internal(current_file_path, Some(StandardFileSystem))
-    }
-
-    fn compile_internal<F: FileSystem>(
+    fn compile_internal<F: FileSystem + Clone>(
         &self, 
         current_file_path: &Path,
-        filesystem: Option<F>
+        filesystem: Option<F>,
+        stdlib: Option<Rc<stdlib::Stdlib>>,
     ) -> AlthreadResult<CompiledProject> {
+
+        let mut global_memory = BTreeMap::new();
+        let mut global_table = HashMap::new();
 
         if filesystem.is_none() {
             // Delegate to the standard filesystem version
-            return self.compile_with_standard_filesystem(current_file_path);
+            return self.compile_internal(current_file_path, Some(StandardFileSystem), stdlib);
         }
 
         let filesystem = filesystem.unwrap();
 
-        // "compile" the "shared" block to retrieve the set of
-        // shared variables
         println!("Compiling AST for file: {}", current_file_path.display());
-        let mut state = CompilerState::new();
-
+        let stdlib = stdlib.unwrap_or_else(|| Rc::new(stdlib::Stdlib::new()));
+        let mut state = CompilerState::new_with_stdlib(Rc::clone(&stdlib));
 
         if  self.process_blocks.is_empty() &&
             self.global_block.as_ref().map_or(true, |block| block.value.children.is_empty()) &&
@@ -205,16 +199,17 @@ impl Ast {
             self.condition_blocks.is_empty() {
                 return Ok(CompiledProject {
                     global_memory: BTreeMap::new(),
+                    global_table: HashMap::new(),
                     user_functions: HashMap::new(),
                     programs_code: HashMap::new(),
                     always_conditions: Vec::new(),
                     eventually_conditions: Vec::new(),
-                    stdlib: Rc::new(stdlib::Stdlib::new()),
+                    stdlib: Rc::clone(&stdlib),
                 });
             }
 
         if let Some(import_block) = &self.import_block {
-            let mut module_resolver = ModuleResolver::new(current_file_path, filesystem);
+            let mut module_resolver = ModuleResolver::new(current_file_path, filesystem.clone());
 
             module_resolver.resolve_imports(&import_block.value)?;
 
@@ -245,9 +240,7 @@ impl Ast {
                     ));
                 }
 
-                // println!("AST for module '{}':\n{}", resolved_module.name, module_ast);
-
-                let compiled_module = module_ast.compile(&resolved_module.path).map_err(|e| {
+                let compiled_module = module_ast.compile_internal(&resolved_module.path, Some(filesystem.clone()), Some(Rc::clone(&stdlib))).map_err(|e| {
                     AlthreadError::new(
                         ErrorType::SyntaxError,
                         Some(import_block.pos),
@@ -256,6 +249,25 @@ impl Ast {
                 })?;
 
                 // println!("Compiled module '{}': {:?}", resolved_module.name, compiled_module);
+
+                // for (var_name, value) in compiled_module.global_memory {
+                //     let qualified_var_name = format!("{}.{}", name, var_name);
+                //     if global_memory.contains_key(&qualified_var_name) {
+                //         return Err(AlthreadError::new(
+                //             ErrorType::VariableAlreadyDefined,
+                //             Some(import_block.pos),
+                //             format!("Shared variable '{}' from module '{}' is already defined", var_name, name),
+                //         ));
+                //     }
+                //     println!("Adding global variable '{}' with value {:?}", qualified_var_name, value);
+                //     global_memory.insert(qualified_var_name.clone(), value.clone());
+                //     if let Some(var_meta) = compiled_module.global_table.get(&var_name) {
+                //         global_table.insert(qualified_var_name.clone(), var_meta.clone());
+                //     }
+                // }
+
+                let imported_fn_names: std::collections::HashSet<String> = 
+                    compiled_module.user_functions.keys().cloned().collect();
 
                 for (func_name, func_def) in compiled_module.user_functions {
 
@@ -270,18 +282,50 @@ impl Ast {
                     
                     let mut new_func_def = func_def.clone();
                     new_func_def.name = new_func_name.clone();
-                    state.user_functions.insert(new_func_name, new_func_def);
+
+                    // replace all function calls in the body with the new function name
+                    for instruction in &mut new_func_def.body {
+                        match &mut instruction.control {
+                            InstructionType::FnCall { name: call_name, ..} => {
+                                if imported_fn_names.contains(call_name) {
+                                    *call_name = format!("{}.{}", name, call_name);
+                                }
+                            }
+                            // InstructionType::GlobalReads { variables, only_const } => {
+                            //     println!("Global reads: {:?}", variables);
+                            //     for var in variables.iter_mut() {
+                            //         *var = format!("{}.{}", name, var);
+                            //     }
+                            // }
+                            _ => {}
+                        }
+                    }
+
+                    state.user_functions.insert(new_func_name.clone(), new_func_def);
                 }
+
+                // for (prog_name, prog_code) in compiled_module.programs_code {
+                //     let qualified_prog_name = format!("{}.{}", name, prog_name);
+                //     if state.program_arguments.contains_key(&qualified_prog_name) {
+                //         return Err(AlthreadError::new(
+                //             ErrorType::ProgramAlreadyDefined,
+                //             Some(import_block.pos),
+                //             format!("Program '{}' from module '{}' is already defined", prog_name, name),
+                //         ));
+                //     }
+
+                    // println!("Adding program '{}' with code {:?}", qualified_prog_name, prog_code);
+                    // state.program_arguments.insert(
+                    //     qualified_prog_name.clone(),
+                    //     prog_code.name.clone(),
+                    // );
+                // }
             }
         }
 
 
-
-
-
-
-        let mut global_memory = BTreeMap::new();
-        let mut global_table = HashMap::new();
+        // "compile" the "shared" block to retrieve the set of
+        // shared variables
         state.current_stack_depth = 1;
         state.is_shared = true;
         if let Some(global) = self.global_block.as_ref() {
@@ -338,6 +382,8 @@ impl Ast {
         }
 
         state.global_table = global_table;
+
+
 
         state.unstack_current_depth();
         assert!(state.current_stack_depth == 0);
@@ -598,10 +644,11 @@ impl Ast {
         Ok(CompiledProject {
             global_memory,
             user_functions: state.user_functions.clone(),
+            global_table: state.global_table.clone(),
             programs_code,
             always_conditions,
             eventually_conditions,
-            stdlib: Rc::new(state.stdlib),
+            stdlib: Rc::clone(&stdlib),
             
         })
     }

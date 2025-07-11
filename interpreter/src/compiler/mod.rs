@@ -108,7 +108,7 @@ pub struct CompilerState {
     // The names of the available programs and arguments
     pub program_arguments: HashMap<String, Vec<DataType>>,
 
-    pub stdlib: stdlib::Stdlib,
+    pub stdlib: Rc<stdlib::Stdlib>,
 
     pub current_program_name: String,
     pub is_atomic: bool,
@@ -132,9 +132,16 @@ impl CompilerState {
             is_atomic: false,
             is_shared: false,
             in_function: false,
-            stdlib: stdlib::Stdlib::new(),
+            stdlib: Rc::new(stdlib::Stdlib::new()),
             user_functions: HashMap::new(),
             method_call_stack_offset: 0,
+        }
+    }
+
+    pub fn new_with_stdlib(stdlib: Rc<stdlib::Stdlib>) -> Self {
+        Self {
+            stdlib: stdlib,
+            ..Self::new()
         }
     }
 
@@ -159,6 +166,7 @@ pub struct CompiledProject {
     pub programs_code: HashMap<String, ProgramCode>,
     pub user_functions: HashMap<String, FunctionDefinition>,
     pub global_memory: BTreeMap<String, Literal>,
+    pub global_table: HashMap<String, Variable>,
 
     /// The conditions that should always be true
     /// The first element is the variables that are used in the condition

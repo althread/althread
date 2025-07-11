@@ -84,7 +84,9 @@ pub enum ErrorType {
     AssertionFailed,
     ImportNameConflict,
     ModuleNotFound,
-    ImportMainConflict
+    ImportMainConflict,
+    VariableAlreadyDefined,
+    ProgramAlreadyDefined,
 }
 
 impl fmt::Display for ErrorType {
@@ -115,6 +117,8 @@ impl fmt::Display for ErrorType {
             ErrorType::ImportNameConflict => write!(f, "Import name conflict"),
             ErrorType::ModuleNotFound => write!(f, "Module not found"),
             ErrorType::ImportMainConflict => write!(f, "Import main conflict"),
+            ErrorType::VariableAlreadyDefined => write!(f, "Variable already defined"),
+            ErrorType::ProgramAlreadyDefined => write!(f, "Program already defined"),
         }
     }
 }
