@@ -1,0 +1,66 @@
+name: Question
+description: Ask a question about Althread
+title: "[QUESTION] "
+labels: ["question", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question about Althread? We're here to help! Please fill out the sections below.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which component of Althread is your question about?
+      options:
+        - CLI (Command Line Interface)
+        - Interpreter/Core (Language features and execution)
+        - Web UI (Browser-based editor)
+        - Documentation
+        - Installation/Setup
+        - General Usage
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What would you like to know?
+      placeholder: Ask your question here...
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Provide any relevant context that might help us answer your question
+      placeholder: |
+        - What are you trying to achieve?
+        - What have you already tried?
+        - Any relevant code or configuration?
+
+  - type: textarea
+    id: althread-code
+    attributes:
+      label: Althread Code (if applicable)
+      description: If your question is about specific Althread code, please paste it here
+      render: text
+      placeholder: |
+        program Example() {
+            // Your Althread code here
+        }
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      description: Please confirm the following
+      options:
+        - label: I have searched existing issues and discussions
+          required: true
+        - label: I have checked the documentation at https://althread.github.io/
+          required: true
