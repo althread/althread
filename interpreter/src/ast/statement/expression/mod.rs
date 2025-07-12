@@ -302,14 +302,14 @@ impl LocalExpressionNode {
             Self::FnCall(node) => {
                 let full_name = node.value.fn_name_to_string();
 
-                if state.user_functions.contains_key(&full_name) || node.value.fn_name.value.parts.len() == 1 {
-                    let fn_name = if state.user_functions.contains_key(&full_name) {
+                if state.user_functions().contains_key(&full_name) || node.value.fn_name.value.parts.len() == 1 {
+                    let fn_name = if state.user_functions().contains_key(&full_name) {
                         &full_name
                     } else {
                         &node.value.fn_name.value.parts[0].value.value
                     };
 
-                    if let Some(func_def) = state.user_functions.get(fn_name) {
+                    if let Some(func_def) = state.user_functions().get(fn_name) {
                         Ok(func_def.return_type.clone())
                     } else {
                         Err(format!("Function {} not found", fn_name))
@@ -319,7 +319,7 @@ impl LocalExpressionNode {
                     let receiver_name = &node.value.fn_name.value.parts[0].value.value;
                     let var = state.program_stack.iter().rev().find(|v| &v.name == receiver_name);
                     if let Some(var) = var {
-                        if let Some(interfaces) = state.stdlib.get_interfaces(&var.datatype) {
+                        if let Some(interfaces) = state.stdlib().get_interfaces(&var.datatype) {
                             let method_name = &node.value.fn_name.value.parts.last().unwrap().value.value;
                             if let Some(method) = interfaces.iter().find(|m| &m.name == method_name) {
                                 Ok(method.ret.clone())
@@ -367,11 +367,11 @@ impl InstructionBuilder for Node<Expression> {
         let mut vars = HashSet::new();
         self.value.get_vars(&mut vars);
 
-        vars.retain(|var| state.global_table.contains_key(var));
+        vars.retain(|var| state.global_table().contains_key(var));
 
         if !vars.is_empty() {
             for var in vars.iter() {
-                let global_var = state.global_table.get(var).expect(&format!(
+                let global_var = state.global_table().get(var).cloned().expect(&format!(
                     "Error: Variable '{}' not found in global table",
                     var
                 ));
@@ -386,7 +386,7 @@ impl InstructionBuilder for Node<Expression> {
             instructions.push(Instruction {
                 pos: Some(self.pos),
                 control: InstructionType::GlobalReads {
-                    only_const: vars.iter().all(|v| state.global_table[v].mutable == false),
+                    only_const: vars.iter().all(|v| state.global_table()[v].mutable == false),
                     variables: vars.into_iter().collect(),
                 },
             });

@@ -75,7 +75,7 @@ domain_char = _{ ASCII_ALPHANUMERIC | "_" | "." | "-" }
 
 
 fn_call  = { object_identifier ~ tuple_expression }
-run_call = { RUN_KW ~ identifier ~ tuple_expression }
+run_call = { RUN_KW ~ object_identifier ~ tuple_expression }
 send_call = { SEND_KW ~ object_identifier ~ tuple_expression }
 channel_declaration = { 
     CHANNEL_KW ~ 

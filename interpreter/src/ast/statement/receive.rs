@@ -81,7 +81,7 @@ impl InstructionBuilder for Node<ReceiveStatement> {
 
         // first check that the correct number of variables are supplied
         // retreive the variable from the declared channel:
-        let (channel_types, pos) = state.channels.get(&(state.current_program_name.clone(), channel_name.clone())).ok_or(AlthreadError::new(
+        let (channel_types, pos) = state.channels().get(&(state.current_program_name.clone(), channel_name.clone())).ok_or(AlthreadError::new(
             ErrorType::TypeError,
             Some(self.pos),
             format!("Cannot infer the types of the channel '{}', please declare the channel in the main (even if not used)", channel_name)

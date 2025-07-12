@@ -1,8 +1,8 @@
 use pest::iterators::Pairs;
 
 use crate::{
-    ast::node::{Node, NodeBuilder},
-    error::{AlthreadResult, Pos},
+    ast::node::{NodeBuilder},
+    error::{AlthreadResult},
     no_rule,
     parser::Rule,
 };

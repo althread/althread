@@ -59,7 +59,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
             .clone();
         let unstack_len = state.unstack_current_depth();
 
-        if let Some(g_val) = state.global_table.get(&full_var_name) {
+        if let Some(g_val) = state.global_table().get(&full_var_name) {
             if g_val.datatype != rdatatype {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,

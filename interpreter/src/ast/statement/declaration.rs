@@ -82,7 +82,7 @@ impl InstructionBuilder for Declaration {
         let var_name = &self.identifier.value.parts[0].value.value;
 
         if state
-            .global_table
+            .global_table()
             .contains_key(&full_var_name)
         {
             return Err(AlthreadError::new(

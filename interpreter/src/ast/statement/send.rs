@@ -68,17 +68,17 @@ impl InstructionBuilder for Node<SendStatement> {
         let unstack_len = state.unstack_current_depth();
 
         if state
-            .channels
+            .channels()
             .get(&(state.current_program_name.clone(), channel_name.clone()))
             .is_none()
         {
-            state.undefined_channels.insert(
+            state.undefined_channels_mut().insert(
                 (state.current_program_name.clone(), channel_name.clone()),
                 (vec![rdatatype], self.pos),
             );
         } else {
-            let (channel_types, pos) = state
-                .channels
+            let channels = state.channels();
+            let (channel_types, pos) = channels
                 .get(&(
                     state.current_program_name.clone(),
                     self.value.channel.clone(),

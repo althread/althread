@@ -8,7 +8,7 @@ pub mod token;
 
 use core::panic;
 use std::{
-    collections::{BTreeMap, HashMap}, fmt::{self, Formatter}, path::Path, rc::Rc
+    cell::RefCell, collections::{BTreeMap, HashMap}, fmt::{self, Formatter}, path::Path, rc::Rc
 };
 
 use block::Block;
@@ -21,7 +21,7 @@ use statement::Statement;
 use token::{args_list::ArgsList, condition_keyword::ConditionKeyword, datatype::DataType, identifier::Identifier};
 
 use crate::{
-    analysis::control_flow_graph::ControlFlowGraph, compiler::{stdlib, CompiledProject, CompilerState, FunctionDefinition, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, module_resolver::{module_resolver::ModuleResolver, FileSystem, StandardFileSystem}, no_rule, parser::{self, Rule}, vm::{
+    analysis::control_flow_graph::ControlFlowGraph, compiler::{stdlib, CompilationContext, CompiledProject, CompilerState, FunctionDefinition, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, module_resolver::{module_resolver::ModuleResolver, FileSystem, StandardFileSystem}, no_rule, parser::{self, Rule}, vm::{
         instruction::{Instruction, InstructionType, ProgramCode},
         VM,
     }
@@ -177,9 +177,7 @@ impl Ast {
         filesystem: Option<F>,
         stdlib: Option<Rc<stdlib::Stdlib>>,
     ) -> AlthreadResult<CompiledProject> {
-
-        let mut global_memory = BTreeMap::new();
-        let mut global_table = HashMap::new();
+        let mut programs_code = HashMap::new();
 
         if filesystem.is_none() {
             // Delegate to the standard filesystem version
@@ -190,7 +188,10 @@ impl Ast {
 
         println!("Compiling AST for file: {}", current_file_path.display());
         let stdlib = stdlib.unwrap_or_else(|| Rc::new(stdlib::Stdlib::new()));
-        let mut state = CompilerState::new_with_stdlib(Rc::clone(&stdlib));
+
+        // Create shared compilation context
+        let context = Rc::new(RefCell::new(CompilationContext::new(Rc::clone(&stdlib))));
+        let mut state = CompilerState::new_with_context(Rc::clone(&context));
 
         if  self.process_blocks.is_empty() &&
             self.global_block.as_ref().map_or(true, |block| block.value.children.is_empty()) &&
@@ -199,6 +200,7 @@ impl Ast {
             self.condition_blocks.is_empty() {
                 return Ok(CompiledProject {
                     global_memory: BTreeMap::new(),
+                    program_arguments: HashMap::new(),
                     global_table: HashMap::new(),
                     user_functions: HashMap::new(),
                     programs_code: HashMap::new(),
@@ -249,12 +251,10 @@ impl Ast {
                     )
                 })?;
 
-                // println!("Compiled module '{}': {:?}", resolved_module.name, compiled_module);
-
-                // shared variables
+                // shared variables - use context instead of local variables
                 for (var_name, value) in compiled_module.global_memory {
                     let qualified_var_name = format!("{}.{}", name, var_name);
-                    if global_memory.contains_key(&qualified_var_name) {
+                    if state.global_memory().contains_key(&qualified_var_name) {
                         return Err(AlthreadError::new(
                             ErrorType::VariableAlreadyDefined,
                             Some(import_block.pos),
@@ -262,9 +262,9 @@ impl Ast {
                         ));
                     }
                     println!("Adding global variable '{}' with value {:?}", qualified_var_name, value);
-                    global_memory.insert(qualified_var_name.clone(), value.clone());
+                    state.global_memory_mut().insert(qualified_var_name.clone(), value.clone());
                     if let Some(var_meta) = compiled_module.global_table.get(&var_name) {
-                        global_table.insert(qualified_var_name.clone(), var_meta.clone());
+                        state.global_table_mut().insert(qualified_var_name.clone(), var_meta.clone());
                     }
                 }
 
@@ -273,9 +273,8 @@ impl Ast {
                     compiled_module.user_functions.keys().cloned().collect();
 
                 for (func_name, func_def) in compiled_module.user_functions {
-
                     let new_func_name = format!("{}.{}", name, func_name);
-                    if state.user_functions.contains_key(&new_func_name) {
+                    if state.user_functions().contains_key(&new_func_name) {
                         return Err(AlthreadError::new(
                             ErrorType::FunctionAlreadyDefined,
                             Some(func_def.pos),
@@ -292,6 +291,53 @@ impl Ast {
                             InstructionType::FnCall { name: call_name, ..} => {
                                 if imported_fn_names.contains(call_name) {
                                     *call_name = format!("{}.{}", name, call_name);
+                            }
+                        }
+                        InstructionType::GlobalReads { variables, ..} => {
+                            for var in variables.iter_mut() {
+                                *var = format!("{}.{}", name, var);
+                            }
+                        }
+                        InstructionType::GlobalAssignment { identifier, ..} => {
+                            *identifier = format!("{}.{}", name, identifier);
+                        }
+                        InstructionType::RunCall { name: call_name, ..} => {
+                            *call_name = format!("{}.{}", name, call_name);
+                        }
+                        _ => {}
+                        }
+                    }
+
+                    println!("function body for {}: {:?}", new_func_name, new_func_def.body);
+
+                    state.user_functions_mut().insert(new_func_name.clone(), new_func_def);
+                }
+
+                for (prog_name, mut prog_code) in compiled_module.programs_code {
+                    let qualified_prog_name = format!("{}.{}", name, prog_name);
+                    if state.program_arguments().contains_key(&qualified_prog_name) {
+                        return Err(AlthreadError::new(
+                            ErrorType::ProgramAlreadyDefined,
+                            Some(import_block.pos),
+                            format!("Program '{}' from module '{}' is already defined", prog_name, name),
+                        ));
+                    }
+
+                    println!("Adding program '{}' with arguments {:?}", qualified_prog_name, compiled_module.program_arguments.get(&prog_name));
+                    state.program_arguments_mut().insert(
+                        qualified_prog_name.clone(),
+                        compiled_module.program_arguments.get(&prog_name)
+                            .cloned()
+                            .unwrap_or_default(),
+                    );
+
+                    println!("Adding program '{}' with code {:?}", qualified_prog_name, prog_code);
+                    prog_code.name = qualified_prog_name.clone();
+                    for instruction in &mut prog_code.instructions {
+                        match &mut instruction.control {
+                            InstructionType::FnCall { name: call_name, ..} => {
+                                if imported_fn_names.contains(call_name) {
+                                    *call_name = format!("{}.{}", name, call_name);
                                 }
                             }
                             InstructionType::GlobalReads { variables, ..} => {
@@ -302,37 +348,22 @@ impl Ast {
                             InstructionType::GlobalAssignment { identifier, ..} => {
                                 *identifier = format!("{}.{}", name, identifier);
                             }
+                            InstructionType::RunCall { name: call_name, ..} => {
+                                *call_name = format!("{}.{}", name, call_name);
+                            }
                             _ => {}
                         }
                     }
 
-                    println!("function body for {}: {:?}", new_func_name, new_func_def.body);
-
-                    state.user_functions.insert(new_func_name.clone(), new_func_def);
+                    programs_code.insert(qualified_prog_name, prog_code);
                 }
-
-                // for (prog_name, prog_code) in compiled_module.programs_code {
-                //     let qualified_prog_name = format!("{}.{}", name, prog_name);
-                //     if state.program_arguments.contains_key(&qualified_prog_name) {
-                //         return Err(AlthreadError::new(
-                //             ErrorType::ProgramAlreadyDefined,
-                //             Some(import_block.pos),
-                //             format!("Program '{}' from module '{}' is already defined", prog_name, name),
-                //         ));
-                //     }
-
-                //     println!("Adding program '{}' with code {:?}", qualified_prog_name, prog_code);
-                //     state.program_arguments.insert(
-                //         qualified_prog_name.clone(),
-                //         prog_code.name.clone(),
-                //     );
-                // }
             }
         }
 
+        println!("program arguments: {:?}", state.program_arguments());
+        println!("programs code: {:?}", programs_code);
 
-        // "compile" the "shared" block to retrieve the set of
-        // shared variables
+        // "compile" the "shared" block to retrieve the set of shared variables
         state.current_stack_depth = 1;
         state.is_shared = true;
         if let Some(global) = self.global_block.as_ref() {
@@ -370,11 +401,12 @@ impl Ast {
                             memory.push(literal);
 
                             let var_name = &decl.value.identifier.value.parts[0].value.value;
-                            global_table.insert(
+                            // Use context instead of local global_table
+                            state.global_table_mut().insert(
                                 var_name.clone(),
                                 state.program_stack.last().unwrap().clone(),
                             );
-                            global_memory.insert(var_name.clone(), memory.last().unwrap().clone());
+                            state.global_memory_mut().insert(var_name.clone(), memory.last().unwrap().clone());
                     }
                     _ => {
                         return Err(AlthreadError::new(
@@ -388,10 +420,6 @@ impl Ast {
             }
         }
 
-        state.global_table = global_table;
-
-
-
         state.unstack_current_depth();
         assert!(state.current_stack_depth == 0);
 
@@ -403,7 +431,7 @@ impl Ast {
         // or if they are recursive
         for (func_name, (args_list, return_datatype, func_block)) in &self.function_blocks {
             // check if the function is already defined
-            if state.user_functions.contains_key(func_name) {
+            if state.user_functions().contains_key(func_name) {
                 return Err(AlthreadError::new(
                     ErrorType::FunctionAlreadyDefined,
                     Some(func_block.pos),
@@ -426,88 +454,15 @@ impl Ast {
                 pos: func_block.pos,
             };
 
-            // println!("Function body for {}: {:?}", func_name, func_block);
-
             if let Err(e) = check_function_returns(&func_name,func_block, return_datatype){
                 return Err(e);
             }
 
-            state.user_functions.insert(func_name.clone(), func_def);
-        }
-
-        // now compile the function bodies
-        for (func_name, (args_list, return_datatype, func_block)) in &self.function_blocks {
-
-            state.in_function = true;
-            state.current_stack_depth += 1;
-            let initial_stack_len = state.program_stack.len();
-
-            let arguments: Vec<(Identifier, DataType)> = args_list.value
-                .identifiers
-                .iter()
-                .zip(args_list.value.datatypes.iter())
-                .map(|(id, dt)| {
-                    // add the arguments to the stack
-                    state.program_stack.push(Variable {
-                        name: id.value.value.clone(),
-                        depth: state.current_stack_depth,
-                        mutable: true,
-                        datatype: dt.value.clone(),
-                        declare_pos: Some(id.pos),
-                    });
-                    (id.value.clone(), dt.value.clone())
-                })
-                .collect();
-
-
-            // compile the function body
-            let mut compiled_body = func_block.compile(&mut state)?;
-            
-            // if the function's return datatype is Void
-            if *return_datatype == DataType::Void {
-                let mut has_return = false;
-                // check if it has a return instruction as the last instruction
-                match compiled_body.instructions.last() {
-                    Some(last_instruction) => {
-                        if let InstructionType::Return { has_value: false } = &last_instruction.control {
-                            has_return = true;
-                        }
-                    }
-                    None => {}
-                }
-                // if it does not have a return instruction, add one
-                if !has_return {
-                    compiled_body.instructions.push(
-                        Instruction {
-                            control: InstructionType::Return {
-                                has_value: false,
-                            },
-                            pos: Some(func_block.pos),
-                        },
-                    );
-                }
-            }
-
-            // clean up compiler state
-            state.program_stack.truncate(initial_stack_len);
-            state.current_stack_depth -= 1;
-            state.in_function = false;
-
-
-            let func_def = FunctionDefinition {
-                name: func_name.clone(),
-                arguments,
-                return_type: return_datatype.clone(),
-                body: compiled_body.instructions,
-                pos: func_block.pos,
-            };
-
-            state.user_functions.insert(func_name.clone(), func_def);
-
+            state.user_functions_mut().insert(func_name.clone(), func_def);
         }
 
         // before compiling the programs, get the list of program names and their arguments
-        state.program_arguments = self
+        let program_args: HashMap<String, Vec<DataType>> = self
             .process_blocks
             .iter()
             .map(|(name, (args, _))| {
@@ -521,10 +476,12 @@ impl Ast {
                 )
             })
             .collect();
+        
+        // Update context instead of state
+        state.program_arguments_mut().extend(program_args);
 
         // Compile all the programs
         state.is_shared = false;
-        let mut programs_code = HashMap::new();
         // start with the main program
 
         if self.process_blocks.contains_key("main") {
@@ -542,8 +499,8 @@ impl Ast {
             assert!(state.current_stack_depth == 0);
         }
 
-        // check if all the channed used have been declared
-        for (channel_name, (_, pos)) in &state.undefined_channels {
+        // check if all the channels used have been declared
+        for (channel_name, (_, pos)) in state.undefined_channels().iter() {
             return Err(AlthreadError::new(
                 ErrorType::UndefinedChannel,
                 Some(pos.clone()),
@@ -648,17 +605,91 @@ impl Ast {
             }
         
         }
-        Ok(CompiledProject {
-            global_memory,
-            user_functions: state.user_functions.clone(),
-            global_table: state.global_table.clone(),
-            programs_code,
-            always_conditions,
-            eventually_conditions,
-            stdlib: Rc::clone(&stdlib),
+
+                // now compile the function bodies
+        for (func_name, (args_list, return_datatype, func_block)) in &self.function_blocks {
+
+            state.in_function = true;
+            state.current_stack_depth += 1;
+            let initial_stack_len = state.program_stack.len();
+
+            let arguments: Vec<(Identifier, DataType)> = args_list.value
+                .identifiers
+                .iter()
+                .zip(args_list.value.datatypes.iter())
+                .map(|(id, dt)| {
+                    // add the arguments to the stack
+                    state.program_stack.push(Variable {
+                        name: id.value.value.clone(),
+                        depth: state.current_stack_depth,
+                        mutable: true,
+                        datatype: dt.value.clone(),
+                        declare_pos: Some(id.pos),
+                    });
+                    (id.value.clone(), dt.value.clone())
+                })
+                .collect();
+
+
+            // compile the function body
+            let mut compiled_body = func_block.compile(&mut state)?;
             
-        })
-    }
+            // if the function's return datatype is Void
+            if *return_datatype == DataType::Void {
+                let mut has_return = false;
+                // check if it has a return instruction as the last instruction
+                match compiled_body.instructions.last() {
+                    Some(last_instruction) => {
+                        if let InstructionType::Return { has_value: false } = &last_instruction.control {
+                            has_return = true;
+                        }
+                    }
+                    None => {}
+                }
+                // if it does not have a return instruction, add one
+                if !has_return {
+                    compiled_body.instructions.push(
+                        Instruction {
+                            control: InstructionType::Return {
+                                has_value: false,
+                            },
+                            pos: Some(func_block.pos),
+                        },
+                    );
+                }
+            }
+
+            // clean up compiler state
+            state.program_stack.truncate(initial_stack_len);
+            state.current_stack_depth -= 1;
+            state.in_function = false;
+
+
+            let func_def = FunctionDefinition {
+                name: func_name.clone(),
+                arguments,
+                return_type: return_datatype.clone(),
+                body: compiled_body.instructions,
+                pos: func_block.pos,
+            };
+
+            state.user_functions_mut().insert(func_name.clone(), func_def);
+
+        }
+
+    // Return using context data instead of local variables
+    let context_borrow = context.borrow();
+    Ok(CompiledProject {
+        global_memory: context_borrow.global_memory.clone(),
+        program_arguments: context_borrow.program_arguments.clone(),
+        user_functions: context_borrow.user_functions.clone(),
+        global_table: context_borrow.global_table.clone(),
+        programs_code,
+        always_conditions,
+        eventually_conditions,
+        stdlib: context_borrow.stdlib.clone(),
+    })
+}
     fn compile_program(
         &self,
         name: &str,

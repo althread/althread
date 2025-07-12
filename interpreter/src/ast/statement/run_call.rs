@@ -6,7 +6,7 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
-        token::datatype::DataType,
+        token::{datatype::DataType, object_identifier::ObjectIdentifier},
     },
     compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
@@ -18,23 +18,25 @@ use super::expression::Expression;
 
 #[derive(Debug, Clone)]
 pub struct RunCall {
-    pub identifier: Node<String>,
+    pub identifier: Node<ObjectIdentifier>,
     pub args: Node<Expression>,
+}
+
+impl RunCall {
+    pub fn program_name_to_string(&self) -> String {
+        self.identifier
+            .value
+            .parts
+            .iter()
+            .map(|part| part.value.value.as_str())
+            .collect::<Vec<_>>()
+            .join(".")
+    }
 }
 
 impl NodeBuilder for RunCall {
     fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
-        let pair = pairs.next().unwrap();
-        let identifier = Node {
-            pos: Pos {
-                line: pair.line_col().0,
-                col: pair.line_col().1,
-                start: pair.as_span().start(),
-                end: pair.as_span().end(),
-            },
-            value: pair.as_str().to_string(),
-        };
-
+        let identifier = Node::build(pairs.next().unwrap())?;
         let args: Node<Expression> = Expression::build_top_level(pairs.next().unwrap())?;
 
         if !args.value.is_tuple() {
@@ -51,6 +53,7 @@ impl NodeBuilder for RunCall {
 impl InstructionBuilder for Node<RunCall> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         let mut builder = InstructionBuilderOk::new();
+        let full_program_name = self.value.program_name_to_string();
 
         // push the args to the stack
         state.current_stack_depth += 1;
@@ -64,7 +67,14 @@ impl InstructionBuilder for Node<RunCall> {
         let unstack_len = state.unstack_current_depth();
         let call_datatype = call_datatype.tuple_unwrap();
 
-        if let Some(prog_args) = state.program_arguments.get(&self.value.identifier.value) {
+        println!(
+            "RunCall: {} with args {:?} at pos {:?}",
+            full_program_name, call_datatype, self.pos
+        );
+
+        println!("state program arguments: {:?}", state.program_arguments());
+
+        if let Some(prog_args) = state.program_arguments().get(&full_program_name) {
             if prog_args.len() != call_datatype.len() {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
@@ -94,7 +104,7 @@ impl InstructionBuilder for Node<RunCall> {
             return Err(AlthreadError::new(
                 ErrorType::TypeError,
                 Some(self.pos),
-                format!("Program {} does not exist", self.value.identifier.value),
+                format!("Program {} does not exist", full_program_name),
             ));
         }
 
@@ -103,13 +113,13 @@ impl InstructionBuilder for Node<RunCall> {
             name: "".to_string(),
             depth: state.current_stack_depth,
             mutable: false,
-            datatype: DataType::Process(self.value.identifier.value.clone()),
+            datatype: DataType::Process(full_program_name.clone()),
             declare_pos: Some(self.pos),
         });
 
         builder.instructions.push(Instruction {
             control: InstructionType::RunCall {
-                name: self.value.identifier.value.clone(),
+                name: full_program_name,
                 unstack_len,
             },
             pos: Some(self.pos),
@@ -121,7 +131,8 @@ impl InstructionBuilder for Node<RunCall> {
 
 impl AstDisplay for RunCall {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
-        writeln!(f, "{prefix}run: {}", self.identifier)?;
+        let program_name = self.program_name_to_string();
+        writeln!(f, "{prefix}run: {}", program_name)?;
 
         Ok(())
     }

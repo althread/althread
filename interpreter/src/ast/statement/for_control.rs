@@ -77,7 +77,7 @@ impl InstructionBuilder for Node<ForControl> {
         };
         // make sure the interface is built for this list:
         state
-            .stdlib
+            .stdlib()
             .interfaces(&DataType::List(Box::new(list_type.clone())));
 
         // push the iterator variable

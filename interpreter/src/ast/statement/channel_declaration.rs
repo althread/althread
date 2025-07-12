@@ -105,7 +105,7 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
 
         // check if a channel with the same name already exists on this program
         let left_key = (left_prog.clone(), dec.ch_left_name.clone());
-        if let Some(used) = state.undefined_channels.remove(&left_key) {
+        if let Some(used) = state.undefined_channels_mut().remove(&left_key) {
             if used.0 != dec.datatypes {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
@@ -122,7 +122,7 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
                 ));
             }
         }
-        if let Some((datatypes, pos)) = state.channels.get(&left_key) {
+        if let Some((datatypes, pos)) = state.channels().get(&left_key) {
             // check if the datatypes are the same
             if datatypes != &dec.datatypes {
                 return Err(AlthreadError::new(
@@ -136,12 +136,12 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
             }
         } else {
             state
-                .channels
+                .channels_mut()
                 .insert(left_key, (dec.datatypes.clone(), self.pos.clone()));
         }
 
         let right_key = (right_prog.clone(), dec.ch_right_name.clone());
-        if let Some(used) = state.undefined_channels.remove(&right_key) {
+        if let Some(used) = state.undefined_channels_mut().remove(&right_key) {
             if used.0 != dec.datatypes {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
@@ -158,7 +158,7 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
                 ));
             }
         }
-        if let Some((datatypes, pos)) = state.channels.get(&right_key) {
+        if let Some((datatypes, pos)) = state.channels().get(&right_key) {
             // check if the datatypes are the same
             if datatypes != &dec.datatypes {
                 return Err(AlthreadError::new(
@@ -172,7 +172,7 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
             }
         } else {
             state
-                .channels
+                .channels_mut()
                 .insert(right_key, (dec.datatypes.clone(), self.pos.clone()));
         }
 

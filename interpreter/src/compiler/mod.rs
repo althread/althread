@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::rc::Rc;
@@ -95,54 +96,114 @@ pub struct Variable {
 
 
 #[derive(Debug)]
-pub struct CompilerState {
+pub struct CompilationContext {
+    pub stdlib: Rc<stdlib::Stdlib>,
+    pub user_functions: HashMap<String, FunctionDefinition>,
     pub global_table: HashMap<String, Variable>,
-    pub program_stack: Vec<Variable>,
-    pub current_stack_depth: usize,
-
-    /// Store the channels data types that can be attached to a program
-    /// The key is the program name and the channel name
+    pub program_arguments: HashMap<String, Vec<DataType>>,
+    pub global_memory: BTreeMap<String, Literal>,
+    
+    // Add channel state
     pub channels: HashMap<(String, String), (Vec<DataType>, Pos)>,
     pub undefined_channels: HashMap<(String, String), (Vec<DataType>, Pos)>,
+}
 
-    // The names of the available programs and arguments
-    pub program_arguments: HashMap<String, Vec<DataType>>,
+impl CompilationContext {
+    pub fn new(stdlib: Rc<stdlib::Stdlib>) -> Self {
+        Self {
+            stdlib,
+            user_functions: HashMap::new(),
+            global_table: HashMap::new(),
+            program_arguments: HashMap::new(),
+            global_memory: BTreeMap::new(),
+            channels: HashMap::new(),
+            undefined_channels: HashMap::new(),
+        }
+    }
+}
 
-    pub stdlib: Rc<stdlib::Stdlib>,
-
+#[derive(Debug)]
+pub struct CompilerState {
+    pub program_stack: Vec<Variable>,
+    pub current_stack_depth: usize,
     pub current_program_name: String,
     pub is_atomic: bool,
     pub is_shared: bool,
     pub in_function: bool,
-
-    pub user_functions: HashMap<String, FunctionDefinition>,
     pub method_call_stack_offset: usize,
+    
+    // Reference to shared context
+    pub context: Rc<RefCell<CompilationContext>>,
 }
 
 impl CompilerState {
-    pub fn new() -> Self {
+    pub fn new_with_context(context: Rc<RefCell<CompilationContext>>) -> Self {
         Self {
-            global_table: HashMap::new(),
             program_stack: Vec::new(),
             current_stack_depth: 0,
-            channels: HashMap::new(),
-            undefined_channels: HashMap::new(),
             current_program_name: String::new(),
-            program_arguments: HashMap::new(),
             is_atomic: false,
             is_shared: false,
             in_function: false,
-            stdlib: Rc::new(stdlib::Stdlib::new()),
-            user_functions: HashMap::new(),
             method_call_stack_offset: 0,
+            context,
         }
     }
 
-    pub fn new_with_stdlib(stdlib: Rc<stdlib::Stdlib>) -> Self {
-        Self {
-            stdlib: stdlib,
-            ..Self::new()
-        }
+    pub fn stdlib(&self) -> Rc<stdlib::Stdlib> {
+        self.context.borrow().stdlib.clone()
+    }
+
+    pub fn stdlib_mut(&mut self) -> Rc<stdlib::Stdlib> {
+        Rc::clone(&self.context.borrow_mut().stdlib)
+    }
+    
+    pub fn user_functions(&self) -> std::cell::Ref<HashMap<String, FunctionDefinition>> {
+        std::cell::Ref::map(self.context.borrow(), |ctx| &ctx.user_functions)
+    }
+    
+    pub fn user_functions_mut(&self) -> std::cell::RefMut<HashMap<String, FunctionDefinition>> {
+        std::cell::RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.user_functions)
+    }
+    
+    pub fn global_table(&self) -> std::cell::Ref<HashMap<String, Variable>> {
+        std::cell::Ref::map(self.context.borrow(), |ctx| &ctx.global_table)
+    }
+    
+    pub fn global_table_mut(&self) -> std::cell::RefMut<HashMap<String, Variable>> {
+        std::cell::RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.global_table)
+    }
+
+    pub fn global_memory(&self) -> std::cell::Ref<BTreeMap<String, Literal>> {
+        std::cell::Ref::map(self.context.borrow(), |ctx| &ctx.global_memory)
+    }  
+
+    pub fn global_memory_mut(&self) -> std::cell::RefMut<BTreeMap<String, Literal>> {
+        std::cell::RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.global_memory)
+    }
+    
+    pub fn channels(&self) -> std::cell::Ref<HashMap<(String, String), (Vec<DataType>, Pos)>> {
+        std::cell::Ref::map(self.context.borrow(), |ctx| &ctx.channels)
+    }
+    
+    pub fn channels_mut(&self) -> std::cell::RefMut<HashMap<(String, String), (Vec<DataType>, Pos)>> {
+        std::cell::RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.channels)
+    }
+
+    pub fn undefined_channels(&self) -> std::cell::Ref<HashMap<(String, String), (Vec<DataType>, Pos)>> {
+        std::cell::Ref::map(self.context.borrow(), |ctx| &ctx.undefined_channels)
+    }  
+    
+    pub fn undefined_channels_mut(&self) -> std::cell::RefMut<HashMap<(String, String), (Vec<DataType>, Pos)>> {
+        std::cell::RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.undefined_channels)
+    }
+
+    pub fn program_arguments(&self) -> std::cell::Ref<HashMap<String, Vec<DataType>>> {
+        std::cell::Ref::map(self.context.borrow(), |ctx| &ctx.program_arguments)
+    }
+
+    pub fn program_arguments_mut(&self) -> std::cell::RefMut<HashMap<String, Vec<DataType>>> {
+        std::cell::RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.program_arguments)
     }
 
     /// Pop all variables from the program stack that have the same depth as the current stack depth
@@ -164,6 +225,7 @@ impl CompilerState {
 #[derive(Debug)]
 pub struct CompiledProject {
     pub programs_code: HashMap<String, ProgramCode>,
+    pub program_arguments: HashMap<String, Vec<DataType>>,
     pub user_functions: HashMap<String, FunctionDefinition>,
     pub global_memory: BTreeMap<String, Literal>,
     pub global_table: HashMap<String, Variable>,
