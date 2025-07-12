@@ -6,7 +6,7 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
-        token::datatype::DataType,
+        token::{datatype::DataType, object_identifier::ObjectIdentifier},
     },
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
@@ -24,7 +24,20 @@ pub struct SendStatement {
 
 impl NodeBuilder for SendStatement {
     fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
-        let channel = String::from(pairs.next().unwrap().as_str());
+        let mut pair = pairs.next().unwrap();
+
+        let channel = if pair.as_rule() == Rule::object_identifier {
+            // Parse the object_identifier and convert it to a string
+            let object_id = Node::<ObjectIdentifier>::build(pair)?;
+            object_id.value.parts
+                .iter()
+                .map(|p| p.value.value.as_str())
+                .collect::<Vec<_>>()
+                .join(".")
+        } else {
+            // Fallback for simple identifier (shouldn't happen with current grammar)
+            pair.as_str().to_string()
+        };
 
         let values: Node<Expression> = Expression::build_top_level(pairs.next().unwrap())?;
 
@@ -67,23 +80,16 @@ impl InstructionBuilder for Node<SendStatement> {
             .clone();
         let unstack_len = state.unstack_current_depth();
 
-        if state
-            .channels()
-            .get(&(state.current_program_name.clone(), channel_name.clone()))
-            .is_none()
-        {
+        // CLONE the channels data to avoid holding a reference
+        let channel_info = state.channels().get(&(state.current_program_name.clone(), channel_name.clone())).cloned();
+        
+        if channel_info.is_none() {
             state.undefined_channels_mut().insert(
                 (state.current_program_name.clone(), channel_name.clone()),
                 (vec![rdatatype], self.pos),
             );
         } else {
-            let channels = state.channels();
-            let (channel_types, pos) = channels
-                .get(&(
-                    state.current_program_name.clone(),
-                    self.value.channel.clone(),
-                ))
-                .unwrap();
+            let (channel_types, pos) = channel_info.unwrap();
 
             if channel_types.len() != tuple.values.len() {
                 return Err(AlthreadError::new(

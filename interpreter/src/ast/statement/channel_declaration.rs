@@ -105,7 +105,11 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
 
         // check if a channel with the same name already exists on this program
         let left_key = (left_prog.clone(), dec.ch_left_name.clone());
-        if let Some(used) = state.undefined_channels_mut().remove(&left_key) {
+        
+        // CLONE the undefined channels data to avoid holding a reference
+        let left_undefined = state.undefined_channels().get(&left_key).cloned();
+        if let Some(used) = left_undefined {
+            state.undefined_channels_mut().remove(&left_key);
             if used.0 != dec.datatypes {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
@@ -122,9 +126,12 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
                 ));
             }
         }
-        if let Some((datatypes, pos)) = state.channels().get(&left_key) {
+        
+        // CLONE the channels data to avoid holding a reference
+        let left_channel_info = state.channels().get(&left_key).cloned();
+        if let Some((datatypes, pos)) = left_channel_info {
             // check if the datatypes are the same
-            if datatypes != &dec.datatypes {
+            if datatypes != dec.datatypes {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
                     Some(self.pos),
@@ -141,7 +148,11 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
         }
 
         let right_key = (right_prog.clone(), dec.ch_right_name.clone());
-        if let Some(used) = state.undefined_channels_mut().remove(&right_key) {
+        
+        // CLONE the undefined channels data to avoid holding a reference
+        let right_undefined = state.undefined_channels().get(&right_key).cloned();
+        if let Some(used) = right_undefined {
+            state.undefined_channels_mut().remove(&right_key);
             if used.0 != dec.datatypes {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
@@ -158,9 +169,12 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
                 ));
             }
         }
-        if let Some((datatypes, pos)) = state.channels().get(&right_key) {
+        
+        // CLONE the channels data to avoid holding a reference
+        let right_channel_info = state.channels().get(&right_key).cloned();
+        if let Some((datatypes, pos)) = right_channel_info {
             // check if the datatypes are the same
-            if datatypes != &dec.datatypes {
+            if datatypes != dec.datatypes {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
                     Some(self.pos),
