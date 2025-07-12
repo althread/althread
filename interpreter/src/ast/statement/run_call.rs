@@ -9,7 +9,7 @@ use crate::{
         token::{datatype::DataType, object_identifier::ObjectIdentifier},
     },
     compiler::{CompilerState, InstructionBuilderOk, Variable},
-    error::{AlthreadError, AlthreadResult, ErrorType, Pos},
+    error::{AlthreadError, AlthreadResult, ErrorType},
     parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };

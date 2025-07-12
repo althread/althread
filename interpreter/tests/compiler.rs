@@ -8,9 +8,7 @@ use althread::{
             literal::Literal,
         },
         Ast,
-    },
-    error::Pos,
-    vm::instruction::{Instruction, InstructionType},
+    }, error::Pos, module_resolver::StandardFileSystem, vm::instruction::{Instruction, InstructionType}
 };
 
 // A simple test to verify that the compiler can compile a simple program
@@ -146,7 +144,7 @@ main {
 
     let ast = Ast::build(pairs).unwrap();
 
-    let compiled_project = ast.compile(std::path::Path::new("")).unwrap();
+    let compiled_project = ast.compile(std::path::Path::new(""), StandardFileSystem).unwrap();
 
     assert_eq!(
         compiled_project
@@ -255,7 +253,7 @@ main {
                 line: 5,
                 col: 9,
                 start: 49,
-                end: 50,
+                end: 51,
             }),
             control: InstructionType::LocalAssignment {
                 index: 0,
@@ -384,7 +382,7 @@ main {
 
     let ast = Ast::build(pairs).unwrap();
 
-    let compiled_project = ast.compile(std::path::Path::new("")).unwrap();
+    let compiled_project = ast.compile(std::path::Path::new(""), StandardFileSystem).unwrap();
 
     assert_eq!(
         compiled_project
