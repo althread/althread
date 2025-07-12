@@ -102,7 +102,7 @@ assignment = { binary_assignment }
 side_effect_expression    = { run_call | fn_call | expression | ("[" ~ range_expression ~ "]") }
 
 binary_assignment          = { 
-    identifier ~ 
+    object_identifier ~ 
     binary_assignment_operator ~ 
     side_effect_expression }
 binary_assignment_operator = { ASSIGN_OP | ADD_ASSIGN_OP | SUB_ASSIGN_OP | MUL_ASSIGN_OP | DIV_ASSIGN_OP | MOD_ASSIGN_OP }
@@ -125,7 +125,7 @@ range_expression = {
 	(expression ~ LIST_OP ~ expression)
 }
 
-primary_expression = _{ fn_call | literal | identifier | "(" ~ expression ~ ")" }
+primary_expression = _{ fn_call | literal | object_identifier | "(" ~ expression ~ ")" }
 
 unary_expression = _{ unary_operator? ~ primary_expression }
 unary_operator   =  { POS_OP | NEG_OP | NOT_OP }
@@ -279,7 +279,7 @@ NULL    = @{ NULL_KW }
 /// ### Identifiers
 /// Identifiers are used for naming variables, functions, and other constructs.
 identifier        = { IDENT }
-object_identifier = { (IDENT ~ "." ~ object_identifier) | IDENT }
+object_identifier = { IDENT ~ ("." ~ IDENT)* }
 
 reserved_keywords = { (KEYWORDS | datatype) ~ !IDENT_CHAR }
 

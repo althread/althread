@@ -7,7 +7,7 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
         statement::expression::SideEffectExpression,
-        token::{binary_assignment_operator::BinaryAssignmentOperator, identifier::Identifier},
+        token::{binary_assignment_operator::BinaryAssignmentOperator, object_identifier::ObjectIdentifier},
     },
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
@@ -17,7 +17,7 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct BinaryAssignment {
-    pub identifier: Node<Identifier>,
+    pub identifier: Node<ObjectIdentifier>,
     pub operator: Node<BinaryAssignmentOperator>,
     pub value: Node<SideEffectExpression>,
 }
@@ -40,6 +40,15 @@ impl InstructionBuilder for Node<BinaryAssignment> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         let mut builder = InstructionBuilderOk::new();
 
+        // Get the full variable name (e.g., "fibo.N")
+        let full_var_name = self.value.identifier
+            .value
+            .parts
+            .iter()
+            .map(|p| p.value.value.as_str())
+            .collect::<Vec<_>>()
+            .join(".");
+
         state.current_stack_depth += 1;
         builder.extend(self.value.value.compile(state)?);
         let rdatatype = state
@@ -50,7 +59,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
             .clone();
         let unstack_len = state.unstack_current_depth();
 
-        if let Some(g_val) = state.global_table.get(&self.value.identifier.value.value) {
+        if let Some(g_val) = state.global_table.get(&full_var_name) {
             if g_val.datatype != rdatatype {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
@@ -67,14 +76,14 @@ impl InstructionBuilder for Node<BinaryAssignment> {
                     Some(self.pos),
                     format!(
                         "Cannot assign value to the immutable global variable {}",
-                        self.value.identifier.value.value
+                        full_var_name
                     ),
                 ));
             }
             builder.instructions.push(Instruction {
                 pos: Some(self.value.identifier.pos),
                 control: InstructionType::GlobalAssignment {
-                    identifier: self.value.identifier.value.value.clone(),
+                    identifier: full_var_name,
                     operator: self.value.operator.value.clone(),
                     unstack_len,
                 },
@@ -83,7 +92,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
             let mut var_idx = 0;
             let mut l_var = None;
             for var in state.program_stack.iter().rev() {
-                if var.name == self.value.identifier.value.value {
+                if var.name == full_var_name {
                     l_var = Some(var);
                     break;
                 }
@@ -95,7 +104,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
                     Some(self.pos),
                     format!(
                         "Variable '{}' is undefined",
-                        self.value.identifier.value.value
+                        full_var_name
                     ),
                 ));
             }
@@ -116,7 +125,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
                     Some(self.pos),
                     format!(
                         "Cannot assign value to the immutable local variable {}",
-                        self.value.identifier.value.value
+                        full_var_name
                     ),
                 ));
             }
@@ -140,7 +149,14 @@ impl AstDisplay for BinaryAssignment {
         writeln!(f, "{}binary_assign", prefix)?;
 
         let prefix = prefix.add_branch();
-        writeln!(f, "{}ident: {}", &prefix, self.identifier)?;
+        let full_name = self.identifier
+            .value
+            .parts
+            .iter()
+            .map(|p| p.value.value.as_str())
+            .collect::<Vec<_>>()
+            .join(".");
+        writeln!(f, "{}ident: {}", &prefix, full_name)?;
         writeln!(f, "{}op: {}", &prefix, self.operator)?;
 
         let prefix = prefix.switch();

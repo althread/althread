@@ -251,22 +251,24 @@ impl Ast {
 
                 // println!("Compiled module '{}': {:?}", resolved_module.name, compiled_module);
 
-                // for (var_name, value) in compiled_module.global_memory {
-                //     let qualified_var_name = format!("{}.{}", name, var_name);
-                //     if global_memory.contains_key(&qualified_var_name) {
-                //         return Err(AlthreadError::new(
-                //             ErrorType::VariableAlreadyDefined,
-                //             Some(import_block.pos),
-                //             format!("Shared variable '{}' from module '{}' is already defined", var_name, name),
-                //         ));
-                //     }
-                //     println!("Adding global variable '{}' with value {:?}", qualified_var_name, value);
-                //     global_memory.insert(qualified_var_name.clone(), value.clone());
-                //     if let Some(var_meta) = compiled_module.global_table.get(&var_name) {
-                //         global_table.insert(qualified_var_name.clone(), var_meta.clone());
-                //     }
-                // }
+                // shared variables
+                for (var_name, value) in compiled_module.global_memory {
+                    let qualified_var_name = format!("{}.{}", name, var_name);
+                    if global_memory.contains_key(&qualified_var_name) {
+                        return Err(AlthreadError::new(
+                            ErrorType::VariableAlreadyDefined,
+                            Some(import_block.pos),
+                            format!("Shared variable '{}' from module '{}' is already defined", var_name, name),
+                        ));
+                    }
+                    println!("Adding global variable '{}' with value {:?}", qualified_var_name, value);
+                    global_memory.insert(qualified_var_name.clone(), value.clone());
+                    if let Some(var_meta) = compiled_module.global_table.get(&var_name) {
+                        global_table.insert(qualified_var_name.clone(), var_meta.clone());
+                    }
+                }
 
+                // functions
                 let imported_fn_names: std::collections::HashSet<String> = 
                     compiled_module.user_functions.keys().cloned().collect();
 
@@ -292,15 +294,19 @@ impl Ast {
                                     *call_name = format!("{}.{}", name, call_name);
                                 }
                             }
-                            // InstructionType::GlobalReads { variables, only_const } => {
-                            //     println!("Global reads: {:?}", variables);
-                            //     for var in variables.iter_mut() {
-                            //         *var = format!("{}.{}", name, var);
-                            //     }
-                            // }
+                            InstructionType::GlobalReads { variables, ..} => {
+                                for var in variables.iter_mut() {
+                                    *var = format!("{}.{}", name, var);
+                                }
+                            }
+                            InstructionType::GlobalAssignment { identifier, ..} => {
+                                *identifier = format!("{}.{}", name, identifier);
+                            }
                             _ => {}
                         }
                     }
+
+                    println!("function body for {}: {:?}", new_func_name, new_func_def.body);
 
                     state.user_functions.insert(new_func_name.clone(), new_func_def);
                 }
@@ -315,11 +321,11 @@ impl Ast {
                 //         ));
                 //     }
 
-                    // println!("Adding program '{}' with code {:?}", qualified_prog_name, prog_code);
-                    // state.program_arguments.insert(
-                    //     qualified_prog_name.clone(),
-                    //     prog_code.name.clone(),
-                    // );
+                //     println!("Adding program '{}' with code {:?}", qualified_prog_name, prog_code);
+                //     state.program_arguments.insert(
+                //         qualified_prog_name.clone(),
+                //         prog_code.name.clone(),
+                //     );
                 // }
             }
         }
@@ -363,7 +369,7 @@ impl Ast {
                                 .expect("declaration did not compile to expression nor PushNull");
                             memory.push(literal);
 
-                            let var_name = &decl.value.identifier.value.value;
+                            let var_name = &decl.value.identifier.value.parts[0].value.value;
                             global_table.insert(
                                 var_name.clone(),
                                 state.program_stack.last().unwrap().clone(),

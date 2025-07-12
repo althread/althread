@@ -6,7 +6,7 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
-        token::{datatype::DataType, literal::Literal},
+        token::{datatype::DataType, literal::Literal, object_identifier::ObjectIdentifier},
     },
     compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
@@ -33,7 +33,13 @@ impl NodeBuilder for ReceiveStatement {
         let mut channel = "".to_string();
 
         if pair.as_rule() == Rule::object_identifier {
-            channel = pair.as_str().to_string();
+            // Parse the object_identifier and convert it to a string
+            let object_id = Node::<ObjectIdentifier>::build(pair)?;
+            channel = object_id.value.parts
+                .iter()
+                .map(|p| p.value.value.as_str())
+                .collect::<Vec<_>>()
+                .join(".");
             pair = pairs.next().unwrap();
         }
 

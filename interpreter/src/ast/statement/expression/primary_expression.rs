@@ -11,7 +11,7 @@ use crate::{
         display::AstDisplay,
         node::Node,
         statement::waiting_case::WaitDependency,
-        token::{datatype::DataType, identifier::Identifier, literal::Literal},
+        token::{datatype::DataType, identifier::Identifier, literal::Literal, object_identifier::ObjectIdentifier},
     },
     compiler::{CompilerState, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
@@ -22,7 +22,7 @@ use crate::{
 #[derive(Debug, Clone, PartialEq)]
 pub enum PrimaryExpression {
     Literal(Node<Literal>),
-    Identifier(Node<Identifier>),
+    Identifier(Node<ObjectIdentifier>),
     Expression(Box<Node<Expression>>),
 }
 
@@ -37,7 +37,7 @@ impl PrimaryExpression {
             },
             value: match pair.as_rule() {
                 Rule::literal => Self::Literal(Node::build(pair)?),
-                Rule::identifier => Self::Identifier(Node::build(pair)?),
+                Rule::object_identifier => Self::Identifier(Node::build(pair)?),
                 Rule::expression => Self::Expression(Box::new(Node::build(pair)?)),
                 _ => return Err(no_rule!(pair, "PrimaryExpression")),
             },
@@ -50,7 +50,7 @@ impl PrimaryExpression {
         match self {
             Self::Literal(_) => (),
             Self::Identifier(node) => {
-                dependencies.variables.insert(node.value.value.clone());
+                dependencies.variables.insert(node.value.parts.iter().map(|p| p.value.value.as_str()).collect::<Vec<_>>().join("."));
             }
             Self::Expression(node) => node.value.add_dependencies(dependencies),
         }
@@ -59,7 +59,14 @@ impl PrimaryExpression {
         match self {
             Self::Literal(_) => (),
             Self::Identifier(node) => {
-                vars.insert(node.value.value.clone());
+                vars.insert(
+                    node.value
+                        .parts
+                        .iter()
+                        .map(|p| p.value.value.as_str())
+                        .collect::<Vec<_>>()
+                        .join("."),
+                );
             }
             Self::Expression(node) => node.value.get_vars(vars),
         }
@@ -102,7 +109,23 @@ impl LocalPrimaryExpressionNode {
                 LocalPrimaryExpressionNode::Literal(LocalLiteralNode::from_literal(node)?)
             }
             PrimaryExpression::Identifier(node) => {
-                LocalPrimaryExpressionNode::Var(LocalVarNode::from_identifier(node, program_stack)?)
+                let full_name = node
+                    .value
+                    .parts
+                    .iter()
+                    .map(|p| p.value.value.as_str())
+                    .collect::<Vec<_>>()
+                    .join(".");
+                let index = program_stack
+                    .iter()
+                    .rev()
+                    .position(|var| var.name == full_name)
+                    .ok_or(AlthreadError::new(
+                        ErrorType::VariableError,
+                        Some(node.pos),
+                        format!("Variable '{}' not found", full_name),
+                    ))?;
+                LocalPrimaryExpressionNode::Var(LocalVarNode { index })
             }
             PrimaryExpression::Expression(node) => {
                 let e = LocalExpressionNode::from_expression(&node.as_ref().value, program_stack)?;
@@ -158,7 +181,9 @@ impl AstDisplay for PrimaryExpression {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &crate::ast::display::Prefix) -> fmt::Result {
         match self {
             Self::Literal(node) => node.ast_fmt(f, prefix),
-            PrimaryExpression::Identifier(value) => writeln!(f, "{prefix}ident: {value}"),
+            PrimaryExpression::Identifier(value) => {
+                return writeln!(f, "{prefix}ident: {}", value.value.parts.iter().map(|p| p.value.value.as_str()).collect::<Vec<_>>().join("."));
+            }
             PrimaryExpression::Expression(node) => node.ast_fmt(f, prefix),
         }
     }

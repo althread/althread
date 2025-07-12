@@ -300,14 +300,13 @@ impl LocalExpressionNode {
             Self::Tuple(node) => node.datatype(state),
             Self::Range(node) => node.datatype(state),
             Self::FnCall(node) => {
-                // the datatype of a function call is the return type of the function
                 let full_name = node.value.fn_name_to_string();
 
-                if state.user_functions.contains_key(&full_name) || node.value.fn_name.len() == 1 {
+                if state.user_functions.contains_key(&full_name) || node.value.fn_name.value.parts.len() == 1 {
                     let fn_name = if state.user_functions.contains_key(&full_name) {
                         &full_name
                     } else {
-                        &node.value.fn_name[0].value.value
+                        &node.value.fn_name.value.parts[0].value.value
                     };
 
                     if let Some(func_def) = state.user_functions.get(fn_name) {
@@ -316,13 +315,13 @@ impl LocalExpressionNode {
                         Err(format!("Function {} not found", fn_name))
                     }
                 } else {
-                    // same for method calls
-                    let receiver_name = &node.value.fn_name[0].value.value;
+                    // Method call
+                    let receiver_name = &node.value.fn_name.value.parts[0].value.value;
                     let var = state.program_stack.iter().rev().find(|v| &v.name == receiver_name);
                     if let Some(var) = var {
                         if let Some(interfaces) = state.stdlib.get_interfaces(&var.datatype) {
-                            let method_name = node.value.fn_name.last().unwrap().value.value.clone();
-                            if let Some(method) = interfaces.iter().find(|m| m.name == method_name) {
+                            let method_name = &node.value.fn_name.value.parts.last().unwrap().value.value;
+                            if let Some(method) = interfaces.iter().find(|m| &m.name == method_name) {
                                 Ok(method.ret.clone())
                             } else {
                                 Err(format!("Method {} not found in interface", method_name))
@@ -354,7 +353,7 @@ impl LocalExpressionNode {
             LocalExpressionNode::Tuple(tuple_exp) => tuple_exp.eval(mem),
             LocalExpressionNode::Range(list_exp) => list_exp.eval(mem),
             LocalExpressionNode::FnCall(node) => {
-                Err(format!("Cannot evaluate function call in this context: {}", &node.value.fn_name[0].value.value))
+                Err(format!("Cannot evaluate function call in this context: {:?}", &node.value.fn_name))
             }
         }
     }
