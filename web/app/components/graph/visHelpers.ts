@@ -22,10 +22,15 @@ export function createGraphToolbarHandlers(
     getNetwork: () => Network | null,
     getContainer: () => HTMLDivElement | undefined,
     toggleMaximized: () => void,
+    toggleDetails: () => void
 ) {
     const handleMaximize = () => {
         toggleMaximized();
     };
+
+    const handleDetails = () => {
+        toggleDetails();
+    }
 
     const handleRecenter = () => {
         const network = getNetwork();
@@ -54,7 +59,8 @@ export function createGraphToolbarHandlers(
     return {
         handleMaximize,
         handleRecenter,
-        handleDownload
+        handleDownload,
+        handleDetails
     };
 
 };

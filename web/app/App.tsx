@@ -356,7 +356,7 @@ export default function App() {
       setActiveTab("vm_states");
       return (
         <div class="console">
-          <Graph nodes={nodes()} edges={edges()} theme="dark" />
+          <Graph nodes={nodes()} edges={edges()} vm_states={vm_states()} theme="dark" />
         </div>
       );
     }
@@ -442,6 +442,7 @@ export default function App() {
                       id: i,
                       level,
                       label,
+                      isViolationNode,
                       color: {
                         border,
                         background,

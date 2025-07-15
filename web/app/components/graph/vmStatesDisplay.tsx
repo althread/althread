@@ -6,12 +6,18 @@ import GraphToolbar from "./GraphToolbar";
 import { themes } from "./visOptions";
 import { setupNodeClickZoom, createGraphToolbarHandlers } from "./visHelpers";
 import { useGraphMaximizeHotkeys } from "@hooks/useGraphMaximizeHotkeys";
+import MetadataDisplay from "./MetadataDisplay";
 
 export const rendervmStates = (vm_states) => {
     console.log(vm_states);
     let container: HTMLDivElement | undefined;
     let network: vis.Network | null = null;
     const [maximized, setMaximized] = createSignal(false);
+    const [showDetails, setDetails] = createSignal(false);
+    let data = {
+        nodes: [],
+        edges: []
+    };
 
     if (!vm_states || vm_states.length === 0) {
         return <pre>The VM states will appear here.</pre>;
@@ -41,7 +47,8 @@ export const rendervmStates = (vm_states) => {
                 })
             }
         })
-        const data = { nodes, edges };
+        data = { nodes, edges };
+        console.log("Network created with nodes:", data.nodes, "and edges:", data.edges);
         const options = themes.dark;
         network = new vis.Network(container, data, options);
         setupNodeClickZoom(network);
@@ -49,16 +56,18 @@ export const rendervmStates = (vm_states) => {
             if (network) network.fit();
         });
 
+
         onCleanup(() => { if (network) network.destroy(); });
     });
 
 
     useGraphMaximizeHotkeys(setMaximized);
 
-    const { handleMaximize, handleRecenter, handleDownload } = createGraphToolbarHandlers(
+    const { handleMaximize, handleRecenter, handleDownload, handleDetails } = createGraphToolbarHandlers(
         () => network,
         () => container,
-        () => setMaximized((v: boolean) => !v)
+        () => setMaximized((v: boolean) => !v),
+        () => setDetails((v: boolean) => !v)
     );
 
     return (
@@ -69,11 +78,13 @@ export const rendervmStates = (vm_states) => {
           ref={container}
           style="width: 100%; height: 100%;"
         />
+        {showDetails() ? <MetadataDisplay nodes={data.nodes} /> : null}
         <GraphToolbar
           onFullscreen={handleMaximize}
           onRecenter={handleRecenter}
           onDownload={handleDownload}
           isFullscreen={maximized()}
+          onDetails={handleDetails}
         />
       </div>
     );

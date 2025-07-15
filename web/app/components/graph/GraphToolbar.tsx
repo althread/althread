@@ -4,6 +4,7 @@ interface GraphToolbarProps {
   onFullscreen: () => void;
   onRecenter: () => void;
   onDownload: () => void;
+  onDetails: () => void;
   isFullscreen?: boolean;
 }
 
@@ -25,6 +26,9 @@ export default function GraphToolbar(props: GraphToolbarProps) {
       </button>
       <button title="Download" onClick={props.onDownload}>
         <i class="codicon codicon-desktop-download"></i>
+      </button>
+      <button title="Details" onClick={props.onDetails}>
+        <i class="codicon codicon-info"></i>
       </button>
     </div>
   );

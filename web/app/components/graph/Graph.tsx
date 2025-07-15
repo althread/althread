@@ -5,11 +5,13 @@ import GraphToolbar from "./GraphToolbar";
 import { themes } from "./visOptions";
 import { setupNodeClickZoom, createGraphToolbarHandlers } from "./visHelpers";
 import { useGraphMaximizeHotkeys } from "@hooks/useGraphMaximizeHotkeys";
+import MetadataDisplay from "./MetadataDisplay";
 
 export default (props /*: GraphProps & { theme?: 'light' | 'dark' } */) => {
     let container: HTMLDivElement | undefined; // Renamed for clarity
     let network: vis.Network | null = null;
     const [maximized, setMaximized] = createSignal(false);
+    const [showDetails, setDetails] = createSignal(false);
 
     const nodes = new vis.DataSet(props.nodes || []);
     const edges = new vis.DataSet(props.edges || []);
@@ -50,10 +52,11 @@ export default (props /*: GraphProps & { theme?: 'light' | 'dark' } */) => {
 
     useGraphMaximizeHotkeys(setMaximized);
 
-    const { handleMaximize, handleRecenter, handleDownload } = createGraphToolbarHandlers(
+    const { handleMaximize, handleRecenter, handleDownload, handleDetails } = createGraphToolbarHandlers(
         () => network,
         () => container,
-        () => setMaximized((v: boolean) => !v)
+        () => setMaximized((v: boolean) => !v),
+        () => setDetails((v: boolean) => !v)
     );
 
     return (
@@ -64,10 +67,13 @@ export default (props /*: GraphProps & { theme?: 'light' | 'dark' } */) => {
           ref={container}
           style="width: 100%; height: 100%;"
         />
+
+        {showDetails() ? <MetadataDisplay nodes={props.nodes} /> : null}
         <GraphToolbar
           onFullscreen={handleMaximize}
           onRecenter={handleRecenter}
           onDownload={handleDownload}
+          onDetails={handleDetails}
           isFullscreen={maximized()}
         />
       </div>

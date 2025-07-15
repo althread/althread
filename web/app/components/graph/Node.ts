@@ -1,15 +1,18 @@
-export type ProgramStateJS = {
-  pid: number;
-  name: string;
-  memory: any[]; // This will be the array of serialized Literal objects (the stack)
-  instruction_pointer: number;
-  clock: number; // Assuming 'clock' is also part of the serialized program state
-};
+import { ProgramStateJS } from "./State";
+import { Color } from "vis-network";
 
 export type Node = { // This represents the VM state in JS
   channels: Map<any, any[]>; // Or however channels are structured from Rust
   globals: Map<any, any>;    // Or however globals are structured from Rust
   locals: ProgramStateJS[];  // This is the key change: an array of program states
+};
+
+export type VisNode = {
+  id: number;
+  label: string;
+  level?: number;
+  color: Color;
+  isViolationNode: boolean;
 };
 
 //////////////////////////////////////
