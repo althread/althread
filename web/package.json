@@ -25,6 +25,7 @@
     "@lezer/highlight": "^1.2.1",
     "@lezer/lr": "^1.4.2",
     "babel-preset-solid": "^1.9.6",
+    "buffer": "^6.0.3",
     "keycharm": "^0.4.0",
     "parcel": "^2.15.4",
     "process": "^0.11.10",
@@ -48,6 +49,7 @@
     "@codemirror/lang-python": "^6.2.1",
     "@codemirror/lang-rust": "^6.0.2",
     "@solidjs/router": "^0.15.3",
+    "jszip": "^3.10.1",
     "marked": "^15.0.12"
   }
 }

@@ -1088,7 +1088,7 @@ const FileExplorer = (props: FileExplorerProps) => {
               class="header-action-btn"
             >
                 <i class="codicon codicon-new-file"></i>
-                <span>File</span>
+                <span></span>
             </button>
             <button 
               onClick={() => {
@@ -1118,7 +1118,57 @@ const FileExplorer = (props: FileExplorerProps) => {
               class="header-action-btn"
             >
                 <i class="codicon codicon-new-folder"></i>
-                <span>Folder</span>
+                <span></span>
+            </button>
+                        <button
+              class="header-action-btn"
+              onClick={async () => {
+                // Dynamically import JSZip
+                const JSZipModule = await import('jszip');
+                const JSZip = JSZipModule.default || JSZipModule;
+                const zip = new JSZip();
+                // Load file system from localStorage
+                let fileSystemRaw = localStorage.getItem('althread-file-system');
+                let fileSystem: any[] = fileSystemRaw ? JSON.parse(fileSystemRaw) : [];
+                // Helper to add IDs if missing (copied from storage.ts)
+                const addIds = (entries: any[]): any[] => {
+                  return entries.map(entry => ({
+                    ...entry,
+                    id: entry.id || (window.crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2)),
+                    children: entry.children ? addIds(entry.children) : undefined
+                  }));
+                };
+                fileSystem = addIds(fileSystem);
+                // Recursively add files to zip
+                const addToZip = (entries: any[], currentPath: string = '') => {
+                  for (const entry of entries) {
+                    const fullPath = currentPath ? `${currentPath}/${entry.name}` : entry.name;
+                    if (entry.type === 'file') {
+                      const content = localStorage.getItem('althread-file-content-' + fullPath) || '';
+                      zip.file(fullPath, content);
+                    } else if (entry.type === 'directory' && entry.children) {
+                      addToZip(entry.children, fullPath);
+                    }
+                  }
+                };
+                addToZip(fileSystem);
+                // Generate zip and trigger download
+                zip.generateAsync({ type: 'blob' }).then((blob: Blob) => {
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'althread-files.zip';
+                  document.body.appendChild(a);
+                  a.click();
+                  setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  }, 100);
+                });
+              }}
+            >
+              <i class="codicon codicon-desktop-download"></i>
+              <span></span>
             </button>
         </div>
       </div>
