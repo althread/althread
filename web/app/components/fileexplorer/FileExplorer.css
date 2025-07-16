@@ -30,8 +30,29 @@
 
 .file-explorer-actions {
   display: flex;
-  align-items: center;
   gap: 4px;
+}
+
+.file-explorer-actions .header-action-btn {
+  position: relative;
+}
+
+.file-explorer-actions .header-action-btn:hover::after {
+  content: attr(title);
+  position: absolute;
+  left: 44px;
+  top: 50%;
+  transform: translate(-100%, 80%);
+  background: #2d2d2d;
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 1001;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  border: 1px solid #333;
+  pointer-events: none;
 }
 
 .file-explorer-actions button {

@@ -1088,7 +1088,6 @@ const FileExplorer = (props: FileExplorerProps) => {
               class="header-action-btn"
             >
                 <i class="codicon codicon-new-file"></i>
-                <span></span>
             </button>
             <button 
               onClick={() => {
@@ -1118,10 +1117,10 @@ const FileExplorer = (props: FileExplorerProps) => {
               class="header-action-btn"
             >
                 <i class="codicon codicon-new-folder"></i>
-                <span></span>
             </button>
-                        <button
+            <button
               class="header-action-btn"
+              title="Download all files as .zip"
               onClick={async () => {
                 // Dynamically import JSZip
                 const JSZipModule = await import('jszip');
@@ -1168,7 +1167,6 @@ const FileExplorer = (props: FileExplorerProps) => {
               }}
             >
               <i class="codicon codicon-desktop-download"></i>
-              <span></span>
             </button>
         </div>
       </div>
