@@ -42,7 +42,7 @@ export default function HelpView(props: HelpViewProps) {
                 <div class="help-link-desc">Complete reference</div>
               </div>
             </button>
-            <button class="help-link" onClick={() => window.open('https://github.com/althread/althread/issues/new', '_blank')}>
+            <button class="help-link" onClick={() => window.open('https://github.com/althread/althread/issues/new?template=🐞-bug-report.md', '_blank')}>
               <i class="codicon codicon-issue-opened"></i>
               <div>
                 <div class="help-link-title">Report Issue</div>
