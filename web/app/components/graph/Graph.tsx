@@ -1,6 +1,6 @@
 /** @jsxImportSource solid-js */
 import vis from "vis-network/dist/vis-network.esm";
-import { createEffect, onCleanup, onMount, createSignal } from "solid-js";
+import { createEffect, onCleanup, createSignal } from "solid-js";
 import GraphToolbar from "./GraphToolbar";
 import { themes } from "./visOptions";
 import { setupNodeClickZoom, createGraphToolbarHandlers } from "./visHelpers";
@@ -13,21 +13,14 @@ export default (props /*: GraphProps & { theme?: 'light' | 'dark' } */) => {
     const [maximized, setMaximized] = createSignal(false);
     const [showDetails, setDetails] = createSignal(false);
 
-    const nodes = new vis.DataSet(props.nodes || []);
-    const edges = new vis.DataSet(props.edges || []);
-
     createEffect(() => {
-        nodes.clear();
-        nodes.add(props.nodes || []);
-        edges.clear();
-        edges.add(props.edges || []);
-    });
-
-    onMount(() => {
         if (!container) {
             console.error("Graph container element not found.");
             return;
         }
+
+        let nodes = new vis.DataSet(props.nodes || []);
+        let edges = new vis.DataSet(props.edges || []);
 
         const data = {
             nodes: nodes.get(),
@@ -39,7 +32,12 @@ export default (props /*: GraphProps & { theme?: 'light' | 'dark' } */) => {
         setupNodeClickZoom(network);
 
         network.once('stabilized', function() {
-          if (network) network.fit();
+          if (network) {
+            network.fit();
+            // stop the loading spinner in the check button
+            props.setLoadingAction(null);
+          }
+
         });
 
         onCleanup(() => {

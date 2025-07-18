@@ -318,6 +318,7 @@ export default function App() {
   let [activeAction, setActiveAction] = createSignal<string | null>(null);
   const [loadingAction, setLoadingAction] = createSignal<string | null>(null);
   const [executionError, setExecutionError] = createSignal(false);
+  const [graphKey, setGraphKey] = createSignal(0);
 
   const renderExecContent = () => {
     if (isRun()) {
@@ -356,7 +357,7 @@ export default function App() {
       setActiveTab("vm_states");
       return (
         <div class="console">
-          <Graph nodes={nodes()} edges={edges()} vm_states={vm_states()} theme="dark" />
+          <Graph key={graphKey()} nodes={nodes()} edges={edges()} vm_states={vm_states()} setLoadingAction={setLoadingAction} theme="dark" />
         </div>
       );
     }
@@ -372,14 +373,15 @@ export default function App() {
           </div>
           <div class="actions">
             <button
-              class={`vscode-button${loadingAction() === "run" ? " active" : ""}`}
+              class={`vscode-button${activeAction() === "run" ? " active" : ""}`}
               disabled={loadingAction() === "run" || !editorManager.activeFile() || !isAltFile()}
               onClick={async () => {
                 if (!editorManager.activeFile()) return;
-                setExecutionError(false);
-                setLoadingAction("run");
+                if (!isRun()) setIsRun(true);
+                if (!executionError()) setExecutionError(false);
+                if (activeAction() !== "run") setActiveAction("run");
+                if (loadingAction() !== "run") setLoadingAction("run");
                 try {
-                  setIsRun(true);
                   
                   const virtualFS = buildVirtualFileSystem(mockFileSystem());
                   let res = run(editor.editorView().state.doc.toString(), virtualFS); // Pass virtualFS
@@ -401,7 +403,6 @@ export default function App() {
                 } finally {
                   setTimeout(() => {
                     setLoadingAction(null);
-                    setActiveAction(null);
                   }, animationTimeOut);
                 }
               }}>
@@ -413,13 +414,17 @@ export default function App() {
               class={`vscode-button${activeAction() === "check" ? " active" : ""}`}
               disabled={!editorManager.activeFile() || !isAltFile()}
               onClick={() => {
-                setExecutionError(false);
+                if (loadingAction() !== "check") setLoadingAction("check");
+                if (activeAction() !== "check") setActiveAction("check");
+                if (executionError()) setExecutionError(false);
                 if (!editorManager.activeFile()) return;
+
+                // Increment key to force re-render of Graph component
+                setGraphKey(k => k + 1);
                 
-                setActiveAction(activeAction() === "check" ? null : "check");
                 try {
                   const virtualFS = buildVirtualFileSystem(mockFileSystem());
-                  let res = check(editor.editorView().state.doc.toString(), virtualFS) // Add virtualFS parameter to check() call too
+                  let res = check(editor.editorView().state.doc.toString(), virtualFS)
                   setOut(res);
                   
                   console.log(res);
@@ -485,7 +490,7 @@ export default function App() {
                   setExecutionError(true);
                 }
               }}>
-              <i class="codicon codicon-check"></i>
+              <i class={loadingAction() === "check" ? "codicon codicon-loading codicon-modifier-spin" : "codicon codicon-check"}></i>
               Check
             </button>
 
