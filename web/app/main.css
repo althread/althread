@@ -60,16 +60,24 @@ body {
     pointer-events: auto;
 }
 
-.editor-panel {
-     overflow: hidden;
+.editor-panel,
+.editor-instance-wrapper {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
+/* Make CodeMirror fill its parent */
 .editor-instance-wrapper .cm-editor {
   height: 100%;
   min-height: 0;
   max-height: 100%;
   box-sizing: border-box;
-  overflow-y: hidden;
+  overflow: hidden;
+  flex: 1 1 0%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Custom scrollbar for editor - consistent with console, hover-only */
