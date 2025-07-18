@@ -299,7 +299,7 @@ const Tutorial: Component = () => {
                     </button>
                 </div>
               </div>
-              <div ref={editorInstance.ref} class="editor-instance-wrapper"></div>
+              <div ref={editorInstance.ref} class="editor-tutorial-instance-wrapper"></div>
             </div>
             <div class="output-pane">
                 <div class="tab">
