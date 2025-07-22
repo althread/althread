@@ -75,7 +75,7 @@ impl InstructionBuilder for Node<RunCall> {
         // CLONE the program arguments to avoid holding a reference
         let prog_args_opt = state.program_arguments().get(&full_program_name).cloned();
 
-        println!("state program arguments: {:?}", state.program_arguments());
+        println!("state program arguments: {:?}", state.program_arguments().clone());
 
         if let Some(prog_args) = prog_args_opt {
             if prog_args.len() != call_datatype.len() {

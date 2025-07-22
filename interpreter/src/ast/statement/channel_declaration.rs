@@ -96,6 +96,8 @@ fn get_prog_name(var_name: &str, state: &mut CompilerState, pos: &Pos) -> Althre
     }
 }
 
+
+
 impl InstructionBuilder for Node<ChannelDeclaration> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         let dec = &self.value;

@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::{ast::node::NodeBuilder, error::AlthreadResult, no_rule, parser::Rule};
+use crate::{ast::{node::NodeBuilder}, error::AlthreadResult, no_rule, parser::Rule};
 use ordered_float::OrderedFloat;
 use pest::iterators::Pairs;
 use serde::{Deserialize, Serialize};
@@ -93,6 +93,15 @@ impl DataType {
         match self {
             Self::Process(n) => n == name,
             _ => false,
+        }
+    }
+
+    pub fn is_process(&self) -> (bool, String) {
+        println!("Checking if {:?} is a process", self);
+        match self {
+            Self::List(datatype) => datatype.is_process(),
+            Self::Process(name) => (true, name.clone()),
+            _ => (false, String::new()),
         }
     }
 

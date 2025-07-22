@@ -24,7 +24,7 @@ pub struct SendStatement {
 
 impl NodeBuilder for SendStatement {
     fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
-        let mut pair = pairs.next().unwrap();
+        let pair = pairs.next().unwrap();
 
         let channel = if pair.as_rule() == Rule::object_identifier {
             // Parse the object_identifier and convert it to a string
@@ -83,6 +83,11 @@ impl InstructionBuilder for Node<SendStatement> {
         // CLONE the channels data to avoid holding a reference
         let channel_info = state.channels().get(&(state.current_program_name.clone(), channel_name.clone())).cloned();
         
+        println!(
+            "SendStatement: {} with values {:?} at pos {:?}",
+            channel_name, rdatatype, self.pos
+        );
+
         if channel_info.is_none() {
             state.undefined_channels_mut().insert(
                 (state.current_program_name.clone(), channel_name.clone()),

@@ -21,7 +21,7 @@ use statement::Statement;
 use token::{args_list::ArgsList, condition_keyword::ConditionKeyword, datatype::DataType, identifier::Identifier};
 
 use crate::{
-    analysis::control_flow_graph::ControlFlowGraph, compiler::{stdlib, CompilationContext, CompiledProject, CompilerState, FunctionDefinition, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, module_resolver::{module_resolver::ModuleResolver, FileSystem, StandardFileSystem}, no_rule, parser::{self, Rule}, vm::{
+    analysis::control_flow_graph::ControlFlowGraph, ast::statement::{assignment::{Assignment}, expression::{primary_expression::PrimaryExpression, Expression, SideEffectExpression}}, compiler::{stdlib, CompilationContext, CompiledProject, CompilerState, FunctionDefinition, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, module_resolver::{module_resolver::ModuleResolver, FileSystem, StandardFileSystem}, no_rule, parser::{self, Rule}, vm::{
         instruction::{Instruction, InstructionType, ProgramCode},
         VM,
     }
@@ -62,6 +62,12 @@ pub fn check_function_returns(func_name: &str,  func_body: &Node<Block>, return_
     }
 
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct ProcessListInfo {
+    program_name: String, 
+    element_type: String
 }
 
 impl Ast {
@@ -163,12 +169,352 @@ impl Ast {
         Ok(ast)
     }
 
+
+    fn extract_channel_declarations_from_statement(
+        &self,
+        statement: &Statement,
+        state: &mut CompilerState,
+        module_prefix: &str,
+        var_to_program: &HashMap<String, String>,
+    ) -> AlthreadResult<()> {
+        // println!("Extracting channel declarations from statement: {:?}", statement);
+        match statement {
+            Statement::ChannelDeclaration(channel_decl) => {
+                self.register_channel_declaration(&channel_decl.value, state, module_prefix, var_to_program)?;
+            }
+            Statement::Atomic(atomic_statement) => {
+                self.extract_channel_declarations_from_statement(&atomic_statement.value.statement.value, state, module_prefix, var_to_program)?;
+            }
+            Statement::If(if_statement) => {
+                self.extract_channel_declarations_from_block(&if_statement.value.then_block.value, state, module_prefix, var_to_program)?;
+                if let Some(else_block) = &if_statement.value.else_block {
+                    self.extract_channel_declarations_from_block(&else_block.value, state, module_prefix, var_to_program)?;
+                }
+            }
+            Statement::Block(block) => {
+                self.extract_channel_declarations_from_block(&block.value, state, module_prefix, var_to_program)?;
+            }
+            Statement::Loop(loop_statement) => {
+                self.extract_channel_declarations_from_statement(&loop_statement.value.statement.value, state, module_prefix, var_to_program)?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn register_channel_declaration(
+        &self,
+        channel_decl: &statement::channel_declaration::ChannelDeclaration,
+        state: &mut CompilerState,
+        module_prefix: &str,
+        var_to_program: &HashMap<String, String>,
+    ) -> AlthreadResult<()> {
+        // Resolve program names for both sides of the channel
+        let left_prog = self.prescan_get_prog_name(&channel_decl.ch_left_prog, module_prefix, var_to_program)?;
+        let right_prog = self.prescan_get_prog_name(&channel_decl.ch_right_prog, module_prefix, var_to_program)?;
+
+        // Create channel keys for both sender and receiver
+        let left_key = (left_prog, channel_decl.ch_left_name.clone());
+        let right_key = (right_prog, channel_decl.ch_right_name.clone());
+
+        // Register the channel types - both sides get the same datatype info
+        let pos = crate::error::Pos::default(); // We don't have position info during prescan
+        state.channels_mut().insert(left_key.clone(), (channel_decl.datatypes.clone(), pos.clone()));
+        state.channels_mut().insert(right_key.clone(), (channel_decl.datatypes.clone(), pos));
+
+        // Remove from undefined channels if they exist
+        state.undefined_channels_mut().remove(&left_key);
+        state.undefined_channels_mut().remove(&right_key);
+
+        Ok(())
+    }
+
+    fn prescan_get_prog_name(
+        &self,
+        var_name: &str,
+        module_prefix: &str,
+        var_to_program: &HashMap<String, String>,
+    ) -> AlthreadResult<String> {
+        if var_name == "self" {
+            return Ok("main".to_string());
+        }
+        
+        // Look up the variable in our mapping
+        if let Some(program_name) = var_to_program.get(var_name) {
+            if module_prefix.is_empty() {
+                Ok(program_name.clone())
+            } else {
+                Ok(format!("{}.{}", module_prefix, program_name))
+            }
+        } else {
+            Err(AlthreadError::new(
+                ErrorType::VariableError,
+                None,
+                format!("Variable '{}' not found in run statements during prescan", var_name),
+            ))
+            // let res = if module_prefix.is_empty() {
+            //     var_name.to_string()
+            // } else {
+            //     format!("{}.{}", module_prefix, var_name)
+            // };
+            // Ok(res) // Fallback to module prefix if not found
+        }
+    }
+
+    fn extract_channel_declarations_from_block(
+        &self,
+        block: &Block,
+        state: &mut CompilerState,
+        module_prefix: &str,
+        var_to_program: &HashMap<String, String>
+    ) -> AlthreadResult<()> {
+        for statement in &block.children {
+            // println!("Extracting channel declarations from statement: {:?}", statement);
+            self.extract_channel_declarations_from_statement(&statement.value, state, module_prefix, var_to_program)?;
+        }
+        Ok(())
+    }
+
+    fn build_variable_program_mapping(&self, var_to_program: &mut HashMap<String, String>) -> AlthreadResult<()> {
+        let mut process_lists: HashMap<String, ProcessListInfo> = HashMap::new();
+
+        // Scan all process blocks, not just main
+        for (program_name, (_, program_block)) in &self.process_blocks {
+            self.scan_block_for_run_statements(
+                &program_block.value,
+                var_to_program,
+                &mut process_lists,
+                program_name
+            )?;
+        }
+
+        Ok(())
+    }
+
+    fn scan_block_for_run_statements(
+        &self,
+        block: &Block,
+        var_to_program: &mut HashMap<String, String>,
+        process_lists: &mut HashMap<String, ProcessListInfo>,
+        current_program: &str
+    ) -> AlthreadResult<()> {
+        for statement in &block.children {
+            self.scan_statement_for_run_statements(
+                &statement.value, 
+                var_to_program,
+                process_lists,
+                current_program
+            )?;
+        }
+        Ok(())
+    }
+
+    fn scan_statement_for_run_statements(
+        &self,
+        statement: &Statement,
+        var_to_program: &mut HashMap<String, String>,
+        process_lists: &mut HashMap<String, ProcessListInfo>,
+        current_program: &str
+    ) -> AlthreadResult<()> {
+        match statement {
+            Statement::Declaration(var_decl) => {
+                let var_name = &var_decl.value.identifier.value.parts[0].value.value;
+
+                // Check if this is a list
+                if let Some(list_type) = var_decl.value.datatype.as_ref() {
+                    println!("Found list declaration: {} with type {:?}", var_name, list_type.value);
+
+                    let (is_process, element_type) = list_type.value.is_process();
+                    if is_process {
+                        println!("Found process list declaration: {} with type {:?}", var_name, element_type);
+                        process_lists.insert(
+                            var_name.clone(),
+                            ProcessListInfo { 
+                                program_name: current_program.to_string(),
+                                element_type: element_type
+                            }
+                        );
+                    }
+                }
+                println!("process_lists: {:?}", process_lists.clone());
+
+                // check for run calls
+                if let Some(side_effect_node) = var_decl.value.value.as_ref() {
+                    if let Some(program_name) = self.extract_run_program_name(&side_effect_node.value) {
+                        var_to_program.insert(var_decl.value.identifier.value.parts[0].value.value.clone(), program_name);
+                    }
+
+                    // check for reference assignments (let b = a;)
+                    else if let Some(ref_var) = self.extract_variable_reference(&side_effect_node.value) {
+                        if let Some(program_type) = var_to_program.get(&ref_var) {
+                            var_to_program.insert(var_name.clone(), program_type.clone());
+                        }
+
+                        if let Some(list_info) = process_lists.get(&ref_var).cloned() {
+                            process_lists.insert(
+                                var_name.clone(),
+                                list_info
+                            );
+                        }
+                    }
+
+                    // check for .at() calls
+                    else if let Some((list_var, _index)) = self.extract_list_at_call(&side_effect_node.value) {
+                        if let Some(list_info) = process_lists.get(&list_var) {
+                            var_to_program.insert(var_name.clone(), list_info.element_type.clone());
+                        }
+                    }
+                }
+            }
+            Statement::Assignment(assignment) => {
+                // handle assignments like: p1 = a.at(i);
+                let Assignment::Binary(binary) = &assignment.value;
+                let var_name = &binary.value.identifier.value.parts[0].value.value;
+                
+                // Get the right-hand side expression
+                let rhs = &binary.value.value;
+
+                // Check for reference assignment (p1 = b;)
+                if let Some(ref_var) = self.extract_variable_reference(&rhs.value) {
+                    if let Some(program_type) = var_to_program.get(&ref_var) {
+                        var_to_program.insert(var_name.clone(), program_type.clone());
+                    }
+                    if let Some(list_info) = process_lists.get(&ref_var).cloned() {
+                        process_lists.insert(var_name.clone(), list_info);
+                    }
+                }
+                // Check for .at() calls (p1 = a.at(i);)
+                else if let Some((list_var, _index)) = self.extract_list_at_call(&rhs.value) {
+                    if let Some(list_info) = process_lists.get(&list_var) {
+                        var_to_program.insert(var_name.clone(), list_info.element_type.clone());
+                    }
+                }
+            }
+            Statement::Atomic(atomic_statement) => {
+                self.scan_statement_for_run_statements(&atomic_statement.value.statement.value, var_to_program, process_lists, current_program)?;
+            }
+            Statement::If(if_statement) => {
+                self.scan_block_for_run_statements(&if_statement.value.then_block.value, var_to_program, process_lists, current_program)?;
+                if let Some(else_block) = &if_statement.value.else_block {
+                    self.scan_block_for_run_statements(&else_block.value, var_to_program, process_lists, current_program)?;
+                }
+            }
+            Statement::Block(block) => {
+                self.scan_block_for_run_statements(&block.value, var_to_program, process_lists, current_program)?;
+            }
+            Statement::For(for_statement) => {
+                self.scan_statement_for_run_statements(&for_statement.value.statement.value, var_to_program, process_lists, current_program)?;
+            }
+            Statement::Loop(loop_statement) => {
+                self.scan_statement_for_run_statements(&loop_statement.value.statement.value, var_to_program, process_lists, current_program)?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn extract_variable_reference(&self, side_effect_expr: &SideEffectExpression) -> Option<String> {
+        match side_effect_expr {
+            SideEffectExpression::Expression(expr_node) => {
+                if let Expression::Primary(primary_expr) = &expr_node.value {
+                    if let PrimaryExpression::Identifier(identifier) = &primary_expr.value {
+                        if identifier.value.parts.len() == 1 {
+                            return Some(identifier.value.parts[0].value.value.clone());
+                        } 
+                    }
+                }
+            }
+            _ => {},
+        }
+        None
+    }
+
+    fn extract_list_at_call(&self, side_effect_expr: &SideEffectExpression) -> Option<(String, String)> {
+        match side_effect_expr {
+            SideEffectExpression::FnCall(fn_call_node) => {
+                let fn_call = &fn_call_node.value;
+
+                if fn_call.fn_name.value.parts.len() == 2 {
+                    let receiver_name = &fn_call.fn_name.value.parts[0].value.value;
+                    let method_name = &fn_call.fn_name.value.parts[1].value.value;
+
+                    if method_name == "at" {
+                        return Some((receiver_name.clone(), "index".to_string()));
+                    }
+                }
+            }
+            _ => {},
+        }
+        None
+    }
+
+    fn extract_run_program_name(&self, side_effect_expr: &SideEffectExpression) -> Option<String> {
+        match side_effect_expr {
+            SideEffectExpression::RunCall(run_call_node) => {
+                Some(run_call_node.value.program_name_to_string())
+            }
+            _ => None
+        }
+    }
+
+    fn prescan_channel_declarations<F: FileSystem + Clone>(
+    &self, 
+    state: &mut CompilerState,
+    current_file_path: &Path,
+    filesystem: Option<F>
+) -> AlthreadResult<()> {
+    // Build variable-to-program mapping first
+    let mut var_to_program: HashMap<String, String> = HashMap::new();
+    self.build_variable_program_mapping(&mut var_to_program)?;
+
+    // Scan ALL process blocks for channel declarations, not just main
+    for (program_name, (_, program_block)) in &self.process_blocks {
+        println!("Scanning program '{}' for channel declarations", program_name);
+        self.extract_channel_declarations_from_block(
+            &program_block.value, 
+            state,
+            "",
+            &var_to_program
+        )?;
+        // println!("Finished scanning program '{:?}'", var_to_program);
+    }
+
+    // Handle imported modules
+    if let Some(import_block) = &self.import_block {
+        let mut module_resolver = ModuleResolver::new(current_file_path, filesystem.unwrap());
+        let mut import_stack = Vec::new();
+        module_resolver.resolve_imports(&import_block.value, &mut import_stack)?;
+
+        for (name, resolved_module) in &module_resolver.resolved_modules {
+            let module_content = module_resolver.filesystem.read_file(&resolved_module.path)?;
+            let pairs = parser::parse(&module_content)?;
+            let module_ast = Ast::build(pairs)?;
+
+            let mut module_var_to_program: HashMap<String, String> = HashMap::new();
+            module_ast.build_variable_program_mapping(&mut module_var_to_program)?;
+
+            // Scan ALL process blocks in imported modules too
+            for (program_name, (_, program_block)) in &module_ast.process_blocks {
+                module_ast.extract_channel_declarations_from_block(
+                    &program_block.value, 
+                    state, 
+                    name, 
+                    &module_var_to_program
+                )?;
+            }
+        }
+    }
+
+    Ok(())
+    }
+    
+
     pub fn compile<F: FileSystem + Clone>(
         &self,
         current_file_path: &Path,
         filesystem: F
     ) -> AlthreadResult<CompiledProject> {
-        self.compile_internal(current_file_path, Some(filesystem), None)
+        self.compile_internal(current_file_path, Some(filesystem), None, None, None)
     }
 
     fn compile_internal<F: FileSystem + Clone>(
@@ -176,12 +522,14 @@ impl Ast {
         current_file_path: &Path,
         filesystem: Option<F>,
         stdlib: Option<Rc<stdlib::Stdlib>>,
+        module_prefix: Option<&str>,
+        existing_context: Option<&Rc<RefCell<CompilationContext>>>
     ) -> AlthreadResult<CompiledProject> {
         let mut programs_code = HashMap::new();
 
         if filesystem.is_none() {
             // Delegate to the standard filesystem version
-            return self.compile_internal(current_file_path, Some(StandardFileSystem), stdlib);
+            return self.compile_internal(current_file_path, Some(StandardFileSystem), stdlib, None, existing_context);
         }
 
         let filesystem = filesystem.unwrap();
@@ -190,8 +538,16 @@ impl Ast {
         let stdlib = stdlib.unwrap_or_else(|| Rc::new(stdlib::Stdlib::new()));
 
         // Create shared compilation context
-        let context = Rc::new(RefCell::new(CompilationContext::new(Rc::clone(&stdlib))));
+        let context = existing_context.cloned().unwrap_or_else(|| {
+            Rc::new(RefCell::new(CompilationContext::new(Rc::clone(&stdlib))))
+        });
         let mut state = CompilerState::new_with_context(Rc::clone(&context));
+
+        if module_prefix.is_none() {
+            self.prescan_channel_declarations(&mut state, current_file_path, Some(filesystem.clone()))?;
+            println!("Prescan complete. Channels: {:?}", state.channels().clone());
+        }
+
 
         if  self.process_blocks.is_empty() &&
             self.global_block.as_ref().map_or(true, |block| block.value.children.is_empty()) &&
@@ -243,7 +599,7 @@ impl Ast {
                     ));
                 }
 
-                let compiled_module = module_ast.compile_internal(&resolved_module.path, Some(filesystem.clone()), Some(Rc::clone(&stdlib))).map_err(|e| {
+                let compiled_module = module_ast.compile_internal(&resolved_module.path, Some(filesystem.clone()), Some(Rc::clone(&stdlib)), Some(&name), Some(&Rc::clone(&context))).map_err(|e| {
                     AlthreadError::new(
                         ErrorType::SyntaxError,
                         Some(import_block.pos),
@@ -261,7 +617,6 @@ impl Ast {
                             format!("Shared variable '{}' from module '{}' is already defined", var_name, name),
                         ));
                     }
-                    println!("Adding global variable '{}' with value {:?}", qualified_var_name, value);
                     state.global_memory_mut().insert(qualified_var_name.clone(), value.clone());
                     if let Some(var_meta) = compiled_module.global_table.get(&var_name) {
                         state.global_table_mut().insert(qualified_var_name.clone(), var_meta.clone());
@@ -308,7 +663,7 @@ impl Ast {
                         }
                     }
 
-                    println!("function body for {}: {:?}", new_func_name, new_func_def.body);
+                    // println!("function body for {}: {:?}", new_func_name, new_func_def.body);
 
                     state.user_functions_mut().insert(new_func_name.clone(), new_func_def);
                 }
@@ -323,7 +678,10 @@ impl Ast {
                         ));
                     }
 
-                    println!("Adding program '{}' with arguments {:?}", qualified_prog_name, compiled_module.program_arguments.get(&prog_name));
+                    // remove the unqualified program name from the arguments if it exists
+                    state.program_arguments_mut().remove(&prog_name);
+
+                    // println!("Adding program '{}' with arguments {:?}", qualified_prog_name, compiled_module.program_arguments.get(&prog_name));
                     state.program_arguments_mut().insert(
                         qualified_prog_name.clone(),
                         compiled_module.program_arguments.get(&prog_name)
@@ -351,6 +709,12 @@ impl Ast {
                             InstructionType::RunCall { name: call_name, ..} => {
                                 *call_name = format!("{}.{}", name, call_name);
                             }
+                            InstructionType::WaitStart { dependencies, ..} => {
+                                let updated_vars: std::collections::HashSet<String> = dependencies.variables.iter()
+                                    .map(|dep| format!("{}.{}", name, dep))
+                                    .collect();
+                                dependencies.variables = updated_vars;
+                            }
                             _ => {}
                         }
                     }
@@ -360,8 +724,8 @@ impl Ast {
             }
         }
 
-        println!("program arguments: {:?}", state.program_arguments());
-        println!("programs code: {:?}", programs_code);
+        // println!("program arguments: {:?}", state.program_arguments());
+        // println!("programs code: {:?}", programs_code);
 
         // "compile" the "shared" block to retrieve the set of shared variables
         state.current_stack_depth = 1;
@@ -485,7 +849,7 @@ impl Ast {
         // start with the main program
 
         if self.process_blocks.contains_key("main") {
-            let code = self.compile_program("main", &mut state)?;
+            let code = self.compile_program("main", &mut state, module_prefix)?;
             programs_code.insert("main".to_string(), code);
             assert!(state.current_stack_depth == 0);
         }
@@ -494,7 +858,7 @@ impl Ast {
             if name == "main" {
                 continue;
             }
-            let code = self.compile_program(name, &mut state)?;
+            let code = self.compile_program(name, &mut state, module_prefix)?;
             programs_code.insert(name.clone(), code);
             assert!(state.current_stack_depth == 0);
         }
@@ -694,6 +1058,7 @@ impl Ast {
         &self,
         name: &str,
         state: &mut CompilerState,
+        module_prefix: Option<&str>
     ) -> AlthreadResult<ProgramCode> {
         let mut process_code = ProgramCode {
             instructions: Vec::new(),
@@ -703,7 +1068,11 @@ impl Ast {
             .process_blocks
             .get(name)
             .expect("trying to compile a non-existant program");
-        state.current_program_name = name.to_string();
+        state.current_program_name = if let Some(prefix) = module_prefix {
+            format!("{}.{}", prefix, name)
+        } else {
+            name.to_string()
+        };
 
         for (i, var) in args.value.identifiers.iter().enumerate() {
             state.program_stack.push(Variable {
