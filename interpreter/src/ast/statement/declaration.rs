@@ -81,6 +81,8 @@ impl InstructionBuilder for Declaration {
         // Get the simple variable name (first and only part)
         let var_name = &self.identifier.value.parts[0].value.value;
 
+        // println!("global table: {:?}", state.global_table());
+
         if state
             .global_table()
             .contains_key(&full_var_name)

@@ -89,6 +89,10 @@ impl InstructionBuilder for Node<ReceiveStatement> {
 
         println!("channels: {:?}", state.channels().clone());
 
+        println!("current program name and channel name: {:?} {:?}",
+            state.current_program_name, channel_name
+        );
+
         let (channel_types, pos) = state.channels().get(&(state.current_program_name.clone(), channel_name.clone())).ok_or(AlthreadError::new(
             ErrorType::TypeError,
             Some(self.pos),

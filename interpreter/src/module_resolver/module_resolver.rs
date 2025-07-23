@@ -80,7 +80,7 @@ impl <F: FileSystem + Clone> ModuleResolver<F> {
             if import_stack.contains(&resolved.path) {
                 return Err(AlthreadError::new(
                     ErrorType::ImportNameConflict,
-                    None,
+                    Some(import_item.pos),
                     format!("Circular import detected for '{}'. Import stack: {:?}", 
                             resolved.name, import_stack)
                 ))

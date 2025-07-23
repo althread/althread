@@ -67,15 +67,8 @@ impl InstructionBuilder for Node<RunCall> {
         let unstack_len = state.unstack_current_depth();
         let call_datatype = call_datatype.tuple_unwrap();
 
-        println!(
-            "RunCall: {} with args {:?} at pos {:?}",
-            full_program_name, call_datatype, self.pos
-        );
-
         // CLONE the program arguments to avoid holding a reference
         let prog_args_opt = state.program_arguments().get(&full_program_name).cloned();
-
-        println!("state program arguments: {:?}", state.program_arguments().clone());
 
         if let Some(prog_args) = prog_args_opt {
             if prog_args.len() != call_datatype.len() {

@@ -4,6 +4,8 @@ use std::fmt;
 use std::rc::Rc;
 
 pub mod stdlib;
+pub mod compiler;
+pub mod prescan;
 
 use crate::ast::statement::expression::LocalExpressionNode;
 use crate::error::Pos;
@@ -114,9 +116,9 @@ pub struct CompilationContext {
 }
 
 impl CompilationContext {
-    pub fn new(stdlib: Rc<stdlib::Stdlib>) -> Self {
+    pub fn new() -> Self {
         Self {
-            stdlib,
+            stdlib: Rc::new(stdlib::Stdlib::new()),
             user_functions: HashMap::new(),
             global_table: HashMap::new(),
             program_arguments: HashMap::new(),
@@ -135,6 +137,9 @@ pub struct CompilerState {
     pub program_stack: Vec<Variable>,
     pub current_stack_depth: usize,
     pub current_program_name: String,
+
+    // pub current_file_path: Option<String>,
+    pub module_prefix: Option<String>,
     pub is_atomic: bool,
     pub is_shared: bool,
     pub in_function: bool,
@@ -155,6 +160,7 @@ impl CompilerState {
             in_function: false,
             method_call_stack_offset: 0,
             context,
+            module_prefix: None,
         }
     }
 
