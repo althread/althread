@@ -8,7 +8,7 @@ pub mod token;
 
 use core::panic;
 use std::{
-    cell::RefCell, collections::{BTreeMap, HashMap}, fmt::{self, Formatter}, path::Path, rc::Rc
+    cell::RefCell, collections::{BTreeMap, HashMap, HashSet}, fmt::{self, Formatter}, path::Path, rc::Rc
 };
 
 use block::Block;
@@ -525,8 +525,6 @@ impl Ast {
         module_prefix: Option<&str>,
         existing_context: Option<&Rc<RefCell<CompilationContext>>>
     ) -> AlthreadResult<CompiledProject> {
-        let mut programs_code = HashMap::new();
-
         if filesystem.is_none() {
             // Delegate to the standard filesystem version
             return self.compile_internal(current_file_path, Some(StandardFileSystem), stdlib, None, existing_context);
@@ -618,9 +616,53 @@ impl Ast {
                         ));
                     }
                     state.global_memory_mut().insert(qualified_var_name.clone(), value.clone());
+                    state.global_memory_mut().remove(&var_name);
                     if let Some(var_meta) = compiled_module.global_table.get(&var_name) {
-                        state.global_table_mut().insert(qualified_var_name.clone(), var_meta.clone());
+                        let mut var_meta_cloned = var_meta.clone();
+                        var_meta_cloned.name = qualified_var_name.clone();
+                        state.global_table_mut().insert(qualified_var_name.clone(), var_meta_cloned);
+                        state.global_table_mut().remove(&var_name);
                     }
+                }
+
+                println!("global memory after importing module '{}': {:?}", name, state.global_memory());
+                println!("global table after importing module '{}': {:?}", name, state.global_table());
+
+
+                for condition in compiled_module.always_conditions {
+                    let (deps, read_vars, expr, pos) = condition;
+
+                    let updated_deps: HashSet<String> = deps.iter()
+                        .map(|dep| format!("{}.{}", name, dep))
+                        .collect();
+                    let updated_read_vars: Vec<String> = read_vars.iter()
+                        .map(|var| format!("{}.{}", name, var))
+                        .collect();
+
+                    state.always_conditions_mut().push((
+                        updated_deps, 
+                        updated_read_vars,
+                        expr,
+                        pos
+                    ))
+                }
+
+                for condition in compiled_module.eventually_conditions {
+                    let (deps, read_vars, expr, pos) = condition;
+
+                    let updated_deps: HashSet<String> = deps.iter()
+                        .map(|dep| format!("{}.{}", name, dep))
+                        .collect();
+                    let updated_read_vars: Vec<String> = read_vars.iter()
+                        .map(|var| format!("{}.{}", name, var))
+                        .collect();
+
+                    state.eventually_conditions_mut().push((
+                        updated_deps, 
+                        updated_read_vars,
+                        expr,
+                        pos
+                    ))
                 }
 
                 // functions
@@ -689,7 +731,7 @@ impl Ast {
                             .unwrap_or_default(),
                     );
 
-                    println!("Adding program '{}' with code {:?}", qualified_prog_name, prog_code);
+                    // println!("Adding program '{}' with code {:?}", qualified_prog_name, prog_code);
                     prog_code.name = qualified_prog_name.clone();
                     for instruction in &mut prog_code.instructions {
                         match &mut instruction.control {
@@ -718,14 +760,25 @@ impl Ast {
                             _ => {}
                         }
                     }
-
-                    programs_code.insert(qualified_prog_name, prog_code);
+                    state.programs_code_mut().remove(&prog_name);
+                    state.programs_code_mut().insert(qualified_prog_name, prog_code);
                 }
             }
-        }
 
-        // println!("program arguments: {:?}", state.program_arguments());
-        // println!("programs code: {:?}", programs_code);
+            state.always_conditions_mut().retain(|(deps, _read_vars, _expr, _pos)| {
+                deps.iter().all(|dep| {
+                    let parts: Vec<&str> = dep.split('.').collect();
+                    parts.len() == 2 && !parts[0].is_empty() && !parts[1].is_empty()
+                })
+            });
+
+            state.eventually_conditions_mut().retain(|(deps, _read_vars, _expr, _pos)| {
+                deps.iter().all(|dep| {
+                    let parts: Vec<&str> = dep.split('.').collect();
+                    parts.len() == 2 && !parts[0].is_empty() && !parts[1].is_empty()
+                })
+            });
+        }
 
         // "compile" the "shared" block to retrieve the set of shared variables
         state.current_stack_depth = 1;
@@ -850,7 +903,7 @@ impl Ast {
 
         if self.process_blocks.contains_key("main") {
             let code = self.compile_program("main", &mut state, module_prefix)?;
-            programs_code.insert("main".to_string(), code);
+            state.programs_code_mut().insert("main".to_string(), code);
             assert!(state.current_stack_depth == 0);
         }
 
@@ -859,7 +912,7 @@ impl Ast {
                 continue;
             }
             let code = self.compile_program(name, &mut state, module_prefix)?;
-            programs_code.insert(name.clone(), code);
+            state.programs_code_mut().insert(name.clone(), code);
             assert!(state.current_stack_depth == 0);
         }
 
@@ -874,9 +927,6 @@ impl Ast {
                 ),
             ));
         }
-
-        let mut always_conditions = Vec::new();
-        let mut eventually_conditions = Vec::new();
 
         for (name, condition_block) in self.condition_blocks.iter() {
             match name {
@@ -900,7 +950,7 @@ impl Ast {
                         if let InstructionType::GlobalReads { variables, .. } = &compiled[0].control
                         {
                             if let InstructionType::Expression(exp) = &compiled[1].control {
-                                always_conditions.push((
+                                state.always_conditions_mut().push((
                                     variables.iter().map(|s| s.clone()).collect(),
                                     variables.clone(),
                                     exp.clone(),
@@ -943,7 +993,7 @@ impl Ast {
                         if let InstructionType::GlobalReads { variables, .. } = &compiled[0].control
                         {
                             if let InstructionType::Expression(exp) = &compiled[1].control {
-                                eventually_conditions.push((
+                                state.eventually_conditions_mut().push((
                                     variables.iter().map(|s| s.clone()).collect(),
                                     variables.clone(),
                                     exp.clone(),
@@ -969,6 +1019,9 @@ impl Ast {
             }
         
         }
+
+        println!("always conditions: {:?}", state.always_conditions());
+        println!("eventually conditions: {:?}", state.eventually_conditions());
 
                 // now compile the function bodies
         for (func_name, (args_list, return_datatype, func_block)) in &self.function_blocks {
@@ -1041,6 +1094,9 @@ impl Ast {
 
         }
 
+        // println!("program arguments: {:?}", state.program_arguments());
+        // println!("programs code: {:?}", state.programs_code());
+
     // Return using context data instead of local variables
     let context_borrow = context.borrow();
     Ok(CompiledProject {
@@ -1048,9 +1104,9 @@ impl Ast {
         program_arguments: context_borrow.program_arguments.clone(),
         user_functions: context_borrow.user_functions.clone(),
         global_table: context_borrow.global_table.clone(),
-        programs_code,
-        always_conditions,
-        eventually_conditions,
+        programs_code: context_borrow.programs_code.clone(),
+        always_conditions: context_borrow.always_conditions.clone(),
+        eventually_conditions: context_borrow.eventually_conditions.clone(),
         stdlib: context_borrow.stdlib.clone(),
     })
 }
