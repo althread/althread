@@ -264,7 +264,7 @@ INT_TYPE   = { "int" }
 FLOAT_TYPE = { "float" }
 STR_TYPE   = { "string" }
 VOID_TYPE  = { "void" }
-PROCESS_TYPE = { "proc" ~ "(" ~ identifier ~ ")" }
+PROCESS_TYPE = { "proc" ~ "(" ~ object_identifier ~ ")" }
 LIST_TYPE  = { "list" ~ "(" ~ datatype ~ ")" }
 
 /// ### Literals

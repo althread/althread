@@ -151,6 +151,15 @@ fn extract_channel_declarations_from_statement(
                 program_name
             )?;
         }
+        // Scan all function blocks
+        for (function_name, (_, _, function_block)) in &self.function_blocks {
+            self.scan_block_for_run_statements(
+                &function_block.value,
+                var_to_program,
+                &mut process_lists,
+                &format!("function_{}", function_name)
+            )?;
+        }
 
         Ok(())
     }
@@ -162,6 +171,8 @@ fn extract_channel_declarations_from_statement(
         process_lists: &mut HashMap<String, ProcessListInfo>,
         current_program: &str
     ) -> AlthreadResult<()> {
+        // println!("Scanning block for run statements in program '{:?}'", block);
+        // println!(" ");
         for statement in &block.children {
             self.scan_statement_for_run_statements(
                 &statement.value, 
@@ -180,17 +191,19 @@ fn extract_channel_declarations_from_statement(
         process_lists: &mut HashMap<String, ProcessListInfo>,
         current_program: &str
     ) -> AlthreadResult<()> {
+        // println!("Scanning statement: {:?}", statement);
+        // println!(" ");
         match statement {
             Statement::Declaration(var_decl) => {
                 let var_name = &var_decl.value.identifier.value.parts[0].value.value;
 
                 // Check if this is a list
                 if let Some(list_type) = var_decl.value.datatype.as_ref() {
-                    println!("Found list declaration: {} with type {:?}", var_name, list_type.value);
+                    // println!("Found list declaration: {} with type {:?}", var_name, list_type.value);
 
                     let (is_process, element_type) = list_type.value.is_process();
                     if is_process {
-                        println!("Found process list declaration: {} with type {:?}", var_name, element_type);
+                        // println!("Found process list declaration: {} with type {:?}", var_name, element_type);
                         process_lists.insert(
                             var_name.clone(),
                             ProcessListInfo { 
@@ -200,7 +213,7 @@ fn extract_channel_declarations_from_statement(
                         );
                     }
                 }
-                println!("process_lists: {:?}", process_lists.clone());
+                // println!("process_lists: {:?}", process_lists.clone());
 
                 // check for run calls
                 if let Some(side_effect_node) = var_decl.value.value.as_ref() {
@@ -323,11 +336,14 @@ fn extract_channel_declarations_from_statement(
 
     pub fn prescan_channel_declarations(
     &self, 
-    state: &mut CompilerState
+    state: &mut CompilerState,
+    module_prefix: &str
 ) -> AlthreadResult<()> {
     // Build variable-to-program mapping first
     let mut var_to_program: HashMap<String, String> = HashMap::new();
     self.build_variable_program_mapping(&mut var_to_program)?;
+
+    // println!("[{}] Prescanning for channel declarations", m_prefix);
 
     // Scan ALL process blocks for channel declarations, not just main
     for (program_name, (_, program_block)) in &self.process_blocks {
@@ -335,11 +351,24 @@ fn extract_channel_declarations_from_statement(
         self.extract_channel_declarations_from_block(
             &program_block.value, 
             state,
-            "",
+            module_prefix,
             &var_to_program
         )?;
         // println!("Finished scanning program '{:?}'", var_to_program);
     }
+
+    // Scan ALL function blocks for channel declarations
+    for (function_name, (_, _, function_block)) in &self.function_blocks {
+        // println!("Scanning function '{}' for channel declarations", function_name);
+        self.extract_channel_declarations_from_block(
+            &function_block.value, 
+            state,
+            module_prefix,
+            &var_to_program
+        )?;
+        // println!("Finished scanning function '{:?}'", function_name);
+    }
+
     Ok(())
     }
 

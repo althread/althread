@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::{BTreeMap, HashMap, HashSet}, path::Path, rc::Rc};
 
-use crate::{ast::{statement::Statement, token::{condition_keyword::ConditionKeyword, datatype::DataType, identifier::Identifier}, Ast, node::InstructionBuilder}, compiler::{stdlib::{self, Stdlib}, CompilationContext, CompiledProject, CompilerState, FunctionDefinition, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, module_resolver::{self, module_resolver::{ModuleResolver, ResolvedModule}, FileSystem}, parser, vm::{instruction::{Instruction, InstructionType, ProgramCode}, VM}};
+use crate::{ast::{import_block::ImportBlock, node::{InstructionBuilder, Node}, statement::Statement, token::{condition_keyword::ConditionKeyword, datatype::DataType, identifier::Identifier, literal::Literal}, Ast}, compiler::{stdlib::{self, Stdlib}, CompilationContext, CompiledProject, CompilerState, FunctionDefinition, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, module_resolver::{self, module_resolver::{ModuleResolver, ResolvedModule}, FileSystem}, parser, vm::{instruction::{Instruction, InstructionType, ProgramCode}, VM}};
 
 
 impl Ast {
@@ -16,6 +16,18 @@ impl Ast {
         false
     }
 
+    pub fn build_qualified_name(
+        &self, 
+        name: &str,
+        module_prefix: &str
+    ) -> String {
+        if module_prefix.is_empty() {
+            name.to_string()
+        } else {
+            format!("{}.{}", module_prefix, name)
+        }
+    }
+
     pub fn compile<F: FileSystem + Clone>(
         &self,
         current_file_path: &Path,
@@ -25,7 +37,7 @@ impl Ast {
         // Create shared compilation context
         let context = Rc::new(RefCell::new(CompilationContext::new()));
 
-        self.compile_with_context(current_file_path, filesystem, context, None)
+        self.compile_with_context(current_file_path, filesystem, context, &"".to_string(), Vec::new())
     }
 
     pub fn compile_with_context<F: FileSystem + Clone>(
@@ -33,7 +45,8 @@ impl Ast {
         current_file_path: &Path,
         filesystem: F,
         context: Rc<RefCell<CompilationContext>>,
-        module_prefix: Option<&String>,
+        module_prefix: &str,
+        same_level_module_names: Vec<String>
     ) -> AlthreadResult<CompiledProject> {
 
         // if the main file is empty (no executable stuff) we have nothing to do
@@ -52,18 +65,91 @@ impl Ast {
 
         let mut state= CompilerState::new_with_context(context.clone());
 
-        if let Some(prefix) = &module_prefix {
-            state.module_prefix = Some(prefix.to_string());
-        }
+        println!("Current module prefix: {:?}", module_prefix);
 
-        // scan everything for channel declarations (in the main file and in all imports)
-        if let Err(e) = self.prescan_channel_declarations(&mut state) {
+        // scan everything for channel declarations in the current file
+        if let Err(e) = self.prescan_channel_declarations(&mut state, module_prefix) {
             return Err(e);
         }
 
-        self.compile_imports(current_file_path, filesystem.clone(), &mut state, context.clone())?;
+        let mut next_level_module_names = Vec::<String>::new();
 
-                // "compile" the "shared" block to retrieve the set of shared variables
+        // if there's an import block, resolve the imports
+        if let Some(import_block) = &self.import_block {
+            
+            let mut module_resolver = ModuleResolver::new(current_file_path, filesystem.clone());
+            let mut import_stack = Vec::new();
+
+            module_resolver.resolve_imports(&import_block.value, &mut import_stack)?;
+
+            for (name, _) in module_resolver.resolved_modules.clone() {
+                println!("[{}] Resolved module: {}", module_prefix, name);
+                next_level_module_names.push(name);
+            }
+            println!("[{}] Same level module names: {:?}", module_prefix, next_level_module_names);
+            
+            for (name, resolved_module) in module_resolver.resolved_modules {
+                let module_content = module_resolver.filesystem.read_file(&resolved_module.path)?;
+
+                let pairs = parser::parse(&module_content).map_err(|e| {
+                    AlthreadError::new(
+                        ErrorType::SyntaxError,
+                        Some(import_block.pos),
+                        format!("Failed to parse module '{}': {:?}", resolved_module.name, e),
+                    )
+                })?;
+
+                let module_ast = Ast::build(pairs).map_err(|e| {
+                    AlthreadError::new(
+                        ErrorType::SyntaxError,
+                        Some(import_block.pos),
+                        format!("Failed to build AST for module '{}': {:?}", resolved_module.name, e),
+                    )
+                })?;
+
+                if module_ast.process_blocks.contains_key("main") {
+                    return Err(AlthreadError::new(
+                        ErrorType::ImportMainConflict,
+                        Some(import_block.pos),
+                        format!("'{}' defines a 'main' block. Imported modules cannot define a 'main' block.", resolved_module.name),
+                    ));
+                }
+
+                let next_module_prefix: String = self.build_qualified_name(&name, module_prefix);
+
+                let compiled_module = module_ast.compile_with_context(&resolved_module.path, filesystem.clone(), context.clone(), &next_module_prefix, next_level_module_names.clone()).map_err(|e| {
+                    AlthreadError::new(
+                        ErrorType::SyntaxError,
+                        Some(import_block.pos),
+                        format!("Failed to compile module '{}': {:?}", resolved_module.name, e),
+                    )
+                })?;
+
+                // display what was imported at this point
+                println!("----------------------------------------------------");
+                println!("[{}] Imported module '{}'", module_prefix, name);
+                println!("[{}] Imported shared variables: {:?}", module_prefix, compiled_module.global_memory.keys());
+                println!("[{}] Imported functions: {:?}", module_prefix, compiled_module.user_functions.keys());
+                println!("[{}] Imported programs: {:?}", module_prefix, compiled_module.programs_code.keys());
+                println!("[{}] Imported always conditions: {:?}", module_prefix, compiled_module.always_conditions);
+                println!("[{}] Imported eventually conditions: {:?}", module_prefix, compiled_module.eventually_conditions);
+                println!("----------------------------------------------------");
+
+
+                state.always_conditions_mut().extend(compiled_module.always_conditions);
+                state.eventually_conditions_mut().extend(compiled_module.eventually_conditions);
+                state.global_memory_mut().extend(compiled_module.global_memory);
+                state.program_arguments_mut().extend(compiled_module.program_arguments);
+                state.user_functions_mut().extend(compiled_module.user_functions);
+                state.programs_code_mut().extend(compiled_module.programs_code);
+                state.global_table_mut().extend(compiled_module.global_table);
+
+            }
+
+        }
+
+
+         // "compile" the "shared" block to retrieve the set of shared variables
         state.current_stack_depth = 1;
         state.is_shared = true;
         if let Some(global) = self.global_block.as_ref() {
@@ -119,6 +205,8 @@ impl Ast {
                 }
             }
         }
+
+        println!("[{}] Shared variables: {:?}", module_prefix, state.global_memory().keys());
 
         state.unstack_current_depth();
         assert!(state.current_stack_depth == 0);
@@ -185,7 +273,7 @@ impl Ast {
         // start with the main program
 
         if self.process_blocks.contains_key("main") {
-            let code = self.compile_program("main", &mut state)?;
+            let code = self.compile_program("main", &mut state, module_prefix)?;
             state.programs_code_mut().insert("main".to_string(), code);
             assert!(state.current_stack_depth == 0);
         }
@@ -194,7 +282,8 @@ impl Ast {
             if name == "main" {
                 continue;
             }
-            let code = self.compile_program(name, &mut state)?;
+            let code = self.compile_program(name, &mut state, module_prefix)?;
+
             state.programs_code_mut().insert(name.clone(), code);
             assert!(state.current_stack_depth == 0);
         }
@@ -356,22 +445,331 @@ impl Ast {
                 }
             }
 
+            state.user_functions_mut().insert(
+                func_name.clone(),
+                FunctionDefinition {
+                    name: func_name.clone(),
+                    arguments,
+                    return_type: return_datatype.clone(),
+                    body: compiled_body.instructions,
+                    pos: func_block.pos,
+                },
+            );
+
             // clean up compiler state
             state.program_stack.truncate(initial_stack_len);
             state.current_stack_depth -= 1;
             state.in_function = false;
 
+        }
 
-            let func_def = FunctionDefinition {
-                name: func_name.clone(),
-                arguments,
-                return_type: return_datatype.clone(),
-                body: compiled_body.instructions,
-                pos: func_block.pos,
+
+        if !module_prefix.is_empty() {
+            println!("[{}] Same level module names: {:?}", module_prefix, same_level_module_names);
+
+            for (func_name, (args_list, return_datatype, func_block )) in &self.function_blocks {
+                if same_level_module_names.iter().any(|mod_name| func_name.starts_with(&format!("{}.", mod_name))) {
+                        println!("[{}] Skipping function '{}' as it is already qualified", module_prefix, func_name);
+                        continue;
+                }
+
+                let old_func_def_opt = state.user_functions_mut().remove(func_name);
+
+                if old_func_def_opt.is_none() {
+                    return Err(AlthreadError::new(
+                        ErrorType::FunctionNotFound,
+                        Some(func_block.pos),
+                        format!("Function '{}' not found", func_name),
+                    ));
+                }
+
+                let mut old_func_def = old_func_def_opt.unwrap();
+
+                let new_func_name = self.build_qualified_name(&func_name, module_prefix);
+
+                println!("[{}] Importing function '{}'", module_prefix, func_name);
+                if state.user_functions().contains_key(&new_func_name) {
+                    return Err(AlthreadError::new(
+                        ErrorType::FunctionAlreadyDefined,
+                        Some(old_func_def.pos),
+                        format!("Function '{}' from module '{}' is already defined", func_name, module_prefix),
+                    ));
+                }
+
+                // replace all function calls in the body with the new function name
+                for instruction in &mut old_func_def.body {
+                    match &mut instruction.control {
+                    InstructionType::FnCall { name: call_name, ..} => {
+                        if call_name == "print" || call_name == "assert" {
+                            // do not qualify standard library function calls
+                            continue;
+                        }
+                        *call_name = format!("{}.{}", module_prefix, call_name);
+                    }
+                    InstructionType::GlobalReads { variables, ..} => {
+                        for var in variables.iter_mut() {
+                            *var = format!("{}.{}", module_prefix, var);
+                        }
+                    }
+                    InstructionType::GlobalAssignment { identifier, ..} => {
+                        *identifier = format!("{}.{}", module_prefix, identifier);
+                    }
+                    InstructionType::RunCall { name: call_name, ..} => {
+                        *call_name = format!("{}.{}", module_prefix, call_name);
+                    }
+                    _ => {}
+                    }
+                }
+
+                let func_def = FunctionDefinition {
+                    name: new_func_name.clone(),
+                    arguments: old_func_def.arguments.clone(),
+                    return_type: return_datatype.clone(),
+                    body: old_func_def.body.clone(),
+                    pos: func_block.pos,
+                };
+
+                state.user_functions_mut().insert(new_func_name.clone(), func_def);
+            }
+
+
+            println!("[{}] Module importing shared variables", module_prefix);
+            println!("Global memory: {:?}", state.global_memory_mut().keys());
+
+            // Collect all variable data first to avoid borrow conflicts
+            let shared_vars: Vec<(String, Literal, Option<Variable>)> = {
+                let global_memory = state.global_memory();
+                let global_table = state.global_table();
+                
+                global_memory.iter().map(|(var_name, value)| {
+                    let var_meta = global_table.get(var_name).cloned();
+                    (var_name.clone(), value.clone(), var_meta)
+                }).collect()
             };
 
-            state.user_functions_mut().insert(func_name.clone(), func_def);
+            println!("[{}] Shared variables: {:?}", module_prefix, shared_vars.iter().map(|(name, _, _)| name).collect::<Vec<_>>());
 
+            for (var_name, value, var_meta) in shared_vars {
+                if var_name.contains(module_prefix) {
+                    // This variable is already qualified, skip it
+                    continue;
+                }
+
+                if same_level_module_names.iter().any(|mod_name| var_name.starts_with(&format!("{}.", mod_name))) {
+                        println!("[{}] Skipping variable '{}' as it is already qualified", module_prefix, var_name);
+                        continue;
+                }
+                
+                let qualified_var_name = self.build_qualified_name(&var_name, module_prefix);
+
+                if qualified_var_name == var_name {
+                    // No need to qualify, it's already qualified
+                    continue;
+                }
+                println!("qualified variable name: {}", qualified_var_name);
+
+                println!("[{}] Importing shared variable '{}'", module_prefix, qualified_var_name);
+
+                if state.global_memory().contains_key(&qualified_var_name) {
+                    return Err(AlthreadError::new(
+                        ErrorType::VariableAlreadyDefined,
+                        None,
+                        format!("Shared variable '{}' from module '{}' is already defined", var_name, module_prefix),
+                    ));
+                }
+                
+                state.global_memory_mut().insert(qualified_var_name.clone(), value);
+                state.global_memory_mut().remove(&var_name);
+                
+                if let Some(var_meta) = var_meta {
+                    let mut var_meta_cloned = var_meta.clone();
+                    var_meta_cloned.name = qualified_var_name.clone();
+                    state.global_table_mut().insert(qualified_var_name.clone(), var_meta_cloned);
+                    state.global_table_mut().remove(&var_name);
+                }
+            }
+
+            println!("[{}] Shared variables after import: {:?}", module_prefix, state.global_memory().keys());
+
+
+            // Collect conditions into a temporary vector to avoid borrow conflicts
+            let always_conditions: Vec<_> = state.always_conditions().clone();
+            let mut new_always_conditions = Vec::new();
+            for condition in always_conditions.iter() {
+                // if the condition is already qualified, skip it
+                if condition.0.iter().any(|dep| dep.contains(module_prefix)) {
+                    continue;
+                }
+
+                // skip if any dependency starts with any same-level module name
+                if same_level_module_names.iter().any(|mod_name| {
+                    condition.0.iter().any(|dep| dep.starts_with(&format!("{}.", mod_name)))
+                }) {
+                    continue;
+                }
+                
+                let (deps, read_vars, expr, pos) = condition;
+
+                let updated_deps: HashSet<String> = deps.iter()
+                    .map(|dep| format!("{}.{}", module_prefix, dep))
+                    .collect();
+                let updated_read_vars: Vec<String> = read_vars.iter()
+                    .map(|var| format!("{}.{}", module_prefix, var))
+                    .collect();
+
+                new_always_conditions.push((
+                    updated_deps,
+                    updated_read_vars,
+                    expr.clone(),
+                    pos.clone()
+                ));
+            }
+            *state.always_conditions_mut() = new_always_conditions;
+
+            // Do the same for eventually_conditions
+            let eventually_conditions: Vec<_> = state.eventually_conditions().clone();
+            let mut new_eventually_conditions = Vec::new();
+            for condition in eventually_conditions.iter() {
+                // if the condition is already qualified, skip it
+                if condition.0.iter().any(|dep| dep.contains(module_prefix)) {
+                    continue;
+                }
+
+                // skip if any dependency starts with any same-level module name
+                if same_level_module_names.iter().any(|mod_name| {
+                    condition.0.iter().any(|dep| dep.starts_with(&format!("{}.", mod_name)))
+                }) {
+                    continue;
+                }
+                let (deps, read_vars, expr, pos) = condition;
+
+                let updated_deps: HashSet<String> = deps.iter()
+                    .map(|dep| format!("{}.{}", module_prefix, dep))
+                    .collect();
+                let updated_read_vars: Vec<String> = read_vars.iter()
+                    .map(|var| format!("{}.{}", module_prefix, var))
+                    .collect();
+
+                new_eventually_conditions.push((
+                    updated_deps,
+                    updated_read_vars,
+                    expr.clone(),
+                    pos.clone()
+                ));
+            }
+            *state.eventually_conditions_mut() = new_eventually_conditions;
+
+            state.always_conditions_mut().retain(|(deps, _read_vars, _expr, _pos)| {
+                deps.iter().any(|dep| dep.contains('.'))
+            });
+
+            state.eventually_conditions_mut().retain(|(deps, _read_vars, _expr, _pos)| {
+                deps.iter().any(|dep| dep.contains('.'))
+            });
+
+            // Collect programs to update first to avoid borrow conflicts
+            let programs_to_update: Vec<(String, ProgramCode)> = state.programs_code()
+            .iter()
+            .map(|(prog_name, prog_code)| (prog_name.clone(), prog_code.clone()))
+            .collect();
+
+            for (prog_name, mut prog_code) in programs_to_update {
+                if prog_name.contains(module_prefix) {
+                    // This program is already qualified, skip it
+                    continue;
+                }
+
+                if same_level_module_names.iter().any(|mod_name| prog_name.starts_with(&format!("{}.", mod_name))) {
+                        println!("[{}] Skipping program '{}' as it is already qualified", module_prefix, prog_name);
+                        continue;
+                }
+                
+                let qualified_prog_name = self.build_qualified_name(&prog_name, module_prefix);
+
+                if qualified_prog_name == prog_name {
+                    // No need to qualify, it's already qualified
+                    continue;
+                }
+
+                println!("[{}] Importing program '{}'", module_prefix, qualified_prog_name);
+                if state.program_arguments().contains_key(&qualified_prog_name) {
+                    return Err(AlthreadError::new(
+                        ErrorType::ProgramAlreadyDefined,
+                        Some(self.import_block.as_ref().unwrap().pos),
+                        format!("Program '{}' from module '{}' is already defined", prog_name, module_prefix),
+                    ));
+                }
+
+                let prog_args = state.program_arguments().get(&prog_name)
+                .cloned()
+                .unwrap_or_default();
+
+                state.program_arguments_mut().insert(
+                    qualified_prog_name.clone(),
+                    prog_args,
+                );
+
+                prog_code.name = qualified_prog_name.clone();
+                for instruction in &mut prog_code.instructions {
+                    match &mut instruction.control {
+                        InstructionType::FnCall { name: call_name, ..} => {
+                                if call_name == "print" || call_name == "assert" {
+                                    // do not qualify standard library function calls
+                                    continue;
+                                }
+                            *call_name = format!("{}.{}", module_prefix, call_name);
+                        }
+                        InstructionType::GlobalReads { variables, ..} => {
+                            for var in variables.iter_mut() {
+                                *var = format!("{}.{}", module_prefix, var);
+                            }
+                        }
+                        InstructionType::GlobalAssignment { identifier, ..} => {
+                            *identifier = format!("{}.{}", module_prefix, identifier);
+                        }
+                        InstructionType::RunCall { name: call_name, ..} => {
+                            *call_name = format!("{}.{}", module_prefix, call_name);
+                        }
+                        InstructionType::WaitStart { dependencies, ..} => {
+                            let updated_vars: std::collections::HashSet<String> = dependencies.variables.iter()
+                                .map(|dep| format!("{}.{}", module_prefix, dep))
+                                .collect();
+                            dependencies.variables = updated_vars;
+                        }
+                        _ => {}
+                    }
+                }
+                state.programs_code_mut().remove(&prog_name);
+                state.programs_code_mut().insert(qualified_prog_name, prog_code.clone());
+            }
+        }
+
+        state.context.borrow_mut().global_memory.extend(state.global_memory().clone());
+        state.context.borrow_mut().program_arguments.extend(state.program_arguments().clone());
+        state.context.borrow_mut().user_functions.extend(state.user_functions().clone());
+        state.context.borrow_mut().global_table.extend(state.global_table().clone());
+        state.context.borrow_mut().programs_code.extend(state.programs_code().clone());
+        state.context.borrow_mut().always_conditions.extend(state.always_conditions().clone());
+        state.context.borrow_mut().eventually_conditions.extend(state.eventually_conditions().clone());
+
+        println!("[{}] Compiled module with {} programs, {} functions, {} shared variables, {} always conditions, {} eventually conditions", 
+            module_prefix, 
+            state.programs_code().len(), 
+            state.user_functions().len(), 
+            state.global_memory().len(),
+            state.always_conditions().len(),
+            state.eventually_conditions().len()
+        );
+
+        if module_prefix.is_empty() {
+            println!("-----------------------------------------------------");
+            println!("[Main module] Finished compiling main module");
+            println!("[Main module] Shared variables: {:?}", state.global_memory().keys());
+            println!("[Main module] User functions: {:?}", state.user_functions().keys());
+            println!("[Main module] Programs code: {:?}", state.programs_code().keys());
+            println!("[Main module] Always conditions: {:?}", state.always_conditions());
+            println!("[Main module] Eventually conditions: {:?}", state.eventually_conditions());
+            println!("-----------------------------------------------------");
         }
 
         // Return using context data instead of local variables
@@ -389,253 +787,12 @@ impl Ast {
 
     }
 
-    fn compile_imports<F: FileSystem + Clone>(
-        &self,
-        current_file_path: &Path,
-        filesystem: F,
-        state: &mut CompilerState,
-        context: Rc<RefCell<CompilationContext>>,
-    ) -> AlthreadResult<()> {
-
-        if let Some(import_block) = &self.import_block {
-            let mut module_resolver = ModuleResolver::new(current_file_path, filesystem.clone());
-            let mut import_stack = Vec::new();
-            let mut same_level_module_names = Vec::<String>::new();
-
-            module_resolver.resolve_imports(&import_block.value, &mut import_stack)?;
-
-            for (name, _) in module_resolver.resolved_modules.clone() {
-                same_level_module_names.push(name);
-            }
-
-            for (name, resolved_module) in module_resolver.resolved_modules {
-                let module_content = module_resolver.filesystem.read_file(&resolved_module.path)?;
-
-                let pairs = parser::parse(&module_content).map_err(|e| {
-                    AlthreadError::new(
-                        ErrorType::SyntaxError,
-                        Some(import_block.pos),
-                        format!("Failed to parse module '{}': {:?}", resolved_module.name, e),
-                    )
-                })?;
-
-                let module_ast = Ast::build(pairs).map_err(|e| {
-                    AlthreadError::new(
-                        ErrorType::SyntaxError,
-                        Some(import_block.pos),
-                        format!("Failed to build AST for module '{}': {:?}", resolved_module.name, e),
-                    )
-                })?;
-
-                if module_ast.process_blocks.contains_key("main") {
-                    return Err(AlthreadError::new(
-                        ErrorType::ImportMainConflict,
-                        Some(import_block.pos),
-                        format!("'{}' defines a 'main' block. Imported modules cannot define a 'main' block.", resolved_module.name),
-                    ));
-                }
-
-                let next_module_prefix = if let Some(prefix) = state.module_prefix.as_ref() {
-                    format!("{}.{}", prefix, name)
-                } else {
-                    name.clone()
-                };
-
-                let compiled_module = module_ast.compile_with_context(&resolved_module.path, filesystem.clone(), context.clone(), Some(&next_module_prefix)).map_err(|e| {
-                    AlthreadError::new(
-                        ErrorType::SyntaxError,
-                        Some(import_block.pos),
-                        format!("Failed to compile module '{}': {:?}", resolved_module.name, e),
-                    )
-                })?;
-
-                // shared variables - use context instead of local variables
-                for (var_name, value) in compiled_module.global_memory {
-                    // Skip if var_name is already qualified with a same-level module name
-                    if same_level_module_names.iter().any(|mod_name| var_name.starts_with(&format!("{}.", mod_name))) {
-                        continue;
-                    }
-                    let qualified_var_name = format!("{}.{}", name, var_name);
-                    if state.global_memory().contains_key(&qualified_var_name) {
-                        return Err(AlthreadError::new(
-                            ErrorType::VariableAlreadyDefined,
-                            Some(import_block.pos),
-                            format!("Shared variable '{}' from module '{}' is already defined", var_name, name),
-                        ));
-                    }
-                    state.global_memory_mut().insert(qualified_var_name.clone(), value.clone());
-                    state.global_memory_mut().remove(&var_name);
-                    if let Some(var_meta) = compiled_module.global_table.get(&var_name) {
-                        let mut var_meta_cloned = var_meta.clone();
-                        var_meta_cloned.name = qualified_var_name.clone();
-                        state.global_table_mut().insert(qualified_var_name.clone(), var_meta_cloned);
-                        state.global_table_mut().remove(&var_name);
-                    }
-                }
-
-                for condition in compiled_module.always_conditions {
-                    let (deps, read_vars, expr, pos) = condition;
-
-                    let updated_deps: HashSet<String> = deps.iter()
-                        .map(|dep| format!("{}.{}", name, dep))
-                        .collect();
-                    let updated_read_vars: Vec<String> = read_vars.iter()
-                        .map(|var| format!("{}.{}", name, var))
-                        .collect();
-
-                    state.always_conditions_mut().push((
-                        updated_deps, 
-                        updated_read_vars,
-                        expr,
-                        pos
-                    ))
-                }
-
-                for condition in compiled_module.eventually_conditions {
-                    let (deps, read_vars, expr, pos) = condition;
-
-                    let updated_deps: HashSet<String> = deps.iter()
-                        .map(|dep| format!("{}.{}", name, dep))
-                        .collect();
-                    let updated_read_vars: Vec<String> = read_vars.iter()
-                        .map(|var| format!("{}.{}", name, var))
-                        .collect();
-
-                    state.eventually_conditions_mut().push((
-                        updated_deps, 
-                        updated_read_vars,
-                        expr,
-                        pos
-                    ))
-                }
-
-                // functions
-                let imported_fn_names: std::collections::HashSet<String> = 
-                    compiled_module.user_functions.keys().cloned().collect();
-
-                for (func_name, func_def) in compiled_module.user_functions {
-                    // Skip if func_name is already qualified with a same-level module name
-                    if same_level_module_names.iter().any(|mod_name| func_name.starts_with(&format!("{}.", mod_name))) {
-                        continue;
-                    }
-                    let new_func_name = format!("{}.{}", name, func_name);
-                    if state.user_functions().contains_key(&new_func_name) {
-                        return Err(AlthreadError::new(
-                            ErrorType::FunctionAlreadyDefined,
-                            Some(func_def.pos),
-                            format!("Function '{}' from module '{}' is already defined", func_name, name),
-                        ));
-                    }
-                    
-                    let mut new_func_def = func_def.clone();
-                    new_func_def.name = new_func_name.clone();
-
-                    // replace all function calls in the body with the new function name
-                    for instruction in &mut new_func_def.body {
-                        match &mut instruction.control {
-                            InstructionType::FnCall { name: call_name, ..} => {
-                                if imported_fn_names.contains(call_name) {
-                                    *call_name = format!("{}.{}", name, call_name);
-                            }
-                        }
-                        InstructionType::GlobalReads { variables, ..} => {
-                            for var in variables.iter_mut() {
-                                *var = format!("{}.{}", name, var);
-                            }
-                        }
-                        InstructionType::GlobalAssignment { identifier, ..} => {
-                            *identifier = format!("{}.{}", name, identifier);
-                        }
-                        InstructionType::RunCall { name: call_name, ..} => {
-                            *call_name = format!("{}.{}", name, call_name);
-                        }
-                        _ => {}
-                        }
-                    }
-
-                    state.user_functions_mut().remove(&func_name);
-                    state.user_functions_mut().insert(new_func_name.clone(), new_func_def);
-                }
-
-                for (prog_name, mut prog_code) in compiled_module.programs_code {
-                    // Skip if prog_name is already qualified with a same-level module name
-                    if same_level_module_names.iter().any(|mod_name| prog_name.starts_with(&format!("{}.", mod_name))) {
-                        continue;
-                    }
-
-                    let qualified_prog_name = format!("{}.{}", name, prog_name);
-                    if state.program_arguments().contains_key(&qualified_prog_name) {
-                        return Err(AlthreadError::new(
-                            ErrorType::ProgramAlreadyDefined,
-                            Some(import_block.pos),
-                            format!("Program '{}' from module '{}' is already defined", prog_name, name),
-                        ));
-                    }
-
-                    // remove the unqualified program name from the arguments if it exists
-                    state.program_arguments_mut().remove(&prog_name);
-
-                    state.program_arguments_mut().insert(
-                        qualified_prog_name.clone(),
-                        compiled_module.program_arguments.get(&prog_name)
-                            .cloned()
-                            .unwrap_or_default(),
-                    );
-
-                    prog_code.name = qualified_prog_name.clone();
-                    for instruction in &mut prog_code.instructions {
-                        match &mut instruction.control {
-                            InstructionType::FnCall { name: call_name, ..} => {
-                                if imported_fn_names.contains(call_name) {
-                                    *call_name = format!("{}.{}", name, call_name);
-                                }
-                            }
-                            InstructionType::GlobalReads { variables, ..} => {
-                                for var in variables.iter_mut() {
-                                    *var = format!("{}.{}", name, var);
-                                }
-                            }
-                            InstructionType::GlobalAssignment { identifier, ..} => {
-                                *identifier = format!("{}.{}", name, identifier);
-                            }
-                            InstructionType::RunCall { name: call_name, ..} => {
-                                *call_name = format!("{}.{}", name, call_name);
-                            }
-                            InstructionType::WaitStart { dependencies, ..} => {
-                                let updated_vars: std::collections::HashSet<String> = dependencies.variables.iter()
-                                    .map(|dep| format!("{}.{}", name, dep))
-                                    .collect();
-                                dependencies.variables = updated_vars;
-                            }
-                            _ => {}
-                        }
-                    }
-                    state.programs_code_mut().remove(&prog_name);
-                    state.programs_code_mut().insert(qualified_prog_name, prog_code);
-                }
-            }
-
-            state.always_conditions_mut().retain(|(deps, _read_vars, _expr, _pos)| {
-                deps.iter().all(|dep| {
-                    let parts: Vec<&str> = dep.split('.').collect();
-                    parts.len() == 2 && !parts[0].is_empty() && !parts[1].is_empty()
-                })
-            });
-
-            state.eventually_conditions_mut().retain(|(deps, _read_vars, _expr, _pos)| {
-                deps.iter().all(|dep| {
-                    let parts: Vec<&str> = dep.split('.').collect();
-                    parts.len() == 2 && !parts[0].is_empty() && !parts[1].is_empty()
-                })
-            });
-        }
-        Ok(())
-    }
 
     fn compile_program(
         &self,
         name: &str,
         state: &mut CompilerState,
+        module_prefix: &str
     ) -> AlthreadResult<ProgramCode> {
         let mut process_code = ProgramCode {
             instructions: Vec::new(),
@@ -645,11 +802,8 @@ impl Ast {
             .process_blocks
             .get(name)
             .expect("trying to compile a non-existant program");
-        if let Some(prefix) = &state.module_prefix {
-            state.current_program_name = format!("{}.{}", prefix, name);
-        } else {
-            state.current_program_name = name.to_string();
-        }
+
+        state.current_program_name = self.build_qualified_name(name, module_prefix);
 
         for (i, var) in args.value.identifiers.iter().enumerate() {
             state.program_stack.push(Variable {
