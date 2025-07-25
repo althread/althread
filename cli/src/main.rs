@@ -16,6 +16,7 @@ use althread::{ast::Ast, checker, module_resolver::StandardFileSystem};
 use crate::package::{DependencySpec, Package};
 
 fn main() {
+    env_logger::init();
     let cli_args = CliArguments::parse();
 
     match &cli_args.command {

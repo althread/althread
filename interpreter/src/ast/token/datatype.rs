@@ -97,7 +97,6 @@ impl DataType {
     }
 
     pub fn is_process(&self) -> (bool, String) {
-        // println!("Checking if {:?} is a process", self);
         match self {
             Self::List(datatype) => datatype.is_process(),
             Self::Process(name) => (true, name.clone()),

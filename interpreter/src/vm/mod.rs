@@ -237,7 +237,6 @@ impl<'a> VM<'a> {
                     }
                 }
                 GlobalAction::Write(var_name) => {
-                    //println!("program {} writes {}", program_id, var_name);
                     // Check if the variable appears in the conditions of a waiting program
                     self.waiting_programs.retain(|prog_id, dependencies| {
                         if dependencies.variables.contains(var_name) {
@@ -361,7 +360,6 @@ impl<'a> VM<'a> {
                     }
                 }
                 GlobalAction::Write(var_name) => {
-                    //println!("program {} writes {}", program_id, var_name);
                     // Check if the variable appears in the conditions of a waiting program
                     self.waiting_programs.retain(|prog_id, dependencies| {
                         if dependencies.variables.contains(&var_name) {

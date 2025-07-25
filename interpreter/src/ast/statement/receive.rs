@@ -79,30 +79,16 @@ impl InstructionBuilder for Node<ReceiveStatement> {
         // a false value, and if it is true, then the stack contains all the read variables from the channel and a true value.
         let channel_name = self.value.channel.clone();
 
+        log::debug!("channels: {:?}", state.channels().clone());
+
         // first check that the correct number of variables are supplied
         // retreive the variable from the declared channel:
-
-        // println!(
-        //     "Compiling ReceiveStatement for channel '{}' with variables {:?} at pos {:?}",
-        //     channel_name, self.value.variables, self.pos
-        // );
-
-        println!("channels: {:?}", state.channels().clone());
-
-        // println!("current program name and channel name: {:?} {:?}",
-        //     state.current_program_name, channel_name
-        // );
-
         let (channel_types, pos) = state.channels().get(&(state.current_program_name.clone(), channel_name.clone())).ok_or(AlthreadError::new(
             ErrorType::TypeError,
             Some(self.pos),
             format!("Cannot infer the types of the channel '{}', please declare the channel (even if not used)", channel_name)
         ))?.clone();
 
-        //         println!(
-        //     "ReceiveStatement: {} with variables {:?} of types {:?} at pos {:?}",
-        //     channel_name, self.value.variables, channel_types, self.pos
-        // );
         // check that the number of variables is correct
         if channel_types.len() != self.value.variables.len() {
             return Err(AlthreadError::new(

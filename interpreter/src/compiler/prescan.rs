@@ -1,14 +1,6 @@
 use std::{collections::HashMap};
 
-use crate::{analysis::control_flow_graph::ControlFlowGraph, ast::{block::Block, node::Node, statement::{assignment::Assignment, channel_declaration::ChannelDeclaration, expression::{primary_expression::PrimaryExpression, Expression, SideEffectExpression}, Statement}, token::datatype::DataType, Ast}, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType}, module_resolver::{module_resolver::ModuleResolver, FileSystem}, parser};
-
-
-#[derive(Debug, Clone)]
-struct ProcessListInfo {
-    program_name: String, 
-    element_type: String
-}
-
+use crate::{analysis::control_flow_graph::ControlFlowGraph, ast::{block::Block, node::Node, statement::{assignment::Assignment, channel_declaration::ChannelDeclaration, expression::{primary_expression::PrimaryExpression, Expression, SideEffectExpression}, Statement}, token::datatype::DataType, Ast}, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType}};
 
 impl Ast {
 
@@ -47,7 +39,6 @@ fn extract_channel_declarations_from_statement(
         module_prefix: &str,
         var_to_program: &HashMap<String, String>,
     ) -> AlthreadResult<()> {
-        // println!("Extracting channel declarations from statement: {:?}", statement);
         match statement {
             Statement::ChannelDeclaration(channel_decl) => {
                 self.register_channel_declaration(&channel_decl.value, state, module_prefix, var_to_program)?;
@@ -133,14 +124,13 @@ fn extract_channel_declarations_from_statement(
         var_to_program: &HashMap<String, String>
     ) -> AlthreadResult<()> {
         for statement in &block.children {
-            // println!("Extracting channel declarations from statement: {:?}", statement);
             self.extract_channel_declarations_from_statement(&statement.value, state, module_prefix, var_to_program)?;
         }
         Ok(())
     }
 
     fn build_variable_program_mapping(&self, var_to_program: &mut HashMap<String, String>) -> AlthreadResult<()> {
-        let mut process_lists: HashMap<String, ProcessListInfo> = HashMap::new();
+        let mut process_lists: HashMap<String, String> = HashMap::new();
 
         // Scan all process blocks, not just main
         for (program_name, (_, program_block)) in &self.process_blocks {
@@ -168,11 +158,9 @@ fn extract_channel_declarations_from_statement(
         &self,
         block: &Block,
         var_to_program: &mut HashMap<String, String>,
-        process_lists: &mut HashMap<String, ProcessListInfo>,
+        process_lists: &mut HashMap<String, String>,
         current_program: &str
     ) -> AlthreadResult<()> {
-        // println!("Scanning block for run statements in program '{:?}'", block);
-        // println!(" ");
         for statement in &block.children {
             self.scan_statement_for_run_statements(
                 &statement.value, 
@@ -188,32 +176,24 @@ fn extract_channel_declarations_from_statement(
         &self,
         statement: &Statement,
         var_to_program: &mut HashMap<String, String>,
-        process_lists: &mut HashMap<String, ProcessListInfo>,
+        process_lists: &mut HashMap<String, String>,
         current_program: &str
     ) -> AlthreadResult<()> {
-        // println!("Scanning statement: {:?}", statement);
-        // println!(" ");
         match statement {
             Statement::Declaration(var_decl) => {
                 let var_name = &var_decl.value.identifier.value.parts[0].value.value;
 
                 // Check if this is a list
                 if let Some(list_type) = var_decl.value.datatype.as_ref() {
-                    // println!("Found list declaration: {} with type {:?}", var_name, list_type.value);
 
                     let (is_process, element_type) = list_type.value.is_process();
                     if is_process {
-                        // println!("Found process list declaration: {} with type {:?}", var_name, element_type);
                         process_lists.insert(
                             var_name.clone(),
-                            ProcessListInfo { 
-                                program_name: current_program.to_string(),
-                                element_type: element_type
-                            }
+                            element_type
                         );
                     }
                 }
-                // println!("process_lists: {:?}", process_lists.clone());
 
                 // check for run calls
                 if let Some(side_effect_node) = var_decl.value.value.as_ref() {
@@ -227,18 +207,18 @@ fn extract_channel_declarations_from_statement(
                             var_to_program.insert(var_name.clone(), program_type.clone());
                         }
 
-                        if let Some(list_info) = process_lists.get(&ref_var).cloned() {
+                        if let Some(element_type) = process_lists.get(&ref_var).cloned() {
                             process_lists.insert(
                                 var_name.clone(),
-                                list_info
+                                element_type
                             );
                         }
                     }
 
                     // check for .at() calls
                     else if let Some((list_var, _index)) = self.extract_list_at_call(&side_effect_node.value) {
-                        if let Some(list_info) = process_lists.get(&list_var) {
-                            var_to_program.insert(var_name.clone(), list_info.element_type.clone());
+                        if let Some(element_type) = process_lists.get(&list_var).cloned() {
+                            var_to_program.insert(var_name.clone(), element_type);
                         }
                     }
                 }
@@ -262,8 +242,8 @@ fn extract_channel_declarations_from_statement(
                 }
                 // Check for .at() calls (p1 = a.at(i);)
                 else if let Some((list_var, _index)) = self.extract_list_at_call(&rhs.value) {
-                    if let Some(list_info) = process_lists.get(&list_var) {
-                        var_to_program.insert(var_name.clone(), list_info.element_type.clone());
+                    if let Some(element_type) = process_lists.get(&list_var).cloned() {
+                        var_to_program.insert(var_name.clone(), element_type);
                     }
                 }
             }
@@ -343,32 +323,29 @@ fn extract_channel_declarations_from_statement(
     let mut var_to_program: HashMap<String, String> = HashMap::new();
     self.build_variable_program_mapping(&mut var_to_program)?;
 
-    // println!("[{}] Prescanning for channel declarations", m_prefix);
+    log::debug!("[{}] Prescanning for channel declarations", module_prefix);
 
     // Scan ALL process blocks for channel declarations, not just main
     for (program_name, (_, program_block)) in &self.process_blocks {
-        // println!("Scanning program '{}' for channel declarations", program_name);
+        log::debug!("Scanning program '{}' for channel declarations", program_name);
         self.extract_channel_declarations_from_block(
             &program_block.value, 
             state,
             module_prefix,
             &var_to_program
         )?;
-        // println!("Finished scanning program '{:?}'", var_to_program);
     }
 
     // Scan ALL function blocks for channel declarations
     for (function_name, (_, _, function_block)) in &self.function_blocks {
-        // println!("Scanning function '{}' for channel declarations", function_name);
+        log::debug!("Scanning function '{}' for channel declarations", function_name);
         self.extract_channel_declarations_from_block(
             &function_block.value, 
             state,
             module_prefix,
             &var_to_program
         )?;
-        // println!("Finished scanning function '{:?}'", function_name);
     }
-
     Ok(())
     }
 

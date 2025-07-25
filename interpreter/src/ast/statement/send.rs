@@ -80,13 +80,7 @@ impl InstructionBuilder for Node<SendStatement> {
             .clone();
         let unstack_len = state.unstack_current_depth();
 
-        // CLONE the channels data to avoid holding a reference
         let channel_info = state.channels().get(&(state.current_program_name.clone(), channel_name.clone())).cloned();
-        
-        // println!(
-        //     "SendStatement: {} with values {:?} at pos {:?}",
-        //     channel_name, rdatatype, self.pos
-        // );
 
         if channel_info.is_none() {
             state.undefined_channels_mut().insert(

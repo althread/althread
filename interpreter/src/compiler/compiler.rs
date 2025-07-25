@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::{BTreeMap, HashMap, HashSet}, path::Path, rc::Rc};
 
-use crate::{ast::{import_block::ImportBlock, node::{InstructionBuilder, Node}, statement::Statement, token::{condition_keyword::ConditionKeyword, datatype::DataType, identifier::Identifier, literal::Literal}, Ast}, compiler::{stdlib::{self, Stdlib}, CompilationContext, CompiledProject, CompilerState, FunctionDefinition, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, module_resolver::{self, module_resolver::{ModuleResolver, ResolvedModule}, FileSystem}, parser, vm::{instruction::{Instruction, InstructionType, ProgramCode}, VM}};
+use crate::{ast::{node::{InstructionBuilder}, statement::Statement, token::{condition_keyword::ConditionKeyword, datatype::DataType, identifier::Identifier, literal::Literal}, Ast}, compiler::{stdlib::{self}, CompilationContext, CompiledProject, CompilerState, FunctionDefinition, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, module_resolver::{module_resolver::{ModuleResolver}, FileSystem}, parser, vm::{instruction::{Instruction, InstructionType, ProgramCode}, VM}};
 
 
 impl Ast {
@@ -65,7 +65,8 @@ impl Ast {
 
         let mut state= CompilerState::new_with_context(context.clone());
 
-        println!("Current module prefix: {:?}", module_prefix);
+        log::debug!("Current module prefix: {:?}", module_prefix);
+        log::debug!("[{}] Same level module names: {:?}", module_prefix, same_level_module_names);
 
         // scan everything for channel declarations in the current file
         if let Err(e) = self.prescan_channel_declarations(&mut state, module_prefix) {
@@ -83,11 +84,9 @@ impl Ast {
             module_resolver.resolve_imports(&import_block.value, &mut import_stack)?;
 
             for (name, _) in module_resolver.resolved_modules.clone() {
-                println!("[{}] Resolved module: {}", module_prefix, name);
                 next_level_module_names.push(name);
             }
-            println!("[{}] Same level module names: {:?}", module_prefix, next_level_module_names);
-            
+
             for (name, resolved_module) in module_resolver.resolved_modules {
                 let module_content = module_resolver.filesystem.read_file(&resolved_module.path)?;
 
@@ -126,14 +125,14 @@ impl Ast {
                 })?;
 
                 // display what was imported at this point
-                println!("----------------------------------------------------");
-                println!("[{}] Imported module '{}'", module_prefix, name);
-                println!("[{}] Imported shared variables: {:?}", module_prefix, compiled_module.global_memory.keys());
-                println!("[{}] Imported functions: {:?}", module_prefix, compiled_module.user_functions.keys());
-                println!("[{}] Imported programs: {:?}", module_prefix, compiled_module.programs_code.keys());
-                println!("[{}] Imported always conditions: {:?}", module_prefix, compiled_module.always_conditions);
-                println!("[{}] Imported eventually conditions: {:?}", module_prefix, compiled_module.eventually_conditions);
-                println!("----------------------------------------------------");
+                log::debug!("----------------------------------------------------");
+                log::debug!("[{}] Imported module '{}'", module_prefix, name);
+                log::debug!("[{}] Imported shared variables: {:?}", module_prefix, compiled_module.global_memory.keys());
+                log::debug!("[{}] Imported functions: {:?}", module_prefix, compiled_module.user_functions.keys());
+                log::debug!("[{}] Imported programs: {:?}", module_prefix, compiled_module.programs_code.keys());
+                log::debug!("[{}] Imported always conditions: {:?}", module_prefix, compiled_module.always_conditions);
+                log::debug!("[{}] Imported eventually conditions: {:?}", module_prefix, compiled_module.eventually_conditions);
+                log::debug!("----------------------------------------------------");
 
 
                 state.always_conditions_mut().extend(compiled_module.always_conditions);
@@ -206,7 +205,7 @@ impl Ast {
             }
         }
 
-        println!("[{}] Shared variables: {:?}", module_prefix, state.global_memory().keys());
+        log::debug!("[{}] Shared variables: {:?}", module_prefix, state.global_memory().keys());
 
         state.unstack_current_depth();
         assert!(state.current_stack_depth == 0);
@@ -270,8 +269,8 @@ impl Ast {
 
         // Compile all the programs
         state.is_shared = false;
+        
         // start with the main program
-
         if self.process_blocks.contains_key("main") {
             let code = self.compile_program("main", &mut state, module_prefix)?;
             state.programs_code_mut().insert("main".to_string(), code);
@@ -283,7 +282,6 @@ impl Ast {
                 continue;
             }
             let code = self.compile_program(name, &mut state, module_prefix)?;
-
             state.programs_code_mut().insert(name.clone(), code);
             assert!(state.current_stack_depth == 0);
         }
@@ -463,13 +461,12 @@ impl Ast {
 
         }
 
-
+        // if not the main file then we need to qualify everything
         if !module_prefix.is_empty() {
-            println!("[{}] Same level module names: {:?}", module_prefix, same_level_module_names);
-
-            for (func_name, (args_list, return_datatype, func_block )) in &self.function_blocks {
+            for (func_name, (_, return_datatype, func_block )) in &self.function_blocks {
+                
                 if same_level_module_names.iter().any(|mod_name| func_name.starts_with(&format!("{}.", mod_name))) {
-                        println!("[{}] Skipping function '{}' as it is already qualified", module_prefix, func_name);
+                        log::debug!("[{}] Skipping function '{}' as it is already qualified", module_prefix, func_name);
                         continue;
                 }
 
@@ -487,7 +484,7 @@ impl Ast {
 
                 let new_func_name = self.build_qualified_name(&func_name, module_prefix);
 
-                println!("[{}] Importing function '{}'", module_prefix, func_name);
+                log::debug!("[{}] Importing function '{}'", module_prefix, func_name);
                 if state.user_functions().contains_key(&new_func_name) {
                     return Err(AlthreadError::new(
                         ErrorType::FunctionAlreadyDefined,
@@ -533,8 +530,8 @@ impl Ast {
             }
 
 
-            println!("[{}] Module importing shared variables", module_prefix);
-            println!("Global memory: {:?}", state.global_memory_mut().keys());
+            log::debug!("[{}] Module importing shared variables", module_prefix);
+            log::debug!("Global memory: {:?}", state.global_memory_mut().keys());
 
             // Collect all variable data first to avoid borrow conflicts
             let shared_vars: Vec<(String, Literal, Option<Variable>)> = {
@@ -547,28 +544,17 @@ impl Ast {
                 }).collect()
             };
 
-            println!("[{}] Shared variables: {:?}", module_prefix, shared_vars.iter().map(|(name, _, _)| name).collect::<Vec<_>>());
+            log::debug!("[{}] Shared variables: {:?}", module_prefix, shared_vars.iter().map(|(name, _, _)| name).collect::<Vec<_>>());
 
             for (var_name, value, var_meta) in shared_vars {
-                if var_name.contains(module_prefix) {
-                    // This variable is already qualified, skip it
-                    continue;
-                }
-
-                if same_level_module_names.iter().any(|mod_name| var_name.starts_with(&format!("{}.", mod_name))) {
-                        println!("[{}] Skipping variable '{}' as it is already qualified", module_prefix, var_name);
+                let qualified_var_name = self.build_qualified_name(&var_name, module_prefix);
+                
+                if qualified_var_name == var_name || var_name.contains(module_prefix) || same_level_module_names.iter().any(|mod_name| var_name.starts_with(&format!("{}.", mod_name))) {
+                        log::debug!("[{}] Skipping variable '{}' as it is already qualified", module_prefix, var_name);
                         continue;
                 }
                 
-                let qualified_var_name = self.build_qualified_name(&var_name, module_prefix);
-
-                if qualified_var_name == var_name {
-                    // No need to qualify, it's already qualified
-                    continue;
-                }
-                println!("qualified variable name: {}", qualified_var_name);
-
-                println!("[{}] Importing shared variable '{}'", module_prefix, qualified_var_name);
+                log::debug!("[{}] Importing shared variable '{}'", module_prefix, qualified_var_name);
 
                 if state.global_memory().contains_key(&qualified_var_name) {
                     return Err(AlthreadError::new(
@@ -589,15 +575,16 @@ impl Ast {
                 }
             }
 
-            println!("[{}] Shared variables after import: {:?}", module_prefix, state.global_memory().keys());
+            log::debug!("[{}] Shared variables after import: {:?}", module_prefix, state.global_memory().keys());
 
-
+            log::debug!("[{}] Qualifying always conditions", module_prefix);
             // Collect conditions into a temporary vector to avoid borrow conflicts
             let always_conditions: Vec<_> = state.always_conditions().clone();
             let mut new_always_conditions = Vec::new();
             for condition in always_conditions.iter() {
                 // if the condition is already qualified, skip it
                 if condition.0.iter().any(|dep| dep.contains(module_prefix)) {
+                    log::debug!("[{}] Skipping condition as it is already qualified", module_prefix);
                     continue;
                 }
 
@@ -605,6 +592,7 @@ impl Ast {
                 if same_level_module_names.iter().any(|mod_name| {
                     condition.0.iter().any(|dep| dep.starts_with(&format!("{}.", mod_name)))
                 }) {
+                    log::debug!("[{}] Skipping condition as it starts with a same-level module name", module_prefix);
                     continue;
                 }
                 
@@ -626,6 +614,7 @@ impl Ast {
             }
             *state.always_conditions_mut() = new_always_conditions;
 
+            log::debug!("[{}] Qualifying eventually conditions", module_prefix);
             // Do the same for eventually_conditions
             let eventually_conditions: Vec<_> = state.eventually_conditions().clone();
             let mut new_eventually_conditions = Vec::new();
@@ -667,6 +656,7 @@ impl Ast {
                 deps.iter().any(|dep| dep.contains('.'))
             });
 
+            log::debug!("[{}] Qualifying programs", module_prefix);
             // Collect programs to update first to avoid borrow conflicts
             let programs_to_update: Vec<(String, ProgramCode)> = state.programs_code()
             .iter()
@@ -680,7 +670,7 @@ impl Ast {
                 }
 
                 if same_level_module_names.iter().any(|mod_name| prog_name.starts_with(&format!("{}.", mod_name))) {
-                        println!("[{}] Skipping program '{}' as it is already qualified", module_prefix, prog_name);
+                        log::debug!("[{}] Skipping program '{}' as it is already qualified", module_prefix, prog_name);
                         continue;
                 }
                 
@@ -691,7 +681,7 @@ impl Ast {
                     continue;
                 }
 
-                println!("[{}] Importing program '{}'", module_prefix, qualified_prog_name);
+                log::debug!("[{}] Importing program '{}'", module_prefix, qualified_prog_name);
                 if state.program_arguments().contains_key(&qualified_prog_name) {
                     return Err(AlthreadError::new(
                         ErrorType::ProgramAlreadyDefined,
@@ -752,7 +742,7 @@ impl Ast {
         state.context.borrow_mut().always_conditions.extend(state.always_conditions().clone());
         state.context.borrow_mut().eventually_conditions.extend(state.eventually_conditions().clone());
 
-        println!("[{}] Compiled module with {} programs, {} functions, {} shared variables, {} always conditions, {} eventually conditions", 
+        log::debug!("[{}] Compiled module with {} programs, {} functions, {} shared variables, {} always conditions, {} eventually conditions", 
             module_prefix, 
             state.programs_code().len(), 
             state.user_functions().len(), 
@@ -762,14 +752,14 @@ impl Ast {
         );
 
         if module_prefix.is_empty() {
-            println!("-----------------------------------------------------");
-            println!("[Main module] Finished compiling main module");
-            println!("[Main module] Shared variables: {:?}", state.global_memory().keys());
-            println!("[Main module] User functions: {:?}", state.user_functions().keys());
-            println!("[Main module] Programs code: {:?}", state.programs_code().keys());
-            println!("[Main module] Always conditions: {:?}", state.always_conditions());
-            println!("[Main module] Eventually conditions: {:?}", state.eventually_conditions());
-            println!("-----------------------------------------------------");
+            log::debug!("-----------------------------------------------------");
+            log::debug!("[Main module] Finished compiling main module");
+            log::debug!("[Main module] Shared variables: {:?}", state.global_memory().keys());
+            log::debug!("[Main module] User functions: {:?}", state.user_functions().keys());
+            log::debug!("[Main module] Programs code: {:?}", state.programs_code().keys());
+            log::debug!("[Main module] Always conditions: {:?}", state.always_conditions());
+            log::debug!("[Main module] Eventually conditions: {:?}", state.eventually_conditions());
+            log::debug!("-----------------------------------------------------");
         }
 
         // Return using context data instead of local variables
