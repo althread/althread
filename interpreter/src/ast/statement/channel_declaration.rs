@@ -25,7 +25,7 @@ pub struct ChannelDeclaration {
 }
 
 impl NodeBuilder for ChannelDeclaration {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
+    fn build(mut pairs: Pairs<Rule>, _filepath: &str) -> AlthreadResult<Self> {
         let mut left_pairs = pairs.next().unwrap().into_inner();
         let left_prog = String::from(left_pairs.next().unwrap().as_str());
         let left_name = String::from(left_pairs.next().unwrap().as_str());

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use pest::{
     error::{ErrorVariant, InputLocation, LineColLocation},
     iterators::Pairs,

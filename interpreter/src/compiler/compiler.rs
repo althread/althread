@@ -1,6 +1,6 @@
-use std::{cell::RefCell, collections::{BTreeMap, HashMap, HashSet}, path::Path, process::exit, rc::Rc};
+use std::{cell::RefCell, collections::{BTreeMap, HashMap, HashSet}, path::Path, rc::Rc};
 
-use crate::{ast::{node::{InstructionBuilder}, statement::Statement, token::{condition_keyword::ConditionKeyword, datatype::DataType, identifier::Identifier, literal::Literal}, Ast}, compiler::{stdlib::{self}, CompilationContext, CompiledProject, CompilerState, FunctionDefinition, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, module_resolver::{module_resolver::{ModuleResolver}, FileSystem}, parser, vm::{instruction::{Instruction, InstructionType, ProgramCode}, VM}};
+use crate::{ast::{node::{InstructionBuilder}, statement::Statement, token::{condition_keyword::ConditionKeyword, datatype::DataType, identifier::Identifier, literal::Literal}, Ast}, compiler::{stdlib::{self}, CompilationContext, CompiledProject, CompilerState, FunctionDefinition, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, module_resolver::{module_resolver::{ModuleResolver}, FileSystem}, vm::{instruction::{Instruction, InstructionType, ProgramCode}, VM}};
 
 
 impl Ast {

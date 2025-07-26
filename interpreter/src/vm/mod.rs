@@ -12,7 +12,7 @@ use serde::{ser::SerializeStruct, Serialize, Serializer};
 
 use crate::{
     ast::{
-        statement::{expression::LocalExpressionNode, fn_call::FnCall, waiting_case::WaitDependency},
+        statement::{expression::LocalExpressionNode, waiting_case::WaitDependency},
         token::literal::Literal,
     },
     compiler::{stdlib::Stdlib, CompiledProject, FunctionDefinition},
