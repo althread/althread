@@ -59,11 +59,12 @@ export default function App() {
   // Initialize editor (no default file content)
   let editor = createEditor({
     compile: (source: string) => {
+      const filePath = getPathFromId(mockFileSystem(), editorManager.activeFile()!.id) || editorManager.activeFile()!.name;
       const virtualFS = buildVirtualFileSystem(mockFileSystem());
-      return compile(source, virtualFS); // Now compile expects virtual_fs parameter
+      return compile(source, filePath, virtualFS); // Now compile expects virtual_fs parameter
     }, 
     defaultValue: '// Welcome to Althread\n',
-    fileName: 'untitled.alt',
+    filePath: 'untitled.alt',
     onValueChange: (value) => {
       // Save current file content when editor changes
       // Use a delayed check since editorManager might not be initialized yet
@@ -384,8 +385,12 @@ export default function App() {
                 try {
                   
                   const virtualFS = buildVirtualFileSystem(mockFileSystem());
-                  let res = run(editor.editorView().state.doc.toString(), virtualFS); // Pass virtualFS
-                  
+                  let filePath = getPathFromId(mockFileSystem(), editorManager.activeFile()!.id, '');
+                  if (!filePath) {
+                    filePath = editorManager.activeFile()!.name; // Fallback to name if ID not found
+                  }
+                  let res = run(editor.editorView().state.doc.toString(), filePath, virtualFS); 
+
                   setOut(res.debug);
                   setCommGraphOut(res.message_flow_graph);
                   setVmStates(res.vm_states);
@@ -424,7 +429,13 @@ export default function App() {
                 
                 try {
                   const virtualFS = buildVirtualFileSystem(mockFileSystem());
-                  let res = check(editor.editorView().state.doc.toString(), virtualFS)
+
+                  let filePath = getPathFromId(mockFileSystem(), editorManager.activeFile()!.id, '');
+                  if (!filePath) {
+                    filePath = editorManager.activeFile()!.name; // Fallback to name if ID not found
+                  }
+
+                  let res = check(editor.editorView().state.doc.toString(), filePath, virtualFS);
                   setOut(res);
                   
                   console.log(res);

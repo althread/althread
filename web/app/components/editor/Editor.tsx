@@ -30,8 +30,8 @@ import { rust } from "@codemirror/lang-rust";
 import { cpp } from "@codemirror/lang-cpp";
 
 // Language detection based on file extension
-const getLanguageExtension = (fileName: string): Extension => {
-  const extension = fileName.split('.').pop()?.toLowerCase();
+const getLanguageExtension = (filePath: string): Extension => {
+  const extension = filePath.split('.').pop()?.toLowerCase();
   
   switch (extension) {
     case 'js':
@@ -99,12 +99,12 @@ const createEditor = ({
     compile, 
     defaultValue,
     onValueChange,
-    fileName = 'main.alt'
+    filePath = 'main.alt',
   }: {
     compile: (code: string) => any,
     defaultValue: string | undefined, 
     onValueChange: undefined | ((value:string) => void),
-    fileName?: string
+    filePath?: string,
   }) => {
   const editor = createCodeMirror({
     value: defaultValue,
@@ -112,7 +112,7 @@ const createEditor = ({
   });
 
   // Store current filename for language detection
-  let currentFileName = fileName;
+  let currentFileName = filePath;
 
   // Create compartments for dynamic extensions
   const languageCompartment = new Compartment();
@@ -170,8 +170,8 @@ const createEditor = ({
   }, {dark: true});
 
   // Create linter only for .alt files, but always include lintGutter for consistent spacing
-  const createLinterExtension = (fileName: string): Extension => {
-    if (fileName.endsWith('.alt')) {
+  const createLinterExtension = (filePath: string): Extension => {
+    if (filePath.endsWith('.alt')) {
       const regexpLinter = linter(view => {
         console.log('linting .alt file');
         let diagnostics: Diagnostic[] = []
@@ -252,8 +252,8 @@ const createEditor = ({
   editor.createExtension(customSyntaxHighlighting);
 
   // Add compartments for dynamic extensions
-  editor.createExtension(languageCompartment.of(getLanguageExtension(fileName)));
-  editor.createExtension(linterCompartment.of(createLinterExtension(fileName)));
+  editor.createExtension(languageCompartment.of(getLanguageExtension(filePath)));
+  editor.createExtension(linterCompartment.of(createLinterExtension(filePath)));
   editor.createExtension(readOnlyCompartment.of([]));
 
   // Safe wrapper for editor view operations

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::Path;
 use fastrand;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use serde_wasm_bindgen;
@@ -19,7 +20,7 @@ fn error_to_js(err: AlthreadError) -> JsValue {
 }
 
 #[wasm_bindgen]
-pub fn compile(source: &str, virtual_fs: JsValue) -> Result<String, JsValue> {
+pub fn compile(source: &str, file_path: &str, virtual_fs: JsValue) -> Result<String, JsValue> {
     // Convert the JS file system to a Rust HashMap
     let fs_map: HashMap<String, String> = 
         serde_wasm_bindgen::from_value(virtual_fs)
@@ -28,16 +29,20 @@ pub fn compile(source: &str, virtual_fs: JsValue) -> Result<String, JsValue> {
     // Create virtual filesystem
     let virtual_filesystem = VirtualFileSystem::new(fs_map);
 
-    // parse code with pest
-    let pairs = althread::parser::parse(&source).map_err(error_to_js)?;
+    let mut input_map = HashMap::new();
+    input_map.insert(file_path.to_string(), source.to_string());
 
-    let ast = Ast::build(pairs).map_err(error_to_js)?;
+    // parse code with pest
+    let pairs = althread::parser::parse(&source, file_path).map_err(error_to_js)?;
+
+    let ast = Ast::build(pairs, file_path).map_err(error_to_js)?;
 
     println!("{}", &ast);
 
     let compiled_project = ast.compile(
-        std::path::Path::new("main.alt"),
-        virtual_filesystem
+        Path::new(file_path),
+        virtual_filesystem,
+        &mut input_map
     ).map_err(error_to_js)?;
     
     println!("{}", compiled_project.to_string());
@@ -95,7 +100,7 @@ impl <'a> Serialize for RunResult<'a> {
 }
 
 #[wasm_bindgen]
-pub fn run(source: &str, virtual_fs: JsValue) -> Result<JsValue, JsValue> {
+pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue, JsValue> {
     // Convert the JS file system to a Rust HashMap
     let fs_map: HashMap<String, String> = 
         serde_wasm_bindgen::from_value(virtual_fs)
@@ -104,17 +109,21 @@ pub fn run(source: &str, virtual_fs: JsValue) -> Result<JsValue, JsValue> {
     // Create virtual filesystem
     let virtual_filesystem = VirtualFileSystem::new(fs_map);
 
-    // parse code with pest
-    let pairs = althread::parser::parse(&source).map_err(error_to_js)?;
+    let mut input_map = HashMap::new();
+    input_map.insert(filepath.to_string(), source.to_string());
 
-    let ast = Ast::build(pairs).map_err(error_to_js)?;
+    // parse code with pest
+    let pairs = althread::parser::parse(&source, filepath).map_err(error_to_js)?;
+
+    let ast = Ast::build(pairs, filepath).map_err(error_to_js)?;
 
     println!("{}", &ast);
 
     // Use compile_with_filesystem instead of compile
     let compiled_project = ast.compile(
-        std::path::Path::new("main.alt"),
-        virtual_filesystem
+        Path::new(filepath),
+        virtual_filesystem,
+        &mut input_map
     ).map_err(error_to_js)?;
 
     // Rest of the function stays exactly the same
@@ -252,7 +261,7 @@ pub fn run(source: &str, virtual_fs: JsValue) -> Result<JsValue, JsValue> {
 }
 
 #[wasm_bindgen]
-pub fn check(source: &str, virtual_fs: JsValue) -> Result<JsValue, JsValue> {
+pub fn check(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue, JsValue> {
     // Convert the JS file system to a Rust HashMap
     let fs_map: HashMap<String, String> = 
         serde_wasm_bindgen::from_value(virtual_fs)
@@ -261,16 +270,20 @@ pub fn check(source: &str, virtual_fs: JsValue) -> Result<JsValue, JsValue> {
     // Create virtual filesystem
     let virtual_filesystem = VirtualFileSystem::new(fs_map);
 
-    // parse code with pest
-    let pairs = althread::parser::parse(&source).map_err(error_to_js)?;
+    let mut input_map = HashMap::new();
+    input_map.insert(filepath.to_string(), source.to_string());
 
-    let ast = Ast::build(pairs).map_err(error_to_js)?;
+    // parse code with pest
+    let pairs = althread::parser::parse(&source, filepath).map_err(error_to_js)?;
+
+    let ast = Ast::build(pairs, filepath).map_err(error_to_js)?;
 
     println!("{}", &ast);
 
     let compiled_project = ast.compile(
-        std::path::Path::new("main.alt"),
-        virtual_filesystem
+        Path::new(filepath),
+        virtual_filesystem,
+        &mut input_map
     ).map_err(error_to_js)?;
 
     let checked = checker::check_program(&compiled_project).map_err(error_to_js)?;
