@@ -41,18 +41,18 @@ impl ImportPath {
 }
 
 impl NodeBuilder for ImportBlock {
-    fn build(pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let mut imports = Vec::new();
         
         for pair in pairs {
             match pair.as_rule() {
                 Rule::import_list => {
                     for import_item_pair in pair.into_inner() {
-                        let import_item = Node::build(import_item_pair)?;
+                        let import_item = Node::build(import_item_pair, filepath)?;
                         imports.push(import_item);
                     }
                 }
-                _ => return Err(no_rule!(pair, "ImportBlock")),
+                _ => return Err(no_rule!(pair, "ImportBlock", filepath)),
             }
         }
 
@@ -76,7 +76,7 @@ impl ImportBlock {
             if used_names.contains(&import_name) {
                 return Err(AlthreadError::new(
                     ErrorType::ImportNameConflict,
-                    Some(import.pos),
+                    Some(import.pos.clone()),
                     format!("'{}' is already imported. Use 'as' to provide a unique alias.",
                     import_name,
                     ),
@@ -90,26 +90,26 @@ impl ImportBlock {
 }
 
 impl NodeBuilder for ImportItem {
-    fn build(pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let mut pairs = pairs;
         let path_pair = pairs.next().unwrap();
-        let path = ImportPath::build(path_pair.into_inner())?;
+        let path = ImportPath::build(path_pair.into_inner(), filepath)?;
         
         let alias = if let Some(next_pair) = pairs.next() {
             match next_pair.as_rule() {
                 Rule::AS_KW => {
                     // The identifier should be the next pair after "as"
                     if let Some(identifier_pair) = pairs.next() {
-                        Some(Node::build(identifier_pair)?)
+                        Some(Node::build(identifier_pair, filepath)?)
                     } else {
-                        return Err(no_rule!(next_pair, "ImportItem - missing identifier after 'as'"));
+                        return Err(no_rule!(next_pair, "ImportItem - missing identifier after 'as'", filepath));
                     }
                 }
                 Rule::identifier => {
                     // If we get an identifier directly
-                    Some(Node::build(next_pair)?)
+                    Some(Node::build(next_pair, filepath)?)
                 }
-                _ => return Err(no_rule!(next_pair, "ImportItem")),
+                _ => return Err(no_rule!(next_pair, "ImportItem", filepath)),
             }
         } else {
             None
@@ -120,7 +120,7 @@ impl NodeBuilder for ImportItem {
 }
 
 impl ImportPath {
-    fn build(pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let mut segments = Vec::new();
         
         for pair in pairs {
@@ -134,7 +134,7 @@ impl ImportPath {
                 Rule::domain_identifier => {
                     segments.push(pair.as_str().to_string());
                 }
-                _ => return Err(no_rule!(pair, "ImportPath")),
+                _ => return Err(no_rule!(pair, "ImportPath", filepath)),
             }
         }
 

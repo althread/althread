@@ -47,10 +47,10 @@ impl fmt::Display for LocalTupleExpressionNode {
 }
 
 impl NodeBuilder for TupleExpression {
-    fn build(pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let mut values = Vec::new();
         for pair in pairs {
-            values.push(Node::build(pair)?);
+            values.push(Node::build(pair, filepath)?);
         }
         Ok(Self { values })
     }
@@ -137,7 +137,7 @@ impl TupleExpression {
                 name: variable.clone(),
                 datatype: types[i].clone(),
                 depth: state.current_stack_depth,
-                declare_pos: Some(pos),
+                declare_pos: Some(pos.clone()),
             })
         }
         Ok(Instruction {

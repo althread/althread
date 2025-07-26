@@ -12,7 +12,7 @@ use serde::{ser::SerializeStruct, Serialize, Serializer};
 
 use crate::{
     ast::{
-        statement::{expression::LocalExpressionNode, waiting_case::WaitDependency},
+        statement::{expression::LocalExpressionNode, fn_call::FnCall, waiting_case::WaitDependency},
         token::literal::Literal,
     },
     compiler::{stdlib::Stdlib, CompiledProject, FunctionDefinition},
@@ -36,12 +36,12 @@ pub struct ExecutionStepInfo {
 }
 
 fn str_to_expr_error(pos: Option<Pos>) -> impl Fn(String) -> AlthreadError {
-    return move |msg| AlthreadError::new(ErrorType::ExpressionError, pos, msg);
+    return move |msg| AlthreadError::new(ErrorType::ExpressionError, pos.clone(), msg);
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum GlobalAction {
-    StartProgram(String, usize, Literal),
+    StartProgram(String, usize, Literal, Option<usize>, Option<Pos>),
     Print(String),
     Write(String),
     Send(String, Option<ReceiverInfo>),
@@ -57,6 +57,7 @@ pub struct GlobalActions {
     pub wait: bool,
     pub end: bool,
 }
+
 
 #[derive(Debug, Clone)]
 pub struct VM<'a> {
@@ -96,31 +97,34 @@ impl<'a> VM<'a> {
         }
     }
 
-    fn run_program(&mut self, program_name: &str, pid: usize, args: Literal) {
+    fn run_program(&mut self, program_name: &str, pid: usize, args: Literal, caller_program_id: Option<usize>, call_site_pos: Option<Pos>) {
         assert!(
             self.running_programs.get(pid).is_none(),
             "program with id {} already exists",
             pid
         );
 
-        self.running_programs.insert(
+        let mut new_program = RunningProgramState::new(
             pid,
-            RunningProgramState::new(
-                pid,
-                program_name.to_string(),
-                &self.programs_code[program_name],
-                self.user_funcs,
-                args,
-                self.stdlib.clone(),
-            ),
+            program_name.to_string(),
+            &self.programs_code[program_name],
+            self.user_funcs,
+            args,
+            self.stdlib.clone(),
         );
+        
+        // Set the caller context
+        new_program.caller_program_id = caller_program_id;
+        new_program.call_site_pos = call_site_pos;
+
+        self.running_programs.insert(pid, new_program);
         self.executable_programs.insert(pid);
     }
 
     pub fn start(&mut self, seed: u64) {
         self.rng = Rng::with_seed(seed);
         self.next_program_id = 1;
-        self.run_program("main", 0, Literal::empty_tuple());
+        self.run_program("main", 0, Literal::empty_tuple(), None, None); // No caller for main
     }
 
     pub fn next_random(&mut self) -> AlthreadResult<ExecutionStepInfo> {
@@ -144,6 +148,7 @@ impl<'a> VM<'a> {
                                     .current_instruction()
                                     .unwrap()
                                     .pos
+                                    .as_ref()
                                     .unwrap()
                                     .line,
                                 dep
@@ -248,8 +253,8 @@ impl<'a> VM<'a> {
 
                     need_to_check_invariants = true;
                 }
-                GlobalAction::StartProgram(name, pid, args) => {
-                    self.run_program(name, *pid, args.clone());
+                GlobalAction::StartProgram(name, pid, args, caller_program_id, call_site_pos) => {
+                    self.run_program(name, *pid, args.clone(), *caller_program_id, call_site_pos.clone());
                 }
                 GlobalAction::EndProgram => {
                     panic!("EndProgram action should not be in the list of actions");
@@ -369,8 +374,8 @@ impl<'a> VM<'a> {
                         true
                     });
                 }
-                GlobalAction::StartProgram(name, pid, args) => {
-                    self.run_program(&name, pid, args);
+                GlobalAction::StartProgram(name, pid, args, caller_program_id, call_site_pos) => {
+                    self.run_program(&name, pid, args, caller_program_id, call_site_pos);
                 }
                 GlobalAction::EndProgram => {
                     panic!("EndProgram action should not be in the list of actions");
@@ -461,7 +466,7 @@ impl<'a> VM<'a> {
                     if !cond.is_true() {
                         return Err(AlthreadError::new(
                             ErrorType::InvariantError,
-                            Some(*pos),
+                            Some(pos.clone()),
                             "The invariant is not respected".to_string(),
                         ));
                     }
@@ -469,7 +474,7 @@ impl<'a> VM<'a> {
                 Err(e) => {
                     return Err(AlthreadError::new(
                         ErrorType::ExpressionError,
-                        Some(*pos),
+                        Some(pos.clone()),
                         e,
                     ));
                 }
@@ -501,7 +506,7 @@ impl<'a> VM<'a> {
                 Err(e) => {
                     return Err(AlthreadError::new(
                         ErrorType::ExpressionError,
-                        Some(*pos),
+                        Some(pos.clone()),
                         e,
                     ));
                 }

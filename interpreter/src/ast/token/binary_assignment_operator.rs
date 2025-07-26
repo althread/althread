@@ -32,7 +32,7 @@ impl BinaryAssignmentOperator {
 }
 
 impl NodeBuilder for BinaryAssignmentOperator {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let pair = pairs.next().unwrap();
         match pair.as_rule() {
             Rule::ASSIGN_OP => Ok(Self::Assign),
@@ -42,7 +42,7 @@ impl NodeBuilder for BinaryAssignmentOperator {
             Rule::DIV_ASSIGN_OP => Ok(Self::DivideAssign),
             Rule::MOD_ASSIGN_OP => Ok(Self::ModuloAssign),
             Rule::OR_ASSIGN_OP => Ok(Self::OrAssign),
-            _ => Err(no_rule!(pair, "BinaryAssignmentOperator")),
+            _ => Err(no_rule!(pair, "BinaryAssignmentOperator", filepath)),
         }
     }
 }

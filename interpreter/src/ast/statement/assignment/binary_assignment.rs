@@ -23,10 +23,10 @@ pub struct BinaryAssignment {
 }
 
 impl NodeBuilder for BinaryAssignment {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
-        let identifier = Node::build(pairs.next().unwrap())?;
-        let operator = Node::build(pairs.next().unwrap())?;
-        let value = Node::build(pairs.next().unwrap())?;
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
+        let identifier = Node::build(pairs.next().unwrap(), filepath)?;
+        let operator = Node::build(pairs.next().unwrap(), filepath)?;
+        let value = Node::build(pairs.next().unwrap(), filepath)?;
 
         Ok(Self {
             identifier,
@@ -63,7 +63,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
             if g_val.datatype != rdatatype {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(self.pos),
+                    Some(self.pos.clone()),
                     format!(
                         "Cannot assign value of type {} to variable of type {}",
                         rdatatype, g_val.datatype
@@ -73,7 +73,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
             if !g_val.mutable {
                 return Err(AlthreadError::new(
                     ErrorType::VariableError,
-                    Some(self.pos),
+                    Some(self.pos.clone()),
                     format!(
                         "Cannot assign value to the immutable global variable {}",
                         full_var_name
@@ -81,7 +81,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
                 ));
             }
             builder.instructions.push(Instruction {
-                pos: Some(self.value.identifier.pos),
+                pos: Some(self.value.identifier.pos.clone()),
                 control: InstructionType::GlobalAssignment {
                     identifier: full_var_name,
                     operator: self.value.operator.value.clone(),
@@ -101,7 +101,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
             if l_var.is_none() {
                 return Err(AlthreadError::new(
                     ErrorType::VariableError,
-                    Some(self.pos),
+                    Some(self.pos.clone()),
                     format!(
                         "Variable '{}' is undefined",
                         full_var_name
@@ -112,7 +112,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
             if l_var.datatype != rdatatype {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(self.pos),
+                    Some(self.pos.clone()),
                     format!(
                         "Cannot assign value of type {} to variable of type {}",
                         rdatatype, l_var.datatype
@@ -122,7 +122,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
             if !l_var.mutable {
                 return Err(AlthreadError::new(
                     ErrorType::VariableError,
-                    Some(self.pos),
+                    Some(self.pos.clone()),
                     format!(
                         "Cannot assign value to the immutable local variable {}",
                         full_var_name
@@ -131,7 +131,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
             }
 
             builder.instructions.push(Instruction {
-                pos: Some(self.value.identifier.pos),
+                pos: Some(self.value.identifier.pos.clone()),
                 control: InstructionType::LocalAssignment {
                     index: var_idx,
                     operator: self.value.operator.value.clone(),

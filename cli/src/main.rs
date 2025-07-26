@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet, env::var, error::Error, fs::{self, remove_dir_all}, io::{stdin, stdout, Read, Write}, path::{Path, PathBuf}, process::exit
+    collections::{HashMap, HashSet}, env::var, error::Error, fs::{self, remove_dir_all}, io::{stdin, stdout, Read, Write}, path::{Path, PathBuf}, process::exit
 };
 
 mod args;
@@ -49,21 +49,24 @@ pub fn compile_command(cli_args: &CompileCommand) {
         )
     };
 
+    let mut input_map = HashMap::new();
+    input_map.insert(path.to_string_lossy().to_string(), source.clone());
+
     // parse code with pest
-    let pairs = althread::parser::parse(&source).unwrap_or_else(|e| {
-        e.report(&source);
+    let pairs = althread::parser::parse(&source, &path.to_string_lossy().to_string()).unwrap_or_else(|e| {
+        e.report(&input_map);
         exit(1);
     });
 
-    let ast = Ast::build(pairs).unwrap_or_else(|e| {
-        e.report(&source);
+    let ast = Ast::build(pairs, &path.to_string_lossy().to_string()).unwrap_or_else(|e| {
+        e.report(&input_map);
         exit(1);
     });
 
     println!("{}", &ast);
 
-    let compiled_project = ast.compile(&path, StandardFileSystem).unwrap_or_else(|e| {
-        e.report(&source);
+    let compiled_project = ast.compile(&path, StandardFileSystem, &mut input_map).unwrap_or_else(|e| {
+        e.report(&input_map);
         exit(1);
     });
 
@@ -87,24 +90,27 @@ pub fn check_command(cli_args: &CheckCommand) {
         )
     };
 
+    let mut input_map = HashMap::new();
+    input_map.insert(path.to_string_lossy().to_string(), source.clone());
+
     // parse code with pest
-    let pairs = althread::parser::parse(&source).unwrap_or_else(|e| {
-        e.report(&source);
+    let pairs = althread::parser::parse(&source, &path.to_string_lossy().to_string()).unwrap_or_else(|e| {
+        e.report(&input_map);
         exit(1);
     });
 
-    let ast = Ast::build(pairs).unwrap_or_else(|e| {
-        e.report(&source);
+    let ast = Ast::build(pairs, &path.to_string_lossy().to_string()).unwrap_or_else(|e| {
+        e.report(&input_map);
         exit(1);
     });
 
-    let compiled_project = ast.compile(&path, StandardFileSystem).unwrap_or_else(|e| {
-        e.report(&source);
+    let compiled_project = ast.compile(&path, StandardFileSystem, &mut input_map).unwrap_or_else(|e| {
+        e.report(&input_map);
         exit(1);
     });
 
     let checked = checker::check_program(&compiled_project).unwrap_or_else(|e| {
-        e.report(&source);
+        e.report(&input_map);
         exit(1);
     });
 
@@ -129,14 +135,15 @@ const PROCESS_PALETTE: [Style; 6] = [
     Style::new().red(),
 ];
 
-pub fn run_interactive(source: String, compiled_project: althread::compiler::CompiledProject) {
+pub fn run_interactive(source: String, input_map: HashMap<String, String>, compiled_project: althread::compiler::CompiledProject) {
+
     let mut vm = althread::vm::VM::new(&compiled_project);
 
     vm.start(0);
 
     loop {
         let next_states = vm.next().unwrap_or_else(|e| {
-            e.report(&source);
+            e.report(&input_map);
             exit(1);
         });
         if next_states.is_empty() {
@@ -152,7 +159,7 @@ pub fn run_interactive(source: String, compiled_project: althread::compiler::Com
                 if insts[0].pos.is_some() {
                     source
                         .lines()
-                        .nth(insts[0].pos.unwrap().line)
+                        .nth(insts[0].pos.as_ref().unwrap().line)
                         .unwrap_or_default()
                 } else {
                     "?"
@@ -211,24 +218,27 @@ pub fn run_command(cli_args: &RunCommand) {
         )
     };
 
+    let mut input_map = HashMap::new();
+    input_map.insert(path.to_string_lossy().to_string(), source.clone());
+
     // parse code with pest
-    let pairs = althread::parser::parse(&source).unwrap_or_else(|e| {
-        e.report(&source);
+    let pairs = althread::parser::parse(&source, &path.to_string_lossy().to_string()).unwrap_or_else(|e| {
+        e.report(&input_map);
         exit(1);
     });
 
-    let ast = Ast::build(pairs).unwrap_or_else(|e| {
-        e.report(&source);
+    let ast = Ast::build(pairs, &path.to_string_lossy().to_string()).unwrap_or_else(|e| {
+        e.report(&input_map);
         exit(1);
     });
 
-    let compiled_project = ast.compile(&path, StandardFileSystem).unwrap_or_else(|e| {
-        e.report(&source);
+    let compiled_project = ast.compile(&path, StandardFileSystem, &mut input_map).unwrap_or_else(|e| {
+        e.report(&input_map);
         exit(1);
     });
 
     if cli_args.interactive {
-        run_interactive(source, compiled_project);
+        run_interactive(source, input_map, compiled_project);
         return;
     }
 
@@ -242,23 +252,23 @@ pub fn run_command(cli_args: &RunCommand) {
             break;
         }
         let info = vm.next_random().unwrap_or_else(|err| {
-            err.report(&source);
+            err.report(&input_map);
             exit(1);
         });
 
         if cli_args.verbose || cli_args.debug {
             let mut prev_line = 0;
             for inst in info.instructions.iter() {
-                if inst.pos.unwrap_or_default().line != 0
-                    && prev_line != inst.pos.unwrap_or_default().line
+                if inst.pos.clone().unwrap_or_default().line != 0
+                    && prev_line != inst.pos.clone().unwrap_or_default().line
                 {
                     println!(
                         "#{}:{} {}",
                         info.prog_id,
-                        inst.pos.unwrap_or_default().line,
+                        inst.pos.clone().unwrap_or_default().line,
                         source
                             .lines()
-                            .nth(inst.pos.unwrap_or_default().line - 1)
+                            .nth(inst.pos.clone().unwrap_or_default().line - 1)
                             .unwrap_or_default()
                             .style(if info.prog_id == 0 {
                                 MAIN_STYLE
@@ -267,7 +277,7 @@ pub fn run_command(cli_args: &RunCommand) {
                                     [((info.prog_id - 1) as usize) % PROCESS_PALETTE.len()]
                             })
                     );
-                    prev_line = inst.pos.unwrap_or_default().line;
+                    prev_line = inst.pos.clone().unwrap_or_default().line;
                 }
                 if cli_args.verbose {
                     println!("\t\t\t#{}:{}", info.prog_id, inst);
@@ -282,7 +292,7 @@ pub fn run_command(cli_args: &RunCommand) {
             }
         }
         if info.invariant_error.is_err() {
-            info.invariant_error.unwrap_err().report(&source);
+            info.invariant_error.unwrap_err().report(&input_map);
             break;
         }
 
@@ -339,19 +349,22 @@ pub fn random_search_command(cli_args: &RandomSearchCommand) {
     )
     };
 
+    let mut input_map = HashMap::new();
+    input_map.insert(path.to_string_lossy().to_string(), source.clone());
+
     // parse code with pest
-    let pairs = althread::parser::parse(&source).unwrap_or_else(|e| {
-        e.report(&source);
+    let pairs = althread::parser::parse(&source, &path.to_string_lossy().to_string()).unwrap_or_else(|e| {
+        e.report(&input_map);
         exit(1);
     });
 
-    let ast = Ast::build(pairs).unwrap_or_else(|e| {
-        e.report(&source);
+    let ast = Ast::build(pairs, &path.to_string_lossy().to_string()).unwrap_or_else(|e| {
+        e.report(&input_map);
         exit(1);
     });
 
-    let compiled_project = ast.compile(&path, StandardFileSystem).unwrap_or_else(|e| {
-        e.report(&source);
+    let compiled_project = ast.compile(&path, StandardFileSystem, &mut input_map).unwrap_or_else(|e| {
+        e.report(&input_map);
         exit(1);
     });
 
@@ -365,12 +378,12 @@ pub fn random_search_command(cli_args: &RandomSearchCommand) {
             }
             let info = vm.next_random().unwrap_or_else(|err| {
                 println!("Error with seed {}:", s);
-                err.report(&source);
+                err.report(&input_map);
                 exit(1);
             });
             if info.invariant_error.is_err() {
                 println!("Error with seed {}:", s);
-                info.invariant_error.unwrap_err().report(&source);
+                info.invariant_error.unwrap_err().report(&input_map);
                 exit(1);
             }
             /*match vm.running_programs.iter()

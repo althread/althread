@@ -15,7 +15,7 @@ pub struct Node<T> {
 }
 
 pub trait NodeBuilder: Sized {
-    fn build(pairs: Pairs<Rule>) -> AlthreadResult<Self>;
+    fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self>;
 }
 
 pub trait InstructionBuilder: Sized {
@@ -23,7 +23,7 @@ pub trait InstructionBuilder: Sized {
 }
 
 impl<T: NodeBuilder> Node<T> {
-    pub fn build(pair: Pair<Rule>) -> AlthreadResult<Self> {
+    pub fn build(pair: Pair<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let (line, col) = pair.line_col();
         Ok(Node {
             pos: Pos {
@@ -31,8 +31,9 @@ impl<T: NodeBuilder> Node<T> {
                 end: pair.as_span().end(),
                 line,
                 col,
+                file_path: filepath.to_string(),
             },
-            value: T::build(pair.into_inner())?,
+            value: T::build(pair.into_inner(), filepath)?,
         })
     }
 }

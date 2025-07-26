@@ -2,6 +2,7 @@ use std::{collections::HashMap};
 
 use crate::{analysis::control_flow_graph::ControlFlowGraph, ast::{block::Block, node::Node, statement::{assignment::Assignment, channel_declaration::ChannelDeclaration, expression::{primary_expression::PrimaryExpression, Expression, SideEffectExpression}, Statement}, token::datatype::DataType, Ast}, compiler::CompilerState, error::{AlthreadError, AlthreadResult, ErrorType}};
 
+
 impl Ast {
 
 pub fn check_function_returns(func_name: &str,  func_body: &Node<Block>, return_type: &DataType) -> AlthreadResult<()> {
@@ -18,10 +19,10 @@ pub fn check_function_returns(func_name: &str,  func_body: &Node<Block>, return_
     // we need to return the function at line does not return a value
     // and say on which line it does not return a value
     
-    if let Some(missing_return_pos) = cfg.find_first_missing_return_point(func_body.pos) {
+    if let Some(missing_return_pos) = cfg.find_first_missing_return_point(func_body.pos.clone()) {
         return Err(AlthreadError::new(
             ErrorType::FunctionMissingReturnStatement,
-            Some(missing_return_pos), // Use the specific Pos found by the CFG analysis
+            Some(missing_return_pos.clone()), // Use the specific Pos found by the CFG analysis
             format!(
                 "Function '{}' does not return a value on all code paths. Problem detected in construct starting at line {}.",
                 func_name, missing_return_pos.line

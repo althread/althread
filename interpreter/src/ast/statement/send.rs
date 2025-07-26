@@ -23,12 +23,12 @@ pub struct SendStatement {
 }
 
 impl NodeBuilder for SendStatement {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let pair = pairs.next().unwrap();
 
         let channel = if pair.as_rule() == Rule::object_identifier {
             // Parse the object_identifier and convert it to a string
-            let object_id = Node::<ObjectIdentifier>::build(pair)?;
+            let object_id = Node::<ObjectIdentifier>::build(pair, filepath)?;
             object_id.value.parts
                 .iter()
                 .map(|p| p.value.value.as_str())
@@ -39,7 +39,7 @@ impl NodeBuilder for SendStatement {
             pair.as_str().to_string()
         };
 
-        let values: Node<Expression> = Expression::build_top_level(pairs.next().unwrap())?;
+        let values: Node<Expression> = Expression::build_top_level(pairs.next().unwrap(), filepath)?;
 
         if !values.value.is_tuple() {
             return Err(AlthreadError::new(
@@ -64,7 +64,7 @@ impl InstructionBuilder for Node<SendStatement> {
             _ => {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(self.pos),
+                    Some(self.pos.clone()),
                     "Send statement expects a tuple of values".to_string(),
                 ))
             }
@@ -85,7 +85,7 @@ impl InstructionBuilder for Node<SendStatement> {
         if channel_info.is_none() {
             state.undefined_channels_mut().insert(
                 (state.current_program_name.clone(), channel_name.clone()),
-                (vec![rdatatype], self.pos),
+                (vec![rdatatype], self.pos.clone()),
             );
         } else {
             let (channel_types, pos) = channel_info.unwrap();
@@ -93,7 +93,7 @@ impl InstructionBuilder for Node<SendStatement> {
             if channel_types.len() != tuple.values.len() {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(self.pos),
+                    Some(self.pos.clone()),
                     format!(
                         "Channel {}, bound at line {}, expects {} values, but {} were given",
                         self.value.channel,
@@ -109,7 +109,7 @@ impl InstructionBuilder for Node<SendStatement> {
             if channel_types != rdatatype {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(self.pos),
+                    Some(self.pos.clone()),
                     format!("Channel {}, bound at line {}, expects values of types {}, but {} were given", self.value.channel, pos.line, channel_types, rdatatype)
                 ));
             }
@@ -120,7 +120,7 @@ impl InstructionBuilder for Node<SendStatement> {
                 channel_name: channel_name.clone(),
                 unstack_len,
             },
-            pos: Some(self.pos),
+            pos: Some(self.pos.clone()),
         });
 
         Ok(builder)

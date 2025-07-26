@@ -19,7 +19,7 @@ use node::{Node};
 use pest::{iterators::Pairs};
 use token::{args_list::ArgsList, condition_keyword::ConditionKeyword, datatype::DataType};
 
-use crate::{error::{AlthreadError, AlthreadResult, ErrorType}, no_rule, parser::Rule};
+use crate::{error::{AlthreadError, AlthreadResult, ErrorType, Pos}, no_rule, parser::Rule};
 
 
 #[derive(Debug)]
@@ -41,8 +41,8 @@ impl Ast {
             import_block: None,
         }
     }
-    /// 
-    pub fn build(pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    /// Builds an AST from the given pairs of rules.
+    pub fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let mut ast = Self::new();
         for pair in pairs {
             match pair.as_rule() {
@@ -50,25 +50,25 @@ impl Ast {
                     if ast.import_block.is_some() {
                         return Err(AlthreadError::new(
                             ErrorType::SyntaxError,
-                            Some(pair.as_span().into()),
+                            Some(Pos::from_span(pair.as_span(), filepath)),
                             "Only one import block is allowed per file.".to_string(),
                         ));
                     }
 
-                    let import_block = Node::build(pair)?;
+                    let import_block = Node::build(pair, filepath)?;
                     ast.import_block = Some(import_block);
                 }
                 Rule::main_block => {
                     let mut pairs = pair.into_inner();
 
-                    let main_block = Node::build(pairs.next().unwrap())?;
+                    let main_block = Node::build(pairs.next().unwrap(), filepath)?;
                     ast.process_blocks
                         .insert("main".to_string(), (Node::<ArgsList>::new(), main_block));
                 }
                 Rule::global_block => {
                     let mut pairs = pair.into_inner();
 
-                    let global_block = Node::build(pairs.next().unwrap())?;
+                    let global_block = Node::build(pairs.next().unwrap(), filepath)?;
                     ast.global_block = Some(global_block);
                 }
                 Rule::condition_block => {
@@ -79,9 +79,9 @@ impl Ast {
                         Rule::ALWAYS_KW => ConditionKeyword::Always,
                         Rule::NEVER_KW => ConditionKeyword::Never,
                         Rule::EVENTUALLY_KW => ConditionKeyword::Eventually,
-                        _ => return Err(no_rule!(keyword_pair, "condition keyword")),
+                        _ => return Err(no_rule!(keyword_pair, "condition keyword", filepath)),
                     };
-                    let condition_block = Node::build(pairs.next().unwrap())?;
+                    let condition_block = Node::build(pairs.next().unwrap(), filepath)?;
                     ast.condition_blocks
                         .insert(condition_keyword, condition_block);
                 }
@@ -90,8 +90,8 @@ impl Ast {
 
                     let process_identifier = pairs.next().unwrap().as_str().to_string();
                     let args_list: Node<token::args_list::ArgsList> =
-                        Node::build(pairs.next().unwrap())?;
-                    let program_block = Node::build(pairs.next().unwrap())?;
+                        Node::build(pairs.next().unwrap(), filepath)?;
+                    let program_block = Node::build(pairs.next().unwrap(), filepath)?;
                     ast.process_blocks
                         .insert(process_identifier, (args_list, program_block));
                 }
@@ -99,13 +99,13 @@ impl Ast {
                     let mut pairs  = pair.into_inner();
 
                     let function_identifier = pairs.next().unwrap().as_str().to_string();
-                    
-                    let args_list: Node<token::args_list::ArgsList> = Node::build(pairs.next().unwrap())?;
+
+                    let args_list: Node<token::args_list::ArgsList> = Node::build(pairs.next().unwrap(), filepath)?;
                     pairs.next(); // skip the "->" token
                     let return_datatype = DataType::from_str(pairs.next().unwrap().as_str());
-                    
-                    let function_block: Node<Block>  = Node::build(pairs.next().unwrap())?;
-                    
+
+                    let function_block: Node<Block>  = Node::build(pairs.next().unwrap(), filepath)?;
+
                     // check if function definition is already defined
                     if ast.function_blocks.contains_key(&function_identifier) {
                         return Err(AlthreadError::new(
@@ -123,7 +123,7 @@ impl Ast {
 
                 }
                 Rule::EOI => (),
-                _ => return Err(no_rule!(pair, "root ast")),
+                _ => return Err(no_rule!(pair, "root ast", filepath)),
             }
         }
 

@@ -7,7 +7,7 @@ use std::{
 use crate::{
     ast::token::{datatype::DataType, literal::Literal},
     compiler::{stdlib::Stdlib, FunctionDefinition},
-    error::{AlthreadError, AlthreadResult, ErrorType},
+    error::{AlthreadError, AlthreadResult, ErrorType, Pos}
 };
 
 use super::{
@@ -22,7 +22,8 @@ struct StackFrame<'a> {
     return_ip: usize, // the instruction pointer to return to
     caller_fp: usize, // the frame pointer of the caller
     caller_code: &'a [Instruction], // the code of the caller
-    expected_return_type: DataType  // the expected return type of the function
+    expected_return_type: DataType,  // the expected return type of the function
+    pos: Option<Pos>, // the position in the source code where this frame was created
 }
 
 #[derive(Debug, Clone)]
@@ -36,6 +37,9 @@ pub struct RunningProgramState<'a> {
     pub id: usize,
     pub stdlib: Rc<Stdlib>,
     pub clock: usize, //counts number of send event
+
+    pub caller_program_id: Option<usize>, // Which program started this one
+    pub call_site_pos: Option<Pos>, // Where this program was called from
 
     pub user_functions: &'a HashMap<String, FunctionDefinition>,
     call_stack: Vec<StackFrame<'a>>,
@@ -90,7 +94,30 @@ impl<'a> RunningProgramState<'a> {
             user_functions,
             call_stack: Vec::new(),
             frame_pointer: 0,
+            caller_program_id: None,
+            call_site_pos: None,
         }
+    }
+
+    pub fn build_error_stack(&self, mut error: AlthreadError) -> AlthreadError {
+        // Push the current instruction context
+        if let Some(pos) = self.current_instruction().ok().and_then(|i| i.pos.clone()) {
+            error.push_stack(pos);
+        }
+        
+        // Push function call stack
+        for frame in self.call_stack.iter().rev() {
+            if let Some(pos) = frame.pos.clone() {
+                error.push_stack(pos);
+            }
+        }
+        
+        // Push program call context
+        if let Some(call_pos) = &self.call_site_pos {
+            error.push_stack(call_pos.clone());
+        }
+        
+        error
     }
 
     pub fn current_state(&self) -> (&Memory, usize, usize) {
@@ -241,14 +268,16 @@ impl<'a> RunningProgramState<'a> {
             InstructionType::Jump(jump) => *jump,
             InstructionType::Expression(exp) => {
                 let lit = exp.eval(&mut self.memory).map_err(|msg| {
-                    AlthreadError::new(ErrorType::ExpressionError, cur_inst.pos, msg)
+                    let e = AlthreadError::new(ErrorType::ExpressionError, cur_inst.pos.clone(), msg);
+                    self.build_error_stack(e)
                 })?;
                 self.memory.push(lit);
                 1
             }
             InstructionType::ExpressionAndCleanup { expression, unstack_len } => {
                 let lit = expression.eval(&mut self.memory).map_err(|msg| {
-                    AlthreadError::new(ErrorType::ExpressionError, cur_inst.pos, msg)
+                    let e = AlthreadError::new(ErrorType::ExpressionError, cur_inst.pos.clone(), msg);
+                    self.build_error_stack(e)
                 })?;
                 // Pop the temporary values from function calls from the stack.
                 for _ in 0..*unstack_len {
@@ -264,17 +293,21 @@ impl<'a> RunningProgramState<'a> {
                 for expr_node in elements {
                     let val = expr_node
                         .eval(&mut self.memory)
-                        .map_err(|msg| {AlthreadError::new(ErrorType::ExpressionError, cur_inst.pos, msg)})?;
+                        .map_err(|msg| {
+                            let e = AlthreadError::new(ErrorType::ExpressionError, cur_inst.pos.clone(), msg);
+                            self.build_error_stack(e)
+                        })?;
                     evaluated_elements.push(val);
                 }
 
                 for _ in 0..*unstack_len {
                     if self.memory.pop().is_none() {
-                        return Err(AlthreadError::new(
+                        let e = AlthreadError::new(
                             ErrorType::RuntimeError,
-                            cur_inst.pos,
+                            cur_inst.pos.clone(),
                             "Stack underflow during tuple cleanup.".to_string(),
-                        ));
+                        );
+                        return Err(self.build_error_stack(e));
                     }
                 }
 
@@ -368,7 +401,13 @@ impl<'a> RunningProgramState<'a> {
                     self.memory.pop();
                 }
                 self.memory.push(Literal::Process(name.clone(), *next_pid));
-                action = Some(GlobalAction::StartProgram(name.clone(), *next_pid, args));
+                action = Some(GlobalAction::StartProgram(
+                    name.clone(), 
+                    *next_pid, 
+                    args,
+                    Some(self.id),
+                    cur_inst.pos.clone()
+                    ));
                 *next_pid += 1;
                 1
             }
@@ -399,15 +438,16 @@ impl<'a> RunningProgramState<'a> {
                 let frame = self.call_stack.pop().expect("Panic: stack is empty, cannot perform return");
 
                 if return_value.get_datatype() != frame.expected_return_type {
-                    return Err(AlthreadError::new(
+                    let e = AlthreadError::new(
                         ErrorType::FunctionReturnTypeMismatch,
-                        cur_inst.pos,
+                        cur_inst.pos.clone(),
                         format!(
                             "expected {:?}, got {:?}",
                             frame.expected_return_type,
                             return_value.get_datatype()
                         ),
-                    ));
+                    );
+                    return Err(self.build_error_stack(e));
                 }
 
                 // clean up the memory to the frame pointer
@@ -439,21 +479,23 @@ impl<'a> RunningProgramState<'a> {
                         .expect("Panic: stack is empty, cannot perform function call")
                         .clone();
 
-                    let interfaces = self.stdlib.get_interfaces(&lit.get_datatype()).ok_or(
-                        AlthreadError::new(
+                    let interfaces = self.stdlib.get_interfaces(&lit.get_datatype()).ok_or_else(|| {
+                        let e = AlthreadError::new(
                             ErrorType::UndefinedFunction,
-                            cur_inst.pos,
+                            cur_inst.pos.clone(),
                             format!("Type {:?} has no interface available", lit.get_datatype()),
-                        ),
-                    )?;
+                        );
+                        self.build_error_stack(e)
+                    })?;
 
                     let fn_idx = interfaces.iter().position(|i| i.name == *name);
                     if fn_idx.is_none() {
-                        return Err(AlthreadError::new(
+                        let e = AlthreadError::new(
                             ErrorType::UndefinedFunction,
-                            cur_inst.pos,
+                            cur_inst.pos.clone(),
                             format!("undefined function {}", name),
-                        ));
+                        );
+                        return Err(self.build_error_stack(e));
                     }
                     let fn_idx = fn_idx.unwrap();
                     let interface = interfaces.get(fn_idx).unwrap();
@@ -520,11 +562,12 @@ impl<'a> RunningProgramState<'a> {
                             let message = &args[1];
 
                             if !condition.is_true() {
-                                return Err(AlthreadError::new(
+                                let e = AlthreadError::new(
                                     ErrorType::AssertionFailed,
-                                    cur_inst.pos,
-                                    format!("{}", message),
-                                ));
+                                    cur_inst.pos.clone(),
+                                    format!("Assertion failed: {}", message),
+                                );
+                                return Err(self.build_error_stack(e));
                             }
                             self.memory.push(Literal::Null);
                             1
@@ -538,6 +581,7 @@ impl<'a> RunningProgramState<'a> {
                                 let arg_values = match args_tuple_lit {
                                     Literal::Tuple(v) => v,
                                     _ => {
+                                        // should never happen
                                         return Err(AlthreadError::new(
                                             ErrorType::RuntimeError,
                                             cur_inst.pos,
@@ -552,6 +596,7 @@ impl<'a> RunningProgramState<'a> {
                                     caller_fp: self.frame_pointer,
                                     caller_code: self.current_code,
                                     expected_return_type: func_def.return_type.clone(),
+                                    pos: cur_inst.pos.clone(),
                                 });
 
                                 self.frame_pointer = self.memory.len();
@@ -566,11 +611,13 @@ impl<'a> RunningProgramState<'a> {
                                 
                                 0
                             } else {
-                                return Err(AlthreadError::new(
+                                let e = AlthreadError::new(
                                     ErrorType::UndefinedFunction,
-                                    cur_inst.pos,
+                                    cur_inst.pos.clone(),
                                     format!("undefined function {}", name),
-                                ));
+                                );
+
+                                return Err(self.build_error_stack(e));
                             }
                         }
                     }

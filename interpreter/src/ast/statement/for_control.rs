@@ -33,15 +33,15 @@ pub struct ForControl {
 }
 
 impl NodeBuilder for ForControl {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
-        let identifier = Node::build(pairs.next().unwrap())?;
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
+        let identifier = Node::build(pairs.next().unwrap(), filepath)?;
         let exp_pair = pairs.next().unwrap();
         let expression = match exp_pair.as_rule() {
-            Rule::expression => Node::build(exp_pair),
-            Rule::range_expression => Expression::build_list_expression(exp_pair),
-            _ => Err(no_rule!(exp_pair, "For loop expression")),
+            Rule::expression => Node::build(exp_pair, filepath),
+            Rule::range_expression => Expression::build_list_expression(exp_pair, filepath),
+            _ => Err(no_rule!(exp_pair, "For loop expression", filepath)),
         }?;
-        let statement = Box::new(Node::build(pairs.next().unwrap())?);
+        let statement = Box::new(Node::build(pairs.next().unwrap(), filepath)?);
 
         Ok(Self {
             statement,
@@ -70,7 +70,7 @@ impl InstructionBuilder for Node<ForControl> {
             _ => {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(self.pos),
+                    Some(self.pos.clone()),
                     format!("The expression is not a list ({} is given)", dtype.clone()),
                 ))
             }
@@ -84,34 +84,34 @@ impl InstructionBuilder for Node<ForControl> {
         state.program_stack.push(Variable {
             name: self.value.identifier.value.value.clone(),
             datatype: list_type.clone(),
-            declare_pos: Some(self.value.identifier.pos),
+            declare_pos: Some(self.value.identifier.pos.clone()),
             depth: state.current_stack_depth,
             mutable: true,
         });
         builder.instructions.push(Instruction {
-            pos: Some(self.value.identifier.pos),
+            pos: Some(self.value.identifier.pos.clone()),
             control: InstructionType::Push(list_type.default()),
         });
         // push the iterator index
         state.program_stack.push(Variable {
             name: "".to_string(),
             datatype: list_type.clone(),
-            declare_pos: Some(self.value.identifier.pos),
+            declare_pos: Some(self.value.identifier.pos.clone()),
             depth: state.current_stack_depth,
             mutable: true,
         });
         builder.instructions.push(Instruction {
-            pos: Some(self.value.identifier.pos),
+            pos: Some(self.value.identifier.pos.clone()),
             control: InstructionType::Push(Literal::Int(-1)),
         });
 
         // add the instruction to increment the the index
         builder.instructions.push(Instruction {
-            pos: Some(self.value.identifier.pos),
+            pos: Some(self.value.identifier.pos.clone()),
             control: InstructionType::Push(Literal::Int(1)),
         });
         builder.instructions.push(Instruction {
-            pos: Some(self.value.identifier.pos),
+            pos: Some(self.value.identifier.pos.clone()),
             control: InstructionType::LocalAssignment {
                 index: 0,
                 operator: BinaryAssignmentOperator::AddAssign,
@@ -120,7 +120,7 @@ impl InstructionBuilder for Node<ForControl> {
         });
         // add the instruction to check if the index is greater than the length of the list
         builder.instructions.push(Instruction {
-            pos: Some(self.value.identifier.pos),
+            pos: Some(self.value.identifier.pos.clone()),
             control: InstructionType::FnCall {
                 name: "len".to_string(),
                 unstack_len: 0,
@@ -129,7 +129,7 @@ impl InstructionBuilder for Node<ForControl> {
             },
         });
         builder.instructions.push(Instruction {
-            pos: Some(self.value.identifier.pos),
+            pos: Some(self.value.identifier.pos.clone()),
             control: InstructionType::Expression(LocalExpressionNode::Binary(
                 LocalBinaryExpressionNode {
                     // idx < len(list)
@@ -144,7 +144,7 @@ impl InstructionBuilder for Node<ForControl> {
             )),
         });
         builder.instructions.push(Instruction {
-            pos: Some(self.value.identifier.pos),
+            pos: Some(self.value.identifier.pos.clone()),
             control: InstructionType::JumpIf {
                 jump_false: 0,
                 unstack_len: 2,
@@ -154,7 +154,7 @@ impl InstructionBuilder for Node<ForControl> {
 
         // add the instruction that the variable takes the value of the element in the list at the position of the index
         builder.instructions.push(Instruction {
-            pos: Some(self.value.identifier.pos),
+            pos: Some(self.value.identifier.pos.clone()),
             control: InstructionType::FnCall {
                 name: "at".to_string(),
                 unstack_len: 0,
@@ -163,7 +163,7 @@ impl InstructionBuilder for Node<ForControl> {
             },
         });
         builder.instructions.push(Instruction {
-            pos: Some(self.value.identifier.pos),
+            pos: Some(self.value.identifier.pos.clone()),
             control: InstructionType::LocalAssignment {
                 index: 1,
                 operator: BinaryAssignmentOperator::Assign,
@@ -177,7 +177,7 @@ impl InstructionBuilder for Node<ForControl> {
         builder.extend(statement_builder);
 
         builder.instructions.push(Instruction {
-            pos: Some(self.value.statement.as_ref().pos),
+            pos: Some(self.value.statement.as_ref().pos.clone()),
             control: InstructionType::Jump(-(statement_len as i64) - 7),
         });
 
@@ -192,7 +192,7 @@ impl InstructionBuilder for Node<ForControl> {
 
         // unstack the list, iterator variable and index
         builder.instructions.push(Instruction {
-            pos: Some(self.value.statement.as_ref().pos),
+            pos: Some(self.value.statement.as_ref().pos.clone()),
             control: InstructionType::Unstack { unstack_len },
         });
 

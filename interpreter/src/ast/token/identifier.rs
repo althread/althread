@@ -13,7 +13,7 @@ pub struct Identifier {
 }
 
 impl NodeBuilder for Identifier {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         // This builder expects to be called from a non-atomic `identifier` rule,
         // which has one inner `IDENT` rule.
         if let Some(pair) = pairs.next() {
@@ -30,7 +30,7 @@ impl NodeBuilder for Identifier {
                 Rule::IDENT => Ok(Self {
                     value: pair.as_str().to_string(),
                 }),
-                _ => Err(no_rule!(pair, "Identifier")),
+                _ => Err(no_rule!(pair, "Identifier", filepath)),
             }
         } else {
             // This error means Node::build was called on an atomic rule (like IDENT)

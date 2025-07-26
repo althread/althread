@@ -46,19 +46,19 @@ pub struct WaitingBlockCase {
 }
 
 impl NodeBuilder for WaitingBlockCase {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let pair = pairs.next().unwrap();
 
         let rule = match pair.as_rule() {
-            Rule::expression => WaitingBlockCaseRule::Expression(Node::build(pair)?),
-            Rule::receive_expression => WaitingBlockCaseRule::Receive(Node::build(pair)?),
+            Rule::expression => WaitingBlockCaseRule::Expression(Node::build(pair, filepath)?),
+            Rule::receive_expression => WaitingBlockCaseRule::Receive(Node::build(pair, filepath)?),
             _ => panic!("Invalid rule while parsing waiting block case"),
         };
 
         let pair = pairs.next();
 
         let statement = match pair {
-            Some(p) => Some(Node::build(p)?),
+            Some(p) => Some(Node::build(p, filepath)?),
             None => None,
         };
 

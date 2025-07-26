@@ -12,13 +12,13 @@ pub enum UnaryOperator {
 }
 
 impl NodeBuilder for UnaryOperator {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let pair = pairs.next().unwrap();
         match pair.as_rule() {
             Rule::POS_OP => Ok(Self::Positive),
             Rule::NEG_OP => Ok(Self::Negative),
             Rule::NOT_OP => Ok(Self::Not),
-            _ => Err(no_rule!(pair, "UnaryOperator")),
+            _ => Err(no_rule!(pair, "UnaryOperator", filepath)),
         }
     }
 }

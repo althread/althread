@@ -296,7 +296,7 @@ impl<'a> ControlFlowGraph<'a> {
             let path_has_return_up_to_and_including_current = path_had_return_before_current || current_node_is_explicit_return;
 
             let current_node_ast_pos = current_cfg_node.ast_node
-                .map(|node| node.pos);
+                .map(|node| node.pos.clone());
 
             let effective_pos_for_this_step = current_node_ast_pos.or(last_ast_node_pos_on_path);
 
@@ -324,7 +324,7 @@ impl<'a> ControlFlowGraph<'a> {
                 stack.push((
                     succesor_id,
                     path_has_return_up_to_and_including_current,
-                    effective_pos_for_this_step,
+                    effective_pos_for_this_step.clone(),
                 ))
             }
 

@@ -15,7 +15,7 @@ pub struct ObjectIdentifier {
 }
 
 impl NodeBuilder for ObjectIdentifier {
-    fn build(pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let parts = pairs
             .map(|pair| {
                 // `pair` is an atomic IDENT rule. We cannot call Node::build on it.
@@ -27,6 +27,7 @@ impl NodeBuilder for ObjectIdentifier {
                         col: span.start_pos().line_col().1,
                         start: span.start(),
                         end: span.end(),
+                        file_path: filepath.to_string(),
                     },
                     value: Identifier {
                         value: pair.as_str().to_string(),

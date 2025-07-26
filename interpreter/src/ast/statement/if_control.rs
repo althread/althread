@@ -18,17 +18,17 @@ pub struct IfControl {
 }
 
 impl NodeBuilder for IfControl {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
-        let condition = Node::build(pairs.next().unwrap())?;
-        let then_block = Node::build(pairs.next().unwrap())?;
-        
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
+        let condition = Node::build(pairs.next().unwrap(), filepath)?;
+        let then_block = Node::build(pairs.next().unwrap(), filepath)?;
+
         // The else block is optional and could be
         // a if statement, in this case we need to wrap it in a block node
         let else_block = match pairs.next() {
             Some(else_block_pair) => match else_block_pair.as_rule() {
                 Rule::if_control => {
                     // wrape the if controle in a block node
-                    let if_statement: Node<IfControl> = Node::build(else_block_pair)?;
+                    let if_statement: Node<IfControl> = Node::build(else_block_pair, filepath)?;
                     let common_position= if_statement.pos.clone();
                     let v = vec![Node { 
                         pos: common_position.clone(), 
@@ -42,9 +42,9 @@ impl NodeBuilder for IfControl {
                     })
                 }
                 Rule::code_block => {
-                    Some(Node::build(else_block_pair)?)
+                    Some(Node::build(else_block_pair, filepath)?)
                 }
-                _ => return Err(no_rule!(else_block_pair, "For else expression")),
+                _ => return Err(no_rule!(else_block_pair, "For else expression", filepath)),
             },
             None => None,
         };
@@ -79,7 +79,7 @@ impl InstructionBuilder for IfControl {
         {
             return Err(AlthreadError::new(
                 ErrorType::TypeError,
-                Some(self.condition.pos),
+                Some(self.condition.pos.clone()),
                 "if condition must be a boolean".to_string(),
             ));
         }
@@ -95,7 +95,7 @@ impl InstructionBuilder for IfControl {
 
         builder.extend(condition);
         builder.instructions.push(Instruction {
-            pos: Some(self.condition.pos),
+            pos: Some(self.condition.pos.clone()),
             control: InstructionType::JumpIf {
                 jump_false: (then_block.instructions.len() + 2) as i64,
                 unstack_len,
@@ -104,13 +104,13 @@ impl InstructionBuilder for IfControl {
         builder.extend(then_block);
         if let Some(else_node) = &self.else_block {
             builder.instructions.push(Instruction {
-                pos: Some(else_node.pos),
+                pos: Some(else_node.pos.clone()),
                 control: InstructionType::Jump((else_block.instructions.len() + 1) as i64),
             });
             builder.extend(else_block);
         } else {
             builder.instructions.push(Instruction {
-                pos: Some(self.then_block.pos),
+                pos: Some(self.then_block.pos.clone()),
                 control: InstructionType::Empty,
             });
         }

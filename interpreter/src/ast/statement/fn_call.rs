@@ -47,9 +47,9 @@ impl FnCall {
 }
 
 impl NodeBuilder for FnCall {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
-        let fn_name = Node::<ObjectIdentifier>::build(pairs.next().unwrap())?;
-        let values = Box::new(Expression::build_top_level(pairs.next().unwrap())?);
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
+        let fn_name = Node::<ObjectIdentifier>::build(pairs.next().unwrap(), filepath)?;
+        let values = Box::new(Expression::build_top_level(pairs.next().unwrap(), filepath)?);
 
         Ok(Self { fn_name, values })
     }
@@ -61,7 +61,10 @@ impl InstructionBuilder for Node<FnCall> {
         let full_name = self.value.fn_name_to_string();
         state.current_stack_depth += 1;
 
-        builder.extend(self.value.values.compile(state)?);
+        builder.extend(self.value.values.compile(state).map_err(|mut e| {
+            e.push_stack(self.pos.clone());
+            e
+        })?);
 
         let args_on_stack_var = 
             state.program_stack
@@ -94,7 +97,7 @@ impl InstructionBuilder for Node<FnCall> {
                     state.unstack_current_depth();
                     return Err(AlthreadError::new(
                         ErrorType::FunctionArgumentCountError,
-                        Some(self.pos),
+                        Some(self.pos.clone()),
                         format!(
                             "Function '{}' expects {} arguments, but {} were provided.",
                             basename,
@@ -110,7 +113,7 @@ impl InstructionBuilder for Node<FnCall> {
                         state.unstack_current_depth(); 
                         return Err(AlthreadError::new(
                             ErrorType::FunctionArgumentTypeMismatch,
-                            Some(self.pos),
+                            Some(self.pos.clone()),
                             format!(
                                 "Function '{}' expects argument {} ('{}') to be of type {}, but got {}.",
                                 basename,
@@ -130,7 +133,7 @@ impl InstructionBuilder for Node<FnCall> {
                     name: "".to_string(),
                     datatype: func_def.return_type.clone(),
                     depth: state.current_stack_depth,
-                    declare_pos: Some(self.pos),
+                    declare_pos: Some(self.pos.clone()),
                 });
 
                 builder.instructions.push(Instruction {
@@ -140,7 +143,7 @@ impl InstructionBuilder for Node<FnCall> {
                         variable_idx: None, 
                         arguments: None 
                     },
-                    pos: Some(self.pos),
+                    pos: Some(self.pos.clone()),
                 });
 
             } else {
@@ -154,7 +157,7 @@ impl InstructionBuilder for Node<FnCall> {
                                 state.unstack_current_depth();
                                 return Err(AlthreadError::new(
                                     ErrorType::FunctionArgumentTypeMismatch,
-                                    Some(self.pos),
+                                    Some(self.pos.clone()),
                                     format!("Function 'print' can't accept argument {} of type Void.", idx + 1),
                                 ));
                             }
@@ -168,7 +171,7 @@ impl InstructionBuilder for Node<FnCall> {
                             state.unstack_current_depth();
                             return Err(AlthreadError::new(
                                 ErrorType::FunctionArgumentCountError,
-                                Some(self.pos),
+                                Some(self.pos.clone()),
                                 "Function 'assert' expects exactly 2 arguments.".to_string(),
                             ));
                         }
@@ -177,7 +180,7 @@ impl InstructionBuilder for Node<FnCall> {
                             state.unstack_current_depth();
                             return Err(AlthreadError::new(
                                 ErrorType::FunctionArgumentTypeMismatch,
-                                Some(self.pos),
+                                Some(self.pos.clone()),
                                 format!("Function 'assert' expects the first argument to be of type bool, but got {}.", provided_arg_types[0]),
                             ));
                         }
@@ -186,7 +189,7 @@ impl InstructionBuilder for Node<FnCall> {
                             state.unstack_current_depth();
                             return Err(AlthreadError::new(
                                 ErrorType::FunctionArgumentTypeMismatch,
-                                Some(self.pos),
+                                Some(self.pos.clone()),
                                 format!("Function 'assert' expects the second argument to be of type string, but got {}.", provided_arg_types[1]),
                             ));
                         }
@@ -195,7 +198,7 @@ impl InstructionBuilder for Node<FnCall> {
                     _ => {
                         return Err(AlthreadError::new(
                             ErrorType::UndefinedFunction,
-                            Some(self.pos),
+                            Some(self.pos.clone()),
                             format!("undefined function {}", basename),
                         ));
                     }
@@ -208,7 +211,7 @@ impl InstructionBuilder for Node<FnCall> {
                     name: "".to_string(),
                     datatype: return_type,
                     depth: state.current_stack_depth,
-                    declare_pos: Some(self.pos),
+                    declare_pos: Some(self.pos.clone()),
                 });
 
                 builder.instructions.push(Instruction {
@@ -218,7 +221,7 @@ impl InstructionBuilder for Node<FnCall> {
                         variable_idx: None,
                         arguments: None,
                     },
-                    pos: Some(self.pos),
+                    pos: Some(self.pos.clone()),
                 });
             }
 
@@ -234,7 +237,7 @@ impl InstructionBuilder for Node<FnCall> {
                 .position(|var| var.name.eq(receiver_name))
                 .ok_or(AlthreadError::new(
                     ErrorType::VariableError,
-                    Some(self.pos),
+                    Some(self.pos.clone()),
                     format!("Variable '{}' not found", receiver_name),
                 ))?;
 
@@ -246,7 +249,7 @@ impl InstructionBuilder for Node<FnCall> {
             if fn_idx.is_none() {
                 return Err(AlthreadError::new(
                     ErrorType::UndefinedFunction,
-                    Some(self.pos),
+                    Some(self.pos.clone()),
                     format!("undefined function {}", method_name),
                 ));
             }
@@ -261,7 +264,7 @@ impl InstructionBuilder for Node<FnCall> {
                 name: "".to_string(),
                 datatype: ret_type,
                 depth: state.current_stack_depth,
-                declare_pos: Some(self.pos),
+                declare_pos: Some(self.pos.clone()),
             });
 
             builder.instructions.push(Instruction {
@@ -271,7 +274,7 @@ impl InstructionBuilder for Node<FnCall> {
                     variable_idx: Some(final_var_id),
                     arguments: None,
                 },
-                pos: Some(self.pos),
+                pos: Some(self.pos.clone()),
             });
         }
 

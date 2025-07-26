@@ -139,7 +139,7 @@ pub fn check_program<'a>(
             
             let mut lines: Vec<usize> = instructions
                 .iter()
-                .map(|x| x.pos.unwrap_or_default().line)
+                .map(|x| x.pos.clone().unwrap_or_default().line)
                 .filter(|l| *l > 0)
                 .collect();
             //42 remove all dupes 

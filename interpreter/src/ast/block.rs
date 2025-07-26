@@ -27,11 +27,11 @@ impl Block {
 }
 
 impl NodeBuilder for Block {
-    fn build(pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let mut block = Self::new();
 
         for pair in pairs {
-            let node = Node::build(pair)?;
+            let node = Node::build(pair, filepath)?;
             block.children.push(node);
         }
 

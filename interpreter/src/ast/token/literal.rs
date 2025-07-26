@@ -55,10 +55,10 @@ impl<'a> Serialize for Literal {
 }
 
 impl NodeBuilder for Literal {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let pair = pairs.next().unwrap();
 
-        fn safe_parse<T: FromStr>(pair: &Pair<Rule>) -> Result<T, AlthreadError> {
+        fn safe_parse<T: FromStr>(pair: &Pair<Rule>, filepath: &str) -> Result<T, AlthreadError> {
             pair.as_str().parse::<T>().map_err(|_| {
                 AlthreadError::new(
                     ErrorType::SyntaxError,
@@ -67,6 +67,7 @@ impl NodeBuilder for Literal {
                         end: pair.as_span().end(),
                         line: pair.line_col().0,
                         col: pair.line_col().1,
+                        file_path: filepath.to_string(),
                     }),
                     format!("Cannot parse {}", pair.as_str()),
                 )
@@ -75,15 +76,15 @@ impl NodeBuilder for Literal {
 
         Ok(match pair.as_rule() {
             Rule::NULL => Self::Null,
-            Rule::BOOL => Self::Bool(safe_parse(&pair)?),
-            Rule::INT => Self::Int(safe_parse(&pair)?),
-            Rule::FLOAT => Self::Float(safe_parse(&pair)?),
+            Rule::BOOL => Self::Bool(safe_parse(&pair, filepath)?),
+            Rule::INT => Self::Int(safe_parse(&pair, filepath)?),
+            Rule::FLOAT => Self::Float(safe_parse(&pair, filepath)?),
             Rule::STR => {
                 let s = pair.as_str();
                 let unquoted = &s[1..s.len() - 1];
                 Self::String(unquoted.to_string())
             },
-            _ => return Err(no_rule!(pair, "Literal")),
+            _ => return Err(no_rule!(pair, "Literal", filepath)),
         })
     }
 }

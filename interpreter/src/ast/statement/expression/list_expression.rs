@@ -42,9 +42,9 @@ pub struct LocalRangeListExpressionNode {
 }
 
 impl NodeBuilder for RangeListExpression {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
-        let expression_start = Box::new(Node::build(pairs.next().unwrap())?);
-        let expression_end = Box::new(Node::build(pairs.next().unwrap())?);
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
+        let expression_start = Box::new(Node::build(pairs.next().unwrap(), filepath)?);
+        let expression_end = Box::new(Node::build(pairs.next().unwrap(), filepath)?);
 
         Ok(Self {
             expression_start,

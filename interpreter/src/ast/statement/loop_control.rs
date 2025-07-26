@@ -21,8 +21,8 @@ pub struct LoopControl {
 }
 
 impl NodeBuilder for LoopControl {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
-        let statement = Box::new(Node::build(pairs.next().unwrap())?);
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
+        let statement = Box::new(Node::build(pairs.next().unwrap(), filepath)?);
 
         Ok(Self { statement })
     }
@@ -35,7 +35,7 @@ impl InstructionBuilder for Node<LoopControl> {
         let mut builder = self.value.statement.as_ref().compile(state)?;
 
         builder.instructions.push(Instruction {
-            pos: Some(self.value.statement.as_ref().pos),
+            pos: Some(self.value.statement.as_ref().pos.clone()),
             control: InstructionType::Jump(-(builder.instructions.len() as i64)),
         });
 

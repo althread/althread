@@ -27,12 +27,12 @@ pub struct BreakLoopControl {
 }
 
 impl NodeBuilder for BreakLoopControl {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let pair = pairs.next().unwrap();
         let kind = match pair.as_rule() {
             Rule::BREAK_KW => BreakLoopType::Break,
             Rule::CONTINUE_KW => BreakLoopType::Continue,
-            _ => return Err(no_rule!(pair, "BreakLoopControl")),
+            _ => return Err(no_rule!(pair, "BreakLoopControl", filepath)),
         };
 
         let label = pairs.next().map(|pair| pair.as_str().to_string());

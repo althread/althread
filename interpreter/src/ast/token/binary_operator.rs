@@ -23,7 +23,7 @@ pub enum BinaryOperator {
 }
 
 impl NodeBuilder for BinaryOperator {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let pair = pairs.next().unwrap();
         match pair.as_rule() {
             Rule::ADD_OP => Ok(Self::Add),
@@ -39,7 +39,7 @@ impl NodeBuilder for BinaryOperator {
             Rule::GE_OP => Ok(Self::GreaterThanOrEqual),
             Rule::AND_OP => Ok(Self::And),
             Rule::OR_OP => Ok(Self::Or),
-            _ => Err(no_rule!(pair, "BinaryOperator")),
+            _ => Err(no_rule!(pair, "BinaryOperator", filepath)),
         }
     }
 }

@@ -41,6 +41,7 @@ impl BinaryExpression {
         left: Node<Expression>,
         operator: Pair<Rule>,
         right: Node<Expression>,
+        filepath: &str,
     ) -> AlthreadResult<Node<Self>> {
         Ok(Node {
             pos: Pos {
@@ -48,10 +49,11 @@ impl BinaryExpression {
                 end: right.pos.end,
                 line: left.pos.line,
                 col: left.pos.col,
+                file_path: filepath.to_string(),
             },
             value: Self {
                 left: Box::new(left),
-                operator: Node::build(operator)?,
+                operator: Node::build(operator, filepath)?,
                 right: Box::new(right),
             },
         })

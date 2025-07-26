@@ -22,8 +22,8 @@ pub struct Atomic {
 }
 
 impl NodeBuilder for Atomic {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
-        let mut statement: Box<Node<Statement>> = Box::new(Node::build(pairs.next().unwrap())?);
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
+        let mut statement: Box<Node<Statement>> = Box::new(Node::build(pairs.next().unwrap(), filepath)?);
         let mut delegated = false;
 
         let mut first_statement = statement.as_mut();
@@ -67,7 +67,7 @@ impl InstructionBuilder for Node<Atomic> {
         if state.is_atomic {
             return Err(AlthreadError::new(
                 ErrorType::InstructionNotAllowed,
-                Some(self.value.statement.as_ref().pos),
+                Some(self.value.statement.as_ref().pos.clone()),
                 "Atomic blocks cannot be nested".to_string(),
             ));
         }
@@ -76,7 +76,7 @@ impl InstructionBuilder for Node<Atomic> {
 
         if !self.value.delegated {
             builder.instructions.push(Instruction {
-                pos: Some(self.value.statement.as_ref().pos),
+                pos: Some(self.value.statement.as_ref().pos.clone()),
                 control: InstructionType::AtomicStart,
             });
             state.is_atomic = true;
@@ -86,7 +86,7 @@ impl InstructionBuilder for Node<Atomic> {
 
         state.is_atomic = false;
         builder.instructions.push(Instruction {
-            pos: Some(self.value.statement.as_ref().pos),
+            pos: Some(self.value.statement.as_ref().pos.clone()),
             control: InstructionType::AtomicEnd,
         });
         if builder.contains_jump() {

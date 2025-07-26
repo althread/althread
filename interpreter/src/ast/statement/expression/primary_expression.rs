@@ -27,19 +27,20 @@ pub enum PrimaryExpression {
 }
 
 impl PrimaryExpression {
-    pub fn build(pair: Pair<Rule>) -> AlthreadResult<Node<Self>> {
+    pub fn build(pair: Pair<Rule>, filepath: &str) -> AlthreadResult<Node<Self>> {
         Ok(Node {
             pos: Pos {
                 line: pair.line_col().0,
                 col: pair.line_col().1,
                 start: pair.as_span().start(),
                 end: pair.as_span().end(),
+                file_path: filepath.to_string(),
             },
             value: match pair.as_rule() {
-                Rule::literal => Self::Literal(Node::build(pair)?),
-                Rule::object_identifier => Self::Identifier(Node::build(pair)?),
-                Rule::expression => Self::Expression(Box::new(Node::build(pair)?)),
-                _ => return Err(no_rule!(pair, "PrimaryExpression")),
+                Rule::literal => Self::Literal(Node::build(pair, filepath)?),
+                Rule::object_identifier => Self::Identifier(Node::build(pair, filepath)?),
+                Rule::expression => Self::Expression(Box::new(Node::build(pair, filepath)?)),
+                _ => return Err(no_rule!(pair, "PrimaryExpression", filepath)),
             },
         })
     }
@@ -122,7 +123,7 @@ impl LocalPrimaryExpressionNode {
                     .position(|var| var.name == full_name)
                     .ok_or(AlthreadError::new(
                         ErrorType::VariableError,
-                        Some(node.pos),
+                        Some(node.pos.clone()),
                         format!("Variable '{}' not found", full_name),
                     ))?;
                 LocalPrimaryExpressionNode::Var(LocalVarNode { index })
@@ -170,7 +171,7 @@ impl LocalVarNode {
             .position(|var| var.name == ident.value.value)
             .ok_or(AlthreadError::new(
                 ErrorType::VariableError,
-                Some(ident.pos),
+                Some(ident.pos.clone()),
                 format!("Variable '{}' not found", ident.value.value),
             ))?;
         Ok(LocalVarNode { index })

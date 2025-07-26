@@ -28,18 +28,18 @@ impl Node<ArgsList> {
 }
 
 impl NodeBuilder for ArgsList {
-    fn build(pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let mut identifiers = Vec::new();
         let mut datatypes = Vec::new();
         for pair in pairs {
             match pair.as_rule() {
                 Rule::datatype => {
-                    datatypes.push(Node::build(pair)?);
+                    datatypes.push(Node::build(pair, filepath)?);
                 }
                 Rule::identifier => {
-                    identifiers.push(Node::build(pair)?);
+                    identifiers.push(Node::build(pair, filepath)?);
                 }
-                _ => return Err(no_rule!(pair, "ArgsList")),
+                _ => return Err(no_rule!(pair, "ArgsList", filepath)),
             }
         }
         Ok(Self {

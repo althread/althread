@@ -34,7 +34,7 @@ pub struct Wait {
 }
 
 impl NodeBuilder for Wait {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let pair = pairs.next().unwrap();
         let mut block_kind = WaitingBlockKind::First;
 
@@ -48,17 +48,17 @@ impl NodeBuilder for Wait {
                 };
                 let mut children = Vec::new();
                 for sub_pair in pair {
-                    let node: Node<WaitingBlockCase> = Node::build(sub_pair)?;
+                    let node: Node<WaitingBlockCase> = Node::build(sub_pair, filepath)?;
                     children.push(node);
                 }
                 children
             }
             Rule::waiting_block_case => {
-                let node: Node<WaitingBlockCase> = Node::build(pair)?;
+                let node: Node<WaitingBlockCase> = Node::build(pair, filepath)?;
                 vec![node]
             }
             _ => {
-                return Err(no_rule!(pair, "Wait"));
+                return Err(no_rule!(pair, "Wait", filepath));
             }
         };
 
@@ -75,7 +75,7 @@ impl InstructionBuilder for Node<Wait> {
         if state.is_atomic {
             return Err(AlthreadError::new(
                 ErrorType::InstructionNotAllowed,
-                Some(self.pos),
+                Some(self.pos.clone()),
                 "Wait blocks cannot be inside an atomic block (except if it is the first instruction)".to_string(),
             ));
         }
@@ -91,7 +91,7 @@ impl InstructionBuilder for Node<Wait> {
         }
 
         builder.instructions.push(Instruction {
-            pos: Some(self.pos),
+            pos: Some(self.pos.clone()),
             control: InstructionType::WaitStart {
                 dependencies,
                 start_atomic: self.value.start_atomic,
@@ -107,7 +107,7 @@ impl InstructionBuilder for Node<Wait> {
         });
 
         builder.instructions.push(Instruction {
-            pos: Some(self.pos),
+            pos: Some(self.pos.clone()),
             control: InstructionType::Push(Literal::Bool(false)),
         });
 
@@ -133,11 +133,11 @@ impl InstructionBuilder for Node<Wait> {
             };
 
             case_statement.instructions.push(Instruction {
-                pos: Some(case.pos),
+                pos: Some(case.pos.clone()),
                 control: InstructionType::Push(Literal::Bool(true)),
             });
             case_statement.instructions.push(Instruction {
-                pos: Some(case.pos),
+                pos: Some(case.pos.clone()),
                 control: InstructionType::LocalAssignment {
                     index: 0,
                     operator: BinaryAssignmentOperator::OrAssign,
@@ -147,7 +147,7 @@ impl InstructionBuilder for Node<Wait> {
 
             // the offset is because a jump will be added after the statement
             case_condition.instructions.push(Instruction {
-                pos: Some(case.pos),
+                pos: Some(case.pos.clone()),
                 control: InstructionType::JumpIf {
                     jump_false: (case_statement.instructions.len() + 1 + jump_if_offset) as i64,
                     unstack_len,
@@ -157,20 +157,20 @@ impl InstructionBuilder for Node<Wait> {
             if !self.value.start_atomic {
                 // if the entire wait block is not atomic, stop the atomicity here
                 builder.instructions.push(Instruction {
-                    pos: Some(case.pos),
+                    pos: Some(case.pos.clone()),
                     control: InstructionType::AtomicEnd,
                 });
             }
             builder.extend(case_statement);
             jump_index.push(builder.instructions.len());
             builder.instructions.push(Instruction {
-                pos: Some(case.pos),
+                pos: Some(case.pos.clone()),
                 control: InstructionType::Empty, // placeholder for the jump if the keyword "first" is used
             });
         }
 
         builder.instructions.push(Instruction {
-            pos: Some(self.pos),
+            pos: Some(self.pos.clone()),
             control: InstructionType::Wait {
                 jump: -(builder.instructions.len() as i64),
                 unstack_len: 1,

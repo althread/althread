@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::{BTreeMap, HashMap, HashSet}, path::Path, rc::Rc};
+use std::{cell::RefCell, collections::{BTreeMap, HashMap, HashSet}, path::Path, process::exit, rc::Rc};
 
 use crate::{ast::{node::{InstructionBuilder}, statement::Statement, token::{condition_keyword::ConditionKeyword, datatype::DataType, identifier::Identifier, literal::Literal}, Ast}, compiler::{stdlib::{self}, CompilationContext, CompiledProject, CompilerState, FunctionDefinition, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, module_resolver::{module_resolver::{ModuleResolver}, FileSystem}, parser, vm::{instruction::{Instruction, InstructionType, ProgramCode}, VM}};
 
@@ -31,13 +31,14 @@ impl Ast {
     pub fn compile<F: FileSystem + Clone>(
         &self,
         current_file_path: &Path,
-        filesystem: F
+        filesystem: F,
+        input_map: &mut HashMap<String, String>
     ) -> AlthreadResult<CompiledProject> {
         
         // Create shared compilation context
         let context = Rc::new(RefCell::new(CompilationContext::new()));
 
-        self.compile_with_context(current_file_path, filesystem, context, &"".to_string(), Vec::new())
+        self.compile_with_context(current_file_path, filesystem, context, &"".to_string(), Vec::new(), input_map)
     }
 
     pub fn compile_with_context<F: FileSystem + Clone>(
@@ -46,7 +47,8 @@ impl Ast {
         filesystem: F,
         context: Rc<RefCell<CompilationContext>>,
         module_prefix: &str,
-        same_level_module_names: Vec<String>
+        same_level_module_names: Vec<String>,
+        input_map: &mut HashMap<String, String>
     ) -> AlthreadResult<CompiledProject> {
 
         // if the main file is empty (no executable stuff) we have nothing to do
@@ -81,47 +83,18 @@ impl Ast {
             let mut module_resolver = ModuleResolver::new(current_file_path, filesystem.clone());
             let mut import_stack = Vec::new();
 
-            module_resolver.resolve_imports(&import_block.value, &mut import_stack)?;
+            module_resolver.resolve_imports(&import_block.value, &mut import_stack, input_map)?;
 
-            for (name, _) in module_resolver.resolved_modules.clone() {
-                next_level_module_names.push(name);
+            for (name, _) in module_resolver.resolved_modules.iter() {
+                next_level_module_names.push(name.clone());
             }
 
             for (name, resolved_module) in module_resolver.resolved_modules {
-                let module_content = module_resolver.filesystem.read_file(&resolved_module.path)?;
-
-                let pairs = parser::parse(&module_content).map_err(|e| {
-                    AlthreadError::new(
-                        ErrorType::SyntaxError,
-                        Some(import_block.pos),
-                        format!("Failed to parse module '{}': {:?}", resolved_module.name, e),
-                    )
-                })?;
-
-                let module_ast = Ast::build(pairs).map_err(|e| {
-                    AlthreadError::new(
-                        ErrorType::SyntaxError,
-                        Some(import_block.pos),
-                        format!("Failed to build AST for module '{}': {:?}", resolved_module.name, e),
-                    )
-                })?;
-
-                if module_ast.process_blocks.contains_key("main") {
-                    return Err(AlthreadError::new(
-                        ErrorType::ImportMainConflict,
-                        Some(import_block.pos),
-                        format!("'{}' defines a 'main' block. Imported modules cannot define a 'main' block.", resolved_module.name),
-                    ));
-                }
-
                 let next_module_prefix: String = self.build_qualified_name(&name, module_prefix);
 
-                let compiled_module = module_ast.compile_with_context(&resolved_module.path, filesystem.clone(), context.clone(), &next_module_prefix, next_level_module_names.clone()).map_err(|e| {
-                    AlthreadError::new(
-                        ErrorType::SyntaxError,
-                        Some(import_block.pos),
-                        format!("Failed to compile module '{}': {:?}", resolved_module.name, e),
-                    )
+                let compiled_module = resolved_module.module_ast.compile_with_context(&resolved_module.resolved_path.path, filesystem.clone(), context.clone(), &next_module_prefix, next_level_module_names.clone(), input_map).map_err(|mut e| {
+                    e.push_stack(import_block.pos.clone());
+                    e
                 })?;
 
                 // display what was imported at this point
@@ -148,7 +121,7 @@ impl Ast {
         }
 
 
-         // "compile" the "shared" block to retrieve the set of shared variables
+        // "compile" the "shared" block to retrieve the set of shared variables
         state.current_stack_depth = 1;
         state.is_shared = true;
         if let Some(global) = self.global_block.as_ref() {
@@ -196,7 +169,7 @@ impl Ast {
                     _ => {
                         return Err(AlthreadError::new(
                             ErrorType::InstructionNotAllowed,
-                            Some(node.pos),
+                            Some(node.pos.clone()),
                             "The 'shared' block can only contains assignment from an expression"
                                 .to_string(),
                         ))
@@ -221,7 +194,7 @@ impl Ast {
             if state.user_functions().contains_key(func_name) {
                 return Err(AlthreadError::new(
                     ErrorType::FunctionAlreadyDefined,
-                    Some(func_block.pos),
+                    Some(func_block.pos.clone()),
                     format!("Function '{}' is already defined", func_name),
                 ));
             }
@@ -238,7 +211,7 @@ impl Ast {
                 arguments: arguments.clone(),
                 return_type: return_datatype.clone(),
                 body: Vec::new(),
-                pos: func_block.pos,
+                pos: func_block.pos.clone(),
             };
 
             if let Err(e) = Ast::check_function_returns(&func_name,func_block, return_datatype){
@@ -271,7 +244,17 @@ impl Ast {
         state.is_shared = false;
         
         // start with the main program
+        
         if self.process_blocks.contains_key("main") {
+            if !module_prefix.is_empty(){
+                return Err(AlthreadError::new(
+                        ErrorType::ImportMainConflict,
+                        Some(self.process_blocks.get("main").unwrap().1.pos.clone()),
+                        format!("'{}' defines a 'main' block. Imported modules cannot define a 'main' block.", module_prefix),
+                ));
+            }
+
+
             let code = self.compile_program("main", &mut state, module_prefix)?;
             state.programs_code_mut().insert("main".to_string(), code);
             assert!(state.current_stack_depth == 0);
@@ -306,14 +289,14 @@ impl Ast {
                         if compiled.len() == 1 {
                             return Err(AlthreadError::new(
                                 ErrorType::InstructionNotAllowed,
-                                Some(condition.pos),
+                                Some(condition.pos.clone()),
                                 "The condition must depend on shared variable(s)".to_string(),
                             ));
                         }
                         if compiled.len() != 2 {
                             return Err(AlthreadError::new(
                                 ErrorType::InstructionNotAllowed,
-                                Some(condition.pos),
+                                Some(condition.pos.clone()),
                                 "The condition must be a single expression".to_string(),
                             ));
                         }
@@ -324,19 +307,19 @@ impl Ast {
                                     variables.iter().map(|s| s.clone()).collect(),
                                     variables.clone(),
                                     exp.clone(),
-                                    condition.pos,
+                                    condition.pos.clone(),
                                 ));
                             } else {
                                 return Err(AlthreadError::new(
                                     ErrorType::InstructionNotAllowed,
-                                    Some(condition.pos),
+                                    Some(condition.pos.clone()),
                                     "The condition must be a single expression".to_string(),
                                 ));
                             }
                         } else {
                             return Err(AlthreadError::new(
                                 ErrorType::InstructionNotAllowed,
-                                Some(condition.pos),
+                                Some(condition.pos.clone()),
                                 "The condition must depend on shared variable(s)".to_string(),
                             ));
                         }
@@ -349,14 +332,14 @@ impl Ast {
                         if compiled.len() == 1 {
                             return Err(AlthreadError::new(
                                 ErrorType::InstructionNotAllowed,
-                                Some(condition.pos),
+                                Some(condition.pos.clone()),
                                 "The condition must depend on shared variable(s)".to_string(),
                             ));
                         }
                         if compiled.len() != 2 {
                             return Err(AlthreadError::new(
                                 ErrorType::InstructionNotAllowed,
-                                Some(condition.pos),
+                                Some(condition.pos.clone()),
                                 "The condition must be a single expression".to_string(),
                             ));
                         }
@@ -367,19 +350,19 @@ impl Ast {
                                     variables.iter().map(|s| s.clone()).collect(),
                                     variables.clone(),
                                     exp.clone(),
-                                    condition.pos,
+                                    condition.pos.clone(),
                                 ));
                             } else {
                                 return Err(AlthreadError::new(
                                     ErrorType::InstructionNotAllowed,
-                                    Some(condition.pos),
+                                    Some(condition.pos.clone()),
                                     "The condition must be a single expression".to_string(),
                                 ));
                             }
                         } else {
                             return Err(AlthreadError::new(
                                 ErrorType::InstructionNotAllowed,
-                                Some(condition.pos),
+                                Some(condition.pos.clone()),
                                 "The condition must depend on shared variable(s)".to_string(),
                             ));
                         }
@@ -408,7 +391,7 @@ impl Ast {
                         depth: state.current_stack_depth,
                         mutable: true,
                         datatype: dt.value.clone(),
-                        declare_pos: Some(id.pos),
+                        declare_pos: Some(id.pos.clone()),
                     });
                     (id.value.clone(), dt.value.clone())
                 })
@@ -416,8 +399,11 @@ impl Ast {
 
 
             // compile the function body
-            let mut compiled_body = func_block.compile(&mut state)?;
-            
+            let mut compiled_body = func_block.compile(&mut state).map_err(|mut e| {
+                e.push_stack(func_block.pos.clone());
+                e
+            })?;
+
             // if the function's return datatype is Void
             if *return_datatype == DataType::Void {
                 let mut has_return = false;
@@ -437,7 +423,7 @@ impl Ast {
                             control: InstructionType::Return {
                                 has_value: false,
                             },
-                            pos: Some(func_block.pos),
+                            pos: Some(func_block.pos.clone()),
                         },
                     );
                 }
@@ -450,7 +436,7 @@ impl Ast {
                     arguments,
                     return_type: return_datatype.clone(),
                     body: compiled_body.instructions,
-                    pos: func_block.pos,
+                    pos: func_block.pos.clone(),
                 },
             );
 
@@ -475,7 +461,7 @@ impl Ast {
                 if old_func_def_opt.is_none() {
                     return Err(AlthreadError::new(
                         ErrorType::FunctionNotFound,
-                        Some(func_block.pos),
+                        Some(func_block.pos.clone()),
                         format!("Function '{}' not found", func_name),
                     ));
                 }
@@ -523,7 +509,7 @@ impl Ast {
                     arguments: old_func_def.arguments.clone(),
                     return_type: return_datatype.clone(),
                     body: old_func_def.body.clone(),
-                    pos: func_block.pos,
+                    pos: func_block.pos.clone(),
                 };
 
                 state.user_functions_mut().insert(new_func_name.clone(), func_def);
@@ -685,7 +671,7 @@ impl Ast {
                 if state.program_arguments().contains_key(&qualified_prog_name) {
                     return Err(AlthreadError::new(
                         ErrorType::ProgramAlreadyDefined,
-                        Some(self.import_block.as_ref().unwrap().pos),
+                        Some(self.import_block.as_ref().unwrap().pos.clone()),
                         format!("Program '{}' from module '{}' is already defined", prog_name, module_prefix),
                     ));
                 }
@@ -801,24 +787,27 @@ impl Ast {
                 depth: state.current_stack_depth,
                 mutable: true,
                 datatype: args.value.datatypes[i].value.clone(),
-                declare_pos: Some(var.pos),
+                declare_pos: Some(var.pos.clone()),
             });
         }
 
-        let compiled = prog.compile(state)?;
+        let compiled = prog.compile(state).map_err(|mut e| {
+            e.push_stack(prog.pos.clone());
+            e
+        })?;
         if compiled.contains_jump() {
             unimplemented!("breaks or return statements in programs are not yet implemented");
         }
         if !args.value.identifiers.is_empty() {
             process_code.instructions.push(Instruction {
                 control: InstructionType::Destruct,
-                pos: Some(args.pos),
+                pos: Some(args.pos.clone()),
             });
         }
         process_code.instructions.extend(compiled.instructions);
         process_code.instructions.push(Instruction {
             control: InstructionType::EndProgram,
-            pos: Some(prog.pos),
+            pos: Some(prog.pos.clone()),
         });
         Ok(process_code)
     }

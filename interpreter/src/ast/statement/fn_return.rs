@@ -22,10 +22,10 @@ pub struct FnReturn {
 }
 
 impl NodeBuilder for FnReturn {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         // return statement doesn't necessarily have a value
         let value = if let Some(pair) = pairs.next() {
-            Some(Expression::build_top_level(pair)?)
+            Some(Expression::build_top_level(pair, filepath)?)
         } else {
             None
         };
@@ -40,7 +40,7 @@ impl InstructionBuilder for FnReturn {
         if !state.in_function {
             return Err(AlthreadError::new(
                 ErrorType::ReturnOutsideFunction,
-                Some(self.pos),
+                Some(self.pos.clone()),
                 "Return statement outside function".to_string(),
             ));
         }
@@ -57,7 +57,7 @@ impl InstructionBuilder for FnReturn {
             control: InstructionType::Return {
                 has_value
             },
-            pos: Some(self.pos),
+            pos: Some(self.pos.clone()),
         };
 
 

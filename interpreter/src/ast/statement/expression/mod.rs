@@ -57,14 +57,14 @@ pub enum SideEffectExpression {
 }
 
 impl NodeBuilder for SideEffectExpression {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let pair = pairs.next().unwrap();
 
         match pair.as_rule() {
-            Rule::expression => Ok(Self::Expression(Node::build(pair)?)),
-            Rule::run_call => Ok(Self::RunCall(Node::build(pair)?)),
-            Rule::fn_call => Ok(Self::FnCall(Node::build(pair)?)),
-            _ => Err(no_rule!(pair, "SideEffectExpression")),
+            Rule::expression => Ok(Self::Expression(Node::build(pair, filepath)?)),
+            Rule::run_call => Ok(Self::RunCall(Node::build(pair, filepath)?)),
+            Rule::fn_call => Ok(Self::FnCall(Node::build(pair, filepath)?)),
+            _ => Err(no_rule!(pair, "SideEffectExpression", filepath)),
         }
     }
 }
@@ -132,7 +132,7 @@ impl fmt::Display for LocalExpressionNode {
     }
 }
 
-pub fn parse_expr(pairs: Pairs<Rule>) -> AlthreadResult<Node<Expression>> {
+pub fn parse_expr(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Node<Expression>> {
     PRATT_PARSER
         .map_primary(|primary| {
             match primary.as_rule() {
@@ -143,8 +143,9 @@ pub fn parse_expr(pairs: Pairs<Rule>) -> AlthreadResult<Node<Expression>> {
                             col: primary.line_col().1,
                             start: primary.as_span().start(),
                             end: primary.as_span().end(),
+                            file_path: filepath.to_string(),
                         },
-                        value: Expression::FnCall(Node::build(primary)?),
+                        value: Expression::FnCall(Node::build(primary, filepath)?),
                     })
                 },
                 _ => 
@@ -154,8 +155,9 @@ pub fn parse_expr(pairs: Pairs<Rule>) -> AlthreadResult<Node<Expression>> {
                     col: primary.line_col().1,
                     start: primary.as_span().start(),
                     end: primary.as_span().end(),
+                    file_path: filepath.to_string(),
                 },
-                value: Expression::Primary(PrimaryExpression::build(primary)?),
+                value: Expression::Primary(PrimaryExpression::build(primary, filepath)?),
                 }),
             }
         })
@@ -166,8 +168,9 @@ pub fn parse_expr(pairs: Pairs<Rule>) -> AlthreadResult<Node<Expression>> {
                     col: op.line_col().1,
                     start: op.as_span().start(),
                     end: op.as_span().end(),
+                    file_path: filepath.to_string(),
                 },
-                value: Expression::Binary(BinaryExpression::build(left?, op, right?)?),
+                value: Expression::Binary(BinaryExpression::build(left?, op, right?, filepath)?),
             })
         })
         .map_prefix(|op, right| {
@@ -177,37 +180,39 @@ pub fn parse_expr(pairs: Pairs<Rule>) -> AlthreadResult<Node<Expression>> {
                     col: op.line_col().1,
                     start: op.as_span().start(),
                     end: op.as_span().end(),
+                    file_path: filepath.to_string(),
                 },
-                value: Expression::Unary(UnaryExpression::build(op, right?)?),
+                value: Expression::Unary(UnaryExpression::build(op, right?, filepath)?),
             })
         })
         .parse(pairs)
 }
 
 impl NodeBuilder for Expression {
-    fn build(pairs: Pairs<Rule>) -> AlthreadResult<Self> {
-        parse_expr(pairs).map(|node| node.value)
+    fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
+        parse_expr(pairs, filepath).map(|node| node.value)
     }
 }
 impl Expression {
-    pub fn build_list_expression(pair: Pair<Rule>) -> AlthreadResult<Node<Self>> {
+    pub fn build_list_expression(pair: Pair<Rule>, filepath: &str) -> AlthreadResult<Node<Self>> {
         let pos = Pos {
             line: pair.line_col().0,
             col: pair.line_col().1,
             start: pair.as_span().start(),
             end: pair.as_span().end(),
+            file_path: filepath.to_string(),
         };
         match pair.as_rule() {
             Rule::range_expression => {
                 let mut pair = pair.into_inner();
                 let expression_start: Box<Node<Expression>> =
-                    Box::new(Node::build(pair.next().unwrap())?);
+                    Box::new(Node::build(pair.next().unwrap(), filepath)?);
                 let expression_end: Box<Node<Expression>> =
-                    Box::new(Node::build(pair.next().unwrap())?);
+                    Box::new(Node::build(pair.next().unwrap(), filepath)?);
                 Ok(Node {
-                    pos,
+                    pos: pos.clone(),
                     value: Expression::Range(Node {
-                        pos,
+                        pos: pos,
                         value: RangeListExpression {
                             expression_start,
                             expression_end,
@@ -215,35 +220,36 @@ impl Expression {
                     }),
                 })
             }
-            _ => Err(no_rule!(pair, "list_expression")),
+            _ => Err(no_rule!(pair, "list_expression", filepath)),
         }
     }
-    pub fn build_top_level(pair: Pair<Rule>) -> AlthreadResult<Node<Self>> {
+    pub fn build_top_level(pair: Pair<Rule>, filepath: &str) -> AlthreadResult<Node<Self>> {
         let pos = Pos {
             line: pair.line_col().0,
             col: pair.line_col().1,
             start: pair.as_span().start(),
             end: pair.as_span().end(),
+            file_path: filepath.to_string(),
         };
         match pair.as_rule() {
             Rule::expression => {
-                let expr = Self::build(pair.into_inner())?;
+                let expr = Self::build(pair.into_inner(), filepath)?;
                 Ok(Node { pos, value: expr })
             }
             Rule::tuple_expression => {
                 let mut values = Vec::new();
                 for pair in pair.into_inner() {
-                    values.push(Node::build(pair)?);
+                    values.push(Node::build(pair, filepath)?);
                 }
                 Ok(Node {
-                    pos,
+                    pos: pos.clone(),
                     value: Expression::Tuple(Node {
                         pos,
                         value: TupleExpression { values },
                     }),
                 })
             }
-            _ => Err(no_rule!(pair, "Expression::build_top_level")),
+            _ => Err(no_rule!(pair, "Expression::build_top_level", filepath)),
         }
     }
 }
@@ -384,7 +390,7 @@ impl InstructionBuilder for Node<Expression> {
                 });
             }
             instructions.push(Instruction {
-                pos: Some(self.pos),
+                pos: Some(self.pos.clone()),
                 control: InstructionType::GlobalReads {
                     only_const: vars.iter().all(|v| state.global_table()[v].mutable == false),
                     variables: vars.into_iter().collect(),
@@ -397,14 +403,14 @@ impl InstructionBuilder for Node<Expression> {
         let result_type = local_expr.datatype(state).map_err(|err| {
             AlthreadError::new(
                 ErrorType::ExpressionError,
-                Some(self.pos),
+                Some(self.pos.clone()),
                 format!("Type of expression is not well-defined: {}", err),
             )
         })?;
 
         if !local_expr.contains_fn_call() {
             instructions.push(Instruction {
-                pos: Some(self.pos),
+                pos: Some(self.pos.clone()),
                 control: InstructionType::Expression(local_expr),
             });
         } else {
@@ -596,7 +602,7 @@ impl InstructionBuilder for Node<Expression> {
                      // It's a direct function call statement, FnCall instruction handles the stack
                 } else if let Expression::Tuple(_) = self.value {
                     instructions.push(Instruction {
-                        pos: Some(self.pos),
+                        pos: Some(self.pos.clone()),
                         control: InstructionType::MakeTupleAndCleanup {
                             elements: if let LocalExpressionNode::Tuple(t) = final_expr { t.values } else { vec![] },
                             unstack_len: fn_call_count,
@@ -605,7 +611,7 @@ impl InstructionBuilder for Node<Expression> {
                 }
                 else {
                     instructions.push(Instruction {
-                        pos: Some(self.pos),
+                        pos: Some(self.pos.clone()),
                         control: InstructionType::ExpressionAndCleanup {
                             expression: final_expr,
                             unstack_len: fn_call_count,
@@ -614,7 +620,7 @@ impl InstructionBuilder for Node<Expression> {
                 }
             } else {
                  instructions.push(Instruction {
-                    pos: Some(self.pos),
+                    pos: Some(self.pos.clone()),
                     control: InstructionType::Expression(final_expr),
                 });
             }
@@ -690,6 +696,7 @@ mod tests {
                 col: 0,
                 start: 0,
                 end: 0,
+                file_path: "test".to_string(),
             },
             value: Literal::Int(42),
         };
@@ -699,6 +706,7 @@ mod tests {
                 col: 0,
                 start: 0,
                 end: 0,
+                file_path: "test".to_string(),
             },
             value: PrimaryExpression::Literal(litteral_node),
         };
@@ -714,6 +722,7 @@ mod tests {
                 col: 0,
                 start: 0,
                 end: 0,
+                file_path: "test".to_string(),
             },
             value: Literal::Int(42),
         };
@@ -723,6 +732,7 @@ mod tests {
                 col: 0,
                 start: 0,
                 end: 0,
+                file_path: "test".to_string(),
             },
             value: PrimaryExpression::Literal(litteral_node),
         };
@@ -735,6 +745,7 @@ mod tests {
                 col: 0,
                 start: 0,
                 end: 0,
+                file_path: "test".to_string(),
             },
             value: BinaryExpression {
                 left: Box::new(Node {
@@ -743,6 +754,7 @@ mod tests {
                         col: 0,
                         start: 0,
                         end: 0,
+                        file_path: "test".to_string(),
                     },
                     value: litteral_expr.clone(),
                 }),
@@ -752,6 +764,7 @@ mod tests {
                         col: 0,
                         start: 0,
                         end: 0,
+                        file_path: "test".to_string(),
                     },
                     value: litteral_expr.clone(),
                 }),
@@ -761,6 +774,7 @@ mod tests {
                         col: 0,
                         start: 0,
                         end: 0,
+                        file_path: "test".to_string(),
                     },
                     value: BinaryOperator::Add,
                 },

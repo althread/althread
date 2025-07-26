@@ -28,21 +28,21 @@ pub struct Declaration {
 }
 
 impl NodeBuilder for Declaration {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
-        let keyword = Node::build(pairs.next().unwrap())?;
-        let identifier = Node::build(pairs.next().unwrap())?;
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
+        let keyword = Node::build(pairs.next().unwrap(), filepath)?;
+        let identifier = Node::build(pairs.next().unwrap(), filepath)?;
         let mut datatype = None;
         let mut value = None;
 
         for pair in pairs {
             match pair.as_rule() {
                 Rule::datatype => {
-                    datatype = Some(Node::build(pair)?);
+                    datatype = Some(Node::build(pair, filepath)?);
                 }
                 Rule::side_effect_expression => {
-                    value = Some(Node::build(pair)?);
+                    value = Some(Node::build(pair, filepath)?);
                 }
-                _ => return Err(no_rule!(pair, "declaration")),
+                _ => return Err(no_rule!(pair, "declaration", filepath)),
             }
         }
 
@@ -73,7 +73,7 @@ impl InstructionBuilder for Declaration {
         if self.identifier.value.parts.len() > 1 {
             return Err(AlthreadError::new(
                 ErrorType::VariableError,
-                Some(self.identifier.pos),
+                Some(self.identifier.pos.clone()),
                 format!("Cannot declare qualified variable '{}'. Use simple identifiers for declarations.", full_var_name),
             ));
         }
@@ -87,7 +87,7 @@ impl InstructionBuilder for Declaration {
         {
             return Err(AlthreadError::new(
                 ErrorType::VariableError,
-                Some(self.identifier.pos),
+                Some(self.identifier.pos.clone()),
                 format!("Variable {} already declared", full_var_name),
             ));
         }
@@ -102,7 +102,7 @@ impl InstructionBuilder for Declaration {
             if !state.is_shared {
                 return Err(AlthreadError::new(
                     ErrorType::VariableError,
-                    Some(self.identifier.pos),
+                    Some(self.identifier.pos.clone()),
                     format!("Variable {} starts with a capital letter, which is reserved for shared variables", var_name)
                 ));
             }
@@ -110,7 +110,7 @@ impl InstructionBuilder for Declaration {
             if state.is_shared && !state.in_function {
                 return Err(AlthreadError::new(
                     ErrorType::VariableError,
-                    Some(self.identifier.pos),
+                    Some(self.identifier.pos.clone()),
                     format!("Variable {} does not start with a capital letter, which is mandatory for shared variables", var_name)
                 ));
             }
@@ -135,7 +135,7 @@ impl InstructionBuilder for Declaration {
                 if datatype != computed_datatype {
                     return Err(AlthreadError::new(
                         ErrorType::TypeError,
-                        Some(self.datatype.as_ref().unwrap().pos),
+                        Some(self.datatype.as_ref().unwrap().pos.clone()),
                         format!(
                             "Declared type and assignment do not match (found :{} = {})",
                             datatype, computed_datatype
@@ -147,19 +147,19 @@ impl InstructionBuilder for Declaration {
 
             builder.instructions.push(Instruction {
                 control: InstructionType::Declaration { unstack_len },
-                pos: Some(self.keyword.pos),
+                pos: Some(self.keyword.pos.clone()),
             });
         } else {
             if datatype.is_none() {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(self.identifier.pos),
+                    Some(self.identifier.pos.clone()),
                     "Declaration must have a datatype or a value".to_string(),
                 ));
             }
             builder.instructions.push(Instruction {
                 control: InstructionType::Push(datatype.as_ref().unwrap().default()),
-                pos: Some(self.keyword.pos),
+                pos: Some(self.keyword.pos.clone()),
             });
         }
 
@@ -170,7 +170,7 @@ impl InstructionBuilder for Declaration {
             name: var_name.clone(), // Use the simple variable name, not the full qualified name
             datatype,
             depth: state.current_stack_depth,
-            declare_pos: Some(self.identifier.pos),
+            declare_pos: Some(self.identifier.pos.clone()),
         });
 
         Ok(builder)

@@ -1,16 +1,23 @@
 use std::{collections::HashMap, path::{Path, PathBuf}};
 use super::filesystem::FileSystem;
 
-use crate::{ast::{self, import_block::{ImportBlock, ImportItem, ImportPath}}, error::{AlthreadError, AlthreadResult, ErrorType}, parser};
+use crate::{ast::{import_block::{ImportBlock, ImportItem, ImportPath}, Ast}, error::{AlthreadError, AlthreadResult, ErrorType}, parser};
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ResolvedModule {
+    pub resolved_path: ResolvedPath,
+    pub module_ast: Ast
+}
+
+#[derive(Debug)]
+pub struct ResolvedPath {
     pub name: String,
     pub path: PathBuf,
     pub alias: Option<String>,
     pub module_type: ModuleType,
 }
+
 
 #[derive(Debug, Clone)]
 pub enum ModuleType {
@@ -71,46 +78,44 @@ impl <F: FileSystem + Clone> ModuleResolver<F> {
         None
     }
 
-    pub fn resolve_imports(&mut self, import_block: &ImportBlock, import_stack: &mut Vec<PathBuf>) -> AlthreadResult<()> {
+    pub fn resolve_imports(&mut self, import_block: &ImportBlock, import_stack: &mut Vec<PathBuf>, input_map: &mut HashMap<String, String>) -> AlthreadResult<()> {
         for import_item in &import_block.imports {
             let resolved = self.resolve_import_item(&import_item.value)?;
             let access_name = resolved.alias.clone().unwrap_or(resolved.name.clone());
+
+            let module_content = self.filesystem.read_file(&resolved.path)?;
+            input_map.insert(resolved.path.to_string_lossy().to_string(), module_content.clone());
 
             // circular import check
             if import_stack.contains(&resolved.path) {
                 return Err(AlthreadError::new(
                     ErrorType::ImportNameConflict,
-                    Some(import_item.pos),
-                    format!("Circular import detected for '{}'. Import stack: {:?}", 
-                            resolved.name, import_stack)
-                ))
+                    Some(import_item.pos.clone()),
+                    format!(
+                        "Circular import detected for '{}'. Import stack:\n{}", 
+                        resolved.name, 
+                        format_import_stack(import_stack)
+                    ),
+                ));
             }
 
             import_stack.push(resolved.path.clone());
-            let module_content = self.filesystem.read_file(&resolved.path)?;
-            let pairs = parser::parse(&module_content).map_err(|e| {
-                AlthreadError::new(
-                    ErrorType::SyntaxError,
-                    None,
-                    format!("Failed to parse module '{}': {:?}", resolved.name, e)
-                )
-            })?;
-            let module_ast = ast::Ast::build(pairs).map_err(|e| {
-                AlthreadError::new(
-                    ErrorType::SyntaxError,
-                    None,
-                    format!("Failed to build AST for module '{}': {:?}", resolved.name, e)
-                )
-            })?;
+            let pairs = parser::parse(&module_content, &resolved.path.to_string_lossy().to_string())?;
+            let module_ast = Ast::build(pairs, &resolved.path.to_string_lossy().to_string())?;
+
             if let Some(import_block) = &module_ast.import_block {
                 let mut nested_resolver = Self::new(&resolved.path, self.filesystem.clone());
-                nested_resolver.resolve_imports(&import_block.value, import_stack)?;
+                nested_resolver.resolve_imports(&import_block.value, import_stack, input_map)?;
             }
 
+            let resolved_module = ResolvedModule {
+                resolved_path: resolved,
+                module_ast,
+            };
 
             self.resolved_modules.insert(
                 access_name,
-                resolved
+                resolved_module
             );
             import_stack.pop();
         }
@@ -118,16 +123,17 @@ impl <F: FileSystem + Clone> ModuleResolver<F> {
         Ok(())
     }
 
-    fn resolve_import_item(&self, item: &ImportItem) -> AlthreadResult<ResolvedModule> {
+    fn resolve_import_item(&self, item: &ImportItem) -> AlthreadResult<ResolvedPath> {
         let (module_path, module_type) = self.resolve_path(&item.path)?;
         let name = item.path.last_segment().to_string();
         let alias = item.alias.as_ref().map(|alias| alias.value.value.clone());
 
-        Ok(ResolvedModule {
+        Ok(ResolvedPath {
             name, 
             path: module_path,
             alias,
             module_type,
+
         })
     }
 
@@ -441,4 +447,15 @@ impl <F: FileSystem + Clone> ModuleResolver<F> {
         
         None
     }
+}
+
+pub fn format_import_stack(import_stack: &Vec<PathBuf>) -> String {
+    if import_stack.is_empty() {
+        return "(empty)".to_string();
+    }
+    import_stack
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect::<Vec<_>>()
+        .join("\n→ ")
 }

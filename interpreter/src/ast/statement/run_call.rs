@@ -35,9 +35,9 @@ impl RunCall {
 }
 
 impl NodeBuilder for RunCall {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
-        let identifier = Node::build(pairs.next().unwrap())?;
-        let args: Node<Expression> = Expression::build_top_level(pairs.next().unwrap())?;
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
+        let identifier = Node::build(pairs.next().unwrap(), filepath)?;
+        let args: Node<Expression> = Expression::build_top_level(pairs.next().unwrap(), filepath)?;
 
         if !args.value.is_tuple() {
             return Err(AlthreadError::new(
@@ -57,7 +57,11 @@ impl InstructionBuilder for Node<RunCall> {
 
         // push the args to the stack
         state.current_stack_depth += 1;
-        builder.extend(self.value.args.compile(state)?);
+        builder.extend(self.value.args.compile(state).map_err(|mut e| {
+            e.push_stack(self.pos.clone());
+            e
+        })?);
+
         let call_datatype = state
             .program_stack
             .last()
@@ -74,7 +78,7 @@ impl InstructionBuilder for Node<RunCall> {
             if prog_args.len() != call_datatype.len() {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(self.pos),
+                    Some(self.pos.clone()),
                     format!(
                         "Expected {} argument(s), got {}",
                         prog_args.len(),
@@ -86,7 +90,7 @@ impl InstructionBuilder for Node<RunCall> {
                 if arg != &call_datatype[i] {
                     return Err(AlthreadError::new(
                         ErrorType::TypeError,
-                        Some(self.pos),
+                        Some(self.pos.clone()),
                         format!(
                             "Expected argument {} to be of type {:?}, got {:?}",
                             i + 1,
@@ -99,7 +103,7 @@ impl InstructionBuilder for Node<RunCall> {
         } else {
             return Err(AlthreadError::new(
                 ErrorType::TypeError,
-                Some(self.pos),
+                Some(self.pos.clone()),
                 format!("Program {} does not exist", full_program_name),
             ));
         }
@@ -110,7 +114,7 @@ impl InstructionBuilder for Node<RunCall> {
             depth: state.current_stack_depth,
             mutable: false,
             datatype: DataType::Process(full_program_name.clone()),
-            declare_pos: Some(self.pos),
+            declare_pos: Some(self.pos.clone()),
         });
 
         builder.instructions.push(Instruction {
@@ -118,7 +122,7 @@ impl InstructionBuilder for Node<RunCall> {
                 name: full_program_name,
                 unstack_len,
             },
-            pos: Some(self.pos),
+            pos: Some(self.pos.clone()),
         });
 
         Ok(builder)
