@@ -27,7 +27,7 @@ pub struct Ast {
     pub process_blocks: HashMap<String, (Node<ArgsList>, Node<Block>)>,
     pub condition_blocks: HashMap<ConditionKeyword, Node<ConditionBlock>>,
     pub global_block: Option<Node<Block>>,
-    pub function_blocks: HashMap<String, (Node<ArgsList>, DataType, Node<Block>)>,
+    pub function_blocks: HashMap<String, (Node<ArgsList>, DataType, Node<Block>, bool)>,
     pub import_block: Option<Node<ImportBlock>>
 }
 
@@ -98,6 +98,14 @@ impl Ast {
                 Rule::function_block => {
                     let mut pairs  = pair.into_inner();
 
+                    // check for directive
+                    let mut is_private = false;
+                    let first = pairs.peek().unwrap();
+                    if first.as_rule() == Rule::private_directive {
+                        is_private = true;
+                        pairs.next(); // consume the private directive
+                    }
+
                     let function_identifier = pairs.next().unwrap().as_str().to_string();
 
                     let args_list: Node<token::args_list::ArgsList> = Node::build(pairs.next().unwrap(), filepath)?;
@@ -118,7 +126,7 @@ impl Ast {
                     ast.function_blocks
                         .insert(
                         function_identifier,
-                        (args_list, return_datatype, function_block)
+                        (args_list, return_datatype, function_block, is_private)
                     );
 
                 }
@@ -165,7 +173,8 @@ impl AstDisplay for Ast {
             writeln!(f, "")?;
         }
 
-        for (function_name, (_args, return_type, function_node)) in &self.function_blocks {
+        for (function_name, (_args, return_type, function_node, is_private)) in &self.function_blocks {
+            writeln!(f, "{}", if *is_private { "@private " } else { "" })?;
             writeln!(f, "{}{} -> {}", prefix, function_name, return_type)?;
             function_node.ast_fmt(f, &prefix.add_branch())?;
             writeln!(f, "")?;

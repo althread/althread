@@ -23,6 +23,7 @@ pub struct FunctionDefinition {
     pub return_type: DataType,
     pub body: Vec<Instruction>,
     pub pos: Pos,
+    pub is_private: bool,
 }
 
 #[derive(Debug)]

@@ -93,6 +93,7 @@ pub enum ErrorType {
     ImportMainConflict,
     VariableAlreadyDefined,
     ProgramAlreadyDefined,
+    PrivateFunctionCall
 }
 
 impl fmt::Display for ErrorType {
@@ -125,6 +126,7 @@ impl fmt::Display for ErrorType {
             ErrorType::ImportMainConflict => write!(f, "Import main conflict"),
             ErrorType::VariableAlreadyDefined => write!(f, "Variable already defined"),
             ErrorType::ProgramAlreadyDefined => write!(f, "Program already defined"),
+            ErrorType::PrivateFunctionCall => write!(f, "Private function call"),
         }
     }
 }

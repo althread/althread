@@ -5,6 +5,13 @@ use crate::{ast::{node::{InstructionBuilder}, statement::Statement, token::{cond
 
 impl Ast {
 
+    fn module_prefix(name: &str) -> &str {
+        match name.rfind('.') {
+            Some(idx) => &name[..idx],
+            None => "",
+        }
+    }
+
     fn ast_empty(&self) -> bool {
         if  self.process_blocks.is_empty() &&
             self.global_block.as_ref().map_or(true, |block| block.value.children.is_empty()) &&
@@ -90,9 +97,8 @@ impl Ast {
             }
 
             for (name, resolved_module) in module_resolver.resolved_modules {
-                let next_module_prefix: String = self.build_qualified_name(&name, module_prefix);
 
-                let compiled_module = resolved_module.module_ast.compile_with_context(&resolved_module.resolved_path.path, filesystem.clone(), context.clone(), &next_module_prefix, next_level_module_names.clone(), input_map).map_err(|mut e| {
+                let compiled_module = resolved_module.module_ast.compile_with_context(&resolved_module.resolved_path.path, filesystem.clone(), context.clone(), &name, next_level_module_names.clone(), input_map).map_err(|mut e| {
                     e.push_stack(import_block.pos.clone());
                     e
                 })?;
@@ -189,7 +195,7 @@ impl Ast {
         // this creates FunctionDefinitions without the compiled body, so that
         // compilation can be done no matter the order of the functions
         // or if they are recursive
-        for (func_name, (args_list, return_datatype, func_block)) in &self.function_blocks {
+        for (func_name, (args_list, return_datatype, func_block, is_private)) in &self.function_blocks {
             // check if the function is already defined
             if state.user_functions().contains_key(func_name) {
                 return Err(AlthreadError::new(
@@ -212,6 +218,7 @@ impl Ast {
                 return_type: return_datatype.clone(),
                 body: Vec::new(),
                 pos: func_block.pos.clone(),
+                is_private: *is_private,
             };
 
             if let Err(e) = Ast::check_function_returns(&func_name,func_block, return_datatype){
@@ -374,7 +381,7 @@ impl Ast {
         }
 
         // now compile the function bodies
-        for (func_name, (args_list, return_datatype, func_block)) in &self.function_blocks {
+        for (func_name, (args_list, return_datatype, func_block, is_private)) in &self.function_blocks {
 
             state.in_function = true;
             state.current_stack_depth += 1;
@@ -437,6 +444,7 @@ impl Ast {
                     return_type: return_datatype.clone(),
                     body: compiled_body.instructions,
                     pos: func_block.pos.clone(),
+                    is_private: *is_private,
                 },
             );
 
@@ -449,19 +457,26 @@ impl Ast {
 
         // if not the main file then we need to qualify everything
         if !module_prefix.is_empty() {
-            for (func_name, (_, return_datatype, func_block )) in &self.function_blocks {
-                
+
+            let user_functions: Vec<(String, FunctionDefinition)> = state
+                .user_functions()
+                .iter()
+                .map(|(name, def)| (name.clone(), def.clone()))
+                .collect();
+
+            for (func_name, func_def) in user_functions {
+
                 if same_level_module_names.iter().any(|mod_name| func_name.starts_with(&format!("{}.", mod_name))) {
                         log::debug!("[{}] Skipping function '{}' as it is already qualified", module_prefix, func_name);
                         continue;
                 }
 
-                let old_func_def_opt = state.user_functions_mut().remove(func_name);
+                let old_func_def_opt = state.user_functions_mut().remove(&func_name);
 
                 if old_func_def_opt.is_none() {
                     return Err(AlthreadError::new(
                         ErrorType::FunctionNotFound,
-                        Some(func_block.pos.clone()),
+                        Some(func_def.pos.clone()),
                         format!("Function '{}' not found", func_name),
                     ));
                 }
@@ -478,7 +493,8 @@ impl Ast {
                         format!("Function '{}' from module '{}' is already defined", func_name, module_prefix),
                     ));
                 }
-
+                println!("[{}] Replacing function calls in body of '{}'", module_prefix, func_name);
+                println!("[{}] Old function definition: {:?}", module_prefix, old_func_def);
                 // replace all function calls in the body with the new function name
                 for instruction in &mut old_func_def.body {
                     match &mut instruction.control {
@@ -487,6 +503,27 @@ impl Ast {
                             // do not qualify standard library function calls
                             continue;
                         }
+
+                        // we don't care about the datatype, we just want to avoid qualifying list methods
+                        if state.stdlib().is_interface(&DataType::List(Box::new(DataType::Integer)), call_name) {
+                            // do not qualify standard library function calls
+                            continue;
+                        }
+
+                        let caller_mod = Ast::module_prefix(&new_func_name);
+                        let callee_mod = Ast::module_prefix(call_name);
+                        println!("[{}] Caller module: '{}', Callee module: '{}'", module_prefix, caller_mod, callee_mod);
+                        if let Some(c_def) = state.user_functions().get(call_name) {
+                            if c_def.is_private && caller_mod != callee_mod {
+                                return Err(AlthreadError::new(
+                                    ErrorType::PrivateFunctionCall,
+                                    instruction.pos.clone(),
+                                    format!("Cannot call private function '{}' from module '{}'", call_name, callee_mod),
+                                ));
+                            }
+                        }
+
+
                         *call_name = format!("{}.{}", module_prefix, call_name);
                     }
                     InstructionType::GlobalReads { variables, ..} => {
@@ -507,10 +544,13 @@ impl Ast {
                 let func_def = FunctionDefinition {
                     name: new_func_name.clone(),
                     arguments: old_func_def.arguments.clone(),
-                    return_type: return_datatype.clone(),
+                    return_type: old_func_def.return_type.clone(),
                     body: old_func_def.body.clone(),
-                    pos: func_block.pos.clone(),
+                    pos: old_func_def.pos.clone(),
+                    is_private: old_func_def.is_private,
                 };
+
+                println!("[{}] New function definition: {:?}", module_prefix, func_def);
 
                 state.user_functions_mut().insert(new_func_name.clone(), func_def);
             }
@@ -648,6 +688,7 @@ impl Ast {
             .iter()
             .map(|(prog_name, prog_code)| (prog_name.clone(), prog_code.clone()))
             .collect();
+            println!("[{}] Programs to update: {:?}", module_prefix, programs_to_update.iter().map(|(name, _)| name).collect::<Vec<_>>());
 
             for (prog_name, mut prog_code) in programs_to_update {
                 if prog_name.contains(module_prefix) {
@@ -686,13 +727,33 @@ impl Ast {
                 );
 
                 prog_code.name = qualified_prog_name.clone();
+                println!("[{}] Qualifying program '{}'", module_prefix, prog_code.name);
                 for instruction in &mut prog_code.instructions {
                     match &mut instruction.control {
                         InstructionType::FnCall { name: call_name, ..} => {
-                                if call_name == "print" || call_name == "assert" {
-                                    // do not qualify standard library function calls
-                                    continue;
+                            if call_name == "print" || call_name == "assert" {
+                                // do not qualify standard library function calls
+                                continue;
+                            }
+
+                            // we don't care about the datatype, we just want to avoid qualifying list methods
+                            if state.stdlib().is_interface(&DataType::List(Box::new(DataType::Integer)), call_name) {
+                                // do not qualify standard library function calls
+                                continue;
+                            }
+                            let caller_mod = Ast::module_prefix(&prog_code.name);
+                            let callee_mod = Ast::module_prefix(call_name);
+
+                            println!("[{}] caller_mod: {}, callee_mod: {}", module_prefix, caller_mod, callee_mod);
+                            if let Some(c_def) = state.user_functions().get(call_name) {
+                                if c_def.is_private && caller_mod != callee_mod {
+                                    return Err(AlthreadError::new(
+                                        ErrorType::PrivateFunctionCall,
+                                        instruction.pos.clone(),
+                                        format!("Cannot call private function '{}' from module '{}'", call_name, callee_mod),
+                                    ));
                                 }
+                            }
                             *call_name = format!("{}.{}", module_prefix, call_name);
                         }
                         InstructionType::GlobalReads { variables, ..} => {

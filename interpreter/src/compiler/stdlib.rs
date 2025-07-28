@@ -39,6 +39,14 @@ impl Stdlib {
         self.interfaces.borrow().get(dtype).cloned()
     }
 
+    pub fn is_interface(&self, dtype: &DataType, name: &str) -> bool {
+        if let Some(interfaces) = self.get_interfaces(dtype) {
+            interfaces.iter().any(|i| i.name == name)
+        } else {
+            false
+        }
+    }
+
     pub fn interfaces(&self, dtype: &DataType) -> Vec<Interface> {
         if let Some(interfaces) = self.get_interfaces(dtype) {
             return interfaces;

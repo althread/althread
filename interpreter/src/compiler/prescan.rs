@@ -143,7 +143,7 @@ fn extract_channel_declarations_from_statement(
             )?;
         }
         // Scan all function blocks
-        for (function_name, (_, _, function_block)) in &self.function_blocks {
+        for (function_name, (_, _, function_block, _)) in &self.function_blocks {
             self.scan_block_for_run_statements(
                 &function_block.value,
                 var_to_program,
@@ -338,7 +338,7 @@ fn extract_channel_declarations_from_statement(
     }
 
     // Scan ALL function blocks for channel declarations
-    for (function_name, (_, _, function_block)) in &self.function_blocks {
+    for (function_name, (_, _, function_block, _)) in &self.function_blocks {
         log::debug!("Scanning function '{}' for channel declarations", function_name);
         self.extract_channel_declarations_from_block(
             &function_block.value, 

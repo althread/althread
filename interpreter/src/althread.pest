@@ -3,6 +3,9 @@
 
 program = _{ SOI ~ blocks* ~ EOI }
 
+/// Directives
+private_directive = { "@" ~ PRIVATE_KW }
+
 /// ## Program Structure
 /// The main building blocks of an Althread program are:
 /// - **Main Block**: The entry point of the program.
@@ -14,7 +17,7 @@ blocks = _{ import_block | main_block | global_block | condition_block | program
 
 global_block    = { GLOBAL_KW ~ code_block }
 condition_block = { condition_keywords ~ expression_block }
-program_block   = { PROGRAM_KW ~ identifier ~ arg_list ~ code_block }
+program_block   = { private_directive? ~ PROGRAM_KW ~ identifier ~ arg_list ~ code_block }
 main_block      = { MAIN_KW ~ code_block }
 
 code_block           = { "{" ~ statement* ~ "}" }
@@ -60,7 +63,7 @@ send_statement         = _{ send_call ~ ";" }
 channel_declaration_statement = _{ channel_declaration ~ ";" }
 
 // Functions
-function_block = { FN_KW ~ identifier ~ arg_list ~ RARROW ~ datatype ~ code_block }
+function_block = { private_directive? ~ FN_KW ~ identifier ~ arg_list ~ RARROW ~ datatype ~ code_block }
 return_statement = { RETURN_KW ~ expression? ~ ";" }
 
 
@@ -177,6 +180,7 @@ KEYWORDS = _{
   | RETURN_KW
   | IMPORT_KW
   | AS_KW
+  | PRIVATE_KW
   | BOOL
   | INT_TYPE
   | FLOAT_TYPE
@@ -216,6 +220,8 @@ FALSE_KW = _{ "false" }
 NULL_KW  = _{ "null" }
 
 ATOMIC_KW = _{ "atomic" }
+
+PRIVATE_KW = _{ "private" }
 
 // Functions
 FN_KW = _{ "fn" }
