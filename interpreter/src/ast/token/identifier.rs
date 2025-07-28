@@ -1,11 +1,6 @@
 use pest::iterators::Pairs;
 
-use crate::{
-    ast::node::{NodeBuilder},
-    error::{AlthreadResult},
-    no_rule,
-    parser::Rule,
-};
+use crate::{ast::node::NodeBuilder, error::AlthreadResult, no_rule, parser::Rule};
 
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub struct Identifier {

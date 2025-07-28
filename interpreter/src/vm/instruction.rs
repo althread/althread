@@ -18,7 +18,7 @@ pub enum InstructionType {
     },
     MakeTupleAndCleanup {
         elements: Vec<LocalExpressionNode>,
-        unstack_len: usize
+        unstack_len: usize,
     },
     Push(Literal),
     Unstack {
@@ -68,7 +68,7 @@ pub enum InstructionType {
     },
     ChannelPeek(String),
     ChannelPop(String),
-    
+
     WaitStart {
         dependencies: WaitDependency,
         start_atomic: bool,
@@ -99,10 +99,20 @@ impl fmt::Display for InstructionType {
         match self {
             Self::Empty => write!(f, "EMPTY")?,
             Self::Expression(a) => write!(f, "eval {}", a)?,
-            Self::ExpressionAndCleanup { expression, unstack_len } => {
-                write!(f, "eval {} and cleanup (unstack {})", expression, unstack_len)
+            Self::ExpressionAndCleanup {
+                expression,
+                unstack_len,
+            } => {
+                write!(
+                    f,
+                    "eval {} and cleanup (unstack {})",
+                    expression, unstack_len
+                )
             }?,
-            Self::MakeTupleAndCleanup { elements, unstack_len } => write!(
+            Self::MakeTupleAndCleanup {
+                elements,
+                unstack_len,
+            } => write!(
                 f,
                 "make tuple ({}) and cleanup (unstack {})",
                 elements.len(),
@@ -127,14 +137,16 @@ impl fmt::Display for InstructionType {
             } => write!(f, "jumpIf {} (unstack {})", jump_false, unstack_len)?,
             Self::Jump(a) => write!(f, "jump {}", a)?,
             Self::Unstack { unstack_len } => write!(f, "unstack {}", unstack_len)?,
-            Self::Destruct => write!(f, "destruct tuple", )?,
+            Self::Destruct => write!(f, "destruct tuple",)?,
             Self::RunCall { name, .. } => write!(f, "run {}()", name)?,
             Self::Break { unstack_len, .. } => write!(f, "break (unstack {})", unstack_len)?,
             Self::EndProgram => write!(f, "end program")?,
             Self::FnCall {
                 name, unstack_len, ..
             } => write!(f, "{}()  (unstack {})", name, unstack_len)?,
-            Self::Return {has_value} => write!(f, "return {:?}", if *has_value { "value" } else { "void" })?,
+            Self::Return { has_value } => {
+                write!(f, "return {:?}", if *has_value { "value" } else { "void" })?
+            }
             Self::Exit => write!(f, "exit")?, //TODO check again ???
             Self::Declaration { unstack_len } => {
                 write!(f, "declare var with value (unstack {})", unstack_len)?

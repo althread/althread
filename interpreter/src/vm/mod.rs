@@ -1,6 +1,9 @@
 use core::panic;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fmt, hash::{Hash, Hasher}, rc::Rc
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    fmt,
+    hash::{Hash, Hasher},
+    rc::Rc,
 };
 
 use channels::{Channels, ChannelsState, ReceiverInfo};
@@ -58,7 +61,6 @@ pub struct GlobalActions {
     pub end: bool,
 }
 
-
 #[derive(Debug, Clone)]
 pub struct VM<'a> {
     pub globals: GlobalMemory,
@@ -68,7 +70,7 @@ pub struct VM<'a> {
     pub user_funcs: &'a HashMap<String, FunctionDefinition>,
     pub executable_programs: BTreeSet<usize>, // needs to be sorted to have a deterministic behavior
     pub always_conditions: &'a Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
-    pub eventually_conditions : &'a Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>, // adding a eventually conditions structure
+    pub eventually_conditions: &'a Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>, // adding a eventually conditions structure
 
     /// The programs that are waiting for a condition to be true
     /// The condition depends on the global variables that are in the HashSet
@@ -97,7 +99,14 @@ impl<'a> VM<'a> {
         }
     }
 
-    fn run_program(&mut self, program_name: &str, pid: usize, args: Literal, caller_program_id: Option<usize>, call_site_pos: Option<Pos>) {
+    fn run_program(
+        &mut self,
+        program_name: &str,
+        pid: usize,
+        args: Literal,
+        caller_program_id: Option<usize>,
+        call_site_pos: Option<Pos>,
+    ) {
         assert!(
             self.running_programs.get(pid).is_none(),
             "program with id {} already exists",
@@ -112,7 +121,7 @@ impl<'a> VM<'a> {
             args,
             self.stdlib.clone(),
         );
-        
+
         // Set the caller context
         new_program.caller_program_id = caller_program_id;
         new_program.call_site_pos = call_site_pos;
@@ -163,8 +172,7 @@ impl<'a> VM<'a> {
             .get_mut(*program)
             .expect("program is executable but not found in running programs");
         let program_id = program.id;
-        
-       
+
         let mut exec_info = ExecutionStepInfo {
             prog_name: program.name.clone(),
             prog_id: program_id,
@@ -254,7 +262,13 @@ impl<'a> VM<'a> {
                     need_to_check_invariants = true;
                 }
                 GlobalAction::StartProgram(name, pid, args, caller_program_id, call_site_pos) => {
-                    self.run_program(name, *pid, args.clone(), *caller_program_id, call_site_pos.clone());
+                    self.run_program(
+                        name,
+                        *pid,
+                        args.clone(),
+                        *caller_program_id,
+                        call_site_pos.clone(),
+                    );
                 }
                 GlobalAction::EndProgram => {
                     panic!("EndProgram action should not be in the list of actions");
@@ -269,7 +283,7 @@ impl<'a> VM<'a> {
             self.waiting_programs.remove(&remove_id);
         }
 
-        // TODO this method should be modified so eventually violation generate an error, 
+        // TODO this method should be modified so eventually violation generate an error,
         // for example by having a encounterd eventually counter, if the final VM's counter is == 0 no block validated eventually and path is wrong
         if need_to_check_invariants {
             exec_info.invariant_error = self.check_invariants();
@@ -434,7 +448,13 @@ impl<'a> VM<'a> {
         Vec::<Literal>::new()
     }
 
-    pub fn current_state(&self) -> (&GlobalMemory, &ChannelsState, Vec<(&Vec<Literal>, usize, usize)>) {
+    pub fn current_state(
+        &self,
+    ) -> (
+        &GlobalMemory,
+        &ChannelsState,
+        Vec<(&Vec<Literal>, usize, usize)>,
+    ) {
         let local_states = self
             .running_programs
             .iter()
@@ -501,7 +521,7 @@ impl<'a> VM<'a> {
                 Ok(cond) => {
                     if !cond.is_true() {
                         return Ok(0); // eventually not checking on a specific state isn't an error
-                    } 
+                    }
                 }
                 Err(e) => {
                     return Err(AlthreadError::new(
@@ -564,10 +584,10 @@ impl std::cmp::Eq for VM<'_> {}
 struct SerializableRunningProgramStateForJs<'b> {
     pid: usize,
     name: &'b str,
-    memory: &'b Vec<Literal>,    // The program's stack
+    memory: &'b Vec<Literal>,   // The program's stack
     instruction_pointer: usize, // The program's PC
     clock: usize,               // Program's logical clock (if you have one)
-    // Add any other per-program fields you want to expose
+                                // Add any other per-program fields you want to expose
 }
 
 impl<'a> Serialize for VM<'a> {
@@ -575,7 +595,6 @@ impl<'a> Serialize for VM<'a> {
     where
         S: Serializer,
     {
-
         let (globals, channels, _locals) = self.current_state();
 
         // Number of fields in the serialized VM struct (globals, channels)
@@ -594,7 +613,7 @@ impl<'a> Serialize for VM<'a> {
                     name: &prog_state.name,
                     memory,
                     instruction_pointer,
-                    clock
+                    clock,
                 }
             })
             .collect();

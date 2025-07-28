@@ -1,6 +1,6 @@
-use std::{collections::{HashSet}, fmt};
+use std::{collections::HashSet, fmt};
 
-use pest::{iterators::Pairs};
+use pest::iterators::Pairs;
 
 use crate::{
     ast::{
@@ -43,7 +43,7 @@ impl ImportPath {
 impl NodeBuilder for ImportBlock {
     fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let mut imports = Vec::new();
-        
+
         for pair in pairs {
             match pair.as_rule() {
                 Rule::import_list => {
@@ -77,10 +77,11 @@ impl ImportBlock {
                 return Err(AlthreadError::new(
                     ErrorType::ImportNameConflict,
                     Some(import.pos.clone()),
-                    format!("'{}' is already imported. Use 'as' to provide a unique alias.",
-                    import_name,
+                    format!(
+                        "'{}' is already imported. Use 'as' to provide a unique alias.",
+                        import_name,
                     ),
-                ))
+                ));
             }
 
             used_names.insert(import_name);
@@ -94,7 +95,7 @@ impl NodeBuilder for ImportItem {
         let mut pairs = pairs;
         let path_pair = pairs.next().unwrap();
         let path = ImportPath::build(path_pair.into_inner(), filepath)?;
-        
+
         let alias = if let Some(next_pair) = pairs.next() {
             match next_pair.as_rule() {
                 Rule::AS_KW => {
@@ -102,7 +103,11 @@ impl NodeBuilder for ImportItem {
                     if let Some(identifier_pair) = pairs.next() {
                         Some(Node::build(identifier_pair, filepath)?)
                     } else {
-                        return Err(no_rule!(next_pair, "ImportItem - missing identifier after 'as'", filepath));
+                        return Err(no_rule!(
+                            next_pair,
+                            "ImportItem - missing identifier after 'as'",
+                            filepath
+                        ));
                     }
                 }
                 Rule::identifier => {
@@ -122,7 +127,7 @@ impl NodeBuilder for ImportItem {
 impl ImportPath {
     fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let mut segments = Vec::new();
-        
+
         for pair in pairs {
             match pair.as_rule() {
                 Rule::import_segment => {
@@ -153,7 +158,7 @@ impl InstructionBuilder for ImportBlock {
 impl AstDisplay for ImportBlock {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
         writeln!(f, "{prefix}import_block")?;
-        
+
         let mut import_count = self.imports.len();
         for import in &self.imports {
             import_count -= 1;
@@ -163,7 +168,7 @@ impl AstDisplay for ImportBlock {
                 import.ast_fmt(f, &prefix.add_branch())?;
             }
         }
-        
+
         Ok(())
     }
 }
@@ -171,7 +176,12 @@ impl AstDisplay for ImportBlock {
 impl AstDisplay for ImportItem {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
         if let Some(alias) = &self.alias {
-            writeln!(f, "{prefix}import {} as {}", self.path.to_string(), alias.value.value)?;
+            writeln!(
+                f,
+                "{prefix}import {} as {}",
+                self.path.to_string(),
+                alias.value.value
+            )?;
         } else {
             writeln!(f, "{prefix}import {}", self.path.to_string())?;
         }

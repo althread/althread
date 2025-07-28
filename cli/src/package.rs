@@ -96,7 +96,7 @@ impl DependencyInfo {
         // - "github.com/username/repo" (remote, latest)
         // - "github.com/username/repo@v1.0.0" (remote, specific version)
         // - "github.com/username/repo@main" (remote, specific branch)
-        
+
         if dep_string.contains("://") {
             return Err("URL schemes not supported, use domain-based imports".to_string());
         }
@@ -110,7 +110,7 @@ impl DependencyInfo {
         };
 
         let is_local = !url.contains('.') || url.starts_with("./") || url.starts_with("../");
-        
+
         // For remote dependencies, the name should be the last part of the URL
         // For local dependencies, the name should be the last part of the path
         let name = if is_local {

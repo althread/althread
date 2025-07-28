@@ -1,10 +1,10 @@
+use crate::git::GitRepository;
+use crate::package::{DependencyInfo, DependencySpec, Package};
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
 use std::env::temp_dir;
 use std::fs::remove_dir_all;
+use std::path::{Path, PathBuf};
 use std::str::from_utf8;
-use crate::package::{Package, DependencyInfo, DependencySpec};
-use crate::git::GitRepository;
 
 /// Version resolution functionality
 pub struct VersionResolver;
@@ -16,18 +16,17 @@ impl VersionResolver {
         let temp_dir = Self::create_temp_dir(url, "latest")?;
 
         let git_repo = GitRepository::new(&git_url, temp_dir.clone());
-        
+
         // Clone the repository
-        git_repo.clone_if_needed()
+        git_repo
+            .clone_if_needed()
             .map_err(|e| format!("Failed to clone repository {}: {}", url, e))?;
 
         // Get the latest version
-        let latest_version = Self::get_latest_git_tag(&temp_dir)
-            .unwrap_or_else(|_| {
-                // If no tags, use the current commit hash
-                Self::get_current_commit_hash(&temp_dir)
-                    .unwrap_or_else(|_| "main".to_string())
-            });
+        let latest_version = Self::get_latest_git_tag(&temp_dir).unwrap_or_else(|_| {
+            // If no tags, use the current commit hash
+            Self::get_current_commit_hash(&temp_dir).unwrap_or_else(|_| "main".to_string())
+        });
 
         // Clean up temp directory
         let _ = remove_dir_all(&temp_dir);
@@ -74,7 +73,8 @@ impl VersionResolver {
                 }
             }
             true
-        }).map_err(|e| format!("Failed to iterate tags: {}", e))?;
+        })
+        .map_err(|e| format!("Failed to iterate tags: {}", e))?;
 
         if tags.is_empty() {
             return Err("No tags found in repository".to_string());
@@ -105,21 +105,25 @@ impl VersionResolver {
     pub fn get_current_commit_hash(repo_path: &Path) -> Result<String, String> {
         let repo = git2::Repository::open(repo_path)
             .map_err(|e| format!("Failed to open repository: {}", e))?;
-        
-        let head = repo.head()
+
+        let head = repo
+            .head()
             .map_err(|e| format!("Failed to get HEAD: {}", e))?;
-        
-        let commit = head.peel_to_commit()
+
+        let commit = head
+            .peel_to_commit()
             .map_err(|e| format!("Failed to get commit: {}", e))?;
-        
+
         Ok(commit.id().to_string()[..8].to_string())
     }
 
     /// Create a temporary directory for git operations (private helper)
     fn create_temp_dir(url: &str, operation: &str) -> Result<PathBuf, String> {
-        let temp_dir = temp_dir().join(format!("althread_{}_{}",
+        let temp_dir = temp_dir().join(format!(
+            "althread_{}_{}",
             operation,
-            url.replace("/", "_").replace(".", "_")));
+            url.replace("/", "_").replace(".", "_")
+        ));
 
         // Clean up any existing temp directory
         if temp_dir.exists() {
@@ -147,7 +151,7 @@ impl ResolutionContext {
     pub fn new() -> Self {
         let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
         let cache_dir = PathBuf::from(home_dir).join(".althread/cache");
-        
+
         Self {
             cache_dir,
             resolved: HashMap::new(),
@@ -175,7 +179,11 @@ impl DependencyResolver {
     }
 
     /// Resolve and install all dependencies for a package in a single pass
-    pub fn resolve_and_install_dependencies(&mut self, package: &Package, force: bool) -> Result<(Vec<ResolvedDependency>, Vec<(String, String, String)>), String> {
+    pub fn resolve_and_install_dependencies(
+        &mut self,
+        package: &Package,
+        force: bool,
+    ) -> Result<(Vec<ResolvedDependency>, Vec<(String, String, String)>), String> {
         // Create cache directory
         if let Err(e) = std::fs::create_dir_all(&self.context.cache_dir) {
             return Err(format!("Error creating cache directory: {}", e));
@@ -183,13 +191,13 @@ impl DependencyResolver {
 
         let mut to_resolve = Vec::new();
         let mut version_changes = Vec::new();
-        
+
         // Collect all dependencies (both runtime and dev)
         for (name, spec) in &package.dependencies {
             let dep_info = self.spec_to_dependency_info(name, spec)?;
             to_resolve.push(dep_info);
         }
-        
+
         for (name, spec) in &package.dev_dependencies {
             let dep_info = self.spec_to_dependency_info(name, spec)?;
             to_resolve.push(dep_info);
@@ -197,16 +205,25 @@ impl DependencyResolver {
 
         // Resolve and install each dependency recursively
         for dep in to_resolve {
-            if let Some(actual_version) = self.resolve_and_install_dependency_recursive(&dep, force)? {
+            if let Some(actual_version) =
+                self.resolve_and_install_dependency_recursive(&dep, force)?
+            {
                 version_changes.push((dep.url.clone(), dep.version.clone(), actual_version));
             }
         }
 
         // Return the resolved dependencies and version changes
-        Ok((self.context.resolved.values().cloned().collect(), version_changes))
+        Ok((
+            self.context.resolved.values().cloned().collect(),
+            version_changes,
+        ))
     }
 
-    fn spec_to_dependency_info(&self, name: &str, spec: &DependencySpec) -> Result<DependencyInfo, String> {
+    fn spec_to_dependency_info(
+        &self,
+        name: &str,
+        spec: &DependencySpec,
+    ) -> Result<DependencyInfo, String> {
         let version = match spec {
             DependencySpec::Simple(v) => v.clone(),
             DependencySpec::Detailed { version, .. } => version.clone(),
@@ -224,7 +241,11 @@ impl DependencyResolver {
         })
     }
 
-    fn resolve_and_install_dependency_recursive(&mut self, dep: &DependencyInfo, force: bool) -> Result<Option<String>, String> {
+    fn resolve_and_install_dependency_recursive(
+        &mut self,
+        dep: &DependencyInfo,
+        force: bool,
+    ) -> Result<Option<String>, String> {
         // Check if already resolved
         if self.context.resolved.contains_key(&dep.name) {
             return Ok(None);
@@ -238,8 +259,9 @@ impl DependencyResolver {
         self.context.visiting.insert(dep.name.clone());
 
         // Resolve and install the dependency
-        let (resolved_version, version_changed) = self.install_dependency(&dep.url, &dep.version, force)?;
-        
+        let (resolved_version, version_changed) =
+            self.install_dependency(&dep.url, &dep.version, force)?;
+
         // Create cache path
         let cache_path = self.context.cache_path_for(&dep.url, &resolved_version);
 
@@ -277,36 +299,46 @@ impl DependencyResolver {
         }
     }
 
-    fn install_dependency(&self, url: &str, version: &str, force: bool) -> Result<(String, bool), String> {
-        println!("Fetching {}@{}...", url.split('/').last().unwrap_or(url), version);
-        
+    fn install_dependency(
+        &self,
+        url: &str,
+        version: &str,
+        force: bool,
+    ) -> Result<(String, bool), String> {
+        println!(
+            "Fetching {}@{}...",
+            url.split('/').last().unwrap_or(url),
+            version
+        );
+
         // Resolve version
         let resolved_version = if version == "*" || version == "latest" {
             "main".to_string()
         } else {
             version.to_string()
         };
-        
+
         // Create cache path structure
         let sanitized_url = url.replace("://", "/");
         let repo_cache_dir = self.context.cache_dir.join(&sanitized_url);
-        
+
         // Convert import URL to git URL
         let git_url = GitRepository::url_from_import_path(url);
         println!("  Cloning from: {}", git_url);
-        
+
         // Create temporary clone location
         let temp_clone_dir = repo_cache_dir.join("_temp_clone");
         if temp_clone_dir.exists() {
             std::fs::remove_dir_all(&temp_clone_dir)
                 .map_err(|e| format!("Failed to clean temp directory: {}", e))?;
         }
-        
+
         // Clone the repository
         let git_repo = GitRepository::new(&git_url, temp_clone_dir.clone());
-        git_repo.clone_if_needed()
+        git_repo
+            .clone_if_needed()
             .map_err(|e| format!("Failed to clone repository: {}", e))?;
-        
+
         // Try to checkout the specific version, get the actual version used
         let actual_version = match git_repo.checkout_version(&resolved_version) {
             Ok(()) => {
@@ -314,7 +346,7 @@ impl DependencyResolver {
                 // This ensures we have the full commit hash, even if input was a partial hash
                 let current_commit = VersionResolver::get_current_commit_hash(&temp_clone_dir)
                     .unwrap_or_else(|_| resolved_version.clone());
-                
+
                 // For commit hashes, we want the full commit hash
                 if is_commit_hash(&resolved_version) {
                     current_commit
@@ -325,19 +357,23 @@ impl DependencyResolver {
                 }
             }
             Err(e) => {
-                println!("  Version '{}' not found ({}), falling back to 'main'", resolved_version, e);
-                git_repo.checkout_version("main")
+                println!(
+                    "  Version '{}' not found ({}), falling back to 'main'",
+                    resolved_version, e
+                );
+                git_repo
+                    .checkout_version("main")
                     .map_err(|e| format!("Failed to checkout main branch: {}", e))?;
-                
+
                 // Get the actual commit hash of main
                 VersionResolver::get_current_commit_hash(&temp_clone_dir)
                     .unwrap_or_else(|_| "main".to_string())
             }
         };
-        
+
         // Now create the cache directory with the actual version
         let actual_version_cache_dir = repo_cache_dir.join(&actual_version);
-        
+
         // Check if already cached with the actual version
         if actual_version_cache_dir.exists() && !force {
             if actual_version_cache_dir.join("alt.toml").exists() {
@@ -347,53 +383,55 @@ impl DependencyResolver {
                 return Ok((actual_version.clone(), version != &actual_version));
             }
         }
-        
+
         // Verify this is a valid Althread package
         let alt_toml_path = temp_clone_dir.join("alt.toml");
         if !alt_toml_path.exists() {
             return Err(format!(
-                "Invalid Althread package: {} does not contain alt.toml", 
+                "Invalid Althread package: {} does not contain alt.toml",
                 url
             ));
         }
-        
+
         // Create the actual version cache directory
         std::fs::create_dir_all(&actual_version_cache_dir)
             .map_err(|e| format!("Failed to create cache directory: {}", e))?;
-        
+
         // Copy the entire repository contents to the versioned cache
         self.copy_dir_all(&temp_clone_dir, &actual_version_cache_dir)?;
-        
+
         // Clean up temporary clone
         std::fs::remove_dir_all(&temp_clone_dir)
             .map_err(|e| format!("Failed to clean temp directory: {}", e))?;
-        
+
         println!("  ✓ Cached to {}", actual_version_cache_dir.display());
-        
+
         // Validate the package structure
         self.validate_package_structure(&actual_version_cache_dir)?;
-        
+
         Ok((actual_version.clone(), version != &actual_version))
     }
 
     fn copy_dir_all(&self, src: &Path, dst: &Path) -> Result<(), String> {
-        std::fs::create_dir_all(dst)
-            .map_err(|e| format!("Failed to create directory: {}", e))?;
-        
-        for entry in std::fs::read_dir(src)
-            .map_err(|e| format!("Failed to read directory: {}", e))? {
+        std::fs::create_dir_all(dst).map_err(|e| format!("Failed to create directory: {}", e))?;
+
+        for entry in
+            std::fs::read_dir(src).map_err(|e| format!("Failed to read directory: {}", e))?
+        {
             let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
-            let file_type = entry.file_type().map_err(|e| format!("Failed to get file type: {}", e))?;
+            let file_type = entry
+                .file_type()
+                .map_err(|e| format!("Failed to get file type: {}", e))?;
             let src_path = entry.path();
             let dst_path = dst.join(entry.file_name());
-            
+
             // Skip .git directory and other hidden files
             if let Some(name) = entry.file_name().to_str() {
                 if name.starts_with('.') {
                     continue;
                 }
             }
-            
+
             if file_type.is_dir() {
                 self.copy_dir_all(&src_path, &dst_path)?;
             } else {
@@ -401,50 +439,53 @@ impl DependencyResolver {
                     .map_err(|e| format!("Failed to copy file: {}", e))?;
             }
         }
-        
+
         Ok(())
     }
 
     fn validate_package_structure(&self, package_dir: &Path) -> Result<(), String> {
         let alt_toml_path = package_dir.join("alt.toml");
-        
+
         // Parse and validate alt.toml
         let package = Package::load_from_path(&alt_toml_path)
             .map_err(|e| format!("Failed to load alt.toml: {}", e))?;
-        
-        println!("  Package: {} v{}", package.package.name, package.package.version);
+
+        println!(
+            "  Package: {} v{}",
+            package.package.name, package.package.version
+        );
         if let Some(desc) = &package.package.description {
             println!("  Description: {}", desc);
         }
-        
+
         // Look for .alt files
         let alt_files = self.find_alt_files(package_dir)?;
         if alt_files.is_empty() {
             println!("  Warning: No .alt files found in package");
         } else {
             println!("  Found {} .alt files", alt_files.len());
-            for file in alt_files.iter().take(5) { // Show first 5
-                let relative_path = file.strip_prefix(package_dir)
-                    .unwrap_or(file)
-                    .display();
+            for file in alt_files.iter().take(5) {
+                // Show first 5
+                let relative_path = file.strip_prefix(package_dir).unwrap_or(file).display();
                 println!("    - {}", relative_path);
             }
             if alt_files.len() > 5 {
                 println!("    ... and {} more", alt_files.len() - 5);
             }
         }
-        
+
         Ok(())
     }
 
     fn find_alt_files(&self, dir: &Path) -> Result<Vec<PathBuf>, String> {
         let mut alt_files = Vec::new();
-        
-        for entry in std::fs::read_dir(dir)
-            .map_err(|e| format!("Failed to read directory: {}", e))? {
+
+        for entry in
+            std::fs::read_dir(dir).map_err(|e| format!("Failed to read directory: {}", e))?
+        {
             let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
             let path = entry.path();
-            
+
             if path.is_dir() {
                 alt_files.extend(self.find_alt_files(&path)?);
             } else if let Some(extension) = path.extension() {
@@ -453,10 +494,9 @@ impl DependencyResolver {
                 }
             }
         }
-        
+
         Ok(alt_files)
     }
-
 }
 
 /// Helper function to check if a string looks like a commit hash
@@ -474,13 +514,15 @@ mod tests {
     fn test_cache_path_generation() {
         let context = ResolutionContext::new();
         let path = context.cache_path_for("github.com/user/repo", "v1.0.0");
-        assert!(path.to_string_lossy().contains("github.com/user/repo/v1.0.0"));
+        assert!(path
+            .to_string_lossy()
+            .contains("github.com/user/repo/v1.0.0"));
     }
 
     #[test]
     fn test_dependency_resolution() {
         let resolver = DependencyResolver::new();
-        
+
         // This test would need a mock package with dependencies
         // For now, just test that the resolver can be created
         assert!(resolver.context.resolved.is_empty());
@@ -492,7 +534,7 @@ mod tests {
         assert!(VersionResolver::parse_version_tag("v1.0.0").is_ok());
         assert!(VersionResolver::parse_version_tag("V2.1.0").is_ok());
         assert!(VersionResolver::parse_version_tag("1.0.0").is_ok());
-        
+
         // Test invalid version tags
         assert!(VersionResolver::parse_version_tag("invalid").is_err());
         assert!(VersionResolver::parse_version_tag("v1.0").is_err());
@@ -516,7 +558,7 @@ mod tests {
         // Test valid commit hashes
         assert!(is_commit_hash("a1b2c3d4")); // 8 character short hash
         assert!(is_commit_hash("1234567890abcdef1234567890abcdef12345678")); // 40 character full hash
-        
+
         // Test invalid commit hashes
         assert!(!is_commit_hash("v1.0.0")); // version tag
         assert!(!is_commit_hash("main")); // branch name

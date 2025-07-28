@@ -31,7 +31,10 @@ impl NodeBuilder for FnReturn {
         };
 
         // the caller takes care of setting the proper position
-        Ok(Self { value, pos: Pos::default() })
+        Ok(Self {
+            value,
+            pos: Pos::default(),
+        })
     }
 }
 
@@ -52,14 +55,11 @@ impl InstructionBuilder for FnReturn {
             builder.extend(value_node.compile(state)?);
             has_value = true;
         }
-                
+
         let ret_instr = Instruction {
-            control: InstructionType::Return {
-                has_value
-            },
+            control: InstructionType::Return { has_value },
             pos: Some(self.pos.clone()),
         };
-
 
         builder.return_indexes.push(builder.instructions.len());
 
@@ -79,7 +79,7 @@ impl AstDisplay for FnReturn {
             writeln!(f, "{}value:", &prefix_val)?;
             value_node.ast_fmt(f, &prefix_val.add_leaf())?;
         } else {
-             writeln!(f, "{}(no value)", prefix.switch())?;
+            writeln!(f, "{}(no value)", prefix.switch())?;
         }
 
         Ok(())

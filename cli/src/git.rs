@@ -27,7 +27,10 @@ impl GitRepository {
     /// Clone the repository if it doesn't exist
     pub fn clone_if_needed(&self) -> Result<(), String> {
         if self.local_path.exists() {
-            println!("  Repository already exists at {}", self.local_path.display());
+            println!(
+                "  Repository already exists at {}",
+                self.local_path.display()
+            );
             return Ok(());
         }
 
@@ -38,7 +41,7 @@ impl GitRepository {
         }
 
         println!("  Cloning {} to {}", self.url, self.local_path.display());
-        
+
         // Use git2 for cloning
         match git2::Repository::clone(&self.url, &self.local_path) {
             Ok(_) => {
@@ -92,7 +95,11 @@ impl GitRepository {
         self.try_checkout_strategies(&repo, &resolved_version)
     }
 
-    fn try_checkout_strategies(&self, repo: &git2::Repository, version: &str) -> Result<(), String> {
+    fn try_checkout_strategies(
+        &self,
+        repo: &git2::Repository,
+        version: &str,
+    ) -> Result<(), String> {
         // Strategy 1: Try as a branch
         if let Ok(branch) = repo.find_branch(version, git2::BranchType::Local) {
             println!("  Found local branch: {}", version);
@@ -119,7 +126,7 @@ impl GitRepository {
                 return self.checkout_commit(repo, &commit);
             }
         }
-        
+
         // Strategy 4.1: Try as a partial commit hash (expand it)
         if version.len() >= 4 && version.chars().all(|c| c.is_ascii_hexdigit()) {
             if let Ok(oid) = self.find_commit_by_prefix(repo, version) {
@@ -133,23 +140,37 @@ impl GitRepository {
         // Strategy 5: Fallback to main/master
         for default_branch in &["main", "master"] {
             if let Ok(branch) = repo.find_branch(default_branch, git2::BranchType::Local) {
-                println!("  Version '{}' not found, falling back to '{}'", version, default_branch);
+                println!(
+                    "  Version '{}' not found, falling back to '{}'",
+                    version, default_branch
+                );
                 return self.checkout_branch(repo, &branch);
             }
-            
+
             let remote_branch_name = format!("origin/{}", default_branch);
             if let Ok(branch) = repo.find_branch(&remote_branch_name, git2::BranchType::Remote) {
-                println!("  Version '{}' not found, falling back to '{}'", version, default_branch);
+                println!(
+                    "  Version '{}' not found, falling back to '{}'",
+                    version, default_branch
+                );
                 return self.checkout_remote_branch(repo, &branch, default_branch);
             }
         }
 
-        Err(format!("Could not find version '{}' in repository", version))
+        Err(format!(
+            "Could not find version '{}' in repository",
+            version
+        ))
     }
 
-    fn checkout_branch(&self, repo: &git2::Repository, branch: &git2::Branch) -> Result<(), String> {
+    fn checkout_branch(
+        &self,
+        repo: &git2::Repository,
+        branch: &git2::Branch,
+    ) -> Result<(), String> {
         let branch_ref = branch.get();
-        let commit = branch_ref.peel_to_commit()
+        let commit = branch_ref
+            .peel_to_commit()
             .map_err(|e| format!("Failed to get commit from branch: {}", e))?;
 
         repo.checkout_tree(commit.as_object(), None)
@@ -158,17 +179,27 @@ impl GitRepository {
         repo.set_head(branch_ref.name().unwrap())
             .map_err(|e| format!("Failed to set HEAD: {}", e))?;
 
-        println!("  ✓ Checked out branch: {}", branch.name().unwrap().unwrap_or("unknown"));
+        println!(
+            "  ✓ Checked out branch: {}",
+            branch.name().unwrap().unwrap_or("unknown")
+        );
         Ok(())
     }
 
-    fn checkout_remote_branch(&self, repo: &git2::Repository, branch: &git2::Branch, local_name: &str) -> Result<(), String> {
+    fn checkout_remote_branch(
+        &self,
+        repo: &git2::Repository,
+        branch: &git2::Branch,
+        local_name: &str,
+    ) -> Result<(), String> {
         let branch_ref = branch.get();
-        let commit = branch_ref.peel_to_commit()
+        let commit = branch_ref
+            .peel_to_commit()
             .map_err(|e| format!("Failed to get commit from remote branch: {}", e))?;
 
         // Create a local branch tracking the remote
-        let _local_branch = repo.branch(local_name, &commit, false)
+        let _local_branch = repo
+            .branch(local_name, &commit, false)
             .map_err(|e| format!("Failed to create local branch: {}", e))?;
 
         repo.checkout_tree(commit.as_object(), None)
@@ -181,8 +212,13 @@ impl GitRepository {
         Ok(())
     }
 
-    fn checkout_tag(&self, repo: &git2::Repository, tag_ref: &git2::Reference) -> Result<(), String> {
-        let commit = tag_ref.peel_to_commit()
+    fn checkout_tag(
+        &self,
+        repo: &git2::Repository,
+        tag_ref: &git2::Reference,
+    ) -> Result<(), String> {
+        let commit = tag_ref
+            .peel_to_commit()
             .map_err(|e| format!("Failed to get commit from tag: {}", e))?;
 
         repo.checkout_tree(commit.as_object(), None)
@@ -191,11 +227,18 @@ impl GitRepository {
         repo.set_head_detached(commit.id())
             .map_err(|e| format!("Failed to set HEAD to tag: {}", e))?;
 
-        println!("  ✓ Checked out tag: {}", tag_ref.shorthand().unwrap_or("unknown"));
+        println!(
+            "  ✓ Checked out tag: {}",
+            tag_ref.shorthand().unwrap_or("unknown")
+        );
         Ok(())
     }
 
-    fn checkout_commit(&self, repo: &git2::Repository, commit: &git2::Commit) -> Result<(), String> {
+    fn checkout_commit(
+        &self,
+        repo: &git2::Repository,
+        commit: &git2::Commit,
+    ) -> Result<(), String> {
         repo.checkout_tree(commit.as_object(), None)
             .map_err(|e| format!("Failed to checkout tree: {}", e))?;
 
@@ -206,35 +249,43 @@ impl GitRepository {
         Ok(())
     }
 
-    fn find_commit_by_prefix(&self, repo: &git2::Repository, prefix: &str) -> Result<git2::Oid, String> {
+    fn find_commit_by_prefix(
+        &self,
+        repo: &git2::Repository,
+        prefix: &str,
+    ) -> Result<git2::Oid, String> {
         // First try to parse as a full OID
         if let Ok(oid) = git2::Oid::from_str(prefix) {
             if repo.find_commit(oid).is_ok() {
                 return Ok(oid);
             }
         }
-        
+
         // If that fails, try to find by prefix
-        let mut walker = repo.revwalk()
+        let mut walker = repo
+            .revwalk()
             .map_err(|e| format!("Failed to create revwalk: {}", e))?;
-        
+
         // Walk all branches and tags
-        walker.push_glob("refs/heads/*")
+        walker
+            .push_glob("refs/heads/*")
             .map_err(|e| format!("Failed to push heads glob: {}", e))?;
-        walker.push_glob("refs/tags/*")
+        walker
+            .push_glob("refs/tags/*")
             .map_err(|e| format!("Failed to push tags glob: {}", e))?;
-        walker.push_glob("refs/remotes/*")
+        walker
+            .push_glob("refs/remotes/*")
             .map_err(|e| format!("Failed to push remotes glob: {}", e))?;
-        
+
         for oid_result in walker {
             let oid = oid_result.map_err(|e| format!("Failed to get oid: {}", e))?;
             let oid_str = oid.to_string();
-            
+
             if oid_str.starts_with(prefix) {
                 return Ok(oid);
             }
         }
-        
+
         Err(format!("No commit found with prefix '{}'", prefix))
     }
 }
@@ -249,7 +300,7 @@ mod tests {
             GitRepository::url_from_import_path("github.com/user/repo"),
             "https://github.com/user/repo.git"
         );
-        
+
         assert_eq!(
             GitRepository::url_from_import_path("https://github.com/user/repo.git"),
             "https://github.com/user/repo.git"

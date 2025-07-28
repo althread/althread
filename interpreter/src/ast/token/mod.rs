@@ -5,6 +5,6 @@ pub mod condition_keyword;
 pub mod datatype;
 pub mod declaration_keyword;
 pub mod identifier;
-pub mod object_identifier;
 pub mod literal;
+pub mod object_identifier;
 pub mod unary_operator;

@@ -7,7 +7,8 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
         token::{
-            datatype::DataType, declaration_keyword::DeclarationKeyword, object_identifier::ObjectIdentifier,
+            datatype::DataType, declaration_keyword::DeclarationKeyword,
+            object_identifier::ObjectIdentifier,
         },
     },
     compiler::{CompilerState, InstructionBuilderOk, Variable},
@@ -60,7 +61,8 @@ impl InstructionBuilder for Declaration {
         let mut builder = InstructionBuilderOk::new();
         let mut datatype = None;
 
-        let full_var_name = self.identifier
+        let full_var_name = self
+            .identifier
             .value
             .parts
             .iter()
@@ -81,10 +83,7 @@ impl InstructionBuilder for Declaration {
         // Get the simple variable name (first and only part)
         let var_name = &self.identifier.value.parts[0].value.value;
 
-        if state
-            .global_table()
-            .contains_key(&full_var_name)
-        {
+        if state.global_table().contains_key(&full_var_name) {
             return Err(AlthreadError::new(
                 ErrorType::VariableError,
                 Some(self.identifier.pos.clone()),
@@ -93,12 +92,7 @@ impl InstructionBuilder for Declaration {
         }
 
         // Check if the variable starts with a capital letter (reserved for shared variables)
-        if var_name
-            .chars()
-            .next()
-            .unwrap()
-            .is_uppercase()
-        {
+        if var_name.chars().next().unwrap().is_uppercase() {
             if !state.is_shared {
                 return Err(AlthreadError::new(
                     ErrorType::VariableError,
@@ -185,7 +179,8 @@ impl AstDisplay for Declaration {
         writeln!(f, "{prefix}keyword: {}", self.keyword)?;
 
         // Get the display name for the identifier
-        let identifier_name = self.identifier
+        let identifier_name = self
+            .identifier
             .value
             .parts
             .iter()

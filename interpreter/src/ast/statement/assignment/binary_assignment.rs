@@ -7,7 +7,10 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
         statement::expression::SideEffectExpression,
-        token::{binary_assignment_operator::BinaryAssignmentOperator, object_identifier::ObjectIdentifier},
+        token::{
+            binary_assignment_operator::BinaryAssignmentOperator,
+            object_identifier::ObjectIdentifier,
+        },
     },
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
@@ -41,7 +44,9 @@ impl InstructionBuilder for Node<BinaryAssignment> {
         let mut builder = InstructionBuilderOk::new();
 
         // Get the full variable name (e.g., "fibo.N")
-        let full_var_name = self.value.identifier
+        let full_var_name = self
+            .value
+            .identifier
             .value
             .parts
             .iter()
@@ -102,10 +107,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
                 return Err(AlthreadError::new(
                     ErrorType::VariableError,
                     Some(self.pos.clone()),
-                    format!(
-                        "Variable '{}' is undefined",
-                        full_var_name
-                    ),
+                    format!("Variable '{}' is undefined", full_var_name),
                 ));
             }
             let l_var = l_var.unwrap();
@@ -149,7 +151,8 @@ impl AstDisplay for BinaryAssignment {
         writeln!(f, "{}binary_assign", prefix)?;
 
         let prefix = prefix.add_branch();
-        let full_name = self.identifier
+        let full_name = self
+            .identifier
             .value
             .parts
             .iter()

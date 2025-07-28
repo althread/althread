@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::{ast::{node::NodeBuilder}, error::AlthreadResult, no_rule, parser::Rule};
+use crate::{ast::node::NodeBuilder, error::AlthreadResult, no_rule, parser::Rule};
 use ordered_float::OrderedFloat;
 use pest::iterators::Pairs;
 use serde::{Deserialize, Serialize};

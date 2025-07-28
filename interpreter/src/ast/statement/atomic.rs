@@ -23,7 +23,8 @@ pub struct Atomic {
 
 impl NodeBuilder for Atomic {
     fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let mut statement: Box<Node<Statement>> = Box::new(Node::build(pairs.next().unwrap(), filepath)?);
+        let mut statement: Box<Node<Statement>> =
+            Box::new(Node::build(pairs.next().unwrap(), filepath)?);
         let mut delegated = false;
 
         let mut first_statement = statement.as_mut();

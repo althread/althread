@@ -4,7 +4,6 @@ use crate::ast::token::literal::Literal;
 
 pub type ChannelsState = BTreeMap<(usize, String), Vec<Literal>>;
 
-
 #[derive(Debug, PartialEq, Clone)]
 pub struct Channels {
     /// states represent the input buffer of the channel
@@ -43,7 +42,12 @@ impl Channels {
         clock: usize,
     ) -> Option<ReceiverInfo> {
         let msg = Literal::Tuple(vec![
-            Literal::Tuple(vec![Literal::Int(program_id as i64), Literal::Int(clock as i64)]), value]);
+            Literal::Tuple(vec![
+                Literal::Int(program_id as i64),
+                Literal::Int(clock as i64),
+            ]),
+            value,
+        ]);
         //^ added sender id to let the receiver know who sent a msg
         if let Some((to_program_id, to_channel_name)) =
             self.connections.get(&(program_id, channel_name.clone()))
@@ -52,7 +56,7 @@ impl Channels {
             if let Some(state) = self
                 .states
                 .get_mut(&(*to_program_id, to_channel_name.clone()))
-            {              
+            {
                 state.push(msg);
             } else {
                 self.states
@@ -113,11 +117,13 @@ impl Channels {
     pub fn peek(&self, program_id: usize, channel_name: String) -> Option<&Literal> {
         match self.states.get(&(program_id, channel_name)) {
             Some(state) => {
-                if let Some(Literal::Tuple(value)) = state.get(0){
+                if let Some(Literal::Tuple(value)) = state.get(0) {
                     value.get(1) //extracts message content from entire message
-                                        // ((prog_id, clock), content)
-                } else { None } //should be impossible to have something other than
-                                //a tuple or nothing
+                                 // ((prog_id, clock), content)
+                } else {
+                    None
+                } //should be impossible to have something other than
+                  //a tuple or nothing
             }
             None => None,
         }
@@ -130,10 +136,12 @@ impl Channels {
         match self.states.get_mut(&(program_id, channel_name)) {
             Some(state) => {
                 let value = state.remove(0);
-                if let Literal::Tuple(msg) = value{
-                    msg.get(1).cloned() 
-                } else { None } //should be impossible to have something other than
-                                //a tuple or nothing
+                if let Literal::Tuple(msg) = value {
+                    msg.get(1).cloned()
+                } else {
+                    None
+                } //should be impossible to have something other than
+                  //a tuple or nothing
             }
             None => None,
         }
@@ -143,8 +151,8 @@ impl Channels {
     pub fn state(&self) -> &ChannelsState {
         &self.states
     }
-    
-    pub fn get_states(&self) -> ChannelsState{
+
+    pub fn get_states(&self) -> ChannelsState {
         return self.states.clone();
     }
 }

@@ -11,7 +11,10 @@ use crate::{
         display::AstDisplay,
         node::Node,
         statement::waiting_case::WaitDependency,
-        token::{datatype::DataType, identifier::Identifier, literal::Literal, object_identifier::ObjectIdentifier},
+        token::{
+            datatype::DataType, identifier::Identifier, literal::Literal,
+            object_identifier::ObjectIdentifier,
+        },
     },
     compiler::{CompilerState, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
@@ -51,7 +54,14 @@ impl PrimaryExpression {
         match self {
             Self::Literal(_) => (),
             Self::Identifier(node) => {
-                dependencies.variables.insert(node.value.parts.iter().map(|p| p.value.value.as_str()).collect::<Vec<_>>().join("."));
+                dependencies.variables.insert(
+                    node.value
+                        .parts
+                        .iter()
+                        .map(|p| p.value.value.as_str())
+                        .collect::<Vec<_>>()
+                        .join("."),
+                );
             }
             Self::Expression(node) => node.value.add_dependencies(dependencies),
         }
@@ -183,7 +193,17 @@ impl AstDisplay for PrimaryExpression {
         match self {
             Self::Literal(node) => node.ast_fmt(f, prefix),
             PrimaryExpression::Identifier(value) => {
-                return writeln!(f, "{prefix}ident: {}", value.value.parts.iter().map(|p| p.value.value.as_str()).collect::<Vec<_>>().join("."));
+                return writeln!(
+                    f,
+                    "{prefix}ident: {}",
+                    value
+                        .value
+                        .parts
+                        .iter()
+                        .map(|p| p.value.value.as_str())
+                        .collect::<Vec<_>>()
+                        .join(".")
+                );
             }
             PrimaryExpression::Expression(node) => node.ast_fmt(f, prefix),
         }

@@ -1,16 +1,22 @@
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
 use althread::{
     ast::{
         statement::expression::{
-            binary_expression::LocalBinaryExpressionNode, primary_expression::{LocalLiteralNode, LocalPrimaryExpressionNode, LocalVarNode}, tuple_expression::LocalTupleExpressionNode, LocalExpressionNode
+            binary_expression::LocalBinaryExpressionNode,
+            primary_expression::{LocalLiteralNode, LocalPrimaryExpressionNode, LocalVarNode},
+            tuple_expression::LocalTupleExpressionNode,
+            LocalExpressionNode,
         },
         token::{
             binary_assignment_operator::BinaryAssignmentOperator, binary_operator::BinaryOperator,
             literal::Literal,
         },
         Ast,
-    }, error::Pos, module_resolver::StandardFileSystem, vm::instruction::{Instruction, InstructionType}
+    },
+    error::Pos,
+    module_resolver::StandardFileSystem,
+    vm::instruction::{Instruction, InstructionType},
 };
 
 // A simple test to verify that the compiler can compile a simple program
@@ -158,7 +164,9 @@ main {
 
     let ast = Ast::build(pairs, "").unwrap();
 
-    let compiled_project = ast.compile(std::path::Path::new(""), StandardFileSystem, &mut input_map).unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
 
     assert_eq!(
         compiled_project
@@ -192,7 +200,7 @@ main {
                 col: 13,
                 start: 20,
                 end: 21,
-            file_path: "".to_string(),
+                file_path: "".to_string(),
             }),
             control: InstructionType::Expression(LocalExpressionNode::Primary(
                 LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
@@ -251,7 +259,7 @@ main {
                 col: 13,
                 start: 53,
                 end: 58,
-                file_path: "".to_string(),  
+                file_path: "".to_string(),
             }),
             control: InstructionType::Expression(LocalExpressionNode::Binary(
                 LocalBinaryExpressionNode {
@@ -355,13 +363,11 @@ main {
             control: InstructionType::Expression(LocalExpressionNode::Tuple(
                 LocalTupleExpressionNode {
                     values: vec![LocalExpressionNode::Primary(
-                        LocalPrimaryExpressionNode::Literal(
-                            LocalLiteralNode {
-                                value: Literal::String("done".to_string())
-                            }
-                        )
+                        LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                            value: Literal::String("done".to_string()),
+                        }),
                     )],
-                }
+                },
             )),
         },
         Instruction {
@@ -413,7 +419,9 @@ main {
 
     let ast = Ast::build(pairs, "").unwrap();
 
-    let compiled_project = ast.compile(std::path::Path::new(""), StandardFileSystem, &mut input_map).unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
 
     assert_eq!(
         compiled_project

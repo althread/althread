@@ -1,6 +1,6 @@
+use pest::Span;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt, rc::Rc};
-use pest::Span;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Pos {
@@ -93,7 +93,7 @@ pub enum ErrorType {
     ImportMainConflict,
     VariableAlreadyDefined,
     ProgramAlreadyDefined,
-    PrivateFunctionCall
+    PrivateFunctionCall,
 }
 
 impl fmt::Display for ErrorType {
@@ -113,12 +113,16 @@ impl fmt::Display for ErrorType {
             ErrorType::UndefinedChannel => write!(f, "Undefined Channel"),
             ErrorType::InvariantError => write!(f, "Invariant Error"),
             ErrorType::NoPathError => write!(f, "No Path Error"),
-            ErrorType::ReturnOutsideFunction => write!(f, "Return statement can only be in a function"),
+            ErrorType::ReturnOutsideFunction => {
+                write!(f, "Return statement can only be in a function")
+            }
             ErrorType::FunctionAlreadyDefined => write!(f, "Function already defined"),
             ErrorType::FunctionArgumentCountError => write!(f, "Function argument count error"),
             ErrorType::FunctionArgumentTypeMismatch => write!(f, "Function argument type mismatch"),
             ErrorType::FunctionNotFound => write!(f, "Function not found"),
-            ErrorType::FunctionMissingReturnStatement => write!(f, "Function missing return statement"),
+            ErrorType::FunctionMissingReturnStatement => {
+                write!(f, "Function missing return statement")
+            }
             ErrorType::FunctionReturnTypeMismatch => write!(f, "Function return type mismatch"),
             ErrorType::AssertionFailed => write!(f, "Assertion failed"),
             ErrorType::ImportNameConflict => write!(f, "Import name conflict"),
@@ -178,7 +182,8 @@ impl AlthreadError {
     fn print_err_line(&self, input_map: &HashMap<String, String>) {
         if let Some(pos) = &self.pos {
             let file_path = &pos.file_path;
-            let input = input_map.get(file_path)
+            let input = input_map
+                .get(file_path)
                 .expect("File path not found in input map");
             let line = match input.lines().nth(pos.line - 1) {
                 Some(line) => line.to_string(),

@@ -29,7 +29,9 @@ impl NodeBuilder for SendStatement {
         let channel = if pair.as_rule() == Rule::object_identifier {
             // Parse the object_identifier and convert it to a string
             let object_id = Node::<ObjectIdentifier>::build(pair, filepath)?;
-            object_id.value.parts
+            object_id
+                .value
+                .parts
                 .iter()
                 .map(|p| p.value.value.as_str())
                 .collect::<Vec<_>>()
@@ -39,7 +41,8 @@ impl NodeBuilder for SendStatement {
             pair.as_str().to_string()
         };
 
-        let values: Node<Expression> = Expression::build_top_level(pairs.next().unwrap(), filepath)?;
+        let values: Node<Expression> =
+            Expression::build_top_level(pairs.next().unwrap(), filepath)?;
 
         if !values.value.is_tuple() {
             return Err(AlthreadError::new(
@@ -80,7 +83,10 @@ impl InstructionBuilder for Node<SendStatement> {
             .clone();
         let unstack_len = state.unstack_current_depth();
 
-        let channel_info = state.channels().get(&(state.current_program_name.clone(), channel_name.clone())).cloned();
+        let channel_info = state
+            .channels()
+            .get(&(state.current_program_name.clone(), channel_name.clone()))
+            .cloned();
 
         if channel_info.is_none() {
             state.undefined_channels_mut().insert(

@@ -1,6 +1,6 @@
-use std::path::{Path, PathBuf};
+use crate::error::{AlthreadError, AlthreadResult, ErrorType, Pos};
 use std::collections::HashMap;
-use crate::error::{AlthreadResult, ErrorType, Pos, AlthreadError};
+use std::path::{Path, PathBuf};
 
 pub trait FileSystem {
     fn is_file(&self, path: &Path) -> bool;
@@ -27,20 +27,22 @@ impl FileSystem for StandardFileSystem {
     }
 
     fn canonicalize(&self, path: &Path) -> AlthreadResult<PathBuf> {
-        std::fs::canonicalize(path)
-            .map_err(|e| crate::error::AlthreadError::new(
+        std::fs::canonicalize(path).map_err(|e| {
+            crate::error::AlthreadError::new(
                 ErrorType::RuntimeError,
                 Some(Pos::default()),
-                format!("Failed to resolve path: {}", e)
-            ))
+                format!("Failed to resolve path: {}", e),
+            )
+        })
     }
     fn read_file(&self, path: &Path) -> AlthreadResult<String> {
-        std::fs::read_to_string(path)
-            .map_err(|e| AlthreadError::new(
+        std::fs::read_to_string(path).map_err(|e| {
+            AlthreadError::new(
                 ErrorType::ModuleNotFound,
                 Some(Pos::default()),
-                format!("Failed to read file: {}", e)
-            ))
+                format!("Failed to read file: {}", e),
+            )
+        })
     }
 }
 
@@ -65,19 +67,19 @@ impl VirtualFileSystem {
 impl FileSystem for VirtualFileSystem {
     fn is_file(&self, path: &Path) -> bool {
         let path_str = path.to_string_lossy().to_string();
-        
+
         // Try the path as-is first
         if self.files.contains_key(&path_str) {
             return true;
         }
-        
+
         // Try without leading "./" if present
         let cleaned_path = if path_str.starts_with("./") {
             &path_str[2..]
         } else {
             &path_str
         };
-        
+
         self.files.contains_key(cleaned_path)
     }
 
@@ -88,58 +90,60 @@ impl FileSystem for VirtualFileSystem {
         } else {
             format!("{}/", path_str)
         };
-        
+
         // Check if any file starts with this path as a directory
-        self.files.keys().any(|file_path| file_path.starts_with(&prefix))
+        self.files
+            .keys()
+            .any(|file_path| file_path.starts_with(&prefix))
     }
 
     fn canonicalize(&self, path: &Path) -> AlthreadResult<PathBuf> {
         let path_str = path.to_string_lossy().to_string();
-        
+
         // Try the path as-is first
         if self.files.contains_key(&path_str) {
             return Ok(path.to_path_buf());
         }
-        
+
         // Try without leading "./" if present
         let cleaned_path = if path_str.starts_with("./") {
             &path_str[2..]
         } else {
             &path_str
         };
-        
+
         if self.files.contains_key(cleaned_path) {
             return Ok(PathBuf::from(cleaned_path));
         }
-        
+
         Err(AlthreadError::new(
             ErrorType::RuntimeError,
             Some(Pos::default()),
-            format!("File not found in virtual filesystem: {}", path_str)
+            format!("File not found in virtual filesystem: {}", path_str),
         ))
     }
 
     fn read_file(&self, path: &Path) -> AlthreadResult<String> {
         let path_str = path.to_string_lossy().to_string();
-        
+
         // Try the path as-is first
         if let Some(content) = self.files.get(&path_str) {
             return Ok(content.clone());
         }
-        
+
         // Try without leading "./" if present
         let cleaned_path = if path_str.starts_with("./") {
             &path_str[2..]
         } else {
             &path_str
         };
-        
-        self.files.get(cleaned_path)
-            .cloned()
-            .ok_or_else(|| AlthreadError::new(
+
+        self.files.get(cleaned_path).cloned().ok_or_else(|| {
+            AlthreadError::new(
                 ErrorType::ModuleNotFound,
                 Some(Pos::default()),
-                format!("File not found in virtual filesystem: {}", path_str)
-            ))
+                format!("File not found in virtual filesystem: {}", path_str),
+            )
+        })
     }
 }

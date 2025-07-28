@@ -55,4 +55,3 @@ impl<T: InstructionBuilder> Node<T> {
         self.value.compile(state)
     }
 }
-

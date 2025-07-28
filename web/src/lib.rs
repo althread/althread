@@ -1,19 +1,18 @@
-use std::collections::HashMap;
-use std::path::Path;
 use fastrand;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use serde_wasm_bindgen;
+use std::collections::HashMap;
+use std::path::Path;
 use wasm_bindgen::prelude::*;
 
-use althread::{ast::Ast, checker, error::AlthreadError, vm::GlobalAction};
-use althread::{vm::instruction::InstructionType};
-use althread::{vm::VM};
 use althread::ast::token::literal::Literal;
-use althread::module_resolver::{VirtualFileSystem};
+use althread::module_resolver::VirtualFileSystem;
+use althread::vm::instruction::InstructionType;
+use althread::vm::VM;
+use althread::{ast::Ast, checker, error::AlthreadError, vm::GlobalAction};
 
 const SEND: u8 = b's';
 const RECV: u8 = b'r';
-
 
 fn error_to_js(err: AlthreadError) -> JsValue {
     serde_wasm_bindgen::to_value(&err).unwrap()
@@ -22,10 +21,9 @@ fn error_to_js(err: AlthreadError) -> JsValue {
 #[wasm_bindgen]
 pub fn compile(source: &str, file_path: &str, virtual_fs: JsValue) -> Result<String, JsValue> {
     // Convert the JS file system to a Rust HashMap
-    let fs_map: HashMap<String, String> = 
-        serde_wasm_bindgen::from_value(virtual_fs)
-            .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
-    
+    let fs_map: HashMap<String, String> = serde_wasm_bindgen::from_value(virtual_fs)
+        .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
+
     // Create virtual filesystem
     let virtual_filesystem = VirtualFileSystem::new(fs_map);
 
@@ -39,24 +37,22 @@ pub fn compile(source: &str, file_path: &str, virtual_fs: JsValue) -> Result<Str
 
     println!("{}", &ast);
 
-    let compiled_project = ast.compile(
-        Path::new(file_path),
-        virtual_filesystem,
-        &mut input_map
-    ).map_err(error_to_js)?;
-    
+    let compiled_project = ast
+        .compile(Path::new(file_path), virtual_filesystem, &mut input_map)
+        .map_err(error_to_js)?;
+
     println!("{}", compiled_project.to_string());
     Ok(format!("{}", compiled_project))
 }
 
 pub struct MessageFlowEvent<'a> {
-    pub sender: usize, // id of the sending process
-    pub receiver: usize,  // id of the receiving process
-    pub evt_type: u8, //send or receive
-    pub message: String, // for SEND: channel name, for RECV: message content
-    pub number: usize, // message sequence number (nmsg_sent for SEND, clock for RECV)
+    pub sender: usize,           // id of the sending process
+    pub receiver: usize,         // id of the receiving process
+    pub evt_type: u8,            //send or receive
+    pub message: String,         // for SEND: channel name, for RECV: message content
+    pub number: usize,           // message sequence number (nmsg_sent for SEND, clock for RECV)
     pub actor_prog_name: String, // Name of the program performing this action
-    pub vm_state: VM<'a>, //vm state associated with this event
+    pub vm_state: VM<'a>,        //vm state associated with this event
 }
 
 pub struct RunResult<'a> {
@@ -66,7 +62,7 @@ pub struct RunResult<'a> {
     vm_states: Vec<VM<'a>>,
 }
 
-impl <'a> Serialize for MessageFlowEvent<'a> {
+impl<'a> Serialize for MessageFlowEvent<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -84,7 +80,7 @@ impl <'a> Serialize for MessageFlowEvent<'a> {
     }
 }
 
-impl <'a> Serialize for RunResult<'a> {
+impl<'a> Serialize for RunResult<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -102,10 +98,9 @@ impl <'a> Serialize for RunResult<'a> {
 #[wasm_bindgen]
 pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue, JsValue> {
     // Convert the JS file system to a Rust HashMap
-    let fs_map: HashMap<String, String> = 
-        serde_wasm_bindgen::from_value(virtual_fs)
-            .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
-    
+    let fs_map: HashMap<String, String> = serde_wasm_bindgen::from_value(virtual_fs)
+        .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
+
     // Create virtual filesystem
     let virtual_filesystem = VirtualFileSystem::new(fs_map);
 
@@ -120,11 +115,9 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
     println!("{}", &ast);
 
     // Use compile_with_filesystem instead of compile
-    let compiled_project = ast.compile(
-        Path::new(filepath),
-        virtual_filesystem,
-        &mut input_map
-    ).map_err(error_to_js)?;
+    let compiled_project = ast
+        .compile(Path::new(filepath), virtual_filesystem, &mut input_map)
+        .map_err(error_to_js)?;
 
     // Rest of the function stays exactly the same
     let mut vm = althread::vm::VM::new(&compiled_project);
@@ -138,7 +131,6 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
     let mut i = 0; //index for vm_states
 
     for _ in 0..100000 {
-        
         if vm.is_finished() {
             break;
         }
@@ -149,7 +141,8 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
 
         // Helper to get program name by ID
         let get_prog_name = |prog_id: usize, vm_instance: &VM| -> String {
-            vm_instance.running_programs
+            vm_instance
+                .running_programs
                 .iter()
                 .find(|p| p.id == prog_id)
                 .map(|p| p.name.clone())
@@ -163,31 +156,50 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
 
             if let InstructionType::ChannelPop(ref s) = &inst.control {
                 if i > 0 {
-                    let previous_vm_state = vm_states.get(i-1); // The state before this pop
+                    let previous_vm_state = vm_states.get(i - 1); // The state before this pop
                     if let Some(prev_vm) = previous_vm_state {
-                        if let Some(chan_content_vec) = prev_vm.channels.get_states().get(&(info.prog_id, s.to_string())) {
-                            if let Some(Literal::Tuple(ref msg_tuple)) = chan_content_vec.get(0) { // Message popped
-                                if msg_tuple.len() >= 2 { // Ensure msg_tuple has at least sender_info and content
-                                    if let Some(Literal::Tuple(ref sender_info_tuple)) = msg_tuple.get(0) {
-                                        if sender_info_tuple.len() >= 2 { // Ensure sender_info_tuple has senderid and clock
-                                            if let (Some(Literal::Int(senderid)), Some(Literal::Int(received_clock))) = 
-                                                (sender_info_tuple.get(0), sender_info_tuple.get(1)) {
-                                                if let Some(actual_message_content) = msg_tuple.get(1) {
-                                                    let receiver_clock = vm.running_programs
+                        if let Some(chan_content_vec) = prev_vm
+                            .channels
+                            .get_states()
+                            .get(&(info.prog_id, s.to_string()))
+                        {
+                            if let Some(Literal::Tuple(ref msg_tuple)) = chan_content_vec.get(0) {
+                                // Message popped
+                                if msg_tuple.len() >= 2 {
+                                    // Ensure msg_tuple has at least sender_info and content
+                                    if let Some(Literal::Tuple(ref sender_info_tuple)) =
+                                        msg_tuple.get(0)
+                                    {
+                                        if sender_info_tuple.len() >= 2 {
+                                            // Ensure sender_info_tuple has senderid and clock
+                                            if let (
+                                                Some(Literal::Int(senderid)),
+                                                Some(Literal::Int(received_clock)),
+                                            ) =
+                                                (sender_info_tuple.get(0), sender_info_tuple.get(1))
+                                            {
+                                                if let Some(actual_message_content) =
+                                                    msg_tuple.get(1)
+                                                {
+                                                    let receiver_clock = vm
+                                                        .running_programs
                                                         .iter()
                                                         .find(|p| p.id == pid)
                                                         .map(|p| p.clock)
                                                         .unwrap_or(0);
-                                                    
 
-                                                    let max_clock = std::cmp::max(*received_clock as usize, receiver_clock as usize) + 1;
+                                                    let max_clock = std::cmp::max(
+                                                        *received_clock as usize,
+                                                        receiver_clock as usize,
+                                                    ) + 1;
 
                                                     vm.running_programs
                                                         .iter_mut()
                                                         .find(|p| p.id == pid)
                                                         .map(|p| p.clock = max_clock);
 
-                                                    let receiver_name = get_prog_name(info.prog_id, &vm);
+                                                    let receiver_name =
+                                                        get_prog_name(info.prog_id, &vm);
                                                     let event = MessageFlowEvent {
                                                         sender: *senderid as usize,
                                                         receiver: pid,
@@ -217,16 +229,20 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
             match p {
                 GlobalAction::Send(s_chan_name, opt_receiver_info) => {
                     let sender_name = get_prog_name(info.prog_id, &vm);
-                    let receiver_id = opt_receiver_info.as_ref().map(|ri| ri.program_id).unwrap_or(0);
+                    let receiver_id = opt_receiver_info
+                        .as_ref()
+                        .map(|ri| ri.program_id)
+                        .unwrap_or(0);
 
-                    let clock = vm.running_programs
+                    let clock = vm
+                        .running_programs
                         .iter()
                         .find(|p| p.id == pid)
                         .map(|p| p.clock)
                         .unwrap_or(0);
 
                     let event = MessageFlowEvent {
-                        sender: pid, 
+                        sender: pid,
                         receiver: receiver_id,
                         evt_type: SEND,
                         message: s_chan_name.clone(), // Channel name for SEND
@@ -250,7 +266,7 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
         }
         i += 1;
     }
-    
+
     Ok(serde_wasm_bindgen::to_value(&RunResult {
         debug: result,
         stdout,
@@ -263,10 +279,9 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
 #[wasm_bindgen]
 pub fn check(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue, JsValue> {
     // Convert the JS file system to a Rust HashMap
-    let fs_map: HashMap<String, String> = 
-        serde_wasm_bindgen::from_value(virtual_fs)
-            .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
-    
+    let fs_map: HashMap<String, String> = serde_wasm_bindgen::from_value(virtual_fs)
+        .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
+
     // Create virtual filesystem
     let virtual_filesystem = VirtualFileSystem::new(fs_map);
 
@@ -280,11 +295,9 @@ pub fn check(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValu
 
     println!("{}", &ast);
 
-    let compiled_project = ast.compile(
-        Path::new(filepath),
-        virtual_filesystem,
-        &mut input_map
-    ).map_err(error_to_js)?;
+    let compiled_project = ast
+        .compile(Path::new(filepath), virtual_filesystem, &mut input_map)
+        .map_err(error_to_js)?;
 
     let checked = checker::check_program(&compiled_project).map_err(error_to_js)?;
 
@@ -309,11 +322,15 @@ version = "{}"
 }
 
 #[wasm_bindgen]
-pub fn add_dependency_to_toml(toml_content: &str, package_name: &str, version: &str) -> Result<String, JsValue> {
+pub fn add_dependency_to_toml(
+    toml_content: &str,
+    package_name: &str,
+    version: &str,
+) -> Result<String, JsValue> {
     let mut lines: Vec<&str> = toml_content.lines().collect();
     let mut dependencies_section_found = false;
     let mut insert_index = lines.len();
-    
+
     // Find the [dependencies] section
     for (i, line) in lines.iter().enumerate() {
         if line.trim() == "[dependencies]" {
@@ -328,17 +345,19 @@ pub fn add_dependency_to_toml(toml_content: &str, package_name: &str, version: &
             break;
         }
     }
-    
+
     if !dependencies_section_found {
-        return Err(JsValue::from_str("No [dependencies] section found in alt.toml"));
+        return Err(JsValue::from_str(
+            "No [dependencies] section found in alt.toml",
+        ));
     }
-    
+
     // Create the new dependency line
     let new_dependency = format!(r#""{}" = "{}""#, package_name, version);
-    
+
     // Insert the new dependency
     lines.insert(insert_index, &new_dependency);
-    
+
     Ok(lines.join("\n"))
 }
 
@@ -347,20 +366,20 @@ pub fn parse_dependencies_from_toml(toml_content: &str) -> Result<JsValue, JsVal
     let mut dependencies = std::collections::HashMap::new();
     let lines: Vec<&str> = toml_content.lines().collect();
     let mut in_dependencies_section = false;
-    
+
     for line in lines {
         let trimmed = line.trim();
-        
+
         if trimmed == "[dependencies]" {
             in_dependencies_section = true;
             continue;
         }
-        
+
         if trimmed.starts_with('[') && trimmed != "[dependencies]" {
             in_dependencies_section = false;
             continue;
         }
-        
+
         if in_dependencies_section && trimmed.contains('=') {
             // Parse dependency line: "package.name" = "version"
             let parts: Vec<&str> = trimmed.splitn(2, '=').collect();
@@ -371,7 +390,7 @@ pub fn parse_dependencies_from_toml(toml_content: &str) -> Result<JsValue, JsVal
             }
         }
     }
-    
+
     serde_wasm_bindgen::to_value(&dependencies)
         .map_err(|e| JsValue::from_str(&format!("Failed to serialize dependencies: {}", e)))
 }

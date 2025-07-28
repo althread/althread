@@ -32,7 +32,7 @@ impl FnCall {
             .collect::<Vec<_>>()
             .join(".")
     }
-    
+
     pub fn add_dependencies(&self, dependencies: &mut WaitDependency) {
         let full_name = self.fn_name_to_string();
         dependencies.variables.insert(full_name);
@@ -49,7 +49,10 @@ impl FnCall {
 impl NodeBuilder for FnCall {
     fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let fn_name = Node::<ObjectIdentifier>::build(pairs.next().unwrap(), filepath)?;
-        let values = Box::new(Expression::build_top_level(pairs.next().unwrap(), filepath)?);
+        let values = Box::new(Expression::build_top_level(
+            pairs.next().unwrap(),
+            filepath,
+        )?);
 
         Ok(Self { fn_name, values })
     }
@@ -66,8 +69,8 @@ impl InstructionBuilder for Node<FnCall> {
             e
         })?);
 
-        let args_on_stack_var = 
-            state.program_stack
+        let args_on_stack_var = state
+            .program_stack
             .last()
             .cloned()
             .expect("Stack should not be empty");
@@ -84,9 +87,11 @@ impl InstructionBuilder for Node<FnCall> {
             }
         };
 
-        if state.user_functions().contains_key(&full_name) || self.value.fn_name.value.parts.len() == 1 {
+        if state.user_functions().contains_key(&full_name)
+            || self.value.fn_name.value.parts.len() == 1
+        {
             let func_def_opt = state.user_functions().get(basename).cloned();
-            
+
             if let Some(func_def) = func_def_opt {
                 let expected_args = &func_def.arguments;
                 let expected_arg_count = expected_args.len();
@@ -108,9 +113,13 @@ impl InstructionBuilder for Node<FnCall> {
                 }
 
                 // check if the types of the arguments are correct
-                for (i, ((_arg_name, expected_type), provided_type)) in expected_args.iter().zip(provided_arg_types.iter()).enumerate() {
+                for (i, ((_arg_name, expected_type), provided_type)) in expected_args
+                    .iter()
+                    .zip(provided_arg_types.iter())
+                    .enumerate()
+                {
                     if expected_type != provided_type {
-                        state.unstack_current_depth(); 
+                        state.unstack_current_depth();
                         return Err(AlthreadError::new(
                             ErrorType::FunctionArgumentTypeMismatch,
                             Some(self.pos.clone()),
@@ -119,8 +128,8 @@ impl InstructionBuilder for Node<FnCall> {
                                 basename,
                                 i + 1,
                                 expected_args[i].0.value, // argument name
-                                expected_type, 
-                                provided_type  
+                                expected_type,
+                                provided_type
                             ),
                         ));
                     }
@@ -137,15 +146,14 @@ impl InstructionBuilder for Node<FnCall> {
                 });
 
                 builder.instructions.push(Instruction {
-                    control: InstructionType::FnCall { 
-                        name: basename.to_string(), 
-                        unstack_len, 
-                        variable_idx: None, 
-                        arguments: None 
+                    control: InstructionType::FnCall {
+                        name: basename.to_string(),
+                        unstack_len,
+                        variable_idx: None,
+                        arguments: None,
                     },
                     pos: Some(self.pos.clone()),
                 });
-
             } else {
                 // Handle built-in functions like print, assert
                 let return_type = match basename.as_str() {
@@ -158,7 +166,10 @@ impl InstructionBuilder for Node<FnCall> {
                                 return Err(AlthreadError::new(
                                     ErrorType::FunctionArgumentTypeMismatch,
                                     Some(self.pos.clone()),
-                                    format!("Function 'print' can't accept argument {} of type Void.", idx + 1),
+                                    format!(
+                                        "Function 'print' can't accept argument {} of type Void.",
+                                        idx + 1
+                                    ),
                                 ));
                             }
                         }
@@ -224,7 +235,6 @@ impl InstructionBuilder for Node<FnCall> {
                     pos: Some(self.pos.clone()),
                 });
             }
-
         } else {
             // Handle method calls (e.g., obj.method())
             let receiver_name = &self.value.fn_name.value.parts[0].value.value;

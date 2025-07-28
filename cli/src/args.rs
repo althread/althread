@@ -32,7 +32,7 @@ pub enum Command {
     #[command(visible_alias = "p")]
     Compile(CompileCommand),
 
-    /// Runs an input file 
+    /// Runs an input file
     #[command(visible_alias = "r")]
     Run(RunCommand),
 

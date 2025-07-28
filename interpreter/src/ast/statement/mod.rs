@@ -35,7 +35,7 @@ use while_control::WhileControl;
 
 use crate::{
     compiler::{CompilerState, InstructionBuilderOk},
-    error::{AlthreadResult,Pos},
+    error::{AlthreadResult, Pos},
     no_rule,
     parser::Rule,
     vm::instruction::{Instruction, InstructionType},
@@ -77,7 +77,7 @@ impl NodeBuilder for Statement {
             Rule::fn_call => Ok(Self::FnCall(Node::build(pair, filepath)?)),
             Rule::return_statement => {
                 // build the node in here
-                // we need to set the position here because 
+                // we need to set the position here because
                 // the node is built from the inner pairs
                 // and the position of the return statement is lost
 
@@ -87,14 +87,14 @@ impl NodeBuilder for Statement {
                 let mut fn_return_node = FnReturn::build(inner_pairs, filepath)?;
 
                 fn_return_node.pos = pos.clone();
-                
+
                 let node = Node {
                     value: fn_return_node,
                     pos,
                 };
 
                 Ok(Self::FnReturn(node))
-            },
+            }
             Rule::run_call => Ok(Self::Run(Node::build(pair, filepath)?)),
             Rule::if_control => Ok(Self::If(Node::build(pair, filepath)?)),
             Rule::while_control => Ok(Self::While(Node::build(pair, filepath)?)),
@@ -144,9 +144,7 @@ impl InstructionBuilder for Statement {
                 state.program_stack.pop();
                 Ok(builder)
             }
-            Self::FnReturn(node) => {
-                node.compile(state)
-            }
+            Self::FnReturn(node) => node.compile(state),
         }
     }
 }

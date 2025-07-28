@@ -1,13 +1,13 @@
 use std::{
+    collections::HashMap,
     hash::{Hash, Hasher},
     rc::Rc,
-    collections::HashMap,
 };
 
 use crate::{
     ast::token::{datatype::DataType, literal::Literal},
     compiler::{stdlib::Stdlib, FunctionDefinition},
-    error::{AlthreadError, AlthreadResult, ErrorType, Pos}
+    error::{AlthreadError, AlthreadResult, ErrorType, Pos},
 };
 
 use super::{
@@ -16,14 +16,13 @@ use super::{
     str_to_expr_error, GlobalAction, GlobalActions, GlobalMemory, Memory,
 };
 
-
 #[derive(Debug, Clone)]
 struct StackFrame<'a> {
-    return_ip: usize, // the instruction pointer to return to
-    caller_fp: usize, // the frame pointer of the caller
+    return_ip: usize,               // the instruction pointer to return to
+    caller_fp: usize,               // the frame pointer of the caller
     caller_code: &'a [Instruction], // the code of the caller
-    expected_return_type: DataType,  // the expected return type of the function
-    pos: Option<Pos>, // the position in the source code where this frame was created
+    expected_return_type: DataType, // the expected return type of the function
+    pos: Option<Pos>,               // the position in the source code where this frame was created
 }
 
 #[derive(Debug, Clone)]
@@ -39,7 +38,7 @@ pub struct RunningProgramState<'a> {
     pub clock: usize, //counts number of send event
 
     pub caller_program_id: Option<usize>, // Which program started this one
-    pub call_site_pos: Option<Pos>, // Where this program was called from
+    pub call_site_pos: Option<Pos>,       // Where this program was called from
 
     pub user_functions: &'a HashMap<String, FunctionDefinition>,
     call_stack: Vec<StackFrame<'a>>,
@@ -90,7 +89,7 @@ impl<'a> RunningProgramState<'a> {
             current_code: &code.instructions,
             instruction_pointer: 0,
             stdlib,
-            clock: 0, 
+            clock: 0,
             user_functions,
             call_stack: Vec::new(),
             frame_pointer: 0,
@@ -104,19 +103,19 @@ impl<'a> RunningProgramState<'a> {
         if let Some(pos) = self.current_instruction().ok().and_then(|i| i.pos.clone()) {
             error.push_stack(pos);
         }
-        
+
         // Push function call stack
         for frame in self.call_stack.iter().rev() {
             if let Some(pos) = frame.pos.clone() {
                 error.push_stack(pos);
             }
         }
-        
+
         // Push program call context
         if let Some(call_pos) = &self.call_site_pos {
             error.push_stack(call_pos.clone());
         }
-        
+
         error
     }
 
@@ -234,7 +233,6 @@ impl<'a> RunningProgramState<'a> {
         channels: &mut Channels,
         next_pid: &mut usize,
     ) -> AlthreadResult<Option<GlobalAction>> {
-
         let cur_inst = self.current_instruction()?.clone();
 
         let mut action = None;
@@ -268,15 +266,20 @@ impl<'a> RunningProgramState<'a> {
             InstructionType::Jump(jump) => *jump,
             InstructionType::Expression(exp) => {
                 let lit = exp.eval(&mut self.memory).map_err(|msg| {
-                    let e = AlthreadError::new(ErrorType::ExpressionError, cur_inst.pos.clone(), msg);
+                    let e =
+                        AlthreadError::new(ErrorType::ExpressionError, cur_inst.pos.clone(), msg);
                     self.build_error_stack(e)
                 })?;
                 self.memory.push(lit);
                 1
             }
-            InstructionType::ExpressionAndCleanup { expression, unstack_len } => {
+            InstructionType::ExpressionAndCleanup {
+                expression,
+                unstack_len,
+            } => {
                 let lit = expression.eval(&mut self.memory).map_err(|msg| {
-                    let e = AlthreadError::new(ErrorType::ExpressionError, cur_inst.pos.clone(), msg);
+                    let e =
+                        AlthreadError::new(ErrorType::ExpressionError, cur_inst.pos.clone(), msg);
                     self.build_error_stack(e)
                 })?;
                 // Pop the temporary values from function calls from the stack.
@@ -287,16 +290,21 @@ impl<'a> RunningProgramState<'a> {
                 self.memory.push(lit);
                 1
             }
-            InstructionType::MakeTupleAndCleanup { elements, unstack_len } => {
+            InstructionType::MakeTupleAndCleanup {
+                elements,
+                unstack_len,
+            } => {
                 let mut evaluated_elements = Vec::new();
 
                 for expr_node in elements {
-                    let val = expr_node
-                        .eval(&mut self.memory)
-                        .map_err(|msg| {
-                            let e = AlthreadError::new(ErrorType::ExpressionError, cur_inst.pos.clone(), msg);
-                            self.build_error_stack(e)
-                        })?;
+                    let val = expr_node.eval(&mut self.memory).map_err(|msg| {
+                        let e = AlthreadError::new(
+                            ErrorType::ExpressionError,
+                            cur_inst.pos.clone(),
+                            msg,
+                        );
+                        self.build_error_stack(e)
+                    })?;
                     evaluated_elements.push(val);
                 }
 
@@ -402,12 +410,12 @@ impl<'a> RunningProgramState<'a> {
                 }
                 self.memory.push(Literal::Process(name.clone(), *next_pid));
                 action = Some(GlobalAction::StartProgram(
-                    name.clone(), 
-                    *next_pid, 
+                    name.clone(),
+                    *next_pid,
                     args,
                     Some(self.id),
-                    cur_inst.pos.clone()
-                    ));
+                    cur_inst.pos.clone(),
+                ));
                 *next_pid += 1;
                 1
             }
@@ -426,16 +434,20 @@ impl<'a> RunningProgramState<'a> {
                     0
                 }
             }
-            InstructionType::Return {has_value}  => {
-
+            InstructionType::Return { has_value } => {
                 let return_value = if *has_value {
-                    self.memory.pop().expect("Stack empty, expected return value")
+                    self.memory
+                        .pop()
+                        .expect("Stack empty, expected return value")
                 } else {
                     Literal::Null
                 };
 
                 // get the frame to restore caller state
-                let frame = self.call_stack.pop().expect("Panic: stack is empty, cannot perform return");
+                let frame = self
+                    .call_stack
+                    .pop()
+                    .expect("Panic: stack is empty, cannot perform return");
 
                 if return_value.get_datatype() != frame.expected_return_type {
                     let e = AlthreadError::new(
@@ -469,9 +481,7 @@ impl<'a> RunningProgramState<'a> {
                 arguments,
                 unstack_len,
             } => {
-
                 if let Some(v_idx) = variable_idx {
-
                     let v_idx = self.memory.len() - 1 - v_idx;
                     let mut lit = self
                         .memory
@@ -479,14 +489,20 @@ impl<'a> RunningProgramState<'a> {
                         .expect("Panic: stack is empty, cannot perform function call")
                         .clone();
 
-                    let interfaces = self.stdlib.get_interfaces(&lit.get_datatype()).ok_or_else(|| {
-                        let e = AlthreadError::new(
-                            ErrorType::UndefinedFunction,
-                            cur_inst.pos.clone(),
-                            format!("Type {:?} has no interface available", lit.get_datatype()),
-                        );
-                        self.build_error_stack(e)
-                    })?;
+                    let interfaces =
+                        self.stdlib
+                            .get_interfaces(&lit.get_datatype())
+                            .ok_or_else(|| {
+                                let e = AlthreadError::new(
+                                    ErrorType::UndefinedFunction,
+                                    cur_inst.pos.clone(),
+                                    format!(
+                                        "Type {:?} has no interface available",
+                                        lit.get_datatype()
+                                    ),
+                                );
+                                self.build_error_stack(e)
+                            })?;
 
                     let fn_idx = interfaces.iter().position(|i| i.name == *name);
                     if fn_idx.is_none() {
@@ -524,7 +540,7 @@ impl<'a> RunningProgramState<'a> {
                     1
                 } else {
                     match name.as_str() {
-                        "print"  => {
+                        "print" => {
                             let lit = self
                                 .memory
                                 .last()
@@ -534,8 +550,10 @@ impl<'a> RunningProgramState<'a> {
                             for _ in 0..*unstack_len {
                                 self.memory.pop();
                             }
-                                                    
-                            let str_val = lit.into_tuple().unwrap_or_default()
+
+                            let str_val = lit
+                                .into_tuple()
+                                .unwrap_or_default()
                                 .iter()
                                 .map(|lit| lit.to_string())
                                 .collect::<Vec<_>>()
@@ -557,7 +575,9 @@ impl<'a> RunningProgramState<'a> {
                                 self.memory.pop();
                             }
 
-                            let args = lit.into_tuple().expect("assert expects a tuple as argument");
+                            let args = lit
+                                .into_tuple()
+                                .expect("assert expects a tuple as argument");
                             let condition = &args[0];
                             let message = &args[1];
 
@@ -574,8 +594,6 @@ impl<'a> RunningProgramState<'a> {
                         }
                         _ => {
                             if let Some(func_def) = self.user_functions.get(name) {
-                            
-
                                 let args_tuple_lit = self.memory.pop().unwrap();
 
                                 let arg_values = match args_tuple_lit {
@@ -585,7 +603,10 @@ impl<'a> RunningProgramState<'a> {
                                         return Err(AlthreadError::new(
                                             ErrorType::RuntimeError,
                                             cur_inst.pos,
-                                            format!("function {} expects a tuple as argument", name),
+                                            format!(
+                                                "function {} expects a tuple as argument",
+                                                name
+                                            ),
                                         ));
                                     }
                                 };
@@ -601,14 +622,13 @@ impl<'a> RunningProgramState<'a> {
 
                                 self.frame_pointer = self.memory.len();
 
-
                                 for arg in arg_values {
                                     self.memory.push(arg);
                                 }
 
                                 self.current_code = &func_def.body;
                                 self.instruction_pointer = 0;
-                                
+
                                 0
                             } else {
                                 let e = AlthreadError::new(
@@ -668,7 +688,7 @@ impl<'a> RunningProgramState<'a> {
                 for _ in 0..*unstack_len {
                     self.memory.pop();
                 }
-                self.clock+=1;
+                self.clock += 1;
                 let receiver = channels.send(self.id, channel_name.clone(), value, self.clock);
 
                 action = Some(GlobalAction::Send(channel_name.clone(), receiver));

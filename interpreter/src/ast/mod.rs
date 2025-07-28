@@ -1,26 +1,29 @@
 pub mod block;
 pub mod condition_block;
-pub mod import_block;
 pub mod display;
+pub mod import_block;
 pub mod node;
 pub mod statement;
 pub mod token;
 
-
 use std::{
-    collections::HashMap, fmt::{self, Formatter}
+    collections::HashMap,
+    fmt::{self, Formatter},
 };
 
 use block::Block;
 use condition_block::ConditionBlock;
-use import_block::ImportBlock;
 use display::{AstDisplay, Prefix};
-use node::{Node};
-use pest::{iterators::Pairs};
+use import_block::ImportBlock;
+use node::Node;
+use pest::iterators::Pairs;
 use token::{args_list::ArgsList, condition_keyword::ConditionKeyword, datatype::DataType};
 
-use crate::{error::{AlthreadError, AlthreadResult, ErrorType, Pos}, no_rule, parser::Rule};
-
+use crate::{
+    error::{AlthreadError, AlthreadResult, ErrorType, Pos},
+    no_rule,
+    parser::Rule,
+};
 
 #[derive(Debug)]
 pub struct Ast {
@@ -28,7 +31,7 @@ pub struct Ast {
     pub condition_blocks: HashMap<ConditionKeyword, Node<ConditionBlock>>,
     pub global_block: Option<Node<Block>>,
     pub function_blocks: HashMap<String, (Node<ArgsList>, DataType, Node<Block>, bool)>,
-    pub import_block: Option<Node<ImportBlock>>
+    pub import_block: Option<Node<ImportBlock>>,
 }
 
 impl Ast {
@@ -70,8 +73,10 @@ impl Ast {
                     };
 
                     let main_block = Node::build(pairs.next().unwrap(), filepath)?;
-                    ast.process_blocks
-                        .insert("main".to_string(), (Node::<ArgsList>::new(), main_block, is_private));
+                    ast.process_blocks.insert(
+                        "main".to_string(),
+                        (Node::<ArgsList>::new(), main_block, is_private),
+                    );
                 }
                 Rule::global_block => {
                     let mut pairs = pair.into_inner();
@@ -112,7 +117,7 @@ impl Ast {
                         .insert(process_identifier, (args_list, program_block, is_private));
                 }
                 Rule::function_block => {
-                    let mut pairs  = pair.into_inner();
+                    let mut pairs = pair.into_inner();
 
                     // check for directive
                     let mut is_private = false;
@@ -124,11 +129,12 @@ impl Ast {
 
                     let function_identifier = pairs.next().unwrap().as_str().to_string();
 
-                    let args_list: Node<token::args_list::ArgsList> = Node::build(pairs.next().unwrap(), filepath)?;
+                    let args_list: Node<token::args_list::ArgsList> =
+                        Node::build(pairs.next().unwrap(), filepath)?;
                     pairs.next(); // skip the "->" token
                     let return_datatype = DataType::from_str(pairs.next().unwrap().as_str());
 
-                    let function_block: Node<Block>  = Node::build(pairs.next().unwrap(), filepath)?;
+                    let function_block: Node<Block> = Node::build(pairs.next().unwrap(), filepath)?;
 
                     // check if function definition is already defined
                     if ast.function_blocks.contains_key(&function_identifier) {
@@ -139,12 +145,10 @@ impl Ast {
                         ));
                     }
 
-                    ast.function_blocks
-                        .insert(
+                    ast.function_blocks.insert(
                         function_identifier,
-                        (args_list, return_datatype, function_block, is_private)
+                        (args_list, return_datatype, function_block, is_private),
                     );
-
                 }
                 Rule::EOI => (),
                 _ => return Err(no_rule!(pair, "root ast", filepath)),
@@ -153,9 +157,7 @@ impl Ast {
 
         Ok(ast)
     }
-    
 }
-
 
 impl fmt::Display for Ast {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
@@ -184,13 +186,19 @@ impl AstDisplay for Ast {
         }
 
         for (process_name, (_args, process_node, is_private)) in &self.process_blocks {
-            let process_name = if *is_private { format!("@private {}", process_name) } else { process_name.clone() };
+            let process_name = if *is_private {
+                format!("@private {}", process_name)
+            } else {
+                process_name.clone()
+            };
             writeln!(f, "{}{}", prefix, process_name)?;
             process_node.ast_fmt(f, &prefix.add_branch())?;
             writeln!(f, "")?;
         }
 
-        for (function_name, (_args, return_type, function_node, is_private)) in &self.function_blocks {
+        for (function_name, (_args, return_type, function_node, is_private)) in
+            &self.function_blocks
+        {
             writeln!(f, "{}", if *is_private { "@private " } else { "" })?;
             writeln!(f, "{}{} -> {}", prefix, function_name, return_type)?;
             function_node.ast_fmt(f, &prefix.add_branch())?;

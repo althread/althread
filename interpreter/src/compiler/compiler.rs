@@ -1,10 +1,33 @@
-use std::{cell::RefCell, collections::{BTreeMap, HashMap, HashSet}, path::Path, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, HashMap, HashSet},
+    path::Path,
+    rc::Rc,
+};
 
-use crate::{ast::{node::{InstructionBuilder}, statement::Statement, token::{condition_keyword::ConditionKeyword, datatype::DataType, identifier::Identifier, literal::Literal}, Ast}, compiler::{stdlib::{self}, CompilationContext, CompiledProject, CompilerState, FunctionDefinition, Variable}, error::{AlthreadError, AlthreadResult, ErrorType}, module_resolver::{module_resolver::{ModuleResolver}, FileSystem}, vm::{instruction::{Instruction, InstructionType, ProgramCode}, VM}};
-
+use crate::{
+    ast::{
+        node::InstructionBuilder,
+        statement::Statement,
+        token::{
+            condition_keyword::ConditionKeyword, datatype::DataType, identifier::Identifier,
+            literal::Literal,
+        },
+        Ast,
+    },
+    compiler::{
+        stdlib::{self},
+        CompilationContext, CompiledProject, CompilerState, FunctionDefinition, Variable,
+    },
+    error::{AlthreadError, AlthreadResult, ErrorType},
+    module_resolver::{module_resolver::ModuleResolver, FileSystem},
+    vm::{
+        instruction::{Instruction, InstructionType, ProgramCode},
+        VM,
+    },
+};
 
 impl Ast {
-
     fn module_prefix(name: &str) -> &str {
         match name.rfind('.') {
             Some(idx) => &name[..idx],
@@ -13,21 +36,21 @@ impl Ast {
     }
 
     fn ast_empty(&self) -> bool {
-        if  self.process_blocks.is_empty() &&
-            self.global_block.as_ref().map_or(true, |block| block.value.children.is_empty()) &&
-            self.function_blocks.is_empty() &&
-            self.import_block.is_none() &&
-            self.condition_blocks.is_empty() {
-                return true;
-            }
+        if self.process_blocks.is_empty()
+            && self
+                .global_block
+                .as_ref()
+                .map_or(true, |block| block.value.children.is_empty())
+            && self.function_blocks.is_empty()
+            && self.import_block.is_none()
+            && self.condition_blocks.is_empty()
+        {
+            return true;
+        }
         false
     }
 
-    pub fn build_qualified_name(
-        &self, 
-        name: &str,
-        module_prefix: &str
-    ) -> String {
+    pub fn build_qualified_name(&self, name: &str, module_prefix: &str) -> String {
         if module_prefix.is_empty() {
             name.to_string()
         } else {
@@ -39,13 +62,19 @@ impl Ast {
         &self,
         current_file_path: &Path,
         filesystem: F,
-        input_map: &mut HashMap<String, String>
+        input_map: &mut HashMap<String, String>,
     ) -> AlthreadResult<CompiledProject> {
-        
         // Create shared compilation context
         let context = Rc::new(RefCell::new(CompilationContext::new()));
 
-        self.compile_with_context(current_file_path, filesystem, context, &"".to_string(), Vec::new(), input_map)
+        self.compile_with_context(
+            current_file_path,
+            filesystem,
+            context,
+            &"".to_string(),
+            Vec::new(),
+            input_map,
+        )
     }
 
     pub fn compile_with_context<F: FileSystem + Clone>(
@@ -55,9 +84,8 @@ impl Ast {
         context: Rc<RefCell<CompilationContext>>,
         module_prefix: &str,
         same_level_module_names: Vec<String>,
-        input_map: &mut HashMap<String, String>
+        input_map: &mut HashMap<String, String>,
     ) -> AlthreadResult<CompiledProject> {
-
         // if the main file is empty (no executable stuff) we have nothing to do
         if self.ast_empty() {
             return Ok(CompiledProject {
@@ -72,10 +100,14 @@ impl Ast {
             });
         }
 
-        let mut state= CompilerState::new_with_context(context.clone());
+        let mut state = CompilerState::new_with_context(context.clone());
 
         log::debug!("Current module prefix: {:?}", module_prefix);
-        log::debug!("[{}] Same level module names: {:?}", module_prefix, same_level_module_names);
+        log::debug!(
+            "[{}] Same level module names: {:?}",
+            module_prefix,
+            same_level_module_names
+        );
 
         // scan everything for channel declarations in the current file
         if let Err(e) = self.prescan_channel_declarations(&mut state, module_prefix) {
@@ -86,7 +118,6 @@ impl Ast {
 
         // if there's an import block, resolve the imports
         if let Some(import_block) = &self.import_block {
-            
             let mut module_resolver = ModuleResolver::new(current_file_path, filesystem.clone());
             let mut import_stack = Vec::new();
 
@@ -97,35 +128,74 @@ impl Ast {
             }
 
             for (name, resolved_module) in module_resolver.resolved_modules {
-
-                let compiled_module = resolved_module.module_ast.compile_with_context(&resolved_module.resolved_path.path, filesystem.clone(), context.clone(), &name, next_level_module_names.clone(), input_map).map_err(|mut e| {
-                    e.push_stack(import_block.pos.clone());
-                    e
-                })?;
+                let compiled_module = resolved_module
+                    .module_ast
+                    .compile_with_context(
+                        &resolved_module.resolved_path.path,
+                        filesystem.clone(),
+                        context.clone(),
+                        &name,
+                        next_level_module_names.clone(),
+                        input_map,
+                    )
+                    .map_err(|mut e| {
+                        e.push_stack(import_block.pos.clone());
+                        e
+                    })?;
 
                 // display what was imported at this point
                 log::debug!("----------------------------------------------------");
                 log::debug!("[{}] Imported module '{}'", module_prefix, name);
-                log::debug!("[{}] Imported shared variables: {:?}", module_prefix, compiled_module.global_memory.keys());
-                log::debug!("[{}] Imported functions: {:?}", module_prefix, compiled_module.user_functions.keys());
-                log::debug!("[{}] Imported programs: {:?}", module_prefix, compiled_module.programs_code.keys());
-                log::debug!("[{}] Imported always conditions: {:?}", module_prefix, compiled_module.always_conditions);
-                log::debug!("[{}] Imported eventually conditions: {:?}", module_prefix, compiled_module.eventually_conditions);
+                log::debug!(
+                    "[{}] Imported shared variables: {:?}",
+                    module_prefix,
+                    compiled_module.global_memory.keys()
+                );
+                log::debug!(
+                    "[{}] Imported functions: {:?}",
+                    module_prefix,
+                    compiled_module.user_functions.keys()
+                );
+                log::debug!(
+                    "[{}] Imported programs: {:?}",
+                    module_prefix,
+                    compiled_module.programs_code.keys()
+                );
+                log::debug!(
+                    "[{}] Imported always conditions: {:?}",
+                    module_prefix,
+                    compiled_module.always_conditions
+                );
+                log::debug!(
+                    "[{}] Imported eventually conditions: {:?}",
+                    module_prefix,
+                    compiled_module.eventually_conditions
+                );
                 log::debug!("----------------------------------------------------");
 
-
-                state.always_conditions_mut().extend(compiled_module.always_conditions);
-                state.eventually_conditions_mut().extend(compiled_module.eventually_conditions);
-                state.global_memory_mut().extend(compiled_module.global_memory);
-                state.program_arguments_mut().extend(compiled_module.program_arguments);
-                state.user_functions_mut().extend(compiled_module.user_functions);
-                state.programs_code_mut().extend(compiled_module.programs_code);
-                state.global_table_mut().extend(compiled_module.global_table);
-
+                state
+                    .always_conditions_mut()
+                    .extend(compiled_module.always_conditions);
+                state
+                    .eventually_conditions_mut()
+                    .extend(compiled_module.eventually_conditions);
+                state
+                    .global_memory_mut()
+                    .extend(compiled_module.global_memory);
+                state
+                    .program_arguments_mut()
+                    .extend(compiled_module.program_arguments);
+                state
+                    .user_functions_mut()
+                    .extend(compiled_module.user_functions);
+                state
+                    .programs_code_mut()
+                    .extend(compiled_module.programs_code);
+                state
+                    .global_table_mut()
+                    .extend(compiled_module.global_table);
             }
-
         }
-
 
         // "compile" the "shared" block to retrieve the set of shared variables
         state.current_stack_depth = 1;
@@ -156,21 +226,25 @@ impl Ast {
                                     literal = Some(pushed_literal)
                                 }
                                 _ => {
-                                    panic!("unexpected instruction in compiled declaration statement")
+                                    panic!(
+                                        "unexpected instruction in compiled declaration statement"
+                                    )
                                 }
                             }
-                          }
-                            let literal = literal
-                                .expect("declaration did not compile to expression nor PushNull");
-                            memory.push(literal);
+                        }
+                        let literal = literal
+                            .expect("declaration did not compile to expression nor PushNull");
+                        memory.push(literal);
 
-                            let var_name = &decl.value.identifier.value.parts[0].value.value;
-                            // Use context instead of local global_table
-                            state.global_table_mut().insert(
-                                var_name.clone(),
-                                state.program_stack.last().unwrap().clone(),
-                            );
-                            state.global_memory_mut().insert(var_name.clone(), memory.last().unwrap().clone());
+                        let var_name = &decl.value.identifier.value.parts[0].value.value;
+                        // Use context instead of local global_table
+                        state.global_table_mut().insert(
+                            var_name.clone(),
+                            state.program_stack.last().unwrap().clone(),
+                        );
+                        state
+                            .global_memory_mut()
+                            .insert(var_name.clone(), memory.last().unwrap().clone());
                     }
                     _ => {
                         return Err(AlthreadError::new(
@@ -184,18 +258,23 @@ impl Ast {
             }
         }
 
-        log::debug!("[{}] Shared variables: {:?}", module_prefix, state.global_memory().keys());
+        log::debug!(
+            "[{}] Shared variables: {:?}",
+            module_prefix,
+            state.global_memory().keys()
+        );
 
         state.unstack_current_depth();
         assert!(state.current_stack_depth == 0);
-
 
         // functions baby ??
         // allow cross-function calls, recursive calls
         // this creates FunctionDefinitions without the compiled body, so that
         // compilation can be done no matter the order of the functions
         // or if they are recursive
-        for (func_name, (args_list, return_datatype, func_block, is_private)) in &self.function_blocks {
+        for (func_name, (args_list, return_datatype, func_block, is_private)) in
+            &self.function_blocks
+        {
             // check if the function is already defined
             if state.user_functions().contains_key(func_name) {
                 return Err(AlthreadError::new(
@@ -205,7 +284,8 @@ impl Ast {
                 ));
             }
             // add the function to the user functions
-            let arguments: Vec<(Identifier, DataType)> = args_list.value
+            let arguments: Vec<(Identifier, DataType)> = args_list
+                .value
                 .identifiers
                 .iter()
                 .zip(args_list.value.datatypes.iter())
@@ -221,11 +301,13 @@ impl Ast {
                 is_private: *is_private,
             };
 
-            if let Err(e) = Ast::check_function_returns(&func_name,func_block, return_datatype){
+            if let Err(e) = Ast::check_function_returns(&func_name, func_block, return_datatype) {
                 return Err(e);
             }
 
-            state.user_functions_mut().insert(func_name.clone(), func_def);
+            state
+                .user_functions_mut()
+                .insert(func_name.clone(), func_def);
         }
 
         // before compiling the programs, get the list of program names and their arguments
@@ -246,17 +328,20 @@ impl Ast {
                 )
             })
             .collect();
-        
+
         // Update context instead of state
         state.program_arguments_mut().extend(program_args);
 
         // Compile all the programs
         state.is_shared = false;
-        
+
         // start with the main program
-        
+
         if self.process_blocks.contains_key("main") {
-            let is_private = state.program_arguments().get("main").is_some_and(|(_, is_private)| *is_private);
+            let is_private = state
+                .program_arguments()
+                .get("main")
+                .is_some_and(|(_, is_private)| *is_private);
 
             if !module_prefix.is_empty() && !is_private {
                 return Err(AlthreadError::new(
@@ -384,17 +469,18 @@ impl Ast {
                 }
                 _ => {}
             }
-        
         }
 
         // now compile the function bodies
-        for (func_name, (args_list, return_datatype, func_block, is_private)) in &self.function_blocks {
-
+        for (func_name, (args_list, return_datatype, func_block, is_private)) in
+            &self.function_blocks
+        {
             state.in_function = true;
             state.current_stack_depth += 1;
             let initial_stack_len = state.program_stack.len();
 
-            let arguments: Vec<(Identifier, DataType)> = args_list.value
+            let arguments: Vec<(Identifier, DataType)> = args_list
+                .value
                 .identifiers
                 .iter()
                 .zip(args_list.value.datatypes.iter())
@@ -411,7 +497,6 @@ impl Ast {
                 })
                 .collect();
 
-
             // compile the function body
             let mut compiled_body = func_block.compile(&mut state).map_err(|mut e| {
                 e.push_stack(func_block.pos.clone());
@@ -424,7 +509,9 @@ impl Ast {
                 // check if it has a return instruction as the last instruction
                 match compiled_body.instructions.last() {
                     Some(last_instruction) => {
-                        if let InstructionType::Return { has_value: false } = &last_instruction.control {
+                        if let InstructionType::Return { has_value: false } =
+                            &last_instruction.control
+                        {
                             has_return = true;
                         }
                     }
@@ -432,14 +519,10 @@ impl Ast {
                 }
                 // if it does not have a return instruction, add one
                 if !has_return {
-                    compiled_body.instructions.push(
-                        Instruction {
-                            control: InstructionType::Return {
-                                has_value: false,
-                            },
-                            pos: Some(func_block.pos.clone()),
-                        },
-                    );
+                    compiled_body.instructions.push(Instruction {
+                        control: InstructionType::Return { has_value: false },
+                        pos: Some(func_block.pos.clone()),
+                    });
                 }
             }
 
@@ -459,7 +542,6 @@ impl Ast {
             state.program_stack.truncate(initial_stack_len);
             state.current_stack_depth -= 1;
             state.in_function = false;
-
         }
 
         // if not the main file then we need to qualify everything
@@ -472,10 +554,16 @@ impl Ast {
             .collect();
 
         for (func_name, func_def) in user_functions {
-
-            if same_level_module_names.iter().any(|mod_name| func_name.starts_with(&format!("{}.", mod_name))) {
-                    log::debug!("[{}] Skipping function '{}' as it is already qualified", module_prefix, func_name);
-                    continue;
+            if same_level_module_names
+                .iter()
+                .any(|mod_name| func_name.starts_with(&format!("{}.", mod_name)))
+            {
+                log::debug!(
+                    "[{}] Skipping function '{}' as it is already qualified",
+                    module_prefix,
+                    func_name
+                );
+                continue;
             }
 
             let old_func_def_opt = state.user_functions_mut().remove(&func_name);
@@ -497,68 +585,94 @@ impl Ast {
                 return Err(AlthreadError::new(
                     ErrorType::FunctionAlreadyDefined,
                     Some(old_func_def.pos),
-                    format!("Function '{}' from module '{}' is already defined", func_name, module_prefix),
+                    format!(
+                        "Function '{}' from module '{}' is already defined",
+                        func_name, module_prefix
+                    ),
                 ));
             }
 
             // replace all function calls in the body with the new function name
             for instruction in &mut old_func_def.body {
                 match &mut instruction.control {
-                InstructionType::FnCall { name: call_name, ..} => {
-                    if call_name == "print" || call_name == "assert" {
-                        // do not qualify standard library function calls
-                        continue;
-                    }
+                    InstructionType::FnCall {
+                        name: call_name, ..
+                    } => {
+                        if call_name == "print" || call_name == "assert" {
+                            // do not qualify standard library function calls
+                            continue;
+                        }
 
-                    // we don't care about the datatype, we just want to avoid qualifying list methods
-                    if state.stdlib().is_interface(&DataType::List(Box::new(DataType::Integer)), call_name) {
-                        // do not qualify standard library function calls
-                        continue;
-                    }
+                        // we don't care about the datatype, we just want to avoid qualifying list methods
+                        if state
+                            .stdlib()
+                            .is_interface(&DataType::List(Box::new(DataType::Integer)), call_name)
+                        {
+                            // do not qualify standard library function calls
+                            continue;
+                        }
 
-                    let caller_mod = Ast::module_prefix(&new_func_name);
-                    let callee_mod = Ast::module_prefix(call_name);
-                    
-                    if let Some(c_def) = state.user_functions().get(call_name) {
-                        log::debug!("[{}] Function '{}' is private: {}", module_prefix, call_name, c_def.is_private);
-                        
-                        if c_def.is_private && caller_mod != callee_mod {
-                            return Err(AlthreadError::new(
-                                ErrorType::PrivateFunctionCall,
-                                instruction.pos.clone(),
-                                format!("Cannot call private function '{}' from module '{}'", call_name, callee_mod),
-                            ));
+                        let caller_mod = Ast::module_prefix(&new_func_name);
+                        let callee_mod = Ast::module_prefix(call_name);
+
+                        if let Some(c_def) = state.user_functions().get(call_name) {
+                            log::debug!(
+                                "[{}] Function '{}' is private: {}",
+                                module_prefix,
+                                call_name,
+                                c_def.is_private
+                            );
+
+                            if c_def.is_private && caller_mod != callee_mod {
+                                return Err(AlthreadError::new(
+                                    ErrorType::PrivateFunctionCall,
+                                    instruction.pos.clone(),
+                                    format!(
+                                        "Cannot call private function '{}' from module '{}'",
+                                        call_name, callee_mod
+                                    ),
+                                ));
+                            }
+                        }
+                        *call_name = self.build_qualified_name(call_name, module_prefix);
+                    }
+                    InstructionType::GlobalReads { variables, .. } => {
+                        for var in variables.iter_mut() {
+                            *var = self.build_qualified_name(var, module_prefix);
                         }
                     }
-                    *call_name = self.build_qualified_name(call_name, module_prefix);
-                }
-                InstructionType::GlobalReads { variables, ..} => {
-                    for var in variables.iter_mut() {
-                        *var = self.build_qualified_name(var, module_prefix);
+                    InstructionType::GlobalAssignment { identifier, .. } => {
+                        *identifier = self.build_qualified_name(identifier, module_prefix);
                     }
-                }
-                InstructionType::GlobalAssignment { identifier, ..} => {
-                    *identifier = self.build_qualified_name(identifier, module_prefix);
-                }
-                InstructionType::RunCall { name: call_name, ..} => {
-                    *call_name = self.build_qualified_name(call_name, module_prefix);
+                    InstructionType::RunCall {
+                        name: call_name, ..
+                    } => {
+                        *call_name = self.build_qualified_name(call_name, module_prefix);
 
-                    let caller_mod = Ast::module_prefix(&new_func_name);
-                    let callee_mod = Ast::module_prefix(call_name);
+                        let caller_mod = Ast::module_prefix(&new_func_name);
+                        let callee_mod = Ast::module_prefix(call_name);
 
-                    if let Some((_, is_private)) = state.program_arguments().get(call_name) {
-                        log::debug!("[{}] Program '{}' is private: {}", module_prefix, call_name, is_private);
+                        if let Some((_, is_private)) = state.program_arguments().get(call_name) {
+                            log::debug!(
+                                "[{}] Program '{}' is private: {}",
+                                module_prefix,
+                                call_name,
+                                is_private
+                            );
 
-                        if *is_private && caller_mod != callee_mod {
-                            return Err(AlthreadError::new(
-                                ErrorType::PrivateFunctionCall,
-                                instruction.pos.clone(),
-                                format!("Cannot call private program '{}' from module '{}'", call_name, callee_mod),
-                            ));
+                            if *is_private && caller_mod != callee_mod {
+                                return Err(AlthreadError::new(
+                                    ErrorType::PrivateFunctionCall,
+                                    instruction.pos.clone(),
+                                    format!(
+                                        "Cannot call private program '{}' from module '{}'",
+                                        call_name, callee_mod
+                                    ),
+                                ));
+                            }
                         }
                     }
-                }
-                _ => {}
+                    _ => {}
                 }
             }
 
@@ -573,9 +687,10 @@ impl Ast {
 
             // println!("[{}] New function definition: {:?}", module_prefix, func_def);
 
-            state.user_functions_mut().insert(new_func_name.clone(), func_def);
+            state
+                .user_functions_mut()
+                .insert(new_func_name.clone(), func_def);
         }
-
 
         log::debug!("[{}] Module importing shared variables", module_prefix);
         log::debug!("Global memory: {:?}", state.global_memory_mut().keys());
@@ -584,45 +699,79 @@ impl Ast {
         let shared_vars: Vec<(String, Literal, Option<Variable>)> = {
             let global_memory = state.global_memory();
             let global_table = state.global_table();
-            
-            global_memory.iter().map(|(var_name, value)| {
-                let var_meta = global_table.get(var_name).cloned();
-                (var_name.clone(), value.clone(), var_meta)
-            }).collect()
+
+            global_memory
+                .iter()
+                .map(|(var_name, value)| {
+                    let var_meta = global_table.get(var_name).cloned();
+                    (var_name.clone(), value.clone(), var_meta)
+                })
+                .collect()
         };
 
-        log::debug!("[{}] Shared variables: {:?}", module_prefix, shared_vars.iter().map(|(name, _, _)| name).collect::<Vec<_>>());
+        log::debug!(
+            "[{}] Shared variables: {:?}",
+            module_prefix,
+            shared_vars
+                .iter()
+                .map(|(name, _, _)| name)
+                .collect::<Vec<_>>()
+        );
 
         for (var_name, value, var_meta) in shared_vars {
             let qualified_var_name = self.build_qualified_name(&var_name, module_prefix);
-            
-            if qualified_var_name == var_name || var_name.contains(module_prefix) || same_level_module_names.iter().any(|mod_name| var_name.starts_with(&format!("{}.", mod_name))) {
-                    log::debug!("[{}] Skipping variable '{}' as it is already qualified", module_prefix, var_name);
-                    continue;
+
+            if qualified_var_name == var_name
+                || var_name.contains(module_prefix)
+                || same_level_module_names
+                    .iter()
+                    .any(|mod_name| var_name.starts_with(&format!("{}.", mod_name)))
+            {
+                log::debug!(
+                    "[{}] Skipping variable '{}' as it is already qualified",
+                    module_prefix,
+                    var_name
+                );
+                continue;
             }
-            
-            log::debug!("[{}] Importing shared variable '{}'", module_prefix, qualified_var_name);
+
+            log::debug!(
+                "[{}] Importing shared variable '{}'",
+                module_prefix,
+                qualified_var_name
+            );
 
             if state.global_memory().contains_key(&qualified_var_name) {
                 return Err(AlthreadError::new(
                     ErrorType::VariableAlreadyDefined,
                     None,
-                    format!("Shared variable '{}' from module '{}' is already defined", var_name, module_prefix),
+                    format!(
+                        "Shared variable '{}' from module '{}' is already defined",
+                        var_name, module_prefix
+                    ),
                 ));
             }
-            
-            state.global_memory_mut().insert(qualified_var_name.clone(), value);
+
+            state
+                .global_memory_mut()
+                .insert(qualified_var_name.clone(), value);
             state.global_memory_mut().remove(&var_name);
-            
+
             if let Some(var_meta) = var_meta {
                 let mut var_meta_cloned = var_meta.clone();
                 var_meta_cloned.name = qualified_var_name.clone();
-                state.global_table_mut().insert(qualified_var_name.clone(), var_meta_cloned);
+                state
+                    .global_table_mut()
+                    .insert(qualified_var_name.clone(), var_meta_cloned);
                 state.global_table_mut().remove(&var_name);
             }
         }
 
-        log::debug!("[{}] Shared variables after import: {:?}", module_prefix, state.global_memory().keys());
+        log::debug!(
+            "[{}] Shared variables after import: {:?}",
+            module_prefix,
+            state.global_memory().keys()
+        );
 
         log::debug!("[{}] Qualifying always conditions", module_prefix);
         // Collect conditions into a temporary vector to avoid borrow conflicts
@@ -631,24 +780,35 @@ impl Ast {
         for condition in always_conditions.iter() {
             // if the condition is already qualified, skip it
             if condition.0.iter().any(|dep| dep.contains(module_prefix)) {
-                log::debug!("[{}] Skipping condition as it is already qualified", module_prefix);
+                log::debug!(
+                    "[{}] Skipping condition as it is already qualified",
+                    module_prefix
+                );
                 continue;
             }
 
             // skip if any dependency starts with any same-level module name
             if same_level_module_names.iter().any(|mod_name| {
-                condition.0.iter().any(|dep| dep.starts_with(&format!("{}.", mod_name)))
+                condition
+                    .0
+                    .iter()
+                    .any(|dep| dep.starts_with(&format!("{}.", mod_name)))
             }) {
-                log::debug!("[{}] Skipping condition as it starts with a same-level module name", module_prefix);
+                log::debug!(
+                    "[{}] Skipping condition as it starts with a same-level module name",
+                    module_prefix
+                );
                 continue;
             }
-            
+
             let (deps, read_vars, expr, pos) = condition;
 
-            let updated_deps: HashSet<String> = deps.iter()
+            let updated_deps: HashSet<String> = deps
+                .iter()
                 .map(|dep| self.build_qualified_name(dep, module_prefix))
                 .collect();
-            let updated_read_vars: Vec<String> = read_vars.iter()
+            let updated_read_vars: Vec<String> = read_vars
+                .iter()
                 .map(|var| self.build_qualified_name(var, module_prefix))
                 .collect();
 
@@ -656,7 +816,7 @@ impl Ast {
                 updated_deps,
                 updated_read_vars,
                 expr.clone(),
-                pos.clone()
+                pos.clone(),
             ));
         }
         *state.always_conditions_mut() = new_always_conditions;
@@ -673,16 +833,21 @@ impl Ast {
 
             // skip if any dependency starts with any same-level module name
             if same_level_module_names.iter().any(|mod_name| {
-                condition.0.iter().any(|dep| dep.starts_with(&format!("{}.", mod_name)))
+                condition
+                    .0
+                    .iter()
+                    .any(|dep| dep.starts_with(&format!("{}.", mod_name)))
             }) {
                 continue;
             }
             let (deps, read_vars, expr, pos) = condition;
 
-            let updated_deps: HashSet<String> = deps.iter()
+            let updated_deps: HashSet<String> = deps
+                .iter()
                 .map(|dep| self.build_qualified_name(dep, module_prefix))
                 .collect();
-            let updated_read_vars: Vec<String> = read_vars.iter()
+            let updated_read_vars: Vec<String> = read_vars
+                .iter()
                 .map(|var| self.build_qualified_name(var, module_prefix))
                 .collect();
 
@@ -690,72 +855,99 @@ impl Ast {
                 updated_deps,
                 updated_read_vars,
                 expr.clone(),
-                pos.clone()
+                pos.clone(),
             ));
         }
         *state.eventually_conditions_mut() = new_eventually_conditions;
 
         // remove conditions that are not qualified
         log::debug!("[{}] Removing unqualified conditions", module_prefix);
-        state.always_conditions_mut().retain(|(deps, _read_vars, _expr, _pos)| {
-            deps.iter().any(|dep| dep.contains('.'))
-        });
+        state
+            .always_conditions_mut()
+            .retain(|(deps, _read_vars, _expr, _pos)| deps.iter().any(|dep| dep.contains('.')));
 
-        state.eventually_conditions_mut().retain(|(deps, _read_vars, _expr, _pos)| {
-            deps.iter().any(|dep| dep.contains('.'))
-        });
+        state
+            .eventually_conditions_mut()
+            .retain(|(deps, _read_vars, _expr, _pos)| deps.iter().any(|dep| dep.contains('.')));
 
         log::debug!("[{}] Qualifying programs", module_prefix);
         // Collect programs to update first to avoid borrow conflicts
-        let programs_to_update: Vec<(String, ProgramCode)> = state.programs_code()
-        .iter()
-        .map(|(prog_name, prog_code)| (prog_name.clone(), prog_code.clone()))
-        .collect();
-        log::debug!("[{}] Programs to update: {:?}", module_prefix, programs_to_update.iter().map(|(name, _)| name).collect::<Vec<_>>());
+        let programs_to_update: Vec<(String, ProgramCode)> = state
+            .programs_code()
+            .iter()
+            .map(|(prog_name, prog_code)| (prog_name.clone(), prog_code.clone()))
+            .collect();
+        log::debug!(
+            "[{}] Programs to update: {:?}",
+            module_prefix,
+            programs_to_update
+                .iter()
+                .map(|(name, _)| name)
+                .collect::<Vec<_>>()
+        );
 
         for (prog_name, mut prog_code) in programs_to_update {
             log::debug!("[{}] Processing program '{}'", module_prefix, prog_name);
 
-            if same_level_module_names.iter().any(|mod_name| prog_name.starts_with(&format!("{}.", mod_name))) {
-                    log::debug!("[{}] Skipping program '{}' as it is already qualified", module_prefix, prog_name);
-                    continue;
+            if same_level_module_names
+                .iter()
+                .any(|mod_name| prog_name.starts_with(&format!("{}.", mod_name)))
+            {
+                log::debug!(
+                    "[{}] Skipping program '{}' as it is already qualified",
+                    module_prefix,
+                    prog_name
+                );
+                continue;
             }
-            
+
             let qualified_prog_name = self.build_qualified_name(&prog_name, module_prefix);
 
             if !(qualified_prog_name == prog_name) {
-
-                log::debug!("[{}] Importing program '{}'", module_prefix, qualified_prog_name);
+                log::debug!(
+                    "[{}] Importing program '{}'",
+                    module_prefix,
+                    qualified_prog_name
+                );
                 if state.program_arguments().contains_key(&qualified_prog_name) {
                     return Err(AlthreadError::new(
                         ErrorType::ProgramAlreadyDefined,
                         Some(self.import_block.as_ref().unwrap().pos.clone()),
-                        format!("Program '{}' from module '{}' is already defined", prog_name, module_prefix),
+                        format!(
+                            "Program '{}' from module '{}' is already defined",
+                            prog_name, module_prefix
+                        ),
                     ));
                 }
 
-                let prog_args = state.program_arguments().get(&prog_name)
-                .cloned()
-                .unwrap_or_default();
+                let prog_args = state
+                    .program_arguments()
+                    .get(&prog_name)
+                    .cloned()
+                    .unwrap_or_default();
 
-                state.program_arguments_mut().insert(
-                    qualified_prog_name.clone(),
-                    prog_args,
-                );
+                state
+                    .program_arguments_mut()
+                    .insert(qualified_prog_name.clone(), prog_args);
             }
 
             prog_code.name = qualified_prog_name.clone();
-            
+
             for instruction in &mut prog_code.instructions {
                 match &mut instruction.control {
-                    InstructionType::FnCall { name: call_name, ..} => {
+                    InstructionType::FnCall {
+                        name: call_name, ..
+                    } => {
                         if call_name == "print" || call_name == "assert" {
                             // do not qualify standard library function calls
                             continue;
                         }
 
                         // we don't care about the datatype, we just want to avoid qualifying list methods
-                        if state.stdlib().is_interface(&DataType::List(Box::new(DataType::Integer)), call_name) {
+                        if state
+                            .stdlib()
+                            .is_interface(&DataType::List(Box::new(DataType::Integer)), call_name)
+                        {
                             // do not qualify standard library function calls
                             continue;
                         }
@@ -763,43 +955,63 @@ impl Ast {
                         let callee_mod = Ast::module_prefix(call_name);
 
                         if let Some(c_def) = state.user_functions().get(call_name) {
-                            log::debug!("[{}] Function '{}' is private: {}", module_prefix, call_name, c_def.is_private);
+                            log::debug!(
+                                "[{}] Function '{}' is private: {}",
+                                module_prefix,
+                                call_name,
+                                c_def.is_private
+                            );
                             if c_def.is_private && caller_mod != callee_mod {
                                 return Err(AlthreadError::new(
                                     ErrorType::PrivateFunctionCall,
                                     instruction.pos.clone(),
-                                    format!("Cannot call private function '{}' from module '{}'", call_name, callee_mod),
+                                    format!(
+                                        "Cannot call private function '{}' from module '{}'",
+                                        call_name, callee_mod
+                                    ),
                                 ));
                             }
                         }
                         *call_name = self.build_qualified_name(call_name, module_prefix);
                     }
-                    InstructionType::GlobalReads { variables, ..} => {
+                    InstructionType::GlobalReads { variables, .. } => {
                         for var in variables.iter_mut() {
                             *var = self.build_qualified_name(var, module_prefix);
                         }
                     }
-                    InstructionType::GlobalAssignment { identifier, ..} => {
+                    InstructionType::GlobalAssignment { identifier, .. } => {
                         *identifier = self.build_qualified_name(identifier, module_prefix);
                     }
-                    InstructionType::RunCall { name: call_name, ..} => {
+                    InstructionType::RunCall {
+                        name: call_name, ..
+                    } => {
                         let caller_mod = Ast::module_prefix(&prog_code.name);
                         let callee_mod = Ast::module_prefix(call_name);
                         if let Some((_, is_private)) = state.program_arguments().get(call_name) {
-                            log::debug!("[{}] Program '{}' is private: {}", module_prefix, call_name, is_private);
+                            log::debug!(
+                                "[{}] Program '{}' is private: {}",
+                                module_prefix,
+                                call_name,
+                                is_private
+                            );
 
                             if *is_private && caller_mod != callee_mod {
                                 return Err(AlthreadError::new(
                                     ErrorType::PrivateFunctionCall,
                                     instruction.pos.clone(),
-                                    format!("Cannot call private program '{}' from module '{}'", call_name, callee_mod),
+                                    format!(
+                                        "Cannot call private program '{}' from module '{}'",
+                                        call_name, callee_mod
+                                    ),
                                 ));
                             }
                         }
                         *call_name = self.build_qualified_name(call_name, module_prefix);
                     }
-                    InstructionType::WaitStart { dependencies, ..} => {
-                        let updated_vars: std::collections::HashSet<String> = dependencies.variables.iter()
+                    InstructionType::WaitStart { dependencies, .. } => {
+                        let updated_vars: std::collections::HashSet<String> = dependencies
+                            .variables
+                            .iter()
                             .map(|dep| self.build_qualified_name(dep, module_prefix))
                             .collect();
                         dependencies.variables = updated_vars;
@@ -808,21 +1020,51 @@ impl Ast {
                 }
             }
             state.programs_code_mut().remove(&prog_name);
-            state.programs_code_mut().insert(qualified_prog_name, prog_code.clone());
+            state
+                .programs_code_mut()
+                .insert(qualified_prog_name, prog_code.clone());
         }
 
-        state.context.borrow_mut().global_memory.extend(state.global_memory().clone());
-        state.context.borrow_mut().program_arguments.extend(state.program_arguments().clone());
-        state.context.borrow_mut().user_functions.extend(state.user_functions().clone());
-        state.context.borrow_mut().global_table.extend(state.global_table().clone());
-        state.context.borrow_mut().programs_code.extend(state.programs_code().clone());
-        state.context.borrow_mut().always_conditions.extend(state.always_conditions().clone());
-        state.context.borrow_mut().eventually_conditions.extend(state.eventually_conditions().clone());
+        state
+            .context
+            .borrow_mut()
+            .global_memory
+            .extend(state.global_memory().clone());
+        state
+            .context
+            .borrow_mut()
+            .program_arguments
+            .extend(state.program_arguments().clone());
+        state
+            .context
+            .borrow_mut()
+            .user_functions
+            .extend(state.user_functions().clone());
+        state
+            .context
+            .borrow_mut()
+            .global_table
+            .extend(state.global_table().clone());
+        state
+            .context
+            .borrow_mut()
+            .programs_code
+            .extend(state.programs_code().clone());
+        state
+            .context
+            .borrow_mut()
+            .always_conditions
+            .extend(state.always_conditions().clone());
+        state
+            .context
+            .borrow_mut()
+            .eventually_conditions
+            .extend(state.eventually_conditions().clone());
 
         log::debug!("[{}] Compiled module with {} programs, {} functions, {} shared variables, {} always conditions, {} eventually conditions", 
-            module_prefix, 
-            state.programs_code().len(), 
-            state.user_functions().len(), 
+            module_prefix,
+            state.programs_code().len(),
+            state.user_functions().len(),
             state.global_memory().len(),
             state.always_conditions().len(),
             state.eventually_conditions().len()
@@ -831,11 +1073,26 @@ impl Ast {
         if module_prefix.is_empty() {
             log::debug!("-----------------------------------------------------");
             log::debug!("[Main module] Finished compiling main module");
-            log::debug!("[Main module] Shared variables: {:?}", state.global_memory().keys());
-            log::debug!("[Main module] User functions: {:?}", state.user_functions().keys());
-            log::debug!("[Main module] Programs code: {:?}", state.programs_code().keys());
-            log::debug!("[Main module] Always conditions: {:?}", state.always_conditions());
-            log::debug!("[Main module] Eventually conditions: {:?}", state.eventually_conditions());
+            log::debug!(
+                "[Main module] Shared variables: {:?}",
+                state.global_memory().keys()
+            );
+            log::debug!(
+                "[Main module] User functions: {:?}",
+                state.user_functions().keys()
+            );
+            log::debug!(
+                "[Main module] Programs code: {:?}",
+                state.programs_code().keys()
+            );
+            log::debug!(
+                "[Main module] Always conditions: {:?}",
+                state.always_conditions()
+            );
+            log::debug!(
+                "[Main module] Eventually conditions: {:?}",
+                state.eventually_conditions()
+            );
             log::debug!("-----------------------------------------------------");
         }
 
@@ -851,15 +1108,13 @@ impl Ast {
             eventually_conditions: context_borrow.eventually_conditions.clone(),
             stdlib: context_borrow.stdlib.clone(),
         })
-
     }
-
 
     fn compile_program(
         &self,
         name: &str,
         state: &mut CompilerState,
-        module_prefix: &str
+        module_prefix: &str,
     ) -> AlthreadResult<ProgramCode> {
         let mut process_code = ProgramCode {
             instructions: Vec::new(),
@@ -902,5 +1157,4 @@ impl Ast {
         });
         Ok(process_code)
     }
-
 }

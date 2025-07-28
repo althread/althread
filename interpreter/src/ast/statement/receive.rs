@@ -35,7 +35,9 @@ impl NodeBuilder for ReceiveStatement {
         if pair.as_rule() == Rule::object_identifier {
             // Parse the object_identifier and convert it to a string
             let object_id = Node::<ObjectIdentifier>::build(pair, filepath)?;
-            channel = object_id.value.parts
+            channel = object_id
+                .value
+                .parts
                 .iter()
                 .map(|p| p.value.value.as_str())
                 .collect::<Vec<_>>()

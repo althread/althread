@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
+use crate::ast::block::Block;
 use crate::ast::node::Node;
 use crate::ast::statement::Statement;
-use crate::ast::block::Block;
 use crate::error::Pos;
 
 pub struct CFGNode<'a> {
@@ -10,9 +10,8 @@ pub struct CFGNode<'a> {
     pub ast_node: Option<&'a Node<Statement>>,
     pub is_return: bool,
     pub predecessors: Vec<usize>,
-    pub successors: Vec<usize>
+    pub successors: Vec<usize>,
 }
-
 
 pub struct ControlFlowGraph<'a> {
     pub nodes: HashMap<usize, CFGNode<'a>>,
@@ -24,8 +23,10 @@ impl<'a> ControlFlowGraph<'a> {
     pub fn display(&self) {
         println!("Control Flow Graph:");
         for node in self.nodes.values() {
-            println!("Node ID: {}, Is Return: {}, Predecessors: {:?}, Successors: {:?}",
-                node.id, node.is_return, node.predecessors, node.successors);
+            println!(
+                "Node ID: {}, Is Return: {}, Predecessors: {:?}, Successors: {:?}",
+                node.id, node.is_return, node.predecessors, node.successors
+            );
             // if let Some(ast_node) = node.ast_node {
             //     println!("  AST Node: {:?}", ast_node.value);
             // }
@@ -41,9 +42,8 @@ impl<'a> ControlFlowGraph<'a> {
     /// Returns:
     ///   - A `ControlFlowGraph` instance representing the control flow of the function.
     pub fn from_function(fn_body_node: &'a Node<Block>) -> Self {
-        let mut nodes : HashMap<usize, CFGNode<'a>> = HashMap::new();
+        let mut nodes: HashMap<usize, CFGNode<'a>> = HashMap::new();
         let mut next_node_id_counter = 0;
-
 
         // create entry node
         let entry_node_id = next_node_id_counter;
@@ -56,9 +56,8 @@ impl<'a> ControlFlowGraph<'a> {
                 is_return: false,
                 predecessors: Vec::new(),
                 successors: Vec::new(),
-            }
+            },
         );
-
 
         // create exit node
         let exit_node_id = next_node_id_counter;
@@ -71,9 +70,8 @@ impl<'a> ControlFlowGraph<'a> {
                 is_return: false,
                 predecessors: Vec::new(),
                 successors: Vec::new(),
-            }
+            },
         );
-
 
         // build the CFG recursively from the function body
         // starting with the entry node as the only predecessor
@@ -84,8 +82,8 @@ impl<'a> ControlFlowGraph<'a> {
                 &mut nodes,
                 &mut next_node_id_counter,
                 exit_node_id,
-            ); 
-        
+            );
+
         // if the function body is empty, we need to connect the entry node to the exit node
         if fn_body_node.value.children.is_empty() {
             if let Some(entry_cfg_node) = nodes.get_mut(&entry_node_id) {
@@ -119,7 +117,6 @@ impl<'a> ControlFlowGraph<'a> {
             exit: exit_node_id,
         }
     }
-
 
     /// Recursively builds the control flow graph from a list of statements.
     /// This function processes each statement and its control flow constructs
@@ -195,7 +192,8 @@ impl<'a> ControlFlowGraph<'a> {
                     current_preceding_cfg_node_ids.clear();
                 }
                 Statement::Atomic(atomic_node) => {
-                    let inner_stmt_node_ref: &Node<Statement> = &atomic_node.value.statement.as_ref();
+                    let inner_stmt_node_ref: &Node<Statement> =
+                        &atomic_node.value.statement.as_ref();
 
                     let (_inner_atomic_entry_id, inner_atomic_open_ends) =
                         ControlFlowGraph::build_cfg_recursive(
@@ -214,19 +212,18 @@ impl<'a> ControlFlowGraph<'a> {
                     current_preceding_cfg_node_ids.clear();
 
                     let then_block_stmts = &if_control_node.value.then_block.value.children;
-                    let (_then_entry_id, then_open_ends) = 
-                        ControlFlowGraph::build_cfg_recursive(
-                            then_block_stmts,
-                            vec![current_stmt_cfg_node_id],
-                            nodes,
-                            next_id_counter,
-                            function_exit_id,
-                        );
+                    let (_then_entry_id, then_open_ends) = ControlFlowGraph::build_cfg_recursive(
+                        then_block_stmts,
+                        vec![current_stmt_cfg_node_id],
+                        nodes,
+                        next_id_counter,
+                        function_exit_id,
+                    );
                     current_preceding_cfg_node_ids.extend(then_open_ends);
 
                     if let Some(else_block_node) = &if_control_node.value.else_block {
                         let else_block_stmts = &else_block_node.value.children;
-                        let (_else_entry_id, else_open_ends) = 
+                        let (_else_entry_id, else_open_ends) =
                             ControlFlowGraph::build_cfg_recursive(
                                 else_block_stmts,
                                 vec![current_stmt_cfg_node_id],
@@ -241,7 +238,7 @@ impl<'a> ControlFlowGraph<'a> {
                 }
                 Statement::Block(inner_block_node) => {
                     let inner_stmts = &inner_block_node.value.children;
-                    let (_inner_block_entry_id, inner_block_open_ends) = 
+                    let (_inner_block_entry_id, inner_block_open_ends) =
                         ControlFlowGraph::build_cfg_recursive(
                             inner_stmts,
                             vec![current_stmt_cfg_node_id],
@@ -252,12 +249,14 @@ impl<'a> ControlFlowGraph<'a> {
                     current_preceding_cfg_node_ids = inner_block_open_ends;
                 }
                 // todo!("Handle while, for, loop, etc. statements")
-                _ => {
-                }
+                _ => {}
             }
         }
 
-        (first_cfg_node_in_this_sequence, current_preceding_cfg_node_ids)
+        (
+            first_cfg_node_in_this_sequence,
+            current_preceding_cfg_node_ids,
+        )
     }
 
     /// Finds the first point in the CFG where a path might be missing a return.
@@ -279,7 +278,12 @@ impl<'a> ControlFlowGraph<'a> {
 
         let mut stack = vec![(self.entry, false, None)];
 
-        while let Some((current_node_id, path_had_return_before_current, last_ast_node_pos_on_path)) = stack.pop() {
+        while let Some((
+            current_node_id,
+            path_had_return_before_current,
+            last_ast_node_pos_on_path,
+        )) = stack.pop()
+        {
             if !globally_visited_tuples.insert((current_node_id, path_had_return_before_current)) {
                 continue; // already visited this node with this return state
             }
@@ -290,13 +294,16 @@ impl<'a> ControlFlowGraph<'a> {
             }
             visited_on_current_path.insert(current_node_id);
 
-            let current_cfg_node = self.nodes.get(&current_node_id).expect("CFG node ID should exist");
-    
-            let current_node_is_explicit_return = current_cfg_node.is_return;
-            let path_has_return_up_to_and_including_current = path_had_return_before_current || current_node_is_explicit_return;
+            let current_cfg_node = self
+                .nodes
+                .get(&current_node_id)
+                .expect("CFG node ID should exist");
 
-            let current_node_ast_pos = current_cfg_node.ast_node
-                .map(|node| node.pos.clone());
+            let current_node_is_explicit_return = current_cfg_node.is_return;
+            let path_has_return_up_to_and_including_current =
+                path_had_return_before_current || current_node_is_explicit_return;
+
+            let current_node_ast_pos = current_cfg_node.ast_node.map(|node| node.pos.clone());
 
             let effective_pos_for_this_step = current_node_ast_pos.or(last_ast_node_pos_on_path);
 
@@ -333,4 +340,3 @@ impl<'a> ControlFlowGraph<'a> {
         None
     }
 }
-

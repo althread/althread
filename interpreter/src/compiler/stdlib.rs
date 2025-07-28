@@ -1,5 +1,8 @@
 use std::{
-    cell::RefCell, collections::HashMap, fmt::{self, Debug}, rc::Rc
+    cell::RefCell,
+    collections::HashMap,
+    fmt::{self, Debug},
+    rc::Rc,
 };
 
 use crate::ast::token::{datatype::DataType, literal::Literal};
@@ -151,8 +154,10 @@ impl Stdlib {
             }
             _ => {}
         }
-        
-        self.interfaces.borrow_mut().insert(dtype.clone(), new_interfaces.clone());
+
+        self.interfaces
+            .borrow_mut()
+            .insert(dtype.clone(), new_interfaces.clone());
         new_interfaces
     }
 }

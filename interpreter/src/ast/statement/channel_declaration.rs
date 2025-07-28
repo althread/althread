@@ -96,8 +96,6 @@ fn get_prog_name(var_name: &str, state: &mut CompilerState, pos: &Pos) -> Althre
     }
 }
 
-
-
 impl InstructionBuilder for Node<ChannelDeclaration> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         let dec = &self.value;
@@ -107,7 +105,7 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
 
         // check if a channel with the same name already exists on this program
         let left_key = (left_prog.clone(), dec.ch_left_name.clone());
-        
+
         // CLONE the undefined channels data to avoid holding a reference
         let left_undefined = state.undefined_channels().get(&left_key).cloned();
         if let Some(used) = left_undefined {
@@ -128,7 +126,7 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
                 ));
             }
         }
-        
+
         // CLONE the channels data to avoid holding a reference
         let left_channel_info = state.channels().get(&left_key).cloned();
         if let Some((datatypes, pos)) = left_channel_info {
@@ -150,7 +148,7 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
         }
 
         let right_key = (right_prog.clone(), dec.ch_right_name.clone());
-        
+
         // CLONE the undefined channels data to avoid holding a reference
         let right_undefined = state.undefined_channels().get(&right_key).cloned();
         if let Some(used) = right_undefined {
@@ -171,7 +169,7 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
                 ));
             }
         }
-        
+
         // CLONE the channels data to avoid holding a reference
         let right_channel_info = state.channels().get(&right_key).cloned();
         if let Some((datatypes, pos)) = right_channel_info {
