@@ -103,7 +103,7 @@ pub struct CompilationContext {
     pub stdlib: Rc<stdlib::Stdlib>,
     pub user_functions: HashMap<String, FunctionDefinition>,
     pub global_table: HashMap<String, Variable>,
-    pub program_arguments: HashMap<String, Vec<DataType>>,
+    pub program_arguments: HashMap<String, (Vec<DataType>, bool)>,
     pub programs_code: HashMap<String, ProgramCode>,
     pub global_memory: BTreeMap<String, Literal>,
     
@@ -213,11 +213,11 @@ impl CompilerState {
         std::cell::RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.undefined_channels)
     }
 
-    pub fn program_arguments(&self) -> std::cell::Ref<HashMap<String, Vec<DataType>>> {
+    pub fn program_arguments(&self) -> std::cell::Ref<HashMap<String, (Vec<DataType>, bool)>> {
         std::cell::Ref::map(self.local_context.borrow(), |ctx| &ctx.program_arguments)
     }
 
-    pub fn program_arguments_mut(&self) -> std::cell::RefMut<HashMap<String, Vec<DataType>>> {
+    pub fn program_arguments_mut(&self) -> std::cell::RefMut<HashMap<String, (Vec<DataType>, bool)>> {
         std::cell::RefMut::map(self.local_context.borrow_mut(), |ctx| &mut ctx.program_arguments)
     }
 
@@ -264,7 +264,7 @@ impl CompilerState {
 #[derive(Debug)]
 pub struct CompiledProject {
     pub programs_code: HashMap<String, ProgramCode>,
-    pub program_arguments: HashMap<String, Vec<DataType>>,
+    pub program_arguments: HashMap<String, (Vec<DataType>, bool)>,
     pub user_functions: HashMap<String, FunctionDefinition>,
     pub global_memory: BTreeMap<String, Literal>,
     pub global_table: HashMap<String, Variable>,

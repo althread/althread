@@ -229,17 +229,20 @@ impl Ast {
         }
 
         // before compiling the programs, get the list of program names and their arguments
-        let program_args: HashMap<String, Vec<DataType>> = self
+        let program_args: HashMap<String, (Vec<DataType>, bool)> = self
             .process_blocks
             .iter()
-            .map(|(name, (args, _))| {
+            .map(|(name, (args, _, is_private))| {
                 (
                     name.clone(),
-                    args.value
-                        .datatypes
-                        .iter()
-                        .map(|d| d.value.clone())
-                        .collect::<Vec<_>>(),
+                    (
+                        args.value
+                            .datatypes
+                            .iter()
+                            .map(|d| d.value.clone())
+                            .collect::<Vec<_>>(),
+                        *is_private,
+                    ),
                 )
             })
             .collect();
@@ -253,24 +256,28 @@ impl Ast {
         // start with the main program
         
         if self.process_blocks.contains_key("main") {
-            if !module_prefix.is_empty(){
+            let is_private = state.program_arguments().get("main").is_some_and(|(_, is_private)| *is_private);
+
+            if !module_prefix.is_empty() && !is_private {
                 return Err(AlthreadError::new(
                         ErrorType::ImportMainConflict,
                         Some(self.process_blocks.get("main").unwrap().1.pos.clone()),
-                        format!("'{}' defines a 'main' block. Imported modules cannot define a 'main' block.", module_prefix),
+                        format!("'{}' defines a 'main' block.\nImported modules cannot define a 'main' block that is not set to private.\nUse '@private' to mark it as private.", module_prefix),
                 ));
             }
 
-
-            let code = self.compile_program("main", &mut state, module_prefix)?;
-            state.programs_code_mut().insert("main".to_string(), code);
-            assert!(state.current_stack_depth == 0);
+            if module_prefix.is_empty() {
+                let code = self.compile_program("main", &mut state, module_prefix)?;
+                state.programs_code_mut().insert("main".to_string(), code);
+                assert!(state.current_stack_depth == 0);
+            }
         }
 
         for name in self.process_blocks.keys() {
             if name == "main" {
                 continue;
             }
+
             let code = self.compile_program(name, &mut state, module_prefix)?;
             state.programs_code_mut().insert(name.clone(), code);
             assert!(state.current_stack_depth == 0);
@@ -456,257 +463,267 @@ impl Ast {
         }
 
         // if not the main file then we need to qualify everything
-        if !module_prefix.is_empty() {
+        // if !module_prefix.is_empty() {
 
-            let user_functions: Vec<(String, FunctionDefinition)> = state
-                .user_functions()
-                .iter()
-                .map(|(name, def)| (name.clone(), def.clone()))
-                .collect();
+        let user_functions: Vec<(String, FunctionDefinition)> = state
+            .user_functions()
+            .iter()
+            .map(|(name, def)| (name.clone(), def.clone()))
+            .collect();
 
-            for (func_name, func_def) in user_functions {
+        for (func_name, func_def) in user_functions {
 
-                if same_level_module_names.iter().any(|mod_name| func_name.starts_with(&format!("{}.", mod_name))) {
-                        log::debug!("[{}] Skipping function '{}' as it is already qualified", module_prefix, func_name);
-                        continue;
-                }
-
-                let old_func_def_opt = state.user_functions_mut().remove(&func_name);
-
-                if old_func_def_opt.is_none() {
-                    return Err(AlthreadError::new(
-                        ErrorType::FunctionNotFound,
-                        Some(func_def.pos.clone()),
-                        format!("Function '{}' not found", func_name),
-                    ));
-                }
-
-                let mut old_func_def = old_func_def_opt.unwrap();
-
-                let new_func_name = self.build_qualified_name(&func_name, module_prefix);
-
-                log::debug!("[{}] Importing function '{}'", module_prefix, func_name);
-                if state.user_functions().contains_key(&new_func_name) {
-                    return Err(AlthreadError::new(
-                        ErrorType::FunctionAlreadyDefined,
-                        Some(old_func_def.pos),
-                        format!("Function '{}' from module '{}' is already defined", func_name, module_prefix),
-                    ));
-                }
-                println!("[{}] Replacing function calls in body of '{}'", module_prefix, func_name);
-                println!("[{}] Old function definition: {:?}", module_prefix, old_func_def);
-                // replace all function calls in the body with the new function name
-                for instruction in &mut old_func_def.body {
-                    match &mut instruction.control {
-                    InstructionType::FnCall { name: call_name, ..} => {
-                        if call_name == "print" || call_name == "assert" {
-                            // do not qualify standard library function calls
-                            continue;
-                        }
-
-                        // we don't care about the datatype, we just want to avoid qualifying list methods
-                        if state.stdlib().is_interface(&DataType::List(Box::new(DataType::Integer)), call_name) {
-                            // do not qualify standard library function calls
-                            continue;
-                        }
-
-                        let caller_mod = Ast::module_prefix(&new_func_name);
-                        let callee_mod = Ast::module_prefix(call_name);
-                        println!("[{}] Caller module: '{}', Callee module: '{}'", module_prefix, caller_mod, callee_mod);
-                        if let Some(c_def) = state.user_functions().get(call_name) {
-                            if c_def.is_private && caller_mod != callee_mod {
-                                return Err(AlthreadError::new(
-                                    ErrorType::PrivateFunctionCall,
-                                    instruction.pos.clone(),
-                                    format!("Cannot call private function '{}' from module '{}'", call_name, callee_mod),
-                                ));
-                            }
-                        }
-
-
-                        *call_name = format!("{}.{}", module_prefix, call_name);
-                    }
-                    InstructionType::GlobalReads { variables, ..} => {
-                        for var in variables.iter_mut() {
-                            *var = format!("{}.{}", module_prefix, var);
-                        }
-                    }
-                    InstructionType::GlobalAssignment { identifier, ..} => {
-                        *identifier = format!("{}.{}", module_prefix, identifier);
-                    }
-                    InstructionType::RunCall { name: call_name, ..} => {
-                        *call_name = format!("{}.{}", module_prefix, call_name);
-                    }
-                    _ => {}
-                    }
-                }
-
-                let func_def = FunctionDefinition {
-                    name: new_func_name.clone(),
-                    arguments: old_func_def.arguments.clone(),
-                    return_type: old_func_def.return_type.clone(),
-                    body: old_func_def.body.clone(),
-                    pos: old_func_def.pos.clone(),
-                    is_private: old_func_def.is_private,
-                };
-
-                println!("[{}] New function definition: {:?}", module_prefix, func_def);
-
-                state.user_functions_mut().insert(new_func_name.clone(), func_def);
+            if same_level_module_names.iter().any(|mod_name| func_name.starts_with(&format!("{}.", mod_name))) {
+                    log::debug!("[{}] Skipping function '{}' as it is already qualified", module_prefix, func_name);
+                    continue;
             }
 
+            let old_func_def_opt = state.user_functions_mut().remove(&func_name);
 
-            log::debug!("[{}] Module importing shared variables", module_prefix);
-            log::debug!("Global memory: {:?}", state.global_memory_mut().keys());
+            if old_func_def_opt.is_none() {
+                return Err(AlthreadError::new(
+                    ErrorType::FunctionNotFound,
+                    Some(func_def.pos.clone()),
+                    format!("Function '{}' not found", func_name),
+                ));
+            }
 
-            // Collect all variable data first to avoid borrow conflicts
-            let shared_vars: Vec<(String, Literal, Option<Variable>)> = {
-                let global_memory = state.global_memory();
-                let global_table = state.global_table();
-                
-                global_memory.iter().map(|(var_name, value)| {
-                    let var_meta = global_table.get(var_name).cloned();
-                    (var_name.clone(), value.clone(), var_meta)
-                }).collect()
+            let mut old_func_def = old_func_def_opt.unwrap();
+
+            let new_func_name = self.build_qualified_name(&func_name, module_prefix);
+
+            log::debug!("[{}] Importing function '{}'", module_prefix, func_name);
+            if state.user_functions().contains_key(&new_func_name) {
+                return Err(AlthreadError::new(
+                    ErrorType::FunctionAlreadyDefined,
+                    Some(old_func_def.pos),
+                    format!("Function '{}' from module '{}' is already defined", func_name, module_prefix),
+                ));
+            }
+
+            // replace all function calls in the body with the new function name
+            for instruction in &mut old_func_def.body {
+                match &mut instruction.control {
+                InstructionType::FnCall { name: call_name, ..} => {
+                    if call_name == "print" || call_name == "assert" {
+                        // do not qualify standard library function calls
+                        continue;
+                    }
+
+                    // we don't care about the datatype, we just want to avoid qualifying list methods
+                    if state.stdlib().is_interface(&DataType::List(Box::new(DataType::Integer)), call_name) {
+                        // do not qualify standard library function calls
+                        continue;
+                    }
+
+                    let caller_mod = Ast::module_prefix(&new_func_name);
+                    let callee_mod = Ast::module_prefix(call_name);
+                    
+                    if let Some(c_def) = state.user_functions().get(call_name) {
+                        log::debug!("[{}] Function '{}' is private: {}", module_prefix, call_name, c_def.is_private);
+                        
+                        if c_def.is_private && caller_mod != callee_mod {
+                            return Err(AlthreadError::new(
+                                ErrorType::PrivateFunctionCall,
+                                instruction.pos.clone(),
+                                format!("Cannot call private function '{}' from module '{}'", call_name, callee_mod),
+                            ));
+                        }
+                    }
+                    *call_name = self.build_qualified_name(call_name, module_prefix);
+                }
+                InstructionType::GlobalReads { variables, ..} => {
+                    for var in variables.iter_mut() {
+                        *var = self.build_qualified_name(var, module_prefix);
+                    }
+                }
+                InstructionType::GlobalAssignment { identifier, ..} => {
+                    *identifier = self.build_qualified_name(identifier, module_prefix);
+                }
+                InstructionType::RunCall { name: call_name, ..} => {
+                    *call_name = self.build_qualified_name(call_name, module_prefix);
+
+                    let caller_mod = Ast::module_prefix(&new_func_name);
+                    let callee_mod = Ast::module_prefix(call_name);
+
+                    if let Some((_, is_private)) = state.program_arguments().get(call_name) {
+                        log::debug!("[{}] Program '{}' is private: {}", module_prefix, call_name, is_private);
+
+                        if *is_private && caller_mod != callee_mod {
+                            return Err(AlthreadError::new(
+                                ErrorType::PrivateFunctionCall,
+                                instruction.pos.clone(),
+                                format!("Cannot call private program '{}' from module '{}'", call_name, callee_mod),
+                            ));
+                        }
+                    }
+                }
+                _ => {}
+                }
+            }
+
+            let func_def = FunctionDefinition {
+                name: new_func_name.clone(),
+                arguments: old_func_def.arguments.clone(),
+                return_type: old_func_def.return_type.clone(),
+                body: old_func_def.body.clone(),
+                pos: old_func_def.pos.clone(),
+                is_private: old_func_def.is_private,
             };
 
-            log::debug!("[{}] Shared variables: {:?}", module_prefix, shared_vars.iter().map(|(name, _, _)| name).collect::<Vec<_>>());
+            // println!("[{}] New function definition: {:?}", module_prefix, func_def);
 
-            for (var_name, value, var_meta) in shared_vars {
-                let qualified_var_name = self.build_qualified_name(&var_name, module_prefix);
-                
-                if qualified_var_name == var_name || var_name.contains(module_prefix) || same_level_module_names.iter().any(|mod_name| var_name.starts_with(&format!("{}.", mod_name))) {
-                        log::debug!("[{}] Skipping variable '{}' as it is already qualified", module_prefix, var_name);
-                        continue;
-                }
-                
-                log::debug!("[{}] Importing shared variable '{}'", module_prefix, qualified_var_name);
+            state.user_functions_mut().insert(new_func_name.clone(), func_def);
+        }
 
-                if state.global_memory().contains_key(&qualified_var_name) {
-                    return Err(AlthreadError::new(
-                        ErrorType::VariableAlreadyDefined,
-                        None,
-                        format!("Shared variable '{}' from module '{}' is already defined", var_name, module_prefix),
-                    ));
-                }
-                
-                state.global_memory_mut().insert(qualified_var_name.clone(), value);
-                state.global_memory_mut().remove(&var_name);
-                
-                if let Some(var_meta) = var_meta {
-                    let mut var_meta_cloned = var_meta.clone();
-                    var_meta_cloned.name = qualified_var_name.clone();
-                    state.global_table_mut().insert(qualified_var_name.clone(), var_meta_cloned);
-                    state.global_table_mut().remove(&var_name);
-                }
+
+        log::debug!("[{}] Module importing shared variables", module_prefix);
+        log::debug!("Global memory: {:?}", state.global_memory_mut().keys());
+
+        // Collect all variable data first to avoid borrow conflicts
+        let shared_vars: Vec<(String, Literal, Option<Variable>)> = {
+            let global_memory = state.global_memory();
+            let global_table = state.global_table();
+            
+            global_memory.iter().map(|(var_name, value)| {
+                let var_meta = global_table.get(var_name).cloned();
+                (var_name.clone(), value.clone(), var_meta)
+            }).collect()
+        };
+
+        log::debug!("[{}] Shared variables: {:?}", module_prefix, shared_vars.iter().map(|(name, _, _)| name).collect::<Vec<_>>());
+
+        for (var_name, value, var_meta) in shared_vars {
+            let qualified_var_name = self.build_qualified_name(&var_name, module_prefix);
+            
+            if qualified_var_name == var_name || var_name.contains(module_prefix) || same_level_module_names.iter().any(|mod_name| var_name.starts_with(&format!("{}.", mod_name))) {
+                    log::debug!("[{}] Skipping variable '{}' as it is already qualified", module_prefix, var_name);
+                    continue;
             }
+            
+            log::debug!("[{}] Importing shared variable '{}'", module_prefix, qualified_var_name);
 
-            log::debug!("[{}] Shared variables after import: {:?}", module_prefix, state.global_memory().keys());
-
-            log::debug!("[{}] Qualifying always conditions", module_prefix);
-            // Collect conditions into a temporary vector to avoid borrow conflicts
-            let always_conditions: Vec<_> = state.always_conditions().clone();
-            let mut new_always_conditions = Vec::new();
-            for condition in always_conditions.iter() {
-                // if the condition is already qualified, skip it
-                if condition.0.iter().any(|dep| dep.contains(module_prefix)) {
-                    log::debug!("[{}] Skipping condition as it is already qualified", module_prefix);
-                    continue;
-                }
-
-                // skip if any dependency starts with any same-level module name
-                if same_level_module_names.iter().any(|mod_name| {
-                    condition.0.iter().any(|dep| dep.starts_with(&format!("{}.", mod_name)))
-                }) {
-                    log::debug!("[{}] Skipping condition as it starts with a same-level module name", module_prefix);
-                    continue;
-                }
-                
-                let (deps, read_vars, expr, pos) = condition;
-
-                let updated_deps: HashSet<String> = deps.iter()
-                    .map(|dep| format!("{}.{}", module_prefix, dep))
-                    .collect();
-                let updated_read_vars: Vec<String> = read_vars.iter()
-                    .map(|var| format!("{}.{}", module_prefix, var))
-                    .collect();
-
-                new_always_conditions.push((
-                    updated_deps,
-                    updated_read_vars,
-                    expr.clone(),
-                    pos.clone()
+            if state.global_memory().contains_key(&qualified_var_name) {
+                return Err(AlthreadError::new(
+                    ErrorType::VariableAlreadyDefined,
+                    None,
+                    format!("Shared variable '{}' from module '{}' is already defined", var_name, module_prefix),
                 ));
             }
-            *state.always_conditions_mut() = new_always_conditions;
-
-            log::debug!("[{}] Qualifying eventually conditions", module_prefix);
-            // Do the same for eventually_conditions
-            let eventually_conditions: Vec<_> = state.eventually_conditions().clone();
-            let mut new_eventually_conditions = Vec::new();
-            for condition in eventually_conditions.iter() {
-                // if the condition is already qualified, skip it
-                if condition.0.iter().any(|dep| dep.contains(module_prefix)) {
-                    continue;
-                }
-
-                // skip if any dependency starts with any same-level module name
-                if same_level_module_names.iter().any(|mod_name| {
-                    condition.0.iter().any(|dep| dep.starts_with(&format!("{}.", mod_name)))
-                }) {
-                    continue;
-                }
-                let (deps, read_vars, expr, pos) = condition;
-
-                let updated_deps: HashSet<String> = deps.iter()
-                    .map(|dep| format!("{}.{}", module_prefix, dep))
-                    .collect();
-                let updated_read_vars: Vec<String> = read_vars.iter()
-                    .map(|var| format!("{}.{}", module_prefix, var))
-                    .collect();
-
-                new_eventually_conditions.push((
-                    updated_deps,
-                    updated_read_vars,
-                    expr.clone(),
-                    pos.clone()
-                ));
+            
+            state.global_memory_mut().insert(qualified_var_name.clone(), value);
+            state.global_memory_mut().remove(&var_name);
+            
+            if let Some(var_meta) = var_meta {
+                let mut var_meta_cloned = var_meta.clone();
+                var_meta_cloned.name = qualified_var_name.clone();
+                state.global_table_mut().insert(qualified_var_name.clone(), var_meta_cloned);
+                state.global_table_mut().remove(&var_name);
             }
-            *state.eventually_conditions_mut() = new_eventually_conditions;
+        }
 
-            state.always_conditions_mut().retain(|(deps, _read_vars, _expr, _pos)| {
-                deps.iter().any(|dep| dep.contains('.'))
-            });
+        log::debug!("[{}] Shared variables after import: {:?}", module_prefix, state.global_memory().keys());
 
-            state.eventually_conditions_mut().retain(|(deps, _read_vars, _expr, _pos)| {
-                deps.iter().any(|dep| dep.contains('.'))
-            });
+        log::debug!("[{}] Qualifying always conditions", module_prefix);
+        // Collect conditions into a temporary vector to avoid borrow conflicts
+        let always_conditions: Vec<_> = state.always_conditions().clone();
+        let mut new_always_conditions = Vec::new();
+        for condition in always_conditions.iter() {
+            // if the condition is already qualified, skip it
+            if condition.0.iter().any(|dep| dep.contains(module_prefix)) {
+                log::debug!("[{}] Skipping condition as it is already qualified", module_prefix);
+                continue;
+            }
 
-            log::debug!("[{}] Qualifying programs", module_prefix);
-            // Collect programs to update first to avoid borrow conflicts
-            let programs_to_update: Vec<(String, ProgramCode)> = state.programs_code()
-            .iter()
-            .map(|(prog_name, prog_code)| (prog_name.clone(), prog_code.clone()))
-            .collect();
-            println!("[{}] Programs to update: {:?}", module_prefix, programs_to_update.iter().map(|(name, _)| name).collect::<Vec<_>>());
+            // skip if any dependency starts with any same-level module name
+            if same_level_module_names.iter().any(|mod_name| {
+                condition.0.iter().any(|dep| dep.starts_with(&format!("{}.", mod_name)))
+            }) {
+                log::debug!("[{}] Skipping condition as it starts with a same-level module name", module_prefix);
+                continue;
+            }
+            
+            let (deps, read_vars, expr, pos) = condition;
 
-            for (prog_name, mut prog_code) in programs_to_update {
-                if prog_name.contains(module_prefix) {
-                    // This program is already qualified, skip it
+            let updated_deps: HashSet<String> = deps.iter()
+                .map(|dep| self.build_qualified_name(dep, module_prefix))
+                .collect();
+            let updated_read_vars: Vec<String> = read_vars.iter()
+                .map(|var| self.build_qualified_name(var, module_prefix))
+                .collect();
+
+            new_always_conditions.push((
+                updated_deps,
+                updated_read_vars,
+                expr.clone(),
+                pos.clone()
+            ));
+        }
+        *state.always_conditions_mut() = new_always_conditions;
+
+        log::debug!("[{}] Qualifying eventually conditions", module_prefix);
+        // Do the same for eventually_conditions
+        let eventually_conditions: Vec<_> = state.eventually_conditions().clone();
+        let mut new_eventually_conditions = Vec::new();
+        for condition in eventually_conditions.iter() {
+            // if the condition is already qualified, skip it
+            if condition.0.iter().any(|dep| dep.contains(module_prefix)) {
+                continue;
+            }
+
+            // skip if any dependency starts with any same-level module name
+            if same_level_module_names.iter().any(|mod_name| {
+                condition.0.iter().any(|dep| dep.starts_with(&format!("{}.", mod_name)))
+            }) {
+                continue;
+            }
+            let (deps, read_vars, expr, pos) = condition;
+
+            let updated_deps: HashSet<String> = deps.iter()
+                .map(|dep| self.build_qualified_name(dep, module_prefix))
+                .collect();
+            let updated_read_vars: Vec<String> = read_vars.iter()
+                .map(|var| self.build_qualified_name(var, module_prefix))
+                .collect();
+
+            new_eventually_conditions.push((
+                updated_deps,
+                updated_read_vars,
+                expr.clone(),
+                pos.clone()
+            ));
+        }
+        *state.eventually_conditions_mut() = new_eventually_conditions;
+
+        // remove conditions that are not qualified
+        log::debug!("[{}] Removing unqualified conditions", module_prefix);
+        state.always_conditions_mut().retain(|(deps, _read_vars, _expr, _pos)| {
+            deps.iter().any(|dep| dep.contains('.'))
+        });
+
+        state.eventually_conditions_mut().retain(|(deps, _read_vars, _expr, _pos)| {
+            deps.iter().any(|dep| dep.contains('.'))
+        });
+
+        log::debug!("[{}] Qualifying programs", module_prefix);
+        // Collect programs to update first to avoid borrow conflicts
+        let programs_to_update: Vec<(String, ProgramCode)> = state.programs_code()
+        .iter()
+        .map(|(prog_name, prog_code)| (prog_name.clone(), prog_code.clone()))
+        .collect();
+        log::debug!("[{}] Programs to update: {:?}", module_prefix, programs_to_update.iter().map(|(name, _)| name).collect::<Vec<_>>());
+
+        for (prog_name, mut prog_code) in programs_to_update {
+            log::debug!("[{}] Processing program '{}'", module_prefix, prog_name);
+
+            if same_level_module_names.iter().any(|mod_name| prog_name.starts_with(&format!("{}.", mod_name))) {
+                    log::debug!("[{}] Skipping program '{}' as it is already qualified", module_prefix, prog_name);
                     continue;
-                }
+            }
+            
+            let qualified_prog_name = self.build_qualified_name(&prog_name, module_prefix);
 
-                if same_level_module_names.iter().any(|mod_name| prog_name.starts_with(&format!("{}.", mod_name))) {
-                        log::debug!("[{}] Skipping program '{}' as it is already qualified", module_prefix, prog_name);
-                        continue;
-                }
-                
-                let qualified_prog_name = self.build_qualified_name(&prog_name, module_prefix);
-
-                if qualified_prog_name == prog_name {
-                    // No need to qualify, it's already qualified
-                    continue;
-                }
+            if !(qualified_prog_name == prog_name) {
 
                 log::debug!("[{}] Importing program '{}'", module_prefix, qualified_prog_name);
                 if state.program_arguments().contains_key(&qualified_prog_name) {
@@ -725,60 +742,73 @@ impl Ast {
                     qualified_prog_name.clone(),
                     prog_args,
                 );
-
-                prog_code.name = qualified_prog_name.clone();
-                println!("[{}] Qualifying program '{}'", module_prefix, prog_code.name);
-                for instruction in &mut prog_code.instructions {
-                    match &mut instruction.control {
-                        InstructionType::FnCall { name: call_name, ..} => {
-                            if call_name == "print" || call_name == "assert" {
-                                // do not qualify standard library function calls
-                                continue;
-                            }
-
-                            // we don't care about the datatype, we just want to avoid qualifying list methods
-                            if state.stdlib().is_interface(&DataType::List(Box::new(DataType::Integer)), call_name) {
-                                // do not qualify standard library function calls
-                                continue;
-                            }
-                            let caller_mod = Ast::module_prefix(&prog_code.name);
-                            let callee_mod = Ast::module_prefix(call_name);
-
-                            println!("[{}] caller_mod: {}, callee_mod: {}", module_prefix, caller_mod, callee_mod);
-                            if let Some(c_def) = state.user_functions().get(call_name) {
-                                if c_def.is_private && caller_mod != callee_mod {
-                                    return Err(AlthreadError::new(
-                                        ErrorType::PrivateFunctionCall,
-                                        instruction.pos.clone(),
-                                        format!("Cannot call private function '{}' from module '{}'", call_name, callee_mod),
-                                    ));
-                                }
-                            }
-                            *call_name = format!("{}.{}", module_prefix, call_name);
-                        }
-                        InstructionType::GlobalReads { variables, ..} => {
-                            for var in variables.iter_mut() {
-                                *var = format!("{}.{}", module_prefix, var);
-                            }
-                        }
-                        InstructionType::GlobalAssignment { identifier, ..} => {
-                            *identifier = format!("{}.{}", module_prefix, identifier);
-                        }
-                        InstructionType::RunCall { name: call_name, ..} => {
-                            *call_name = format!("{}.{}", module_prefix, call_name);
-                        }
-                        InstructionType::WaitStart { dependencies, ..} => {
-                            let updated_vars: std::collections::HashSet<String> = dependencies.variables.iter()
-                                .map(|dep| format!("{}.{}", module_prefix, dep))
-                                .collect();
-                            dependencies.variables = updated_vars;
-                        }
-                        _ => {}
-                    }
-                }
-                state.programs_code_mut().remove(&prog_name);
-                state.programs_code_mut().insert(qualified_prog_name, prog_code.clone());
             }
+
+            prog_code.name = qualified_prog_name.clone();
+            
+            for instruction in &mut prog_code.instructions {
+                match &mut instruction.control {
+                    InstructionType::FnCall { name: call_name, ..} => {
+                        if call_name == "print" || call_name == "assert" {
+                            // do not qualify standard library function calls
+                            continue;
+                        }
+
+                        // we don't care about the datatype, we just want to avoid qualifying list methods
+                        if state.stdlib().is_interface(&DataType::List(Box::new(DataType::Integer)), call_name) {
+                            // do not qualify standard library function calls
+                            continue;
+                        }
+                        let caller_mod = Ast::module_prefix(&prog_code.name);
+                        let callee_mod = Ast::module_prefix(call_name);
+
+                        if let Some(c_def) = state.user_functions().get(call_name) {
+                            log::debug!("[{}] Function '{}' is private: {}", module_prefix, call_name, c_def.is_private);
+                            if c_def.is_private && caller_mod != callee_mod {
+                                return Err(AlthreadError::new(
+                                    ErrorType::PrivateFunctionCall,
+                                    instruction.pos.clone(),
+                                    format!("Cannot call private function '{}' from module '{}'", call_name, callee_mod),
+                                ));
+                            }
+                        }
+                        *call_name = self.build_qualified_name(call_name, module_prefix);
+                    }
+                    InstructionType::GlobalReads { variables, ..} => {
+                        for var in variables.iter_mut() {
+                            *var = self.build_qualified_name(var, module_prefix);
+                        }
+                    }
+                    InstructionType::GlobalAssignment { identifier, ..} => {
+                        *identifier = self.build_qualified_name(identifier, module_prefix);
+                    }
+                    InstructionType::RunCall { name: call_name, ..} => {
+                        let caller_mod = Ast::module_prefix(&prog_code.name);
+                        let callee_mod = Ast::module_prefix(call_name);
+                        if let Some((_, is_private)) = state.program_arguments().get(call_name) {
+                            log::debug!("[{}] Program '{}' is private: {}", module_prefix, call_name, is_private);
+
+                            if *is_private && caller_mod != callee_mod {
+                                return Err(AlthreadError::new(
+                                    ErrorType::PrivateFunctionCall,
+                                    instruction.pos.clone(),
+                                    format!("Cannot call private program '{}' from module '{}'", call_name, callee_mod),
+                                ));
+                            }
+                        }
+                        *call_name = self.build_qualified_name(call_name, module_prefix);
+                    }
+                    InstructionType::WaitStart { dependencies, ..} => {
+                        let updated_vars: std::collections::HashSet<String> = dependencies.variables.iter()
+                            .map(|dep| self.build_qualified_name(dep, module_prefix))
+                            .collect();
+                        dependencies.variables = updated_vars;
+                    }
+                    _ => {}
+                }
+            }
+            state.programs_code_mut().remove(&prog_name);
+            state.programs_code_mut().insert(qualified_prog_name, prog_code.clone());
         }
 
         state.context.borrow_mut().global_memory.extend(state.global_memory().clone());
@@ -835,7 +865,7 @@ impl Ast {
             instructions: Vec::new(),
             name: name.to_string(),
         };
-        let (args, prog) = self
+        let (args, prog, _) = self
             .process_blocks
             .get(name)
             .expect("trying to compile a non-existant program");

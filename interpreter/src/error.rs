@@ -164,7 +164,7 @@ impl AlthreadError {
 
         // Print error stack
         if !self.stack.is_empty() {
-            eprintln!("Error Stack (most recent call last):");
+            eprintln!("\nError Stack (most recent call last):");
             for pos in self.stack.iter().rev() {
                 if !pos.file_path.is_empty() {
                     eprintln!("  at {}:{}:{}", pos.file_path, pos.line, pos.col);

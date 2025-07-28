@@ -24,7 +24,7 @@ use crate::{error::{AlthreadError, AlthreadResult, ErrorType, Pos}, no_rule, par
 
 #[derive(Debug)]
 pub struct Ast {
-    pub process_blocks: HashMap<String, (Node<ArgsList>, Node<Block>)>,
+    pub process_blocks: HashMap<String, (Node<ArgsList>, Node<Block>, bool)>,
     pub condition_blocks: HashMap<ConditionKeyword, Node<ConditionBlock>>,
     pub global_block: Option<Node<Block>>,
     pub function_blocks: HashMap<String, (Node<ArgsList>, DataType, Node<Block>, bool)>,
@@ -61,9 +61,17 @@ impl Ast {
                 Rule::main_block => {
                     let mut pairs = pair.into_inner();
 
+                    // check for directive
+                    let mut is_private = false;
+                    let first = pairs.peek().unwrap();
+                    if first.as_rule() == Rule::private_directive {
+                        is_private = true;
+                        pairs.next(); // consume the private directive
+                    };
+
                     let main_block = Node::build(pairs.next().unwrap(), filepath)?;
                     ast.process_blocks
-                        .insert("main".to_string(), (Node::<ArgsList>::new(), main_block));
+                        .insert("main".to_string(), (Node::<ArgsList>::new(), main_block, is_private));
                 }
                 Rule::global_block => {
                     let mut pairs = pair.into_inner();
@@ -88,12 +96,20 @@ impl Ast {
                 Rule::program_block => {
                     let mut pairs = pair.into_inner();
 
+                    // check for directive
+                    let mut is_private = false;
+                    let first = pairs.peek().unwrap();
+                    if first.as_rule() == Rule::private_directive {
+                        is_private = true;
+                        pairs.next(); // consume the private directive
+                    }
+
                     let process_identifier = pairs.next().unwrap().as_str().to_string();
                     let args_list: Node<token::args_list::ArgsList> =
                         Node::build(pairs.next().unwrap(), filepath)?;
                     let program_block = Node::build(pairs.next().unwrap(), filepath)?;
                     ast.process_blocks
-                        .insert(process_identifier, (args_list, program_block));
+                        .insert(process_identifier, (args_list, program_block, is_private));
                 }
                 Rule::function_block => {
                     let mut pairs  = pair.into_inner();
@@ -167,7 +183,8 @@ impl AstDisplay for Ast {
             writeln!(f, "")?;
         }
 
-        for (process_name, (_args, process_node)) in &self.process_blocks {
+        for (process_name, (_args, process_node, is_private)) in &self.process_blocks {
+            let process_name = if *is_private { format!("@private {}", process_name) } else { process_name.clone() };
             writeln!(f, "{}{}", prefix, process_name)?;
             process_node.ast_fmt(f, &prefix.add_branch())?;
             writeln!(f, "")?;

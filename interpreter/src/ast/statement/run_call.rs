@@ -74,7 +74,7 @@ impl InstructionBuilder for Node<RunCall> {
         // CLONE the program arguments to avoid holding a reference
         let prog_args_opt = state.program_arguments().get(&full_program_name).cloned();
 
-        if let Some(prog_args) = prog_args_opt {
+        if let Some((prog_args, _)) = prog_args_opt {
             if prog_args.len() != call_datatype.len() {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,

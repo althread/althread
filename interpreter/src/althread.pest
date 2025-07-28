@@ -18,7 +18,7 @@ blocks = _{ import_block | main_block | global_block | condition_block | program
 global_block    = { GLOBAL_KW ~ code_block }
 condition_block = { condition_keywords ~ expression_block }
 program_block   = { private_directive? ~ PROGRAM_KW ~ identifier ~ arg_list ~ code_block }
-main_block      = { MAIN_KW ~ code_block }
+main_block      = { private_directive? ~ MAIN_KW ~ code_block }
 
 code_block           = { "{" ~ statement* ~ "}" }
 expression_block     = { "{" ~ expression_statement* ~ "}" }

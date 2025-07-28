@@ -134,7 +134,7 @@ fn extract_channel_declarations_from_statement(
         let mut process_lists: HashMap<String, String> = HashMap::new();
 
         // Scan all process blocks, not just main
-        for (program_name, (_, program_block)) in &self.process_blocks {
+        for (program_name, (_, program_block, _)) in &self.process_blocks {
             self.scan_block_for_run_statements(
                 &program_block.value,
                 var_to_program,
@@ -327,7 +327,7 @@ fn extract_channel_declarations_from_statement(
     log::debug!("[{}] Prescanning for channel declarations", module_prefix);
 
     // Scan ALL process blocks for channel declarations, not just main
-    for (program_name, (_, program_block)) in &self.process_blocks {
+    for (program_name, (_, program_block, _)) in &self.process_blocks {
         log::debug!("Scanning program '{}' for channel declarations", program_name);
         self.extract_channel_declarations_from_block(
             &program_block.value, 
