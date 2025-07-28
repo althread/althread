@@ -471,6 +471,7 @@ impl Ast {
             }
         }
 
+
         // now compile the function bodies
         for (func_name, (args_list, return_datatype, func_block, is_private)) in
             &self.function_blocks
@@ -778,14 +779,6 @@ impl Ast {
         let always_conditions: Vec<_> = state.always_conditions().clone();
         let mut new_always_conditions = Vec::new();
         for condition in always_conditions.iter() {
-            // if the condition is already qualified, skip it
-            if condition.0.iter().any(|dep| dep.contains(module_prefix)) {
-                log::debug!(
-                    "[{}] Skipping condition as it is already qualified",
-                    module_prefix
-                );
-                continue;
-            }
 
             // skip if any dependency starts with any same-level module name
             if same_level_module_names.iter().any(|mod_name| {
@@ -826,10 +819,6 @@ impl Ast {
         let eventually_conditions: Vec<_> = state.eventually_conditions().clone();
         let mut new_eventually_conditions = Vec::new();
         for condition in eventually_conditions.iter() {
-            // if the condition is already qualified, skip it
-            if condition.0.iter().any(|dep| dep.contains(module_prefix)) {
-                continue;
-            }
 
             // skip if any dependency starts with any same-level module name
             if same_level_module_names.iter().any(|mod_name| {
@@ -861,14 +850,16 @@ impl Ast {
         *state.eventually_conditions_mut() = new_eventually_conditions;
 
         // remove conditions that are not qualified
-        log::debug!("[{}] Removing unqualified conditions", module_prefix);
-        state
-            .always_conditions_mut()
-            .retain(|(deps, _read_vars, _expr, _pos)| deps.iter().any(|dep| dep.contains('.')));
+        if !module_prefix.is_empty(){
+            log::debug!("[{}] Removing unqualified conditions", module_prefix);
+            state
+                .always_conditions_mut()
+                .retain(|(deps, _read_vars, _expr, _pos)| deps.iter().any(|dep| dep.contains('.')));
 
-        state
-            .eventually_conditions_mut()
+            state
+                .eventually_conditions_mut()
             .retain(|(deps, _read_vars, _expr, _pos)| deps.iter().any(|dep| dep.contains('.')));
+        }
 
         log::debug!("[{}] Qualifying programs", module_prefix);
         // Collect programs to update first to avoid borrow conflicts
