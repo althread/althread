@@ -18,6 +18,10 @@ export const althreadHighlight = styleTags({
   "CallExpression/FnName": t.function(t.variableName),
   "FnName": t.function(t.variableName),
 
+  "RunExprression/run": t.function(t.keyword),
+  "RunExpression/ProgName": t.function(t.variableName),
+  "ProgName": t.function(t.variableName),
+
   "MemberExpression > identifier:first-child": t.namespace,
   "CallExpression/MemberExpression > identifier:last-child": t.function(t.variableName),
   "MemberExpression > identifier:last-child": t.propertyName,

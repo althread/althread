@@ -154,7 +154,7 @@ IfStatement {
 run_statement {
    RunExpression ";"
 }
-RunExpression { kw<"run"> ProgName ArgList }
+RunExpression { kw<"run"> (ProgName | MemberExpression) ArgList }
 
 //!send_statement
 
