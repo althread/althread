@@ -8,7 +8,8 @@
     "build-lezer": "lezer-generator lezer/althread.grammar -o lezer/parser.js",
     "build-wasm": "wasm-pack build --target web",
     "install-deps": "cargo install wasm-pack",
-    "generate-examples": "node app/scripts/generate-examples.js"
+    "generate-examples": "node app/scripts/generate-examples.js",
+    "clean": "rm -rf dist && rm -rf .cache && rm -rf .parcel-cache"
   },
   "devDependencies": {
     "@babel/core": "^7.28.0",

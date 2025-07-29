@@ -16,8 +16,12 @@
   statement @cut
 }
 
+//!directives
+
+PrivateDirective { "@" kw<"private"> }
 
 @top Project { project_block* }
+
 
 project_block {
   GlobalBlock |
@@ -29,10 +33,10 @@ project_block {
 }
 
 GlobalBlock  { kw<"shared"> "{" shared_declaration* "}" }
-MainBlock    { kw<"main"> code_block }
-ProgramBlock { kw<"program"> ProgName ArgList code_block }
+MainBlock    { PrivateDirective? kw<"main"> code_block }
+ProgramBlock { PrivateDirective?kw<"program"> ProgName ArgList code_block }
 ConditionBlock { Condition expression_block }
-FunctionBlock { kw<"fn"> FnName ArgList ReturnType code_block }
+FunctionBlock { PrivateDirective? kw<"fn"> FnName ArgList ReturnType code_block }
 ImportBlock { kw<"import"> "[" ImportList "]" }
 
 ImportList { ImportItem ("," ImportItem)* ","? }
@@ -48,10 +52,10 @@ Condition {
 }
 
 code_block {
-  !statement "{" statement* "}"
+  "{" statement* "}"
 }
 expression_block {
-  !statement "{" (expression ";")* "}"
+  "{" (expression ";")* "}"
 }
 
 shared_declaration { 

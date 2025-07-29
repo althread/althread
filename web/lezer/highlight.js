@@ -8,6 +8,9 @@ export const althreadHighlight = styleTags({
   "instanceof as": t.operatorKeyword,
   "let const channel": t.definitionKeyword,
   "program always eventually main shared fn import": t.moduleKeyword,
+
+  "PrivateDirective": t.special(t.keyword),
+  "PrivateDirective/private": t.keyword,
   
   // Function highlighting
   "FunctionBlock/fn": t.keyword,
