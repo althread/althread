@@ -1,4 +1,4 @@
-import { createSignal, createEffect, For, onMount } from 'solid-js';
+import { createSignal, createEffect, For } from 'solid-js';
 import type { Component } from "solid-js";
 import createEditor from '@components/editor/Editor';
 import { marked } from 'marked';
@@ -18,6 +18,7 @@ import { tutorial as tutorialStep7 } from '@tutorials/TutorialStep7_Wait';
 import { tutorial as tutorialStep8 } from '@tutorials/TutorialStep8_Channels';
 import { useNavigate } from '@solidjs/router';
 import { Logo } from '@assets/images/Logo';
+import { formatAlthreadError } from '@utils/error';
 
 export interface TutorialStep {
   name: string; // e.g., "Variables", "IfElse"
@@ -55,6 +56,7 @@ const Tutorial: Component = () => {
   const [activeTab, setActiveTab] = createSignal<'validation' | 'result'>('validation');
   const [validationOutput, setValidationOutput] = createSignal<{ message: string, success: boolean } | null>(null);
   const [executionResult, setExecutionResult] = createSignal<string>("");
+  const [executionError, setExecutionError] = createSignal<boolean>(false);
 
   const getLocalStorageKey = (index: number): string => {
     if (index >= 0 && index < tutorialOrder.length) {
@@ -142,7 +144,7 @@ const Tutorial: Component = () => {
             defaultValue: code,
             onValueChange: undefined, // No change handler for read-only
             compile: () => {}, // No compilation needed for read-only examples
-            fileName: 'example.alt'
+            filePath: 'example.alt'
           });
           
           // Create a wrapper div to mount the editor
@@ -176,7 +178,7 @@ const Tutorial: Component = () => {
     const virtualFS = {
       'main.alt': currentEditorCode
     };
-    return compile(currentEditorCode, virtualFS);
+    return compile(currentEditorCode, "main.alt", virtualFS);
   };
 
   const editorInstance = createEditor({
@@ -213,14 +215,20 @@ const Tutorial: Component = () => {
   };
 
   const handleRunCode = () => {
-     const currentEditorCode = code();
-     // Create a simple virtual filesystem with just the tutorial code
-     const virtualFS = {
-       'main.alt': currentEditorCode
-     };
-     const result = run(currentEditorCode, virtualFS);
-     setExecutionResult(result.stdout.join('\n'));
-     setActiveTab('result');
+    setExecutionError(false);
+    const currentEditorCode = code();
+    // Create a simple virtual filesystem with just the tutorial code
+    const virtualFS = {
+      'main.alt': currentEditorCode
+    };
+    try {
+      const result = run(currentEditorCode, "main.alt", virtualFS);
+      setExecutionResult(result.stdout.join('\n'));
+    } catch (e) {
+      setExecutionError(true);
+      setExecutionResult(formatAlthreadError(e, currentEditorCode));
+    }
+    setActiveTab('result');
   };
 
   const handleNextTutorial = () => {
@@ -310,7 +318,7 @@ const Tutorial: Component = () => {
                     <h3>Validation</h3>
                     </button>
                     <button
-                    class={`tab_button ${activeTab() === 'result' ? 'active' : ''}`}
+                    class={`tab_button ${activeTab() === 'result' ? 'active' : ''} ${executionError() ? "execution-error" : ""}`}
                     onClick={() => setActiveTab('result')}
                     >
                     <h3>Result</h3>
@@ -327,11 +335,10 @@ const Tutorial: Component = () => {
                       </div>
                     )}
                     {activeTab() === 'result' && (
-                      <div class="validation-message">
-                        {executionResult()
-                          ? executionResult()
-                          : "No execution output yet."
-                        }
+                      <div class={`validation-message${executionError() ? " execution-error-box" : ""}`}>
+                        <pre>
+                          {executionResult() ? executionResult() : "No execution output yet."}
+                        </pre>
                       </div>
                     )}
                   </div>

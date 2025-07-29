@@ -220,7 +220,6 @@
 }
 
 .validation-message {
-  padding: 1rem;
   white-space: pre-wrap;
   word-wrap: break-word;
   font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
@@ -228,15 +227,17 @@
 }
 
 .validation-message.success {
+  padding: 1rem;
   background-color: #314d31;
   color: #a6dfa6;
   border: 1px solid #a6dfa6;
 }
 
 .validation-message.error {
-  background-color: #4d3131;
-  color: #ec9999;
+  padding: 1rem;
+  background-color: #2a1a1a;
   border: 1px solid #ec9999;
+  color: #b7b7b7;
 }
 
 .console pre {
