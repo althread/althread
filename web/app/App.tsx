@@ -17,12 +17,13 @@ import Sidebar, { type SidebarView } from '@components/sidebar/Sidebar';
 
 // Import our new modules
 import { STORAGE_KEYS, loadFileSystem, saveFileSystem, loadFileContent, saveFileContent } from '@utils/storage';
-import { getPathFromId, buildVirtualFileSystem } from '@utils/fileSystemUtils';  // Add buildVirtualFileSystem here
+import { getPathFromId, buildVirtualFileSystem, getFileContentFromVirtualFS } from '@utils/fileSystemUtils';  // Add buildVirtualFileSystem here
 import { createFileOperationsHandlers } from '@hooks/useFileOperations';
 import { createEditorManager } from '@hooks/useEditorManager';
 import { MoveConfirmationDialog, DeleteConfirmationDialog } from '@components/dialogs/ConfirmationDialogs';
 import { LoadExampleDialog } from '@components/dialogs/LoadExampleDialog';
 import { EmptyEditor } from '@components/editor/EmptyEditor';
+import { formatAlthreadError } from '@utils/error';
 
 init().then(() => {
   console.log('loaded');
@@ -321,15 +322,12 @@ export default function App() {
   const [executionError, setExecutionError] = createSignal(false);
   const [graphKey, setGraphKey] = createSignal(0);
 
+  const resetSetOut = () => {
+    setOut("The execution output will appear here.");
+  }
+
   const renderExecContent = () => {
-    if (isRun()) {
-      if (activeTab() === "console") {
-        return (
-          <div class="console">
-            <pre>{stdout()}</pre>
-          </div>
-        );
-      } else if (activeTab() === "execution") {
+    if (activeTab() === "execution") {
         return (
           <div class="console">
             {executionError() ? (
@@ -341,7 +339,15 @@ export default function App() {
             )}
           </div>
         );
-      } else if (activeTab() === "msg_flow") {
+      } else
+    if (isRun()) {
+      if (activeTab() === "console") {
+        return (
+          <div class="console">
+            <pre>{stdout()}</pre>
+          </div>
+        );
+      } if (activeTab() === "msg_flow") {
         return (
           <div class="console">
             {renderMessageFlowGraph(commgraphout(), vm_states())}
@@ -355,7 +361,6 @@ export default function App() {
         );
       }
     } else {
-      setActiveTab("vm_states");
       return (
         <div class="console">
           <Graph key={graphKey()} nodes={nodes()} edges={edges()} vm_states={vm_states()} setLoadingAction={setLoadingAction} theme="dark" />
@@ -379,7 +384,8 @@ export default function App() {
               onClick={async () => {
                 if (!editorManager.activeFile()) return;
                 if (!isRun()) setIsRun(true);
-                if (!executionError()) setExecutionError(false);
+                setExecutionError(false);
+                resetSetOut();
                 if (activeAction() !== "run") setActiveAction("run");
                 if (loadingAction() !== "run") setLoadingAction("run");
                 try {
@@ -390,15 +396,20 @@ export default function App() {
                     filePath = editorManager.activeFile()!.name; // Fallback to name if ID not found
                   }
                   let res = run(editor.editorView().state.doc.toString(), filePath, virtualFS); 
-
-                  setOut(res.debug);
+                  console.log(res);
+                  if (res.debug.length === 0) {
+                    resetSetOut();
+                  } else {
+                    setOut(res.debug);
+                  }
                   setCommGraphOut(res.message_flow_graph);
                   setVmStates(res.vm_states);
                   setStdout(res.stdout.join('\n'));
                   setActiveTab("console");
                 } catch(e: any) {
+                  console.error("Execution error:", e);
                   // show error in execution tab
-                  setOut("ERROR: "+(e.pos && ('line '+e.pos.line))+"\n"+e.message);
+                  setOut(formatAlthreadError(e, getFileContentFromVirtualFS(buildVirtualFileSystem(mockFileSystem()), e.pos.file_path)));
                   setActiveTab("execution");
                   // reset other tabs to initial state
                   setStdout("The console output will appear here.");
@@ -421,6 +432,7 @@ export default function App() {
               onClick={() => {
                 if (loadingAction() !== "check") setLoadingAction("check");
                 if (activeAction() !== "check") setActiveAction("check");
+                setActiveTab("vm_states");
                 if (executionError()) setExecutionError(false);
                 if (!editorManager.activeFile()) return;
 
@@ -436,7 +448,7 @@ export default function App() {
                   }
 
                   let res = check(editor.editorView().state.doc.toString(), filePath, virtualFS);
-                  setOut(res);
+                  setOut("No execution errors found.");
                   
                   console.log(res);
                   let colored_path: string[] = [];
@@ -492,8 +504,9 @@ export default function App() {
 
                 } catch(e: any) {
                   // show error in execution tab
-                  setOut("ERROR: "+(e.pos && ('line '+e.pos.line))+"\n"+e.message);
+                  setOut(formatAlthreadError(e, getFileContentFromVirtualFS(buildVirtualFileSystem(mockFileSystem()), e.pos.file_path)));
                   setActiveTab("execution");
+                  setLoadingAction(null);
                   // reset other tabs to initial state
                   setStdout("The console output will appear here.");
                   setCommGraphOut([]);
@@ -512,7 +525,7 @@ export default function App() {
                 setLoadingAction("reset");
                 try {
                   setIsRun(true);
-                  setOut("The execution output will appear here.");
+                  resetSetOut();
                   setStdout("The console output will appear here.");
                   setCommGraphOut([]);
                   setNodes([]);
@@ -640,7 +653,6 @@ export default function App() {
                                ${activeTab()   === "execution" ? "active"          : ""} 
                                ${executionError()              ? "execution-error" : ""}`}
                       onclick={() => handleExecutionTabClick("execution")}
-                      disabled={!isRun()}
                     >
                     <h3>Execution</h3>
                     </button>
@@ -705,7 +717,7 @@ export default function App() {
                                ${activeTab()   === "execution" ? "active"          : ""} 
                                ${executionError()              ? "execution-error" : ""}`}
                       onclick={() => handleExecutionTabClick("execution")}
-                      disabled={!isRun()}
+                      // disabled={!isRun()}
                     >
                     <h3>Execution</h3>
                     </button>

@@ -126,3 +126,15 @@ export function buildVirtualFileSystem(entries: FileSystemEntry[]): Record<strin
   entries.forEach(entry => processEntry(entry));
   return virtualFS;
 }
+
+
+export function getFileContentFromVirtualFS(virtualFS: Record<string, string>, filePath: string): string {
+  // Check if the file exists in the virtual filesystem
+  if (virtualFS.hasOwnProperty(filePath)) {
+    console.log(`File found in virtual FS: ${filePath}`);
+    return virtualFS[filePath];
+  }
+  
+  // If not found, return an empty string or a default content
+  return '';
+}
