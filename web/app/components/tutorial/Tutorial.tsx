@@ -16,10 +16,47 @@ import { tutorial as tutorialStep5 } from '@tutorials/TutorialStep5_SharedBlocks
 import { tutorial as tutorialStep6 } from '@tutorials/TutorialStep6_Programs';
 import { tutorial as tutorialStep7 } from '@tutorials/TutorialStep7_Wait';
 import { tutorial as tutorialStep8 } from '@tutorials/TutorialStep8_Channels';
-// import { tutorial as tutorialStep9 } from '@tutorials/TutorialStep9_Imports';
+import { tutorial as tutorialStep9 } from '@tutorials/TutorialStep9_Imports';
 import { useNavigate, useParams } from '@solidjs/router';
 import { Logo } from '@assets/images/Logo';
 import { formatAlthreadError } from '@utils/error';
+
+// Helper function to create the virtual filesystem for the tutorial
+const getTutorialVirtualFS = (code: string) => {
+  return {
+    'main.alt': code,
+    'math.alt': `
+      fn max(a: int, b: int) -> int {
+        if a > b {
+          return a;
+        }
+        return b;
+      }
+      `,
+    'cool/fib.alt': `
+      shared {
+        let N: int = 8;
+      }
+      @private
+      fn fibonacci_iterative(n: int, a: int, b: int) -> int {
+        for i in 1..n {
+          let c = a + b;
+          a = b;
+          b = c;
+        }
+        return b;
+      }
+      fn fibonacci_iterative_8() -> int {
+        return fibonacci_iterative(N, 0, 1);      
+      }
+      `,
+    'display.alt':`
+      program Hello() {
+        print("Hi there!");
+      }
+    `
+  };
+};
 
 export interface TutorialStep {
   name: string; // e.g., "Variables", "IfElse"
@@ -38,6 +75,7 @@ const tutorials: Record<string, TutorialStep> = {
   TutorialStep6_Programs: tutorialStep6,
   TutorialStep7_Wait: tutorialStep7,
   TutorialStep8_Channels: tutorialStep8,
+  TutorialStep9_Imports: tutorialStep9
 };
 
 const tutorialOrder: string[] = [
@@ -49,6 +87,7 @@ const tutorialOrder: string[] = [
   'TutorialStep6_Programs',
   'TutorialStep7_Wait',
   'TutorialStep8_Channels',
+  'TutorialStep9_Imports'
 ];
 
 const Tutorial: Component = () => {
@@ -195,10 +234,7 @@ const Tutorial: Component = () => {
   };
 
   const compileFromEditor = (currentEditorCode: string) => {
-    // Create a simple virtual filesystem with just the tutorial code
-    const virtualFS = {
-      'main.alt': currentEditorCode
-    };
+    const virtualFS = getTutorialVirtualFS(currentEditorCode);
     return compile(currentEditorCode, "main.alt", virtualFS);
   };
 
@@ -238,10 +274,8 @@ const Tutorial: Component = () => {
   const handleRunCode = () => {
     setExecutionError(false);
     const currentEditorCode = code();
-    // Create a simple virtual filesystem with just the tutorial code
-    const virtualFS = {
-      'main.alt': currentEditorCode
-    };
+    const virtualFS = getTutorialVirtualFS(currentEditorCode);
+    console.log("Running code with virtual filesystem:", virtualFS);
     try {
       const result = run(currentEditorCode, "main.alt", virtualFS);
       setExecutionResult(result.stdout.join('\n'));
