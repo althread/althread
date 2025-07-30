@@ -16,7 +16,8 @@ import { tutorial as tutorialStep5 } from '@tutorials/TutorialStep5_SharedBlocks
 import { tutorial as tutorialStep6 } from '@tutorials/TutorialStep6_Programs';
 import { tutorial as tutorialStep7 } from '@tutorials/TutorialStep7_Wait';
 import { tutorial as tutorialStep8 } from '@tutorials/TutorialStep8_Channels';
-import { useNavigate } from '@solidjs/router';
+// import { tutorial as tutorialStep9 } from '@tutorials/TutorialStep9_Imports';
+import { useNavigate, useParams } from '@solidjs/router';
 import { Logo } from '@assets/images/Logo';
 import { formatAlthreadError } from '@utils/error';
 
@@ -51,8 +52,17 @@ const tutorialOrder: string[] = [
 ];
 
 const Tutorial: Component = () => {
+  const params = useParams();
+  const navigate = useNavigate();
+
+  const findIndexFromParam = (param: string | undefined): number => {
+    if (!param) return 0; // Default to first tutorial
+    const index = tutorialOrder.findIndex(key => tutorials[key]?.name.toLowerCase() === param.toLowerCase());
+    return index !== -1 ? index : 0; // Default to first if param is invalid
+  };
+
   const [code, setCode] = createSignal("");
-  const [currentTutorialIndex, setCurrentTutorialIndex] = createSignal(0);
+  const [currentTutorialIndex, setCurrentTutorialIndex] = createSignal(findIndexFromParam(params.stepName));
   const [activeTab, setActiveTab] = createSignal<'validation' | 'result'>('validation');
   const [validationOutput, setValidationOutput] = createSignal<{ message: string, success: boolean } | null>(null);
   const [executionResult, setExecutionResult] = createSignal<string>("");
@@ -74,7 +84,18 @@ const Tutorial: Component = () => {
     return `althread_tutorial_invalid_${index}`;
   };
 
-  const navigate = useNavigate();
+  // Effect to update the URL when the tutorial index changes
+  createEffect(() => {
+    const newIndex = currentTutorialIndex();
+    const tutorialKey = tutorialOrder[newIndex];
+    const tutorial = tutorials[tutorialKey];
+    if (tutorial && tutorial.name) {
+      // Only navigate if the URL doesn't already match to prevent loops
+      if (params.stepName?.toLowerCase() !== tutorial.name.toLowerCase()) {
+        navigate(`/tutorials/${tutorial.name}`, { replace: true });
+      }
+    }
+  });
 
   // Effect to update content and code when currentTutorialIndex changes
   createEffect(() => {

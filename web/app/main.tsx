@@ -11,6 +11,8 @@ if (app) {
   render(() => 
     <HashRouter>
       <Route path="/tutorials" component={Tutorial} />
+      <Route path="/tutorials/:stepName" component={Tutorial} />
+      {/* Main app route */}
       <Route path="/" component={App} />
     </HashRouter>, app);
 }
