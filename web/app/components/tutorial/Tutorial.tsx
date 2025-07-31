@@ -46,7 +46,7 @@ const getTutorialVirtualFS = (code: string) => {
         }
         return b;
       }
-      fn fibonacci_iterative_8() -> int {
+      fn fibonacci_iterative_N() -> int {
         return fibonacci_iterative(N, 0, 1);      
       }
       `,

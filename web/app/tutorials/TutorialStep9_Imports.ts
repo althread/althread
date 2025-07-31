@@ -52,7 +52,7 @@ fn fibonacci_iterative(n: int, a: int, b: int) -> int {
   return b;
 }
 
-fn fibonacci_iterative_8() -> int {
+fn fibonacci_iterative_N() -> int {
   return fibonacci_iterative(N, 0, 1);      
 }
 \`\`\`
@@ -86,8 +86,8 @@ main {
 
 1.  Import the \`math\`, \`cool/fib\`, and \`display\` modules.
 2.  In the \`main\` block, call \`math.max(7, 3)\` and print the result.
-3.  The module \`cool/fib\` contains a shared variable \`N\` with the value \`8\`. Call \`fib.fibonacci_iterative_8()\` and print its result. Also print the value of \`N\` directly.
-4.  Change the value of \`N\` to \`10\` using \`fib.N = 10\` and call \`fib.fibonacci_iterative_8()\` again to see the updated result.
+3.  The module \`cool/fib\` contains a shared variable \`N\` with the value \`8\`. Call \`fib.fibonacci_iterative_N()\` and print its result. Also print the value of \`N\` directly.
+4.  Change the value of \`N\` to \`10\` using \`fib.N = 10\` and call \`fib.fibonacci_iterative_N()\` again to see the updated result.
 5.  Try calling \`fib.fibonacci_iterative(8, 0, 1)\` directly. You'll see an error because this function is marked as \`@private\` and cannot be accessed from outside the module.
 6.  Finally, run the \`Hello()\` program from the \`display\` module.
 
@@ -128,8 +128,8 @@ main {
         if (!(mathDirectPrint || mathVarPrint)) missingSteps.push("printing the result of math.max(7, 3)");
 
         // Step 3: fib.fibonacci_iterative_8() and print
-        const fibVar = mainContent.match(/let\s+(\w+)\s*=\s*fib\.fibonacci_iterative_8\(\s*\)\s*;/);
-        const fibDirectPrint = /print\([\s\S]*fib\.fibonacci_iterative_8\(\s*\)[\s\S]*\)/.test(mainContent);
+        const fibVar = mainContent.match(/let\s+(\w+)\s*=\s*fib\.fibonacci_iterative_N\(\s*\)\s*;/);
+        const fibDirectPrint = /print\([\s\S]*fib\.fibonacci_iterative_N\(\s*\)[\s\S]*\)/.test(mainContent);
         const fibVarPrint = fibVar && new RegExp(`print\\([\\s\\S]*${fibVar[1]}[\\s\\S]*\\)`).test(mainContent);
         if (!(fibDirectPrint || fibVarPrint)) missingSteps.push("printing the result of fib.fibonacci_iterative_8()");
 
@@ -142,10 +142,10 @@ main {
         else {
             // Only check for second fib print after assignment
             const afterAssign = mainContent.split(/fib\.N\s*=\s*10\s*;/)[1] || "";
-            const fibVarAfter = afterAssign.match(/let\s+(\w+)\s*=\s*fib\.fibonacci_iterative_8\(\s*\)\s*;/);
-            const fibDirectPrintAfter = /print\([\s\S]*fib\.fibonacci_iterative_8\(\s*\)[\s\S]*\)/.test(afterAssign);
+            const fibVarAfter = afterAssign.match(/let\s+(\w+)\s*=\s*fib\.fibonacci_iterative_N\(\s*\)\s*;/);
+            const fibDirectPrintAfter = /print\([\s\S]*fib\.fibonacci_iterative_N\(\s*\)[\s\S]*\)/.test(afterAssign);
             const fibVarPrintAfter = fibVarAfter && new RegExp(`print\\([\\s\\S]*${fibVarAfter[1]}[\\s\\S]*\\)`).test(afterAssign);
-            if (!(fibDirectPrintAfter || fibVarPrintAfter)) missingSteps.push("printing the result of fib.fibonacci_iterative_8() after changing fib.N");
+            if (!(fibDirectPrintAfter || fibVarPrintAfter)) missingSteps.push("printing the result of fib.fibonacci_iterative_N() after changing fib.N");
         }
 
         // Step 6: run display.Hello()
@@ -164,7 +164,7 @@ main {
     if (forbiddenUsage) {
         return {
             success: false,
-            message: "You tried to call fib.fibonacci_iterative(8, 0, 1) directly. This function is private and cannot be used outside the module. Please use fib.fibonacci_iterative_8() instead."
+            message: "You tried to call fib.fibonacci_iterative(8, 0, 1) directly. This function is private and cannot be used outside the module. Please use fib.fibonacci_iterative_N() instead."
         };
     }
 

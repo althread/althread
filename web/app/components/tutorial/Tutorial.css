@@ -143,6 +143,12 @@
   border: none;
 }
 
+.tutorial-content ul li,
+.tutorial-content ol li {
+  margin-bottom: 0.5em;
+  line-height: 1.7;
+}
+
 .navigation-buttons {
   display: flex;
   justify-content: space-between;
