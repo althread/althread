@@ -131,7 +131,7 @@ main {
         const fibVar = mainContent.match(/let\s+(\w+)\s*=\s*fib\.fibonacci_iterative_N\(\s*\)\s*;/);
         const fibDirectPrint = /print\([\s\S]*fib\.fibonacci_iterative_N\(\s*\)[\s\S]*\)/.test(mainContent);
         const fibVarPrint = fibVar && new RegExp(`print\\([\\s\\S]*${fibVar[1]}[\\s\\S]*\\)`).test(mainContent);
-        if (!(fibDirectPrint || fibVarPrint)) missingSteps.push("printing the result of fib.fibonacci_iterative_8()");
+        if (!(fibDirectPrint || fibVarPrint)) missingSteps.push("printing the result of fib.fibonacci_iterative_N()");
 
         // Step 3b: print fib.N
         if (!/print\([\s\S]*fib\.N[\s\S]*\)/.test(mainContent)) missingSteps.push("printing fib.N");
