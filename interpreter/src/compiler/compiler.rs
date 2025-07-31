@@ -58,6 +58,102 @@ impl Ast {
         }
     }
 
+    pub fn check_privacy_violations(&self, state: &CompilerState) -> AlthreadResult<()> {
+        // check function and program calls inside programs
+        for (prog_name, prog_code) in state.programs_code().iter() {
+            let caller_module = Ast::module_prefix(prog_name);
+
+            for instruction in &prog_code.instructions {
+                match &instruction.control {
+                    InstructionType::FnCall {
+                        name: call_name, ..
+                    } => {
+                        if let Some(func_def) = state.user_functions().get(call_name) {
+                            let callee_module = Ast::module_prefix(call_name);
+
+                            if func_def.is_private && caller_module != callee_module {
+                                return Err(AlthreadError::new(
+                                    ErrorType::PrivateFunctionCall,
+                                    instruction.pos.clone(),
+                                    format!(
+                                        "Program '{}' cannot call private function '{}' from module '{}'",
+                                        prog_name, call_name, callee_module
+                                    )
+                                ));
+                            }
+                        }
+                    }
+                    InstructionType::RunCall {
+                        name: call_name, ..
+                    } => {
+                        if let Some((_, is_private)) = state.program_arguments().get(call_name) {
+                            let callee_module = Ast::module_prefix(call_name);
+
+                            if *is_private && caller_module != callee_module {
+                                return Err(AlthreadError::new(
+                                    ErrorType::PrivateFunctionCall,
+                                    instruction.pos.clone(),
+                                    format!(
+                                        "Program '{}' cannot call private program '{}' from module '{}'",
+                                        prog_name, call_name, callee_module
+                                    )
+                                ));
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        for (func_name, func_def) in state.user_functions().iter() {
+            let caller_module = Ast::module_prefix(func_name);
+
+            for instruction in &func_def.body {
+                match &instruction.control {
+                    InstructionType::FnCall {
+                        name: call_name, ..
+                    } => {
+                        if let Some(callee_def) = state.user_functions().get(call_name) {
+                            let callee_module = Ast::module_prefix(call_name);
+
+                            if callee_def.is_private && caller_module != callee_module {
+                                return Err(AlthreadError::new(
+                                    ErrorType::PrivateFunctionCall,
+                                    instruction.pos.clone(),
+                                    format!(
+                                        "Function '{}' cannot call private function '{}' from module '{}'",
+                                        func_name, call_name, callee_module
+                                    )
+                                ));
+                            }
+                        }
+                    }
+                    InstructionType::RunCall {
+                        name: call_name, ..
+                    } => {
+                        if let Some((_, is_private)) = state.program_arguments().get(call_name) {
+                            let callee_module = Ast::module_prefix(call_name);
+
+                            if *is_private && caller_module != callee_module {
+                                return Err(AlthreadError::new(
+                                    ErrorType::PrivateFunctionCall,
+                                    instruction.pos.clone(),
+                                    format!(
+                                        "Function '{}' cannot call private program '{}' from module '{}'",
+                                        func_name, call_name, callee_module
+                                    )
+                                ));
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn compile<F: FileSystem + Clone>(
         &self,
         current_file_path: &Path,
@@ -471,7 +567,6 @@ impl Ast {
             }
         }
 
-
         // now compile the function bodies
         for (func_name, (args_list, return_datatype, func_block, is_private)) in
             &self.function_blocks
@@ -612,29 +707,6 @@ impl Ast {
                             // do not qualify standard library function calls
                             continue;
                         }
-
-                        let caller_mod = Ast::module_prefix(&new_func_name);
-                        let callee_mod = Ast::module_prefix(call_name);
-
-                        if let Some(c_def) = state.user_functions().get(call_name) {
-                            log::debug!(
-                                "[{}] Function '{}' is private: {}",
-                                module_prefix,
-                                call_name,
-                                c_def.is_private
-                            );
-
-                            if c_def.is_private && caller_mod != callee_mod {
-                                return Err(AlthreadError::new(
-                                    ErrorType::PrivateFunctionCall,
-                                    instruction.pos.clone(),
-                                    format!(
-                                        "Cannot call private function '{}' from module '{}'",
-                                        call_name, callee_mod
-                                    ),
-                                ));
-                            }
-                        }
                         *call_name = self.build_qualified_name(call_name, module_prefix);
                     }
                     InstructionType::GlobalReads { variables, .. } => {
@@ -649,29 +721,6 @@ impl Ast {
                         name: call_name, ..
                     } => {
                         *call_name = self.build_qualified_name(call_name, module_prefix);
-
-                        let caller_mod = Ast::module_prefix(&new_func_name);
-                        let callee_mod = Ast::module_prefix(call_name);
-
-                        if let Some((_, is_private)) = state.program_arguments().get(call_name) {
-                            log::debug!(
-                                "[{}] Program '{}' is private: {}",
-                                module_prefix,
-                                call_name,
-                                is_private
-                            );
-
-                            if *is_private && caller_mod != callee_mod {
-                                return Err(AlthreadError::new(
-                                    ErrorType::PrivateFunctionCall,
-                                    instruction.pos.clone(),
-                                    format!(
-                                        "Cannot call private program '{}' from module '{}'",
-                                        call_name, callee_mod
-                                    ),
-                                ));
-                            }
-                        }
                     }
                     _ => {}
                 }
@@ -779,7 +828,6 @@ impl Ast {
         let always_conditions: Vec<_> = state.always_conditions().clone();
         let mut new_always_conditions = Vec::new();
         for condition in always_conditions.iter() {
-
             // skip if any dependency starts with any same-level module name
             if same_level_module_names.iter().any(|mod_name| {
                 condition
@@ -819,7 +867,6 @@ impl Ast {
         let eventually_conditions: Vec<_> = state.eventually_conditions().clone();
         let mut new_eventually_conditions = Vec::new();
         for condition in eventually_conditions.iter() {
-
             // skip if any dependency starts with any same-level module name
             if same_level_module_names.iter().any(|mod_name| {
                 condition
@@ -850,7 +897,7 @@ impl Ast {
         *state.eventually_conditions_mut() = new_eventually_conditions;
 
         // remove conditions that are not qualified
-        if !module_prefix.is_empty(){
+        if !module_prefix.is_empty() {
             log::debug!("[{}] Removing unqualified conditions", module_prefix);
             state
                 .always_conditions_mut()
@@ -858,7 +905,7 @@ impl Ast {
 
             state
                 .eventually_conditions_mut()
-            .retain(|(deps, _read_vars, _expr, _pos)| deps.iter().any(|dep| dep.contains('.')));
+                .retain(|(deps, _read_vars, _expr, _pos)| deps.iter().any(|dep| dep.contains('.')));
         }
 
         log::debug!("[{}] Qualifying programs", module_prefix);
@@ -942,27 +989,6 @@ impl Ast {
                             // do not qualify standard library function calls
                             continue;
                         }
-                        let caller_mod = Ast::module_prefix(&prog_code.name);
-                        let callee_mod = Ast::module_prefix(call_name);
-
-                        if let Some(c_def) = state.user_functions().get(call_name) {
-                            log::debug!(
-                                "[{}] Function '{}' is private: {}",
-                                module_prefix,
-                                call_name,
-                                c_def.is_private
-                            );
-                            if c_def.is_private && caller_mod != callee_mod {
-                                return Err(AlthreadError::new(
-                                    ErrorType::PrivateFunctionCall,
-                                    instruction.pos.clone(),
-                                    format!(
-                                        "Cannot call private function '{}' from module '{}'",
-                                        call_name, callee_mod
-                                    ),
-                                ));
-                            }
-                        }
                         *call_name = self.build_qualified_name(call_name, module_prefix);
                     }
                     InstructionType::GlobalReads { variables, .. } => {
@@ -976,27 +1002,6 @@ impl Ast {
                     InstructionType::RunCall {
                         name: call_name, ..
                     } => {
-                        let caller_mod = Ast::module_prefix(&prog_code.name);
-                        let callee_mod = Ast::module_prefix(call_name);
-                        if let Some((_, is_private)) = state.program_arguments().get(call_name) {
-                            log::debug!(
-                                "[{}] Program '{}' is private: {}",
-                                module_prefix,
-                                call_name,
-                                is_private
-                            );
-
-                            if *is_private && caller_mod != callee_mod {
-                                return Err(AlthreadError::new(
-                                    ErrorType::PrivateFunctionCall,
-                                    instruction.pos.clone(),
-                                    format!(
-                                        "Cannot call private program '{}' from module '{}'",
-                                        call_name, callee_mod
-                                    ),
-                                ));
-                            }
-                        }
                         *call_name = self.build_qualified_name(call_name, module_prefix);
                     }
                     InstructionType::WaitStart { dependencies, .. } => {
@@ -1086,6 +1091,8 @@ impl Ast {
             );
             log::debug!("-----------------------------------------------------");
         }
+
+        self.check_privacy_violations(&state)?;
 
         // Return using context data instead of local variables
         let context_borrow = context.borrow();
