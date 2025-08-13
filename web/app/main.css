@@ -337,6 +337,7 @@ body {
 
 .tab_button {
   display: flex;
+  gap: 0.5rem;
   align-items: center;
   background-color: #1e1e1e;
   color: #cccccc;
@@ -344,7 +345,7 @@ body {
   border-bottom: 2px solid transparent; /* Reserve space for underline */
   border-right: none;
   padding: 10px 18px 10px 18px;
-  font-size: 14px;
+  font-size: 12px;
   font-family: inherit;
   cursor: pointer;
   min-width: 0;

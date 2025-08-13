@@ -3,7 +3,7 @@
 import { createSignal, createEffect, Show } from "solid-js";
 import Resizable from '@corvu/resizable'
 
-import init, { compile, run, check } from '../pkg/althread_web';
+import init, { initialize, compile, run, check, start_interactive_session, get_next_interactive_states, execute_interactive_step } from '../pkg/althread_web';
 import createEditor from '@components/editor/Editor';
 import Graph from "@components/graph/Graph";
 import { Logo } from "@assets/images/Logo";
@@ -14,6 +14,7 @@ import type { FileSystemEntry } from '@components/fileexplorer/FileExplorer';
 import '@components/fileexplorer/FileExplorer.css';
 import FileTabs from "@components/fileexplorer/FileTabs";
 import Sidebar, { type SidebarView } from '@components/sidebar/Sidebar';
+import InteractivePanel from '@components/interactive/InteractivePanel';
 
 // Import our new modules
 import { STORAGE_KEYS, loadFileSystem, saveFileSystem, loadFileContent, saveFileContent } from '@utils/storage';
@@ -27,6 +28,7 @@ import { formatAlthreadError } from '@utils/error';
 
 init().then(() => {
   console.log('loaded');
+  initialize(); // Initialize the panic hook
 });
 
 const animationTimeOut = 100; //ms
@@ -322,11 +324,128 @@ export default function App() {
   const [executionError, setExecutionError] = createSignal(false);
   const [graphKey, setGraphKey] = createSignal(0);
 
+  // Interactive mode state
+  const [isInteractiveMode, setIsInteractiveMode] = createSignal(false);
+  const [interactiveStates, setInteractiveStates] = createSignal<any[]>([]);
+  const [executionHistory, setExecutionHistory] = createSignal<number[]>([]);
+  const [currentVMState, setCurrentVMState] = createSignal<any>(null);
+  const [interactiveFinished, setInteractiveFinished] = createSignal(false);
+  const [stepOutput, setStepOutput] = createSignal<string[]>([]);
+  const [accumulatedOutput, setAccumulatedOutput] = createSignal<string>("");
+  const [interactiveMessageFlow, setInteractiveMessageFlow] = createSignal<any[]>([]);
+  const [interactiveVmStates, setInteractiveVmStates] = createSignal<any[]>([]);
+
   const resetSetOut = () => {
     setOut("The execution output will appear here.");
   }
 
+  const executeInteractiveStep = async (selectedIndex: number) => {
+    try {
+      if (!editorManager.activeFile()) return;
+      
+      const virtualFS = buildVirtualFileSystem(mockFileSystem());
+      let filePath = getPathFromId(mockFileSystem(), editorManager.activeFile()!.id, '');
+      if (!filePath) {
+        filePath = editorManager.activeFile()!.name;
+      }
+      let stepResult;
+      try {
+        console.log("Executing interactive step...");
+        console.log("Selected index:", selectedIndex);
+        console.log("Execution history:", executionHistory());
+      // Execute the step and get the output
+        stepResult = execute_interactive_step(
+        editor.editorView().state.doc.toString(),
+        filePath,
+        virtualFS, 
+        executionHistory(),
+        selectedIndex
+      );} catch (e: any) {
+        console.error("Error executing interactive step:", e);
+      }
+
+      
+      
+      // Add the selected step to history
+      const newHistory = [...executionHistory(), selectedIndex];
+      console.log("New execution history:", newHistory);
+      setExecutionHistory(newHistory);
+      
+      // Update the accumulated console output (print statements)
+      const currentConsoleOutput = accumulatedOutput();
+      const newStepOutput = stepResult.get('output') || [];
+      
+      let updatedConsoleOutput = currentConsoleOutput;
+      if (newStepOutput.length > 0) {
+        updatedConsoleOutput += newStepOutput.join('\n') + '\n';
+      }
+      setAccumulatedOutput(updatedConsoleOutput);
+      
+      // Update accumulated message flow events
+      const currentMessageFlow = interactiveMessageFlow();
+      const newMessageFlowEvents = stepResult.get('message_flow_events') || [];
+      setInteractiveMessageFlow([...currentMessageFlow, ...newMessageFlowEvents]);
+      
+      // Update accumulated VM states
+      const currentVmStates = interactiveVmStates();
+      const newVmState = stepResult.get('vm_state');
+      if (newVmState) {
+        setInteractiveVmStates([...currentVmStates, newVmState]);
+      }
+      
+      // Update execution output to show step details (debug info)
+      const executedStep = stepResult.get('executed_step');
+      const debugOutput = stepResult.get('debug') || '';
+      
+      if (executedStep) {
+        const stepInfo = `Executed: ${executedStep.get('prog_name')}#${executedStep.get('prog_id')}\n${debugOutput}`;
+        setOut(stepInfo);
+      } else {
+        setOut(debugOutput);
+      }
+      
+      // Get next states with updated history
+      let res = get_next_interactive_states(
+        editor.editorView().state.doc.toString(), 
+        filePath, 
+        virtualFS, 
+        newHistory
+      );
+      
+      setInteractiveStates(res.get('states') || []);
+      setCurrentVMState(stepResult.get('new_state') || res.get('current_state'));
+      setInteractiveFinished(res.get('is_finished'));
+      
+      if (res.get('is_finished')) {
+        setOut(debugOutput + "\nProgram execution completed.");
+      } else if (!res.get('states') || res.get('states').length === 0) {
+        setOut(debugOutput + "\nNo more states available.");
+        setInteractiveFinished(true);
+      }
+    } catch(e: any) {
+      console.error("Interactive step error:", e);
+      setOut(formatAlthreadError(e, getFileContentFromVirtualFS(buildVirtualFileSystem(mockFileSystem()), e.pos?.file_path || "")));
+      setExecutionError(true);
+      // Switch to execution tab to show the error
+      setActiveTab("execution");
+    }
+  }
+
+  const closeInteractiveMode = () => {
+    setIsInteractiveMode(false);
+    setInteractiveStates([]);
+    setExecutionHistory([]);
+    setCurrentVMState(null);
+    setInteractiveFinished(false);
+    setStepOutput([]);
+    setAccumulatedOutput("");
+    setInteractiveMessageFlow([]);
+    setInteractiveVmStates([]);
+    setActiveAction(null);
+  }
+
   const renderExecContent = () => {
+    // Don't render inline interactive content anymore - it's handled by the popup panel
     if (activeTab() === "execution") {
         return (
           <div class="console">
@@ -378,6 +497,61 @@ export default function App() {
             <h3>Althread</h3>
           </div>
           <div class="actions">
+            <button
+              class={`vscode-button${activeAction() === "interactive" ? " active" : ""}`}
+              disabled={loadingAction() === "interactive" || !editorManager.activeFile() || !isAltFile()}
+              onClick={async () => {
+                if (!editorManager.activeFile()) return;
+                if (activeAction() !== "interactive") setActiveAction("interactive");
+                if (loadingAction() !== "interactive") setLoadingAction("interactive");
+                
+                try {
+                  setIsInteractiveMode(true);
+                  setExecutionError(false);
+                  resetSetOut();
+                  // Reset accumulated output for new session
+                  setAccumulatedOutput("");
+                  setStepOutput([]);
+                  // Go to console by default, execution only if there are errors
+                  setActiveTab("console");
+                  
+                  const virtualFS = buildVirtualFileSystem(mockFileSystem());
+                  let filePath = getPathFromId(mockFileSystem(), editorManager.activeFile()!.id, '');
+                  if (!filePath) {
+                    filePath = editorManager.activeFile()!.name;
+                  }
+                  
+                  let res = start_interactive_session(editor.editorView().state.doc.toString(), filePath, virtualFS);
+                  
+                  setInteractiveStates(res.get('states') || []);
+                  setCurrentVMState(res.get('current_state'));
+                  setInteractiveFinished(res.get('is_finished'));
+                  setExecutionHistory([]);
+                  
+                  if (res.get('is_finished')) {
+                    setOut("Program execution completed.");
+                  } else if (!res.get('states') || res.get('states').length === 0) {
+                    setOut("No interactive choices available.");
+                  } else {
+                    setOut("Interactive mode started. Select the next instruction to execute.");
+                  }
+                } catch(e: any) {
+                  console.error("Interactive mode error:", e);
+                  setOut(formatAlthreadError(e, getFileContentFromVirtualFS(buildVirtualFileSystem(mockFileSystem()), e.pos?.file_path || "")));
+                  setExecutionError(true);
+                  setIsInteractiveMode(false);
+                  // Switch to execution tab to show the error
+                  setActiveTab("execution");
+                } finally {
+                  setTimeout(() => {
+                    setLoadingAction(null);
+                  }, animationTimeOut);
+                }
+              }}>
+              <i class={loadingAction() === "interactive" ? "codicon codicon-loading codicon-modifier-spin" : "codicon codicon-debug-step-over"}></i>
+              Interactive
+            </button>
+
             <button
               class={`vscode-button${activeAction() === "run" ? " active" : ""}`}
               disabled={loadingAction() === "run" || !editorManager.activeFile() || !isAltFile()}
@@ -525,6 +699,7 @@ export default function App() {
                 setLoadingAction("reset");
                 try {
                   setIsRun(true);
+                  setIsInteractiveMode(false);
                   resetSetOut();
                   setStdout("The console output will appear here.");
                   setCommGraphOut([]);
@@ -532,6 +707,11 @@ export default function App() {
                   setEdges([]);
                   setVmStates([]);
                   setActiveAction(null); // Reset the active action state
+                  // Reset interactive mode state
+                  setInteractiveStates([]);
+                  setExecutionHistory([]);
+                  setCurrentVMState(null);
+                  setInteractiveFinished(false);
                 } finally {
                   setTimeout(() => {
                     setLoadingAction(null);
@@ -646,7 +826,7 @@ export default function App() {
                             onclick={() => handleExecutionTabClick("console")}
                             disabled={!isRun()}
                     >
-                    <h3>Console</h3>
+                    <i class="codicon codicon-terminal"></i> Console
                     </button>
                     <button
                       class={`tab_button 
@@ -654,18 +834,18 @@ export default function App() {
                                ${executionError()              ? "execution-error" : ""}`}
                       onclick={() => handleExecutionTabClick("execution")}
                     >
-                    <h3>Execution</h3>
+                    <i class="codicon codicon-play"></i> Execution
                     </button>
                     <button class={`tab_button ${activeTab() === "msg_flow" ? "active" : ""}`}
                             onclick={() => handleExecutionTabClick("msg_flow")}
                             disabled={!isRun()}
                     >
-                    <h3>Message flow</h3>
+                    <i class="codicon codicon-send"></i> Message flow
                     </button>
                     <button class={`tab_button ${activeTab() === "vm_states" ? "active" : ""}`}
                             onclick={() => handleExecutionTabClick("vm_states")}
                     >
-                    <h3>VM states</h3>
+                    <i class="codicon codicon-type-hierarchy-sub"></i> VM states
                     </button>
                 </div>
 
@@ -710,7 +890,7 @@ export default function App() {
                             onclick={() => handleExecutionTabClick("console")}
                             disabled={!isRun()}
                     >
-                    <h3>Console</h3>
+                    <i class="codicon codicon-terminal"></i> Console
                     </button>
                     <button
                       class={`tab_button 
@@ -719,18 +899,18 @@ export default function App() {
                       onclick={() => handleExecutionTabClick("execution")}
                       // disabled={!isRun()}
                     >
-                    <h3>Execution</h3>
+                    <i class="codicon codicon-play"></i> Execution
                     </button>
                     <button class={`tab_button ${activeTab() === "msg_flow" ? "active" : ""}`}
                             onclick={() => handleExecutionTabClick("msg_flow")}
                             disabled={!isRun()}
                     >
-                    <h3>Message flow</h3>
+                    <i class="codicon codicon-send"></i> Message flow
                     </button>
                     <button class={`tab_button ${activeTab() === "vm_states" ? "active" : ""}`}
                             onclick={() => handleExecutionTabClick("vm_states")}
                     >
-                    <h3>VM states</h3>
+                    <i class="codicon codicon-type-hierarchy-sub"></i> VM states
                     </button>
                 </div>
 
@@ -767,6 +947,24 @@ export default function App() {
         onLoadInCurrent={handleLoadInCurrentFile}
         onLoadInNew={handleLoadInNewFile}
         onCancel={handleCancelLoadExample}
+      />
+
+      {/* Interactive Panel */}
+      <InteractivePanel
+        isVisible={isInteractiveMode()}
+        interactiveStates={interactiveStates()}
+        currentVMState={currentVMState()}
+        isFinished={interactiveFinished()}
+        executionOutput={out()}
+        executionError={executionError()}
+        onExecuteStep={executeInteractiveStep}
+        onClose={closeInteractiveMode}
+        stdout={accumulatedOutput()}
+        commGraphOut={commgraphout()}
+        vmStates={vm_states()}
+        isRun={isRun()}
+        interactiveMessageFlow={interactiveMessageFlow()}
+        interactiveVmStates={interactiveVmStates()}
       />
     </>
   );

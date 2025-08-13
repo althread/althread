@@ -119,12 +119,12 @@ export default function InteractivePanel(props: InteractivePanelProps) {
             {state.get('programs').map((prog: any) => (
               <div class="program-info">
                 <div class="program-header">
-                  <strong><i class="codicon codicon-symbol-function"></i> {prog.get('name')}</strong>
+                  <strong class="text-with-icon"><i class="codicon codicon-symbol-function"></i> {prog.get('name')}</strong>
                   <span class="program-pid">PID: {prog.get('pid')}</span>
                 </div>
                 <div class="program-details">
-                  <div><i class="codicon codicon-debug-step-over"></i> IP: {prog.get('instruction_pointer')}</div>
-                  <div><i class="codicon codicon-symbol-array"></i> Memory: {JSON.stringify(prog.get('memory'))}</div>
+                  <div class="text-with-icon"><i class="codicon codicon-debug-step-over"></i> IP: {prog.get('instruction_pointer')}</div>
+                  <div class="text-with-icon"><i class="codicon codicon-symbol-array"></i> Memory: {JSON.stringify(prog.get('memory'))}</div>
                 </div>
               </div>
             ))}
