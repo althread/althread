@@ -1,5 +1,5 @@
 /** @jsxImportSource solid-js */
-import { createSignal, Show } from "solid-js";
+import { createEffect, createSignal, Show } from "solid-js";
 import Resizable from '@corvu/resizable'
 import { renderMessageFlowGraph } from "@components/graph/CommGraph";
 import { rendervmStates } from "@components/graph/vmStatesDisplay";
@@ -29,6 +29,16 @@ export default function InteractivePanel(props: InteractivePanelProps) {
   const [isMinimized, setIsMinimized] = createSignal(false);
   const [activeTab, setActiveTab] = createSignal<'choices' | 'state'>('choices');
   const [rightPanelTab, setRightPanelTab] = createSignal<'console' | 'execution' | 'msg_flow' | 'vm_states'>('console');
+  
+  // Ref for execution console to enable auto-scrolling
+  let executionConsoleRef: HTMLDivElement | undefined;
+  
+  // Auto-scroll execution console to bottom when content changes
+  createEffect(() => {
+    if (rightPanelTab() === "execution" && executionConsoleRef && props.executionOutput) {
+      executionConsoleRef.scrollTop = executionConsoleRef.scrollHeight;
+    }
+  });
 
   const toggleMinimize = () => {
     setIsMinimized(!isMinimized());
@@ -233,7 +243,7 @@ export default function InteractivePanel(props: InteractivePanelProps) {
   const renderRightPanelContent = () => {
     if (rightPanelTab() === "execution") {
       return (
-        <div class="console">
+        <div class="console" ref={executionConsoleRef}>
           {props.executionError ? (
             <div class="execution-error-box">
               <pre>{props.executionOutput}</pre>

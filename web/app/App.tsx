@@ -330,8 +330,8 @@ export default function App() {
   const [executionHistory, setExecutionHistory] = createSignal<number[]>([]);
   const [currentVMState, setCurrentVMState] = createSignal<any>(null);
   const [interactiveFinished, setInteractiveFinished] = createSignal(false);
-  const [stepOutput, setStepOutput] = createSignal<string[]>([]);
   const [accumulatedOutput, setAccumulatedOutput] = createSignal<string>("");
+  const [accumulatedExecutionOutput, setAccumulatedExecutionOutput] = createSignal<string>("");
   const [interactiveMessageFlow, setInteractiveMessageFlow] = createSignal<any[]>([]);
   const [interactiveVmStates, setInteractiveVmStates] = createSignal<any[]>([]);
 
@@ -350,9 +350,6 @@ export default function App() {
       }
       let stepResult;
       try {
-        console.log("Executing interactive step...");
-        console.log("Selected index:", selectedIndex);
-        console.log("Execution history:", executionHistory());
       // Execute the step and get the output
         stepResult = execute_interactive_step(
         editor.editorView().state.doc.toString(),
@@ -364,16 +361,13 @@ export default function App() {
         console.error("Error executing interactive step:", e);
       }
 
-      
-      
       // Add the selected step to history
       const newHistory = [...executionHistory(), selectedIndex];
-      console.log("New execution history:", newHistory);
       setExecutionHistory(newHistory);
       
       // Update the accumulated console output (print statements)
       const currentConsoleOutput = accumulatedOutput();
-      const newStepOutput = stepResult.get('output') || [];
+      const newStepOutput = stepResult.output || [];
       
       let updatedConsoleOutput = currentConsoleOutput;
       if (newStepOutput.length > 0) {
@@ -398,10 +392,16 @@ export default function App() {
       const debugOutput = stepResult.debug || '';
       
       if (executedStep) {
-        const stepInfo = `Executed: ${executedStep.get('prog_name')}#${executedStep.get('prog_id')}\n${debugOutput}`;
-        setOut(stepInfo);
+        const stepInfo = `Executed: ${executedStep.prog_name}#${executedStep.prog_id}\n${debugOutput}`;
+        const currentExecutionOutput = accumulatedExecutionOutput();
+        const updatedExecutionOutput = currentExecutionOutput + (currentExecutionOutput ? '\n\n' : '') + stepInfo;
+        setAccumulatedExecutionOutput(updatedExecutionOutput);
+        setOut(updatedExecutionOutput);
       } else {
-        setOut(debugOutput);
+        const currentExecutionOutput = accumulatedExecutionOutput();
+        const updatedExecutionOutput = currentExecutionOutput + (currentExecutionOutput ? '\n\n' : '') + debugOutput;
+        setAccumulatedExecutionOutput(updatedExecutionOutput);
+        setOut(updatedExecutionOutput);
       }
       
       // Get next states with updated history
@@ -411,15 +411,21 @@ export default function App() {
         virtualFS, 
         newHistory
       );
-      
+
       setInteractiveStates(res.get('states') || []);
-      setCurrentVMState(stepResult.get('new_state') || res.get('current_state'));
+      setCurrentVMState(stepResult.new_state || res.get('current_state'));
       setInteractiveFinished(res.get('is_finished'));
       
       if (res.get('is_finished')) {
-        setOut(debugOutput + "\nProgram execution completed.");
+        const currentExecutionOutput = accumulatedExecutionOutput();
+        const finalOutput = currentExecutionOutput + (currentExecutionOutput ? '\n\n' : '') + "Program execution completed.";
+        setAccumulatedExecutionOutput(finalOutput);
+        setOut(finalOutput);
       } else if (!res.get('states') || res.get('states').length === 0) {
-        setOut(debugOutput + "\nNo more states available.");
+        const currentExecutionOutput = accumulatedExecutionOutput();
+        const finalOutput = currentExecutionOutput + (currentExecutionOutput ? '\n\n' : '') + "No more states available.";
+        setAccumulatedExecutionOutput(finalOutput);
+        setOut(finalOutput);
         setInteractiveFinished(true);
       }
     } catch(e: any) {
@@ -437,8 +443,8 @@ export default function App() {
     setExecutionHistory([]);
     setCurrentVMState(null);
     setInteractiveFinished(false);
-    setStepOutput([]);
     setAccumulatedOutput("");
+    setAccumulatedExecutionOutput("");
     setInteractiveMessageFlow([]);
     setInteractiveVmStates([]);
     setActiveAction(null);
@@ -451,7 +457,7 @@ export default function App() {
       setExecutionError(false);
       resetSetOut();
       setAccumulatedOutput("");
-      setStepOutput([]);
+      setAccumulatedExecutionOutput("");
       setInteractiveMessageFlow([]);
       setInteractiveVmStates([]);
       
@@ -499,8 +505,8 @@ export default function App() {
     setExecutionHistory([]);
     setCurrentVMState(null);
     setInteractiveFinished(false);
-    setStepOutput([]);
     setAccumulatedOutput("");
+    setAccumulatedExecutionOutput("");
     setInteractiveMessageFlow([]);
     setInteractiveVmStates([]);
   }
@@ -572,7 +578,6 @@ export default function App() {
                   resetSetOut();
                   // Reset accumulated output for new session
                   setAccumulatedOutput("");
-                  setStepOutput([]);
                   // Go to console by default, execution only if there are errors
                   setActiveTab("console");
                   
@@ -583,7 +588,7 @@ export default function App() {
                   }
                   
                   let res = start_interactive_session(editor.editorView().state.doc.toString(), filePath, virtualFS);
-                  
+                  console.log("Interactive session started:", res);
                   setInteractiveStates(res.get('states') || []);
                   setCurrentVMState(res.get('current_state'));
                   setInteractiveFinished(res.get('is_finished'));
@@ -637,6 +642,7 @@ export default function App() {
                   } else {
                     setOut(res.debug);
                   }
+                  console.log(res.message_flow_graph);
                   setCommGraphOut(res.message_flow_graph);
                   setVmStates(res.vm_states);
                   setStdout(res.stdout.join('\n'));
