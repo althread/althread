@@ -383,19 +383,19 @@ export default function App() {
       
       // Update accumulated message flow events
       const currentMessageFlow = interactiveMessageFlow();
-      const newMessageFlowEvents = stepResult.get('message_flow_events') || [];
+      const newMessageFlowEvents = stepResult.message_flow_events || [];
       setInteractiveMessageFlow([...currentMessageFlow, ...newMessageFlowEvents]);
       
       // Update accumulated VM states
       const currentVmStates = interactiveVmStates();
-      const newVmState = stepResult.get('vm_state');
+      const newVmState = stepResult.vm_state;
       if (newVmState) {
         setInteractiveVmStates([...currentVmStates, newVmState]);
       }
       
-      // Update execution output to show step details (debug info)
-      const executedStep = stepResult.get('executed_step');
-      const debugOutput = stepResult.get('debug') || '';
+      // Update execution output to show step details (debug info) - accumulate all steps
+      const executedStep = stepResult.executed_step;
+      const debugOutput = stepResult.debug || '';
       
       if (executedStep) {
         const stepInfo = `Executed: ${executedStep.get('prog_name')}#${executedStep.get('prog_id')}\n${debugOutput}`;

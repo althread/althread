@@ -1,5 +1,6 @@
 use fastrand;
-use serde::ser::{Serialize, SerializeStruct, Serializer};
+use serde::{Serialize, Serializer};
+use serde::ser::{SerializeStruct};
 use serde_wasm_bindgen;
 use std::collections::HashMap;
 use std::path::Path;
@@ -10,7 +11,6 @@ use althread::module_resolver::VirtualFileSystem;
 use althread::vm::instruction::InstructionType;
 use althread::vm::VM;
 use althread::{ast::Ast, checker, error::AlthreadError, vm::GlobalAction};
-use web_sys::console;
 use console_error_panic_hook;
 
 const SEND: u8 = b's';
@@ -102,11 +102,43 @@ pub struct MessageFlowEvent<'a> {
     pub vm_state: VM<'a>,        //vm state associated with this event
 }
 
+pub struct InteractiveStepResult<'a> {
+    executed_step: ExecutedStepInfo,
+    output: Vec<String>,
+    debug: String,
+    new_state: serde_json::Value,
+    message_flow_events: Vec<MessageFlowEvent<'a>>,
+    state_display: serde_json::Value,
+}
+
+#[derive(Serialize)]
+pub struct ExecutedStepInfo {
+    prog_name: String,
+    prog_id: usize,
+    instructions: Vec<String>,
+}
+
 pub struct RunResult<'a> {
     debug: String,
     stdout: Vec<String>,
     message_flow_graph: Vec<MessageFlowEvent<'a>>,
     vm_states: Vec<VM<'a>>,
+}
+
+impl<'a> Serialize for InteractiveStepResult<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("InteractiveStepResult", 6)?;
+        state.serialize_field("executed_step", &self.executed_step)?;
+        state.serialize_field("output", &self.output)?;
+        state.serialize_field("debug", &self.debug)?;
+        state.serialize_field("new_state", &self.new_state)?;
+        state.serialize_field("message_flow_events", &self.message_flow_events)?;
+        state.serialize_field("state_display", &self.state_display)?;
+        state.end()
+    }
 }
 
 impl<'a> Serialize for MessageFlowEvent<'a> {
@@ -705,11 +737,15 @@ pub fn execute_interactive_step(source: &str, filepath: &str, virtual_fs: JsValu
     }
 
     // Execute the selected step
-    let (name, pid, instructions, new_vm) = next_states.into_iter().nth(selected_index).unwrap();
+    let (name, pid, instructions, _new_vm) = next_states.into_iter().nth(selected_index).unwrap();
     
     // Instead of executing again, we need to get the actions from the step that was just executed
     // The issue is that vm.next() doesn't return actions, so we need to execute the step properly
     let mut execution_vm = vm.clone();
+    
+    // Store the VM state BEFORE execution for receive event detection
+    let vm_before_step = execution_vm.clone();
+    
     let step_info = match execution_vm.next_step_pid(pid) {
         Ok(Some(info)) => info,
         Ok(None) => {
@@ -762,6 +798,59 @@ pub fn execute_interactive_step(source: &str, filepath: &str, virtual_fs: JsValu
     };
     
     let mut message_flow_events: Vec<MessageFlowEvent> = Vec::new();
+    
+    // Check for receive events by examining instructions
+    for inst in step_info.instructions.iter() {
+        if let InstructionType::ChannelPop(ref s) = &inst.control {
+            // This is a receive event - check the VM state BEFORE the pop to see what message was there
+            if let Some(chan_content_vec) = vm_before_step
+                .channels
+                .get_states()
+                .get(&(step_info.prog_id, s.to_string()))
+            {
+                if let Some(Literal::Tuple(ref msg_tuple)) = chan_content_vec.get(0) {
+                    // Message was received
+                    if msg_tuple.len() >= 2 {
+                        if let Some(Literal::Tuple(ref sender_info_tuple)) = msg_tuple.get(0) {
+                            if sender_info_tuple.len() >= 2 {
+                                if let (Some(Literal::Int(senderid)), Some(Literal::Int(received_clock))) =
+                                    (sender_info_tuple.get(0), sender_info_tuple.get(1))
+                                {
+                                    if let Some(actual_message_content) = msg_tuple.get(1) {
+                                        let receiver_clock = execution_vm
+                                            .running_programs
+                                            .iter()
+                                            .find(|p| p.id == step_info.prog_id)
+                                            .map(|p| p.clock)
+                                            .unwrap_or(0);
+
+                                        let max_clock = std::cmp::max(
+                                            *received_clock as usize,
+                                            receiver_clock as usize,
+                                        ) + 1;
+
+                                        let receiver_name = get_prog_name(step_info.prog_id, &execution_vm);
+                                        let event = MessageFlowEvent {
+                                            sender: *senderid as usize,
+                                            receiver: step_info.prog_id,
+                                            evt_type: RECV,
+                                            message: actual_message_content.to_string(),
+                                            number: max_clock,
+                                            actor_prog_name: receiver_name,
+                                            vm_state: execution_vm.clone(), // Use state after receive
+                                        };
+                                        message_flow_events.push(event);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Check for send events from actions
     for action in step_info.actions.iter() {
         match action {
             GlobalAction::Send(s_chan_name, opt_receiver_info) => {
@@ -779,7 +868,7 @@ pub fn execute_interactive_step(source: &str, filepath: &str, virtual_fs: JsValu
                     .unwrap_or(0);
 
                 let event = MessageFlowEvent {
-                    sender: step_info.prog_id,  // Use step_info.prog_id instead of pid
+                    sender: step_info.prog_id,
                     receiver: receiver_id,
                     evt_type: SEND,
                     message: s_chan_name.clone(),
@@ -793,24 +882,18 @@ pub fn execute_interactive_step(source: &str, filepath: &str, virtual_fs: JsValu
         }
     }
 
-    // Get the current state after execution for logging
-    let current_state = execution_vm.current_state();
-    // web_sys::console::log_1(&JsValue::from_str(&format!("current state: {:?}", current_state)));
-    // web_sys::console::log_1(&JsValue::from_str(&format!("new vm state: {:?}", new_vm)));
-
-    let result = serde_json::json!({
-        "executed_step": {
-            "prog_name": name,
-            "prog_id": pid,
-            "instructions": instructions.iter().map(|inst| inst.to_string()).collect::<Vec<String>>()
+    let result = InteractiveStepResult {
+        executed_step: ExecutedStepInfo {
+            prog_name: name,
+            prog_id: pid,
+            instructions: instructions.iter().map(|inst| inst.to_string()).collect::<Vec<String>>(),
         },
-        "output": step_output,
-        "debug": step_debug,
-        "new_state": create_vm_state_json(&execution_vm),  // Use execution_vm instead of new_vm
-        // "message_flow_events": message_flow_events,
-        // "vm_state": new_vm.clone(),
-        // "state_display": state_display_info,
-    });
+        output: step_output,
+        debug: step_debug,
+        new_state: create_vm_state_json(&execution_vm),
+        message_flow_events,
+        state_display: create_vm_state_json(&execution_vm),
+    };
 
     Ok(serde_wasm_bindgen::to_value(&result).map_err(|e| JsValue::from_str(&format!("Serialization error: {}", e)))?)
 }
