@@ -14,6 +14,7 @@ interface InteractivePanelProps {
   executionError: boolean;
   onExecuteStep: (index: number) => void;
   onClose: () => void;
+  onReset: () => void;
   // Add the same props that the main app uses
   stdout?: string;
   commGraphOut?: any[];
@@ -97,6 +98,10 @@ export default function InteractivePanel(props: InteractivePanelProps) {
     }
 
     const state = props.currentVMState;
+    console.log("Current VM State:", state);
+    console.log("Current VM State keys:", Array.from(state.keys()));
+    console.log("Channel connections:", state.get('channel_connections'));
+    
     return (
       <div class="vm-state-container">
         <div class="state-section">
@@ -109,7 +114,16 @@ export default function InteractivePanel(props: InteractivePanelProps) {
         <div class="state-section">
           <h5><i class="codicon codicon-arrow-swap"></i> Channels</h5>
           <div class="state-content">
-            <pre>{JSON.stringify(state.get('channels'), null, 2)}</pre>
+            <div class="channel-subsection">
+              <h6>Channel States:</h6>
+              <pre>{JSON.stringify(state.get('channels'), null, 2)}</pre>
+            </div>
+            <Show when={state.get('channel_connections')}>
+              <div class="channel-subsection">
+                <h6>Channel Connections:</h6>
+                <pre>{state.get('channel_connections')}</pre>
+              </div>
+            </Show>
           </div>
         </div>
         
@@ -186,10 +200,18 @@ export default function InteractivePanel(props: InteractivePanelProps) {
         <div class="panel-header">
           <div class="panel-title">
             <i class="codicon codicon-debug-step-over panel-icon"></i>
-            <h3>Interactive Debugger</h3>
+            <h3>Interactive Run</h3>
           </div>
           
           <div class="panel-controls">
+            <button
+              class="control-button reset-button"
+              onClick={() => props.onReset()}
+              title="Reset Interactive Session"
+            >
+              <i class="codicon codicon-refresh"></i>
+              Restart
+            </button>
             <button 
               class="control-button minimize-button"
               onClick={() => toggleMinimize()}

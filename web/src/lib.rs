@@ -20,10 +20,40 @@ fn error_to_js(err: AlthreadError) -> JsValue {
     serde_wasm_bindgen::to_value(&err).unwrap()
 }
 
-fn format_error_for_web(err: AlthreadError) -> String {
-    format!("Althread Error: {:?}", err)
-}
 
+// Helper function to create VM state JSON object
+fn create_vm_state_json(vm: &althread::vm::VM) -> serde_json::Value {
+    let current_state = vm.current_state();
+    
+    let v =serde_json::json!({
+        "globals": current_state.0.iter().map(|(key, value)| {
+            (key.clone(), format!("{:?}", value))
+        }).collect::<HashMap<_, _>>(),
+        "channels": current_state.1.iter().map(|((pid, name), values)| {
+            serde_json::json!({
+                "pid": pid,
+                "name": name,
+                "values": values.iter().map(|v| format!("{:?}", v)).collect::<Vec<String>>()
+            })
+        }).collect::<Vec<_>>(),
+        "channel_connections": format!("{:?}", vm.channels), // Include full channel info for debugging
+        "programs": current_state.2.iter().enumerate().map(|(index, (memory, instruction_pointer, clock))| {
+            let prog_name = vm.running_programs.get(index)
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| format!("PID_{}", index));
+            serde_json::json!({
+                "pid": index,
+                "name": prog_name,
+                "memory": memory.iter().map(|v| format!("{:?}", v)).collect::<Vec<String>>(),
+                "instruction_pointer": instruction_pointer,
+                "clock": clock
+            })
+        }).collect::<Vec<_>>()
+    });
+
+    console::log_1(&format!("VM State JSON: {:?}", v).into());
+    v
+}
 
 #[wasm_bindgen]
 pub fn initialize() {
@@ -447,33 +477,10 @@ pub fn start_interactive_session(source: &str, filepath: &str, virtual_fs: JsVal
     let next_states = vm.next().map_err(error_to_js)?;
     
     if next_states.is_empty() {
-        let current_state = vm.current_state();
         return Ok(serde_wasm_bindgen::to_value(&serde_json::json!({
             "states": [],
             "is_finished": true,
-            "current_state": {
-                "globals": current_state.0.iter().map(|(key, value)| {
-                (key.clone(), format!("{:?}", value)) // Convert values to strings
-                }).collect::<HashMap<_, _>>(),
-                "channels": current_state.1.iter().map(|((pid, name), values)| {
-                    serde_json::json!({
-                        "key": format!("{},{}", pid, name), // Convert tuple key to a string
-                        "values": values.iter().map(|v| format!("{:?}", v)).collect::<Vec<String>>() // Convert values to strings
-                    })
-                }).collect::<Vec<_>>(),
-                "programs": current_state.2.iter().enumerate().map(|(index, (memory, instruction_pointer, clock))| {
-                    let prog_name = vm.running_programs.get(index)
-                        .map(|p| p.name.clone())
-                        .unwrap_or_else(|| format!("PID_{}", index));
-                    serde_json::json!({
-                        "pid": index,
-                        "name": prog_name,
-                        "memory": memory,
-                        "instruction_pointer": instruction_pointer,
-                        "clock": clock
-                    })
-                }).collect::<Vec<_>>()
-            },
+            "current_state": create_vm_state_json(&vm),
             "output": []
         })).unwrap());
     }
@@ -501,33 +508,10 @@ pub fn start_interactive_session(source: &str, filepath: &str, virtual_fs: JsVal
         })
     }).collect();
 
-    let current_state = vm.current_state();
     let state_info = serde_json::json!({
         "states": js_next_states,
         "is_finished": false,
-        "current_state": {
-            "globals": current_state.0.iter().map(|(key, value)| {
-            (key.clone(), format!("{:?}", value)) // Convert values to strings
-            }).collect::<HashMap<_, _>>(),
-            "channels": current_state.1.iter().map(|((pid, name), values)| {
-                serde_json::json!({
-                    "key": format!("{},{}", pid, name), // Convert tuple key to a string
-                    "values": values.iter().map(|v| format!("{:?}", v)).collect::<Vec<String>>() // Convert values to strings
-                })
-            }).collect::<Vec<_>>(),
-            "programs": current_state.2.iter().enumerate().map(|(index, (memory, instruction_pointer, clock))| {
-                let prog_name = vm.running_programs.get(index)
-                    .map(|p| p.name.clone())
-                    .unwrap_or_else(|| format!("PID_{}", index));
-                serde_json::json!({
-                    "pid": index,
-                    "name": prog_name,
-                    "memory": memory,
-                    "instruction_pointer": instruction_pointer,
-                    "clock": clock
-                })
-            }).collect::<Vec<_>>()
-        },
+        "current_state": create_vm_state_json(&vm),
         "output": [] // No output for initial state
     });
 
@@ -576,34 +560,11 @@ pub fn get_next_interactive_states(source: &str, filepath: &str, virtual_fs: JsV
     let next_states = vm.next().map_err(error_to_js)?;
     
     if next_states.is_empty() {
-        let current_state = vm.current_state();
         return Ok(serde_wasm_bindgen::to_value(&serde_json::json!({
             "states": [],
             "is_finished": true,
             "message": "No next state",
-            "current_state": {
-                "globals": current_state.0.iter().map(|(key, value)| {
-                (key.clone(), format!("{:?}", value)) // Convert values to strings
-                }).collect::<HashMap<_, _>>(),
-                "channels": current_state.1.iter().map(|((pid, name), values)| {
-                    serde_json::json!({
-                        "key": format!("{},{}", pid, name), // Convert tuple key to a string
-                        "values": values.iter().map(|v| format!("{:?}", v)).collect::<Vec<String>>() // Convert values to strings
-                    })
-                }).collect::<Vec<_>>(),
-                "programs": current_state.2.iter().enumerate().map(|(index, (memory, instruction_pointer, clock))| {
-                    let prog_name = vm.running_programs.get(index)
-                        .map(|p| p.name.clone())
-                        .unwrap_or_else(|| format!("PID_{}", index));
-                    serde_json::json!({
-                        "pid": index,
-                        "name": prog_name,
-                        "memory": memory,
-                        "instruction_pointer": instruction_pointer,
-                        "clock": clock
-                    })
-                }).collect::<Vec<_>>()
-            },
+            "current_state": create_vm_state_json(&vm),
             "output": []
         })).unwrap());
     }
@@ -676,29 +637,7 @@ pub fn get_next_interactive_states(source: &str, filepath: &str, virtual_fs: JsV
         "states": js_next_states,
         "is_finished": false,
         "state_display": state_display_info,
-        "current_state": {
-            "globals": current_state.0.iter().map(|(key, value)| {
-                (key.clone(), format!("{:?}", value)) // Convert values to strings
-            }).collect::<HashMap<_, _>>(),
-            "channels": current_state.1.iter().map(|((pid, name), values)| {
-                serde_json::json!({
-                    "key": format!("{},{}", pid, name), // Convert tuple key to a string
-                    "values": values.iter().map(|v| format!("{:?}", v)).collect::<Vec<String>>() // Convert values to strings
-                })
-            }).collect::<Vec<_>>(),
-            "programs": current_state.2.iter().enumerate().map(|(index, (memory, instruction_pointer, clock))| {
-                let prog_name = vm.running_programs.get(index)
-                    .map(|p| p.name.clone())
-                    .unwrap_or_else(|| format!("PID_{}", index));
-                serde_json::json!({
-                    "pid": index,
-                    "name": prog_name,
-                    "memory": memory.iter().map(|v| format!("{:?}", v)).collect::<Vec<String>>(), // Convert memory values to strings
-                    "instruction_pointer": instruction_pointer,
-                    "clock": clock
-                })
-            }).collect::<Vec<_>>()
-        },
+        "current_state": create_vm_state_json(&vm),
         "output": [] // This is the accumulated output up to this point
     });
 
@@ -763,128 +702,94 @@ pub fn execute_interactive_step(source: &str, filepath: &str, virtual_fs: JsValu
     // Execute the selected step
     let (name, pid, instructions, new_vm) = next_states.into_iter().nth(selected_index).unwrap();
     
-    // Display comprehensive state information similar to run_interactive
-    let current_state = new_vm.current_state();
-    let mut state_display_info = Vec::new();
-    
-    // Add state information similar to run_interactive format
-    state_display_info.push(format!("======= VM next ======="));
-    state_display_info.push(format!(
-        "{}:{}:{}",
-        name,
-        pid,
-        if instructions.get(0).and_then(|inst| inst.pos.as_ref()).is_some() {
-            source
-                .lines()
-                .nth(instructions[0].pos.as_ref().unwrap().line)
-                .unwrap_or_default()
-        } else {
-            "?"
-        }
-    ));
-    
-    state_display_info.push(format!("global: {:?}", current_state.0));
-    for ((channel_pid, cname), state) in current_state.1.iter() {
-        state_display_info.push(format!("channel {},{}", channel_pid, cname));
-        for v in state.iter() {
-            state_display_info.push(format!("  * {}", v));
-        }
-    }
-    for (local_pid, local_state) in current_state.2.iter().enumerate() {
-        state_display_info.push(format!(
-            "{} ({}): {:?}",
-            local_pid,
-            local_state.1,
-            local_state
-                .0
-                .iter()
-                .map(|v| format!("{}", v))
-                .collect::<Vec<String>>()
-                .join(", ")
-        ));
-    }
-    
-    // To capture output, we need to execute this step and capture the actions
-    // Let's execute one random step from the current vm state to get the actions
+    // Instead of executing again, we need to get the actions from the step that was just executed
+    // The issue is that vm.next() doesn't return actions, so we need to execute the step properly
     let mut execution_vm = vm.clone();
-    let step_output: Vec<String>;
-    let mut step_debug = String::new();
-    let mut message_flow_events: Vec<MessageFlowEvent> = Vec::new();
+    let step_info = match execution_vm.next_step_pid(pid) {
+        Ok(Some(info)) => info,
+        Ok(None) => {
+            return Ok(serde_wasm_bindgen::to_value(&serde_json::json!({
+                "finished": true,
+                "message": "Program has terminated"
+            })).unwrap());
+        },
+        Err(e) => {
+            return Err(error_to_js(e));
+        }
+    };
     
-    match execution_vm.next_random() {
-        Ok(info) => {
-            // Check for invariant errors similar to run_interactive
-            if info.invariant_error.is_err() {
-                let error_msg = format!("Invariant error: {:?}", info.invariant_error.unwrap_err());
-                return Ok(serde_wasm_bindgen::to_value(&serde_json::json!({
-                    "error": error_msg,
-                    "invariant_violated": true
-                })).unwrap());
-            }
-            
-            // Capture debug info
-            for inst in info.instructions.iter() {
-                step_debug.push_str(&format!("#{}: {}\n", info.prog_id, inst));
-            }
-            
-            // Capture output from actions
-            step_output = info.actions.iter().filter_map(|action| {
-                if let GlobalAction::Print(s_print) = action {
-                    Some(s_print.clone())
-                } else {
-                    None
-                }
-            }).collect();
-            
-            // Capture message flow events
-            let get_prog_name = |prog_id: usize, vm_instance: &althread::vm::VM| -> String {
-                vm_instance
+    // Check for invariant errors
+    if step_info.invariant_error.is_err() {
+        let error_msg = format!("Invariant error: {:?}", step_info.invariant_error.unwrap_err());
+        return Ok(serde_wasm_bindgen::to_value(&serde_json::json!({
+            "error": error_msg,
+            "invariant_violated": true
+        })).unwrap());
+    }
+    
+    // Capture debug info from the actual executed step
+    let mut step_debug = String::new();
+    for inst in step_info.instructions.iter() {
+        step_debug.push_str(&format!("#{}: {}\n", step_info.prog_id, inst));
+    }
+    
+    // Capture output from actions (no duplication now)
+    let step_output: Vec<String> = step_info.actions.iter().filter_map(|action| {
+        if let GlobalAction::Print(s_print) = action {
+            Some(s_print.clone())
+        } else {
+            None
+        }
+    }).collect();
+    
+    // Debug: Log what actions we found
+    web_sys::console::log_1(&JsValue::from_str(&format!("Step actions: {:?}", step_info.actions)));
+    web_sys::console::log_1(&JsValue::from_str(&format!("Step output: {:?}", step_output)));
+    
+    // Capture message flow events
+    let get_prog_name = |prog_id: usize, vm_instance: &althread::vm::VM| -> String {
+        vm_instance
+            .running_programs
+            .iter()
+            .find(|p| p.id == prog_id)
+            .map(|p| p.name.clone())
+            .unwrap_or_else(|| format!("PID_{}", prog_id))
+    };
+    
+    let mut message_flow_events: Vec<MessageFlowEvent> = Vec::new();
+    for action in step_info.actions.iter() {
+        match action {
+            GlobalAction::Send(s_chan_name, opt_receiver_info) => {
+                let sender_name = get_prog_name(step_info.prog_id, &execution_vm);
+                let receiver_id = opt_receiver_info
+                    .as_ref()
+                    .map(|ri| ri.program_id)
+                    .unwrap_or(0);
+
+                let clock = execution_vm
                     .running_programs
                     .iter()
-                    .find(|p| p.id == prog_id)
-                    .map(|p| p.name.clone())
-                    .unwrap_or_else(|| format!("PID_{}", prog_id))
-            };
-            
-            for action in info.actions.iter() {
-                match action {
-                    GlobalAction::Send(s_chan_name, opt_receiver_info) => {
-                        let sender_name = get_prog_name(info.prog_id, &execution_vm);
-                        let receiver_id = opt_receiver_info
-                            .as_ref()
-                            .map(|ri| ri.program_id)
-                            .unwrap_or(0);
+                    .find(|p| p.id == step_info.prog_id)  // Use step_info.prog_id instead of pid
+                    .map(|p| p.clock)
+                    .unwrap_or(0);
 
-                        let clock = execution_vm
-                            .running_programs
-                            .iter()
-                            .find(|p| p.id == pid)
-                            .map(|p| p.clock)
-                            .unwrap_or(0);
-
-                        let event = MessageFlowEvent {
-                            sender: pid,
-                            receiver: receiver_id,
-                            evt_type: SEND,
-                            message: s_chan_name.clone(),
-                            number: clock,
-                            actor_prog_name: sender_name,
-                            vm_state: execution_vm.clone(),
-                        };
-                        message_flow_events.push(event);
-                    }
-                    _ => {}
-                }
+                let event = MessageFlowEvent {
+                    sender: step_info.prog_id,  // Use step_info.prog_id instead of pid
+                    receiver: receiver_id,
+                    evt_type: SEND,
+                    message: s_chan_name.clone(),
+                    number: clock,
+                    actor_prog_name: sender_name,
+                    vm_state: execution_vm.clone(),
+                };
+                message_flow_events.push(event);
             }
-        },
-        Err(_) => {
-            step_output = Vec::new();
-            for inst in instructions.iter() {
-                step_debug.push_str(&format!("#{}: {}\n", pid, inst));
-            }
+            _ => {}
         }
     }
 
+    // Get the current state after execution for logging
+    let current_state = execution_vm.current_state();
     web_sys::console::log_1(&JsValue::from_str(&format!("current state: {:?}", current_state)));
     web_sys::console::log_1(&JsValue::from_str(&format!("new vm state: {:?}", new_vm)));
 
@@ -896,106 +801,11 @@ pub fn execute_interactive_step(source: &str, filepath: &str, virtual_fs: JsValu
         },
         "output": step_output,
         "debug": step_debug,
+        "new_state": create_vm_state_json(&execution_vm),  // Use execution_vm instead of new_vm
         // "message_flow_events": message_flow_events,
         // "vm_state": new_vm.clone(),
         // "state_display": state_display_info,
-        // "new_state": {
-        //     "globals": current_state.0.iter().map(|(key, value)| {
-        //         (key.clone(), format!("{:?}", value)) // Convert values to strings
-        //     }).collect::<HashMap<_, _>>(),
-        //     "channels": current_state.1.iter().map(|((pid, name), values)| {
-        //         serde_json::json!({
-        //             "key": format!("{},{}", pid, name), // Convert tuple key to a string
-        //             "values": values.iter().map(|v| format!("{:?}", v)).collect::<Vec<String>>() // Convert values to strings
-        //         })
-        //     }).collect::<Vec<_>>(),
-        //     "programs": current_state.2.iter().enumerate().map(|(index, (memory, instruction_pointer, clock))| {
-        //         let prog_name = new_vm.running_programs.get(index)
-        //             .map(|p| p.name.clone())
-        //             .unwrap_or_else(|| {
-        //                 println!("error is here");
-        //                 format!("PID_{}", index)
-        //             });
-        //         serde_json::json!({
-        //             "pid": index,
-        //             "name": prog_name,
-        //             "memory": memory.iter().map(|v| format!("{:?}", v)).collect::<Vec<String>>(), // Convert memory values to strings
-        //             "instruction_pointer": instruction_pointer,
-        //             "clock": clock
-        //         })
-        //     }).collect::<Vec<_>>()
-        // }
     });
 
     Ok(serde_wasm_bindgen::to_value(&result).map_err(|e| JsValue::from_str(&format!("Serialization error: {}", e)))?)
-}
-
-#[wasm_bindgen]
-pub fn execute_interactive_step_debug(source: &str, filepath: &str, virtual_fs: JsValue, execution_history: JsValue, selected_index: usize) -> Result<JsValue, JsValue> {
-    // Step 1: Parse inputs
-    let fs_map: HashMap<String, String> = serde_wasm_bindgen::from_value(virtual_fs)
-        .map_err(|e| JsValue::from_str(&format!("Step 1 failed - parse virtual filesystem: {}", e)))?;
-
-    let history: Vec<usize> = serde_wasm_bindgen::from_value(execution_history)
-        .map_err(|e| JsValue::from_str(&format!("Step 1 failed - parse execution history: {}", e)))?;
-
-    // Step 2: Create filesystem and input map
-    let virtual_filesystem = VirtualFileSystem::new(fs_map);
-    let mut input_map = HashMap::new();
-    input_map.insert(filepath.to_string(), source.to_string());
-
-    // Step 3: Parse code
-    let pairs = althread::parser::parse(&source, filepath)
-        .map_err(|e| JsValue::from_str(&format!("Step 3 failed - parse code: {}", format_error_for_web(e))))?;
-
-    // Step 4: Build AST
-    let ast = Ast::build(pairs, filepath)
-        .map_err(|e| JsValue::from_str(&format!("Step 4 failed - build AST: {}", format_error_for_web(e))))?;
-
-    // Step 5: Compile project
-    let compiled_project = ast
-        .compile(Path::new(filepath), virtual_filesystem, &mut input_map)
-        .map_err(|e| JsValue::from_str(&format!("Step 5 failed - compile project: {}", format_error_for_web(e))))?;
-
-    // Step 6: Create VM
-    let mut vm = althread::vm::VM::new(&compiled_project);
-    vm.start(0);
-
-    // Step 7: Replay execution history
-    for (i, &selected_index_in_history) in history.iter().enumerate() {
-        let next_states = vm.next()
-            .map_err(|e| JsValue::from_str(&format!("Step 7.{} failed - vm.next() during replay: {}", i, format_error_for_web(e))))?;
-        
-        if selected_index_in_history >= next_states.len() {
-            return Err(JsValue::from_str(&format!("Step 7.{} failed - Invalid selection index {} in history", i, selected_index_in_history)));
-        }
-        
-        let (_, _, _, new_vm) = next_states.into_iter().nth(selected_index_in_history)
-            .ok_or_else(|| JsValue::from_str(&format!("Step 7.{} failed - Failed to get selected state", i)))?;
-        vm = new_vm;
-    }
-    
-    // Step 8: Get next possible states
-    let next_states = vm.next()
-        .map_err(|e| JsValue::from_str(&format!("Step 8 failed - vm.next() for current state: {}", format_error_for_web(e))))?;
-    
-    if selected_index >= next_states.len() {
-        return Err(JsValue::from_str(&format!("Step 8 failed - Invalid selection index: {}", selected_index)));
-    }
-    
-    // Step 9: Execute the selected step
-    let (selected_name, selected_pid, selected_instructions, new_vm) = next_states.into_iter().nth(selected_index)
-        .ok_or_else(|| JsValue::from_str("Step 9 failed - Failed to get selected next state"))?;
-    
-    vm = new_vm;
-    
-    // Step 10: Create result
-    Ok(serde_wasm_bindgen::to_value(&serde_json::json!({
-        "success": true,
-        "debug": "All steps completed successfully",
-        "executed_step": {
-            "prog_name": selected_name,
-            "prog_id": selected_pid
-        }
-    })).map_err(|e| JsValue::from_str(&format!("Step 10 failed - Serialization error: {}", e)))?)
 }

@@ -444,6 +444,67 @@ export default function App() {
     setActiveAction(null);
   }
 
+  const resetInteractiveMode = async () => {
+    if (!editorManager.activeFile()) return;
+    
+    try {
+      setExecutionError(false);
+      resetSetOut();
+      setAccumulatedOutput("");
+      setStepOutput([]);
+      setInteractiveMessageFlow([]);
+      setInteractiveVmStates([]);
+      
+      const virtualFS = buildVirtualFileSystem(mockFileSystem());
+      let filePath = getPathFromId(mockFileSystem(), editorManager.activeFile()!.id, '');
+      if (!filePath) {
+        filePath = editorManager.activeFile()!.name;
+      }
+      
+      let res = start_interactive_session(editor.editorView().state.doc.toString(), filePath, virtualFS);
+      
+      setInteractiveStates(res.get('states') || []);
+      setCurrentVMState(res.get('current_state'));
+      setInteractiveFinished(res.get('is_finished'));
+      setExecutionHistory([]);
+      
+      if (res.get('is_finished')) {
+        setOut("Program execution completed immediately.");
+      } else if (!res.get('states') || res.get('states').length === 0) {
+        setOut("No more states available.");
+        setInteractiveFinished(true);
+      } else {
+        setOut("Interactive session restarted. Choose the next instruction to execute.");
+      }
+    } catch(e: any) {
+      console.error("Interactive reset error:", e);
+      setOut(formatAlthreadError(e, getFileContentFromVirtualFS(buildVirtualFileSystem(mockFileSystem()), e.pos?.file_path || "")));
+      setExecutionError(true);
+    }
+  }
+
+  const resetAllState = async () => {
+    setExecutionError(false);
+    setIsRun(true);
+    setIsInteractiveMode(false);
+    resetSetOut();
+    setStdout("The console output will appear here.");
+    setCommGraphOut([]);
+    setNodes([]);
+    setEdges([]);
+    setVmStates([]);
+    setActiveAction(null);
+    // Reset interactive mode state
+    setInteractiveStates([]);
+    setExecutionHistory([]);
+    setCurrentVMState(null);
+    setInteractiveFinished(false);
+    setStepOutput([]);
+    setAccumulatedOutput("");
+    setInteractiveMessageFlow([]);
+    setInteractiveVmStates([]);
+  }
+
   const renderExecContent = () => {
     // Don't render inline interactive content anymore - it's handled by the popup panel
     if (activeTab() === "execution") {
@@ -695,23 +756,9 @@ export default function App() {
             <button
               class={`vscode-button${loadingAction() === "reset" ? " active" : ""}`}
               onClick={async () => {
-                setExecutionError(false);
                 setLoadingAction("reset");
                 try {
-                  setIsRun(true);
-                  setIsInteractiveMode(false);
-                  resetSetOut();
-                  setStdout("The console output will appear here.");
-                  setCommGraphOut([]);
-                  setNodes([]);
-                  setEdges([]);
-                  setVmStates([]);
-                  setActiveAction(null); // Reset the active action state
-                  // Reset interactive mode state
-                  setInteractiveStates([]);
-                  setExecutionHistory([]);
-                  setCurrentVMState(null);
-                  setInteractiveFinished(false);
+                  await resetAllState();
                 } finally {
                   setTimeout(() => {
                     setLoadingAction(null);
@@ -959,6 +1006,7 @@ export default function App() {
         executionError={executionError()}
         onExecuteStep={executeInteractiveStep}
         onClose={closeInteractiveMode}
+        onReset={resetInteractiveMode}
         stdout={accumulatedOutput()}
         commGraphOut={commgraphout()}
         vmStates={vm_states()}

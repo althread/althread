@@ -247,12 +247,6 @@
   background-color: #333333;
 }
 
-.close-button:hover {
-  background-color: #c5302e;
-  border-color: #c5302e;
-  color: #ffffff;
-}
-
 .panel-content {
   display: flex;
   flex-direction: column;
@@ -541,6 +535,23 @@
 
 .state-content {
   padding: 16px;
+}
+
+.channel-subsection {
+  margin-bottom: 16px;
+}
+
+.channel-subsection:last-child {
+  margin-bottom: 0;
+}
+
+.channel-subsection h6 {
+  margin: 0 0 8px 0;
+  color: #999999;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .state-content pre {
