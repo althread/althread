@@ -1,0 +1,22 @@
+/* Error display styling */
+.error-display .file-link {
+  background: none;
+  border: none;
+  color: #4fc3f7;
+  text-decoration: underline;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  padding: 0;
+  margin: 0;
+}
+
+.error-display .file-link:hover {
+  color: #81d4fa;
+  text-decoration: none;
+}
+
+.error-display .file-link:focus {
+  outline: 1px solid #4fc3f7;
+  outline-offset: 1px;
+}

@@ -18,13 +18,14 @@ import InteractivePanel from '@components/interactive/InteractivePanel';
 
 // Import our new modules
 import { STORAGE_KEYS, loadFileSystem, saveFileSystem, loadFileContent, saveFileContent } from '@utils/storage';
-import { getPathFromId, buildVirtualFileSystem, getFileContentFromVirtualFS } from '@utils/fileSystemUtils';  // Add buildVirtualFileSystem here
+import { getPathFromId, buildVirtualFileSystem, getFileContentFromVirtualFS, findFileByPath } from '@utils/fileSystemUtils';  // Add buildVirtualFileSystem here
 import { createFileOperationsHandlers } from '@hooks/useFileOperations';
 import { createEditorManager } from '@hooks/useEditorManager';
 import { MoveConfirmationDialog, DeleteConfirmationDialog } from '@components/dialogs/ConfirmationDialogs';
 import { LoadExampleDialog } from '@components/dialogs/LoadExampleDialog';
 import { EmptyEditor } from '@components/editor/EmptyEditor';
 import { formatAlthreadError } from '@utils/error';
+import ErrorDisplay from '@components/error/ErrorDisplay';
 
 init().then(() => {
   console.log('loaded');
@@ -322,6 +323,7 @@ export default function App() {
   let [activeAction, setActiveAction] = createSignal<string | null>(null);
   const [loadingAction, setLoadingAction] = createSignal<string | null>(null);
   const [executionError, setExecutionError] = createSignal(false);
+  const [structuredError, setStructuredError] = createSignal<any>(null);
   const [graphKey, setGraphKey] = createSignal(0);
 
   // Interactive mode state
@@ -430,12 +432,31 @@ export default function App() {
       }
     } catch(e: any) {
       console.error("Interactive step error:", e);
-      setOut(formatAlthreadError(e, getFileContentFromVirtualFS(buildVirtualFileSystem(mockFileSystem()), e.pos?.file_path || "")));
+      const errorInfo = formatAlthreadError(e, getFileContentFromVirtualFS(buildVirtualFileSystem(mockFileSystem()), e.pos?.file_path || ""));
+      setStructuredError(errorInfo);
+      setOut(errorInfo.message);
       setExecutionError(true);
       // Switch to execution tab to show the error
       setActiveTab("execution");
     }
   }
+
+  // Function to handle file opening from error display
+  const handleErrorFileClick = (filePath: string) => {
+    // Find the file in the file system and open it
+    const file = findFileByPath(mockFileSystem(), filePath);
+    if (file) {
+      editorManager.handleFileSelect(filePath, mockFileSystem());
+      
+      // If sidebar is collapsed, expand it to show the file
+      if (sidebarCollapsed()) {
+        setSidebarCollapsed(false);
+      }
+      setSidebarView('explorer');
+    } else {
+      console.warn(`File not found: ${filePath}`);
+    }
+  };
 
   const closeInteractiveMode = () => {
     setIsInteractiveMode(false);
@@ -484,13 +505,16 @@ export default function App() {
       }
     } catch(e: any) {
       console.error("Interactive reset error:", e);
-      setOut(formatAlthreadError(e, getFileContentFromVirtualFS(buildVirtualFileSystem(mockFileSystem()), e.pos?.file_path || "")));
+      const errorInfo = formatAlthreadError(e, getFileContentFromVirtualFS(buildVirtualFileSystem(mockFileSystem()), e.pos?.file_path || ""));
+      setStructuredError(errorInfo);
+      setOut(errorInfo.message);
       setExecutionError(true);
     }
   }
 
   const resetAllState = async () => {
     setExecutionError(false);
+    setStructuredError(null);
     setIsRun(true);
     setIsInteractiveMode(false);
     resetSetOut();
@@ -516,7 +540,14 @@ export default function App() {
     if (activeTab() === "execution") {
         return (
           <div class="console">
-            {executionError() ? (
+            {executionError() && structuredError() ? (
+              <div class="execution-error-box">
+                <ErrorDisplay 
+                  error={structuredError()} 
+                  onFileClick={handleErrorFileClick} 
+                />
+              </div>
+            ) : executionError() ? (
               <div class="execution-error-box">
                 <pre>{out()}</pre>
               </div>
@@ -602,7 +633,9 @@ export default function App() {
                   }
                 } catch(e: any) {
                   console.error("Interactive mode error:", e);
-                  setOut(formatAlthreadError(e, getFileContentFromVirtualFS(buildVirtualFileSystem(mockFileSystem()), e.pos?.file_path || "")));
+                  const errorInfo = formatAlthreadError(e, getFileContentFromVirtualFS(buildVirtualFileSystem(mockFileSystem()), e.pos?.file_path || ""));
+                  setStructuredError(errorInfo);
+                  setOut(errorInfo.message);
                   setExecutionError(true);
                   setIsInteractiveMode(false);
                   // Switch to execution tab to show the error
@@ -649,7 +682,9 @@ export default function App() {
                 } catch(e: any) {
                   console.error("Execution error:", e);
                   // show error in execution tab
-                  setOut(formatAlthreadError(e, getFileContentFromVirtualFS(buildVirtualFileSystem(mockFileSystem()), e.pos.file_path)));
+                  const errorInfo = formatAlthreadError(e, getFileContentFromVirtualFS(buildVirtualFileSystem(mockFileSystem()), e.pos?.file_path || ""));
+                  setStructuredError(errorInfo);
+                  setOut(errorInfo.message);
                   setActiveTab("execution");
                   // reset other tabs to initial state
                   setStdout("The console output will appear here.");
@@ -744,7 +779,9 @@ export default function App() {
 
                 } catch(e: any) {
                   // show error in execution tab
-                  setOut(formatAlthreadError(e, getFileContentFromVirtualFS(buildVirtualFileSystem(mockFileSystem()), e.pos.file_path)));
+                  const errorInfo = formatAlthreadError(e, getFileContentFromVirtualFS(buildVirtualFileSystem(mockFileSystem()), e.pos?.file_path || ""));
+                  setStructuredError(errorInfo);
+                  setOut(errorInfo.message);
                   setActiveTab("execution");
                   setLoadingAction(null);
                   // reset other tabs to initial state

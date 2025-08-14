@@ -1,20 +1,35 @@
-export function formatAlthreadError(e: any, fileContent?: string): string {
-  if (!e) return "Unknown error";
+export interface FormattedError {
+  message: string,
+  filePath?: string,
+  line?: number,
+  col?: number,
+}
+
+export function formatAlthreadError(e: any, fileContent?: string): FormattedError {
+  if (!e) return { message: "Unknown error"};
+  
   const lines: string[] = [];
+  let filePath: string | undefined;
+  let line: number | undefined;
+  let col: number | undefined;
 
   // Position info
   if (e.pos) {
+    filePath = e.pos.file_path || "unknown";
+    line = e.pos.line;
+    col = e.pos.col;
+
     lines.push(
-      `File: ${e.pos.file_path || "unknown"}\nLine: ${e.pos.line}, Col: ${e.pos.col}`
+      `File: ${filePath || "unknown"}\nLine: ${line}, Col: ${col}`
     );
     // Show error line and caret if fileContent is provided
-    if (fileContent && typeof e.pos.line === "number" && e.pos.line > 0) {
+    if (fileContent && typeof line === "number" && line > 0) {
       const fileLines = fileContent.split('\n');
-      const errorLine = fileLines[e.pos.line - 1] || "";
-      const lineIndent = " ".repeat(e.pos.line.toString().length);
+      const errorLine = fileLines[line - 1] || "";
+      const lineIndent = " ".repeat(line.toString().length);
       lines.push(`${lineIndent} |`);
-      lines.push(`${e.pos.line} | ${errorLine}`);
-      lines.push(`${lineIndent} |${" ".repeat(e.pos.col)}^---`);
+      lines.push(`${line} | ${errorLine}`);
+      lines.push(`${lineIndent} |${" ".repeat(col ? col : 0)}^---`);
       lines.push(`${lineIndent} |`);
     }
   }
@@ -37,5 +52,14 @@ export function formatAlthreadError(e: any, fileContent?: string): string {
     });
   }
 
-  return "ERROR:\n" + lines.join("\n");
+  return {
+    message: "ERROR:\n" + lines.join("\n"),
+    filePath,
+    line,
+    col
+  };
+}
+
+export function formatAlthreadErrorString(e: any, fileContent?: string): string {
+  return formatAlthreadError(e, fileContent).message;
 }
