@@ -170,63 +170,63 @@ impl CompilerState {
         Rc::clone(&self.context.borrow_mut().stdlib)
     }
 
-    pub fn user_functions(&self) -> std::cell::Ref<HashMap<String, FunctionDefinition>> {
+    pub fn user_functions(&self) -> std::cell::Ref<'_, HashMap<String, FunctionDefinition>> {
         std::cell::Ref::map(self.local_context.borrow(), |ctx| &ctx.user_functions)
     }
 
-    pub fn user_functions_mut(&self) -> std::cell::RefMut<HashMap<String, FunctionDefinition>> {
+    pub fn user_functions_mut(&self) -> std::cell::RefMut<'_, HashMap<String, FunctionDefinition>> {
         std::cell::RefMut::map(self.local_context.borrow_mut(), |ctx| {
             &mut ctx.user_functions
         })
     }
 
-    pub fn global_table(&self) -> std::cell::Ref<HashMap<String, Variable>> {
+    pub fn global_table(&self) -> std::cell::Ref<'_, HashMap<String, Variable>> {
         std::cell::Ref::map(self.local_context.borrow(), |ctx| &ctx.global_table)
     }
 
-    pub fn global_table_mut(&self) -> std::cell::RefMut<HashMap<String, Variable>> {
+    pub fn global_table_mut(&self) -> std::cell::RefMut<'_, HashMap<String, Variable>> {
         std::cell::RefMut::map(self.local_context.borrow_mut(), |ctx| &mut ctx.global_table)
     }
 
-    pub fn global_memory(&self) -> std::cell::Ref<BTreeMap<String, Literal>> {
+    pub fn global_memory(&self) -> std::cell::Ref<'_, BTreeMap<String, Literal>> {
         std::cell::Ref::map(self.local_context.borrow(), |ctx| &ctx.global_memory)
     }
 
-    pub fn global_memory_mut(&self) -> std::cell::RefMut<BTreeMap<String, Literal>> {
+    pub fn global_memory_mut(&self) -> std::cell::RefMut<'_, BTreeMap<String, Literal>> {
         std::cell::RefMut::map(self.local_context.borrow_mut(), |ctx| {
             &mut ctx.global_memory
         })
     }
 
-    pub fn channels(&self) -> std::cell::Ref<HashMap<(String, String), (Vec<DataType>, Pos)>> {
+    pub fn channels(&self) -> std::cell::Ref<'_, HashMap<(String, String), (Vec<DataType>, Pos)>> {
         std::cell::Ref::map(self.context.borrow(), |ctx| &ctx.channels)
     }
 
     pub fn channels_mut(
         &self,
-    ) -> std::cell::RefMut<HashMap<(String, String), (Vec<DataType>, Pos)>> {
+    ) -> std::cell::RefMut<'_, HashMap<(String, String), (Vec<DataType>, Pos)>> {
         std::cell::RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.channels)
     }
 
     pub fn undefined_channels(
         &self,
-    ) -> std::cell::Ref<HashMap<(String, String), (Vec<DataType>, Pos)>> {
+    ) -> std::cell::Ref<'_, HashMap<(String, String), (Vec<DataType>, Pos)>> {
         std::cell::Ref::map(self.context.borrow(), |ctx| &ctx.undefined_channels)
     }
 
     pub fn undefined_channels_mut(
         &self,
-    ) -> std::cell::RefMut<HashMap<(String, String), (Vec<DataType>, Pos)>> {
+    ) -> std::cell::RefMut<'_, HashMap<(String, String), (Vec<DataType>, Pos)>> {
         std::cell::RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.undefined_channels)
     }
 
-    pub fn program_arguments(&self) -> std::cell::Ref<HashMap<String, (Vec<DataType>, bool)>> {
+    pub fn program_arguments(&self) -> std::cell::Ref<'_, HashMap<String, (Vec<DataType>, bool)>> {
         std::cell::Ref::map(self.local_context.borrow(), |ctx| &ctx.program_arguments)
     }
 
     pub fn program_arguments_mut(
         &self,
-    ) -> std::cell::RefMut<HashMap<String, (Vec<DataType>, bool)>> {
+    ) -> std::cell::RefMut<'_, HashMap<String, (Vec<DataType>, bool)>> {
         std::cell::RefMut::map(self.local_context.borrow_mut(), |ctx| {
             &mut ctx.program_arguments
         })
@@ -234,13 +234,13 @@ impl CompilerState {
 
     pub fn always_conditions(
         &self,
-    ) -> std::cell::Ref<Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>> {
+    ) -> std::cell::Ref<'_, Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>> {
         std::cell::Ref::map(self.local_context.borrow(), |ctx| &ctx.always_conditions)
     }
 
     pub fn always_conditions_mut(
         &self,
-    ) -> std::cell::RefMut<Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>> {
+    ) -> std::cell::RefMut<'_, Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>> {
         std::cell::RefMut::map(self.local_context.borrow_mut(), |ctx| {
             &mut ctx.always_conditions
         })
@@ -248,7 +248,7 @@ impl CompilerState {
 
     pub fn eventually_conditions(
         &self,
-    ) -> std::cell::Ref<Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>> {
+    ) -> std::cell::Ref<'_, Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>> {
         std::cell::Ref::map(self.local_context.borrow(), |ctx| {
             &ctx.eventually_conditions
         })
@@ -256,17 +256,17 @@ impl CompilerState {
 
     pub fn eventually_conditions_mut(
         &self,
-    ) -> std::cell::RefMut<Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>> {
+    ) -> std::cell::RefMut<'_, Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>> {
         std::cell::RefMut::map(self.local_context.borrow_mut(), |ctx| {
             &mut ctx.eventually_conditions
         })
     }
 
-    pub fn programs_code(&self) -> std::cell::Ref<HashMap<String, ProgramCode>> {
+    pub fn programs_code(&self) -> std::cell::Ref<'_, HashMap<String, ProgramCode>> {
         std::cell::Ref::map(self.local_context.borrow(), |ctx| &ctx.programs_code)
     }
 
-    pub fn programs_code_mut(&self) -> std::cell::RefMut<HashMap<String, ProgramCode>> {
+    pub fn programs_code_mut(&self) -> std::cell::RefMut<'_, HashMap<String, ProgramCode>> {
         std::cell::RefMut::map(self.local_context.borrow_mut(), |ctx| {
             &mut ctx.programs_code
         })

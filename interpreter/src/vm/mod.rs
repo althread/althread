@@ -412,7 +412,7 @@ impl<'a> VM<'a> {
         Ok(Some(exec_info))
     }
 
-    pub fn get_program(&self, pid: usize) -> &RunningProgramState {
+    pub fn get_program(&self, pid: usize) -> &RunningProgramState<'_> {
         self.running_programs.get(pid).expect("program not found")
     }
 
