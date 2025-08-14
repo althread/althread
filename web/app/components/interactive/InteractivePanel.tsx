@@ -286,7 +286,9 @@ export default function InteractivePanel(props: InteractivePanelProps) {
       );
     }
     return null;
-  };  return (
+  };  
+  
+  return (
     <Show when={props.isVisible}>
       <div class={`interactive-panel ${isMinimized() ? 'minimized' : ''}`}>
         <div class="panel-header">

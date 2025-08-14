@@ -106,6 +106,7 @@ pub struct InteractiveStepResult<'a> {
     executed_step: ExecutedStepInfo,
     output: Vec<String>,
     debug: String,
+    current_state: VM<'a>,
     new_state: serde_json::Value,
     message_flow_events: Vec<MessageFlowEvent<'a>>,
     state_display: serde_json::Value,
@@ -130,10 +131,11 @@ impl<'a> Serialize for InteractiveStepResult<'a> {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("InteractiveStepResult", 6)?;
+        let mut state = serializer.serialize_struct("InteractiveStepResult", 7)?;
         state.serialize_field("executed_step", &self.executed_step)?;
         state.serialize_field("output", &self.output)?;
         state.serialize_field("debug", &self.debug)?;
+        state.serialize_field("current_state", &self.current_state)?;
         state.serialize_field("new_state", &self.new_state)?;
         state.serialize_field("message_flow_events", &self.message_flow_events)?;
         state.serialize_field("state_display", &self.state_display)?;
@@ -890,6 +892,7 @@ pub fn execute_interactive_step(source: &str, filepath: &str, virtual_fs: JsValu
         },
         output: step_output,
         debug: step_debug,
+        current_state: execution_vm.clone(),
         new_state: create_vm_state_json(&execution_vm),
         message_flow_events,
         state_display: create_vm_state_json(&execution_vm),

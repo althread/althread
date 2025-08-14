@@ -382,11 +382,11 @@ export default function App() {
       
       // Update accumulated VM states
       const currentVmStates = interactiveVmStates();
-      const newVmState = stepResult.vm_state;
+      const newVmState = stepResult.current_state;
       if (newVmState) {
         setInteractiveVmStates([...currentVmStates, newVmState]);
       }
-      
+
       // Update execution output to show step details (debug info) - accumulate all steps
       const executedStep = stepResult.executed_step;
       const debugOutput = stepResult.debug || '';
@@ -413,6 +413,7 @@ export default function App() {
       );
 
       setInteractiveStates(res.get('states') || []);
+      console.log("console", res.get('states'));
       setCurrentVMState(stepResult.new_state || res.get('current_state'));
       setInteractiveFinished(res.get('is_finished'));
       
