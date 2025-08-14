@@ -344,6 +344,9 @@ impl<'a> VM<'a> {
             return Ok(None);
         }
 
+        // Store actions before processing them
+        exec_info.actions = actions.actions.clone();
+        
         for action in actions.actions {
             match action {
                 GlobalAction::Wait => {

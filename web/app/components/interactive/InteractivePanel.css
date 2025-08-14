@@ -567,6 +567,149 @@
   line-height: 1.5;
 }
 
+.globals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.global-item {
+  display: flex;
+  align-items: center;
+  background: #2d2d2d;
+  border: 1px solid #404040;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+}
+
+.global-name {
+  color: var(--ifm-color-primary);
+  font-weight: 500;
+  margin-right: 8px;
+  min-width: 60px;
+}
+
+.global-value {
+  color: #cccccc;
+}
+
+.channels-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.channel-item {
+  background: #2d2d2d;
+  border: 1px solid #404040;
+  border-radius: 4px;
+  padding: 12px;
+}
+
+.channel-header {
+  margin-bottom: 8px;
+}
+
+.channel-header strong {
+  color: var(--ifm-color-primary);
+  font-size: 13px;
+}
+
+.channel-values-label {
+  color: #999999;
+  font-size: 11px;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.channel-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.message-item {
+  background: #232323;
+  border: 1px solid #404040;
+  border-radius: 4px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--ifm-color-primary);
+}
+
+.message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+
+.message-sender {
+  color: var(--ifm-color-primary);
+  font-weight: 500;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.message-receiver {
+  color: #c586c0;
+  font-weight: 500;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.message-content {
+  color: #cccccc;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.no-messages {
+  color: #666666;
+  font-style: italic;
+  font-size: 12px;
+}
+
+.connections-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.connection-item {
+  background: #2d2d2d;
+  border: 1px solid #404040;
+  border-radius: 4px;
+  padding: 10px 12px;
+}
+
+.connection-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+}
+
+.connection-source {
+  color: #cccccc;
+  font-weight: 500;
+}
+
+.connection-arrow {
+  color: var(--ifm-color-primary);
+  font-weight: bold;
+  font-size: 14px;
+  margin: 0 4px;
+}
+
+.connection-target {
+  color: #cccccc;
+  font-weight: 500;
+}
+
 .program-info {
   background: #2d2d2d;
   border: 1px solid #404040;
@@ -605,11 +748,63 @@
 .program-details {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
   font-size: 12px;
   color: #cccccc;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   line-height: 1.4;
+}
+
+.memory-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.memory-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #cccccc;
+  font-weight: 500;
+}
+
+.memory-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-left: 20px;
+}
+
+.memory-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: #232323;
+  border: 1px solid #404040;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.memory-index {
+  color: #999999;
+  font-weight: 500;
+  min-width: 30px;
+  text-align: right;
+}
+
+.memory-value {
+  color: #cccccc;
+  word-break: break-all;
+  flex: 1;
+}
+
+.memory-empty {
+  color: #666666;
+  font-style: italic;
+  font-size: 11px;
+  margin-left: 20px;
 }
 
 /* Custom scrollbar matching other components */

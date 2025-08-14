@@ -24,8 +24,8 @@ fn error_to_js(err: AlthreadError) -> JsValue {
 // Helper function to create VM state JSON object
 fn create_vm_state_json(vm: &althread::vm::VM) -> serde_json::Value {
     let current_state = vm.current_state();
-    
-    let v =serde_json::json!({
+
+    serde_json::json!({
         "globals": current_state.0.iter().map(|(key, value)| {
             (key.clone(), format!("{:?}", value))
         }).collect::<HashMap<_, _>>(),
@@ -36,7 +36,15 @@ fn create_vm_state_json(vm: &althread::vm::VM) -> serde_json::Value {
                 "values": values.iter().map(|v| format!("{:?}", v)).collect::<Vec<String>>()
             })
         }).collect::<Vec<_>>(),
-        "channel_connections": format!("{:?}", vm.channels), // Include full channel info for debugging
+                "channel_connections": vm.channels.get_connections()
+            .iter()
+            .map(|((from_pid, from_channel), (to_pid, to_channel))| {
+                serde_json::json!({
+                    "from": { "pid": from_pid, "channel": from_channel },
+                    "to": { "pid": to_pid, "channel": to_channel }
+                })
+            })
+            .collect::<Vec<_>>(),
         "programs": current_state.2.iter().enumerate().map(|(index, (memory, instruction_pointer, clock))| {
             let prog_name = vm.running_programs.get(index)
                 .map(|p| p.name.clone())
@@ -49,10 +57,7 @@ fn create_vm_state_json(vm: &althread::vm::VM) -> serde_json::Value {
                 "clock": clock
             })
         }).collect::<Vec<_>>()
-    });
-
-    console::log_1(&format!("VM State JSON: {:?}", v).into());
-    v
+    })
 }
 
 #[wasm_bindgen]
@@ -743,8 +748,8 @@ pub fn execute_interactive_step(source: &str, filepath: &str, virtual_fs: JsValu
     }).collect();
     
     // Debug: Log what actions we found
-    web_sys::console::log_1(&JsValue::from_str(&format!("Step actions: {:?}", step_info.actions)));
-    web_sys::console::log_1(&JsValue::from_str(&format!("Step output: {:?}", step_output)));
+    // web_sys::console::log_1(&JsValue::from_str(&format!("Step actions: {:?}", step_info.actions)));
+    // web_sys::console::log_1(&JsValue::from_str(&format!("Step output: {:?}", step_output)));
     
     // Capture message flow events
     let get_prog_name = |prog_id: usize, vm_instance: &althread::vm::VM| -> String {
@@ -790,8 +795,8 @@ pub fn execute_interactive_step(source: &str, filepath: &str, virtual_fs: JsValu
 
     // Get the current state after execution for logging
     let current_state = execution_vm.current_state();
-    web_sys::console::log_1(&JsValue::from_str(&format!("current state: {:?}", current_state)));
-    web_sys::console::log_1(&JsValue::from_str(&format!("new vm state: {:?}", new_vm)));
+    // web_sys::console::log_1(&JsValue::from_str(&format!("current state: {:?}", current_state)));
+    // web_sys::console::log_1(&JsValue::from_str(&format!("new vm state: {:?}", new_vm)));
 
     let result = serde_json::json!({
         "executed_step": {

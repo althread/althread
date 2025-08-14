@@ -107,7 +107,18 @@ export default function InteractivePanel(props: InteractivePanelProps) {
         <div class="state-section">
           <h5><i class="codicon codicon-symbol-variable"></i> Global Variables</h5>
           <div class="state-content">
-            <pre>{JSON.stringify(state.get('globals'), null, 2)}</pre>
+            {state.get('globals') && Array.from(state.get('globals')).length > 0 ? (
+              <div class="globals-list">
+                {Array.from(state.get('globals')).map((entry: any) => (
+                  <div class="global-item">
+                    <span class="global-name">{entry[0]}:</span>
+                    <span class="global-value">{entry[1]}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <pre>No global variables.</pre>
+            )}
           </div>
         </div>
         
@@ -116,12 +127,69 @@ export default function InteractivePanel(props: InteractivePanelProps) {
           <div class="state-content">
             <div class="channel-subsection">
               <h6>Channel States:</h6>
-              <pre>{JSON.stringify(state.get('channels'), null, 2)}</pre>
+              {state.get('channels') && Array.from(state.get('channels')).length > 0 ? (
+                <div class="channels-list">
+                  {Array.from(state.get('channels')).map((channel: any) => (
+                    <div class="channel-item">
+                      <div class="channel-header">
+                        <strong>Channel: {channel.get('name')} (PID: {channel.get('pid')})</strong>
+                      </div>
+                      <div class="channel-values">
+                        <div class="channel-values-label">Messages:</div>
+                        {channel.get('values') && channel.get('values').length > 0 ? (
+                          <div class="channel-messages">
+                            {channel.get('values').map((message: string) => {
+                              // Parse the message format: "Tuple([Tuple([Int(0), Int(1)]), Tuple([Int(125), Bool(true)])])"
+                              // First tuple: [sender_pid, receiver_pid], Second tuple: message content
+                              const match = message.match(/Tuple\(\[Tuple\(\[Int\((\d+)\), Int\((\d+)\)\]\), (.+)\]\)/);
+                              if (match) {
+                                const senderPID = match[1];
+                                const messageContent = match[3];
+                                return (
+                                  <div class="message-item">
+                                    <div class="message-header">
+                                      <span class="message-sender">From PID {senderPID}</span>
+                                    </div>
+                                    <div class="message-content">{messageContent}</div>
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div class="message-item">
+                                  <div class="message-content">{message}</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div class="no-messages">No messages</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <pre>No messages sent/received.</pre>
+              )}
             </div>
-            <Show when={state.get('channel_connections')}>
+            <Show when={state.get('channel_connections') && Array.from(state.get('channel_connections')).length > 0}>
               <div class="channel-subsection">
                 <h6>Channel Connections:</h6>
-                <pre>{state.get('channel_connections')}</pre>
+                <div class="connections-list">
+                  {Array.from(state.get('channel_connections')).map((connection: any) => (
+                    <div class="connection-item">
+                      <div class="connection-line">
+                        <span class="connection-source">
+                          PID {connection.get('from').get('pid')} ({connection.get('from').get('channel')})
+                        </span>
+                        <span class="connection-arrow">→</span>
+                        <span class="connection-target">
+                          PID {connection.get('to').get('pid')} ({connection.get('to').get('channel')})
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </Show>
           </div>
@@ -138,7 +206,21 @@ export default function InteractivePanel(props: InteractivePanelProps) {
                 </div>
                 <div class="program-details">
                   <div class="text-with-icon"><i class="codicon codicon-debug-step-over"></i> IP: {prog.get('instruction_pointer')}</div>
-                  <div class="text-with-icon"><i class="codicon codicon-symbol-array"></i> Memory: {JSON.stringify(prog.get('memory'))}</div>
+                  <div class="memory-section">
+                    <div class="memory-label"><i class="codicon codicon-symbol-array"></i> Memory:</div>
+                    {prog.get('memory') && prog.get('memory').length > 0 ? (
+                      <div class="memory-list">
+                        {prog.get('memory').map((item: string, index: number) => (
+                          <div class="memory-item">
+                            <span class="memory-index">[{index}]</span>
+                            <span class="memory-value">{item}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div class="memory-empty">Empty stack</div>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

@@ -155,4 +155,8 @@ impl Channels {
     pub fn get_states(&self) -> ChannelsState {
         return self.states.clone();
     }
+
+    pub fn get_connections(&self) -> HashMap<(usize, String), (usize, String)> {
+        self.connections.clone()
+    }
 }
