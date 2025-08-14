@@ -785,7 +785,6 @@ pub fn execute_interactive_step(source: &str, filepath: &str, virtual_fs: JsValu
         }
     }).collect();
     
-    // Debug: Log what actions we found
     // web_sys::console::log_1(&JsValue::from_str(&format!("Step actions: {:?}", step_info.actions)));
     // web_sys::console::log_1(&JsValue::from_str(&format!("Step output: {:?}", step_output)));
     

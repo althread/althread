@@ -108,9 +108,9 @@ export default function InteractivePanel(props: InteractivePanelProps) {
     }
 
     const state = props.currentVMState;
-    console.log("Current VM State:", state);
-    console.log("Current VM State keys:", Array.from(state.keys()));
-    console.log("Channel connections:", state.get('channel_connections'));
+    // console.log("Current VM State:", state);
+    // console.log("Current VM State keys:", Array.from(state.keys()));
+    // console.log("Channel connections:", state.get('channel_connections'));
     
     return (
       <div class="vm-state-container">
@@ -344,7 +344,7 @@ export default function InteractivePanel(props: InteractivePanelProps) {
                     class={`tab-button ${activeTab() === 'state' ? 'active' : ''}`}
                     onClick={() => setActiveTab('state')}
                   >
-                    <i class="codicon codicon-debug-console"></i> Quick State
+                    <i class="codicon codicon-debug-console"></i> Current State
                   </button>
                 </div>
                 

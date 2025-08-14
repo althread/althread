@@ -413,7 +413,6 @@ export default function App() {
       );
 
       setInteractiveStates(res.get('states') || []);
-      console.log("console", res.get('states'));
       setCurrentVMState(stepResult.new_state || res.get('current_state'));
       setInteractiveFinished(res.get('is_finished'));
       
@@ -589,7 +588,6 @@ export default function App() {
                   }
                   
                   let res = start_interactive_session(editor.editorView().state.doc.toString(), filePath, virtualFS);
-                  console.log("Interactive session started:", res);
                   setInteractiveStates(res.get('states') || []);
                   setCurrentVMState(res.get('current_state'));
                   setInteractiveFinished(res.get('is_finished'));
