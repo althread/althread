@@ -98,34 +98,18 @@ pub struct Variable {
 #[derive(Debug)]
 pub struct CompilationContext {
     pub stdlib: Rc<stdlib::Stdlib>,
-    pub user_functions: HashMap<String, FunctionDefinition>,
-    pub global_table: HashMap<String, Variable>,
-    pub program_arguments: HashMap<String, (Vec<DataType>, bool)>,
-    pub programs_code: HashMap<String, ProgramCode>,
-    pub global_memory: BTreeMap<String, Literal>,
 
     // Add channel state
     pub channels: HashMap<(String, String), (Vec<DataType>, Pos)>,
     pub undefined_channels: HashMap<(String, String), (Vec<DataType>, Pos)>,
-
-    // add always and eventually conditions
-    pub always_conditions: Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
-    pub eventually_conditions: Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
 }
 
 impl CompilationContext {
     pub fn new() -> Self {
         Self {
             stdlib: Rc::new(stdlib::Stdlib::new()),
-            user_functions: HashMap::new(),
-            global_table: HashMap::new(),
-            program_arguments: HashMap::new(),
-            global_memory: BTreeMap::new(),
             channels: HashMap::new(),
             undefined_channels: HashMap::new(),
-            always_conditions: Vec::new(),
-            eventually_conditions: Vec::new(),
-            programs_code: HashMap::new(),
         }
     }
 }
@@ -144,7 +128,16 @@ pub struct CompilerState {
 
     // Reference to shared context
     pub context: Rc<RefCell<CompilationContext>>,
-    pub local_context: Rc<RefCell<CompilationContext>>,
+    
+    // add always and eventually conditions
+    pub always_conditions: Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
+    pub eventually_conditions: Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
+
+    pub user_functions: HashMap<String, FunctionDefinition>,
+    pub global_table: HashMap<String, Variable>,
+    pub program_arguments: HashMap<String, (Vec<DataType>, bool)>,
+    pub programs_code: HashMap<String, ProgramCode>,
+    pub global_memory: BTreeMap<String, Literal>,
 }
 
 impl CompilerState {
@@ -158,7 +151,13 @@ impl CompilerState {
             in_function: false,
             method_call_stack_offset: 0,
             context,
-            local_context: Rc::new(RefCell::new(CompilationContext::new())),
+            user_functions: HashMap::new(),
+            global_table: HashMap::new(),
+            program_arguments: HashMap::new(),
+            global_memory: BTreeMap::new(),
+            always_conditions: Vec::new(),
+            eventually_conditions: Vec::new(),
+            programs_code: HashMap::new(),
         }
     }
 
@@ -170,32 +169,28 @@ impl CompilerState {
         Rc::clone(&self.context.borrow_mut().stdlib)
     }
 
-    pub fn user_functions(&self) -> std::cell::Ref<'_, HashMap<String, FunctionDefinition>> {
-        std::cell::Ref::map(self.local_context.borrow(), |ctx| &ctx.user_functions)
+    pub fn user_functions(&self) -> &HashMap<String, FunctionDefinition> {
+        &self.user_functions
     }
 
-    pub fn user_functions_mut(&self) -> std::cell::RefMut<'_, HashMap<String, FunctionDefinition>> {
-        std::cell::RefMut::map(self.local_context.borrow_mut(), |ctx| {
-            &mut ctx.user_functions
-        })
+    pub fn user_functions_mut(&mut self) -> &mut HashMap<String, FunctionDefinition> {
+        &mut self.user_functions
     }
 
-    pub fn global_table(&self) -> std::cell::Ref<'_, HashMap<String, Variable>> {
-        std::cell::Ref::map(self.local_context.borrow(), |ctx| &ctx.global_table)
+    pub fn global_table(&self) -> &HashMap<String, Variable> {
+        &self.global_table
     }
 
-    pub fn global_table_mut(&self) -> std::cell::RefMut<'_, HashMap<String, Variable>> {
-        std::cell::RefMut::map(self.local_context.borrow_mut(), |ctx| &mut ctx.global_table)
+    pub fn global_table_mut(&mut self) -> &mut HashMap<String, Variable> {
+        &mut self.global_table
     }
 
-    pub fn global_memory(&self) -> std::cell::Ref<'_, BTreeMap<String, Literal>> {
-        std::cell::Ref::map(self.local_context.borrow(), |ctx| &ctx.global_memory)
+    pub fn global_memory(&self) -> &BTreeMap<String, Literal> {
+        &self.global_memory
     }
 
-    pub fn global_memory_mut(&self) -> std::cell::RefMut<'_, BTreeMap<String, Literal>> {
-        std::cell::RefMut::map(self.local_context.borrow_mut(), |ctx| {
-            &mut ctx.global_memory
-        })
+    pub fn global_memory_mut(&mut self) -> &mut BTreeMap<String, Literal> {
+        &mut self.global_memory
     }
 
     pub fn channels(&self) -> std::cell::Ref<'_, HashMap<(String, String), (Vec<DataType>, Pos)>> {
@@ -220,57 +215,38 @@ impl CompilerState {
         std::cell::RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.undefined_channels)
     }
 
-    pub fn program_arguments(&self) -> std::cell::Ref<'_, HashMap<String, (Vec<DataType>, bool)>> {
-        std::cell::Ref::map(self.local_context.borrow(), |ctx| &ctx.program_arguments)
+    pub fn program_arguments(&self) -> &HashMap<String, (Vec<DataType>, bool)> {
+        &self.program_arguments
     }
 
-    pub fn program_arguments_mut(
-        &self,
-    ) -> std::cell::RefMut<'_, HashMap<String, (Vec<DataType>, bool)>> {
-        std::cell::RefMut::map(self.local_context.borrow_mut(), |ctx| {
-            &mut ctx.program_arguments
-        })
+    pub fn program_arguments_mut(&mut self) -> &mut HashMap<String, (Vec<DataType>, bool)> {
+        &mut self.program_arguments
     }
 
-    pub fn always_conditions(
-        &self,
-    ) -> std::cell::Ref<'_, Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>> {
-        std::cell::Ref::map(self.local_context.borrow(), |ctx| &ctx.always_conditions)
+    pub fn always_conditions(&self) -> &Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)> {
+        &self.always_conditions
     }
 
-    pub fn always_conditions_mut(
-        &self,
-    ) -> std::cell::RefMut<'_, Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>> {
-        std::cell::RefMut::map(self.local_context.borrow_mut(), |ctx| {
-            &mut ctx.always_conditions
-        })
+    pub fn always_conditions_mut(&mut self) -> &mut Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)> {
+        &mut self.always_conditions
     }
 
-    pub fn eventually_conditions(
-        &self,
-    ) -> std::cell::Ref<'_, Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>> {
-        std::cell::Ref::map(self.local_context.borrow(), |ctx| {
-            &ctx.eventually_conditions
-        })
+    pub fn eventually_conditions(&self) -> &Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)> {
+        &self.eventually_conditions
     }
 
-    pub fn eventually_conditions_mut(
-        &self,
-    ) -> std::cell::RefMut<'_, Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>> {
-        std::cell::RefMut::map(self.local_context.borrow_mut(), |ctx| {
-            &mut ctx.eventually_conditions
-        })
+    pub fn eventually_conditions_mut(&mut self) -> &mut Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)> {
+        &mut self.eventually_conditions
     }
 
-    pub fn programs_code(&self) -> std::cell::Ref<'_, HashMap<String, ProgramCode>> {
-        std::cell::Ref::map(self.local_context.borrow(), |ctx| &ctx.programs_code)
+    pub fn programs_code(&self) -> &HashMap<String, ProgramCode> {
+        &self.programs_code
     }
 
-    pub fn programs_code_mut(&self) -> std::cell::RefMut<'_, HashMap<String, ProgramCode>> {
-        std::cell::RefMut::map(self.local_context.borrow_mut(), |ctx| {
-            &mut ctx.programs_code
-        })
+    pub fn programs_code_mut(&mut self) -> &mut HashMap<String, ProgramCode> {
+        &mut self.programs_code
     }
+
 
     /// Pop all variables from the program stack that have the same depth as the current stack depth
     /// and decrease the current stack depth by one.

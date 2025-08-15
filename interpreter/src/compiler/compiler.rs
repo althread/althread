@@ -334,9 +334,10 @@ impl Ast {
 
                         let var_name = &decl.value.identifier.value.parts[0].value.value;
                         // Use context instead of local global_table
+                        let last_program_stack = state.program_stack.last().unwrap().clone();
                         state.global_table_mut().insert(
                             var_name.clone(),
-                            state.program_stack.last().unwrap().clone(),
+                            last_program_stack,
                         );
                         state
                             .global_memory_mut()
@@ -1021,42 +1022,6 @@ impl Ast {
                 .insert(qualified_prog_name, prog_code.clone());
         }
 
-        state
-            .context
-            .borrow_mut()
-            .global_memory
-            .extend(state.global_memory().clone());
-        state
-            .context
-            .borrow_mut()
-            .program_arguments
-            .extend(state.program_arguments().clone());
-        state
-            .context
-            .borrow_mut()
-            .user_functions
-            .extend(state.user_functions().clone());
-        state
-            .context
-            .borrow_mut()
-            .global_table
-            .extend(state.global_table().clone());
-        state
-            .context
-            .borrow_mut()
-            .programs_code
-            .extend(state.programs_code().clone());
-        state
-            .context
-            .borrow_mut()
-            .always_conditions
-            .extend(state.always_conditions().clone());
-        state
-            .context
-            .borrow_mut()
-            .eventually_conditions
-            .extend(state.eventually_conditions().clone());
-
         log::debug!("[{}] Compiled module with {} programs, {} functions, {} shared variables, {} always conditions, {} eventually conditions", 
             module_prefix,
             state.programs_code().len(),
@@ -1095,16 +1060,15 @@ impl Ast {
         self.check_privacy_violations(&state)?;
 
         // Return using context data instead of local variables
-        let context_borrow = context.borrow();
         Ok(CompiledProject {
-            global_memory: context_borrow.global_memory.clone(),
-            program_arguments: context_borrow.program_arguments.clone(),
-            user_functions: context_borrow.user_functions.clone(),
-            global_table: context_borrow.global_table.clone(),
-            programs_code: context_borrow.programs_code.clone(),
-            always_conditions: context_borrow.always_conditions.clone(),
-            eventually_conditions: context_borrow.eventually_conditions.clone(),
-            stdlib: context_borrow.stdlib.clone(),
+            global_memory: state.global_memory().clone(),
+            program_arguments: state.program_arguments().clone(),
+            user_functions: state.user_functions().clone(),
+            global_table: state.global_table().clone(),
+            programs_code: state.programs_code().clone(),
+            always_conditions: state.always_conditions().clone(),
+            eventually_conditions: state.eventually_conditions().clone(),
+            stdlib: state.stdlib().clone(),
         })
     }
 
