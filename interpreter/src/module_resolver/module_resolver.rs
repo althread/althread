@@ -142,7 +142,20 @@ impl<F: FileSystem + Clone> ModuleResolver<F> {
 
     fn resolve_import_item(&self, item: &ImportItem) -> AlthreadResult<ResolvedPath> {
         let (module_path, module_type) = self.resolve_path(&item.path)?;
-        let name = item.path.last_segment().to_string();
+        
+        // Determine the name based on the resolved path
+        let name = if module_path.file_name().and_then(|n| n.to_str()) == Some("mod.alt") {
+            // If we resolved to a mod.alt file, use the parent directory name as the module name
+            module_path
+                .parent()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str())
+                .unwrap_or_else(|| item.path.last_segment())
+                .to_string()
+        } else {
+            item.path.last_segment().to_string()
+        };
+        
         let alias = item.alias.as_ref().map(|alias| alias.value.value.clone());
 
         Ok(ResolvedPath {
@@ -186,25 +199,39 @@ impl<F: FileSystem + Clone> ModuleResolver<F> {
     ) -> AlthreadResult<Option<(PathBuf, ModuleType)>> {
         let file_path = base_path.with_extension("alt");
         let dir_path = base_path.clone();
+        let mod_file_path = dir_path.join("mod.alt");
 
         let file_exists = self.filesystem.is_file(&file_path);
         let dir_exists = self.filesystem.is_dir(&dir_path);
+        let mod_file_exists = self.filesystem.is_file(&mod_file_path);
 
-        match (file_exists, dir_exists) {
-            (true, true) => {
-                // Both exist: use file and warn user
+        match (file_exists, dir_exists, mod_file_exists) {
+            (true, true, true) => {
+                // All three exist: prioritize mod.alt in directory, warn about ambiguity
+                eprintln!("Warning: File '{}', directory '{}', and mod file '{}' all exist. Using mod file in directory.", 
+                         file_path.display(), dir_path.display(), mod_file_path.display());
+                let canonical_path = self.filesystem.canonicalize(&mod_file_path)?;
+                Ok(Some((canonical_path, ModuleType::File)))
+            }
+            (true, true, false) => {
+                // File and directory exist, no mod.alt: use file and warn
                 eprintln!("Warning: Both '{}' and '{}' exist. Using the file. Consider renaming one to avoid confusion.", 
                          file_path.display(), dir_path.display());
                 let canonical_path = self.filesystem.canonicalize(&file_path)?;
                 Ok(Some((canonical_path, ModuleType::File)))
             }
-            (true, false) => {
+            (true, false, false) => {
                 // Only file exists
                 let canonical_path = self.filesystem.canonicalize(&file_path)?;
                 Ok(Some((canonical_path, ModuleType::File)))
             }
-            (false, true) => {
-                // Only directory exists
+            (false, true, true) => {
+                // Directory with mod.alt exists
+                let canonical_path = self.filesystem.canonicalize(&mod_file_path)?;
+                Ok(Some((canonical_path, ModuleType::File)))
+            }
+            (false, true, false) => {
+                // Only directory exists (no mod.alt)
                 let sub_modules = self.discover_sub_modules(&dir_path)?;
                 let canonical_path = self.filesystem.canonicalize(&dir_path)?;
                 Ok(Some((
@@ -212,8 +239,16 @@ impl<F: FileSystem + Clone> ModuleResolver<F> {
                     ModuleType::Directory { sub_modules },
                 )))
             }
-            (false, false) => {
-                // Neither exists
+            (_, false, false) => {
+                // Neither directory nor file exists
+                Ok(None)
+            }
+            (false, false, true) => {
+                // This shouldn't happen (mod.alt exists but directory doesn't)
+                Ok(None)
+            }
+            (true, false, true) => {
+                // This shouldn't happen (mod.alt and file exist but directory doesn't)
                 Ok(None)
             }
         }
@@ -372,9 +407,6 @@ impl<F: FileSystem + Clone> ModuleResolver<F> {
     }
 
     fn find_virtual_dependency(&self, import_str: &str) -> Option<(PathBuf, ModuleType)> {
-        // Look for dependencies in the virtual filesystem under deps/
-        // e.g., "github.com/user/repo/algebra/floats" maps to "deps/github_com_user_repo/algebra/floats.alt"
-
         let import_parts: Vec<&str> = import_str.split('/').collect();
 
         if import_parts.len() < 3 {
@@ -382,29 +414,28 @@ impl<F: FileSystem + Clone> ModuleResolver<F> {
         }
 
         let base_package = import_parts[0..3].join("/");
-
-        // Convert package name to filesystem-safe name (replace special chars with underscores)
         let sanitized_package = base_package.replace(|c: char| !c.is_alphanumeric(), "_");
-
         let has_hierarchical_part = import_parts.len() > 3;
 
         let target_path = if has_hierarchical_part {
             let hierarchical_part = import_parts[3..].join("/");
             std::path::PathBuf::from(format!("deps/{}/{}", sanitized_package, hierarchical_part))
         } else {
-            // Root level import, look for main.alt
-            std::path::PathBuf::from(format!("deps/{}/main", sanitized_package))
+            std::path::PathBuf::from(format!("deps/{}", sanitized_package))
         };
 
-        // Check if it's a file or directory in the virtual filesystem
+        // Check priority: mod.alt > file.alt > directory
+        let mod_file_path = target_path.join("mod.alt");
         let file_path = target_path.with_extension("alt");
         let dir_path = target_path.clone();
 
+        let mod_file_exists = self.filesystem.is_file(&mod_file_path);
         let is_file = self.filesystem.is_file(&file_path);
         let is_dir = self.filesystem.is_dir(&dir_path);
 
-        if is_file && is_dir {
-            // Both exist: prefer file and warn
+        if mod_file_exists {
+            return Some((mod_file_path, ModuleType::File));
+        } else if is_file && is_dir {
             eprintln!(
                 "Warning: Both file '{}' and directory '{}' exist. Using file.",
                 file_path.display(),
@@ -414,7 +445,6 @@ impl<F: FileSystem + Clone> ModuleResolver<F> {
         } else if is_file {
             return Some((file_path, ModuleType::File));
         } else if is_dir {
-            // Directory module: collect all .alt files as sub-modules
             let sub_modules = self.collect_virtual_submodules(&dir_path);
             return Some((dir_path, ModuleType::Directory { sub_modules }));
         }
@@ -438,50 +468,51 @@ impl<F: FileSystem + Clone> ModuleResolver<F> {
         import_str: &str,
     ) -> Option<(PathBuf, ModuleType)> {
         // Parse the import to extract the hierarchical path
-        // e.g., "github.com/user/repo/algebra/floats" -> "algebra/floats"
         let import_parts: Vec<&str> = import_str.split('/').collect();
 
         if import_parts.len() < 3 {
-            // Not a valid remote import with hierarchical path
             return None;
         }
 
-        let package_part = import_parts[0..3].join("/"); // e.g., "github.com/user/repo"
         let has_hierarchical_part = import_parts.len() > 3;
 
         let target_path = if has_hierarchical_part {
-            let hierarchical_part = import_parts[3..].join("/"); // e.g., "algebra/floats"
+            let hierarchical_part = import_parts[3..].join("/");
             cached_package_path.join(hierarchical_part)
         } else {
-            // Root level import, look for main.alt
-            cached_package_path.join("main.alt")
+            // Root level import: use the package directory itself
+            cached_package_path.clone()
         };
 
-        // Check if it's a file or directory
+        // Check priority: mod.alt > file.alt > directory
+        let mod_file_path = target_path.join("mod.alt");
         let file_path = target_path.with_extension("alt");
         let dir_path = target_path.clone();
 
-        if file_path.exists() && dir_path.exists() {
-            // Both exist: prefer file and warn
+        if mod_file_path.exists() {
+            return Some((mod_file_path, ModuleType::File));
+        } else if file_path.exists() && dir_path.exists() {
             eprintln!(
-                "Warning: Both '{}' and '{}' exist in cached package '{}'. Using the file.",
+                "Warning: Both '{}' and '{}' exist. Using the file.",
                 file_path.display(),
-                dir_path.display(),
-                package_part
+                dir_path.display()
             );
             return Some((file_path, ModuleType::File));
         } else if file_path.exists() {
-            // Only file exists
             return Some((file_path, ModuleType::File));
         } else if dir_path.exists() {
-            // Only directory exists
             if let Ok(sub_modules) = self.discover_sub_modules(&dir_path) {
                 return Some((dir_path, ModuleType::Directory { sub_modules }));
             }
         }
 
-        // If we're at root level and main.alt doesn't exist, check if it's a directory package
+        // If we're at root level and neither main.alt nor mod.alt exists, check if it's a directory package
         if !has_hierarchical_part && cached_package_path.is_dir() {
+            let root_mod_file = cached_package_path.join("mod.alt");
+            if root_mod_file.exists() {
+                return Some((root_mod_file, ModuleType::File));
+            }
+            
             if let Ok(sub_modules) = self.discover_sub_modules(cached_package_path) {
                 return Some((
                     cached_package_path.clone(),
