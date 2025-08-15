@@ -1,8 +1,10 @@
 /** @jsxImportSource solid-js */
 import vis from "vis-network/dist/vis-network.esm";
-import { createSignal, onCleanup, createEffect, For, Show } from "solid-js"
-import {nodeToString, literal, Node, ProgramStateJS} from "./Node";
+import { createSignal, onCleanup, createEffect, Show } from "solid-js"
+import { literal, Node} from "./Node";
+import { ProgramStateJS } from "./State";
 import GraphToolbar from "./GraphToolbar";
+import { exportCommGraphToCSV } from "./exportToCSV";
 
 import { createGraphToolbarHandlers } from "./visHelpers";
 import { useGraphMaximizeHotkeys } from "@hooks/useGraphMaximizeHotkeys";
@@ -463,6 +465,7 @@ export const renderMessageFlowGraph = (commGraphData, vm_states) => {
       <GraphToolbar
         onFullscreen={handleMaximize}
         onRecenter={handleRecenter}
+        onDownloadCSV={() => exportCommGraphToCSV(commGraphData, vm_states)}
         onDownload={handleDownload}
         isFullscreen={maximized()}
       />

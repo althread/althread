@@ -7,6 +7,7 @@ import { themes } from "./visOptions";
 import { setupNodeClickZoom, createGraphToolbarHandlers } from "./visHelpers";
 import { useGraphMaximizeHotkeys } from "@hooks/useGraphMaximizeHotkeys";
 import MetadataDisplay from "./MetadataDisplay";
+import { exportStatesToCSV } from "./exportToCSV";
 
 export const rendervmStates = (vm_states) => {
     console.log(vm_states);
@@ -83,6 +84,7 @@ export const rendervmStates = (vm_states) => {
           onFullscreen={handleMaximize}
           onRecenter={handleRecenter}
           onDownload={handleDownload}
+          onDownloadCSV={() => exportStatesToCSV(data.nodes, data.edges)}
           isFullscreen={maximized()}
           onDetails={handleDetails}
         />
