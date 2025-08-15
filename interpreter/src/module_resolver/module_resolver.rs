@@ -211,7 +211,8 @@ impl<F: FileSystem + Clone> ModuleResolver<F> {
                 eprintln!("Warning: File '{}', directory '{}', and mod file '{}' all exist. Using mod file in directory.", 
                          file_path.display(), dir_path.display(), mod_file_path.display());
                 let canonical_path = self.filesystem.canonicalize(&mod_file_path)?;
-                Ok(Some((canonical_path, ModuleType::File)))
+                let sub_modules = self.discover_sub_modules(&dir_path)?;
+                Ok(Some((canonical_path, ModuleType::Directory { sub_modules })))
             }
             (true, true, false) => {
                 // File and directory exist, no mod.alt: use file and warn
@@ -228,28 +229,34 @@ impl<F: FileSystem + Clone> ModuleResolver<F> {
             (false, true, true) => {
                 // Directory with mod.alt exists
                 let canonical_path = self.filesystem.canonicalize(&mod_file_path)?;
-                Ok(Some((canonical_path, ModuleType::File)))
-            }
-            (false, true, false) => {
-                // Only directory exists (no mod.alt)
                 let sub_modules = self.discover_sub_modules(&dir_path)?;
-                let canonical_path = self.filesystem.canonicalize(&dir_path)?;
-                Ok(Some((
-                    canonical_path,
-                    ModuleType::Directory { sub_modules },
-                )))
+                Ok(Some((canonical_path, ModuleType::Directory { sub_modules })))
             }
-            (_, false, false) => {
-                // Neither directory nor file exists
-                Ok(None)
-            }
-            (false, false, true) => {
-                // This shouldn't happen (mod.alt exists but directory doesn't)
-                Ok(None)
+            // Neither directory nor file exists
+            (false, false, _) => Ok(None),
+            (false, true, false) => {
+                // Only directory exists (no mod.alt) - this should be an error
+                Err(AlthreadError::new(
+                    ErrorType::ModuleNotFound,
+                    None,
+                    format!(
+                        "Directory '{}' exists but contains no 'mod.alt' file. Directory modules require a 'mod.alt' file.",
+                        dir_path.display()
+                    ),
+                ))
             }
             (true, false, true) => {
-                // This shouldn't happen (mod.alt and file exist but directory doesn't)
-                Ok(None)
+                // Impossible state: both .alt file and mod.alt exist but directory doesn't
+                Err(AlthreadError::new(
+                    ErrorType::ModuleNotFound,
+                    None,
+                    format!(
+                        "Inconsistent filesystem state: both '{}' and '{}' exist but directory '{}' doesn't exist",
+                        file_path.display(),
+                        mod_file_path.display(),
+                        dir_path.display()
+                    ),
+                ))
             }
         }
     }
