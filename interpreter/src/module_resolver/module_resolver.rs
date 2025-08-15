@@ -326,6 +326,7 @@ impl<F: FileSystem + Clone> ModuleResolver<F> {
 
         // Try to resolve from cache
         if let Some((cached_path, module_type)) = self.find_cached_dependency(&import_str) {
+            println!("Found cached dependency for '{}': {:?}", import_str, cached_path);
             return Ok((cached_path, module_type));
         }
 
@@ -386,7 +387,20 @@ impl<F: FileSystem + Clone> ModuleResolver<F> {
         let sanitized_base = base_package.replace("://", "/");
         let dep_base_path = cache_dir.join(&sanitized_base);
 
+        // Get the required version from alt.toml
+        let required_version = self.get_required_version(&base_package)?;
+
+        // Look for the specific version directory
+        let version_path = dep_base_path.join(&required_version);
+        if version_path.is_dir() {
+            if let Some(resolved) = self.resolve_cached_import(&version_path, import_str) {
+                return Some(resolved);
+            }
+        }
+
+        // Fallback: if specific version not found
         // Look for any version directory (we'll implement proper version resolution later)
+        let mut available_version = None;
         if let Ok(entries) = std::fs::read_dir(&dep_base_path) {
             for entry in entries {
                 if let Ok(entry) = entry {
@@ -395,8 +409,44 @@ impl<F: FileSystem + Clone> ModuleResolver<F> {
                         // Try to resolve the hierarchical import within the cached dependency
                         if let Some(resolved) =
                             self.resolve_cached_import(&version_path, import_str)
-                        {
-                            return Some(resolved);
+                        {   
+                            available_version = Some(resolved);
+                            break;
+                        }
+                    }
+                }
+            }
+            if let Some(resolved) = available_version {
+                eprintln!(
+                    "Warning: Required version '{}' for '{}' not found in cache. Using '{}'. Run 'install' if you want to use the required version.",
+                    required_version, base_package, resolved.0.display()
+                );
+                return Some(resolved);
+            }
+        }
+
+        None
+    }
+
+    fn get_required_version(&self, package: &str) -> Option<String> {
+        let alt_toml_path = self.project_root.join("alt.toml");
+        if let Ok(content) = std::fs::read_to_string(&alt_toml_path) {
+            // parse the TOML to find the version for this package
+            if let Ok(parsed) = content.parse::<toml::Value>() {
+                if let Some(deps) = parsed.get("dependencies").and_then(|d| d.as_table()) {
+                    if let Some(version) = deps.get(package).and_then(|v| v.as_str()) {
+                        return Some(version.to_string());
+                    }
+                }
+            }
+
+            // Fallback: simple string parsing if TOML parsing fails
+            for line in content.lines() {
+                if line.contains(package) && line.contains('=') {
+                    if let Some(version_part) = line.split('=').nth(1) {
+                        let version = version_part.trim().trim_matches('"');
+                        if !version.is_empty() {
+                            return Some(version.to_string());
                         }
                     }
                 }
