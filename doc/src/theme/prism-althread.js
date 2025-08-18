@@ -34,12 +34,12 @@
 		},
 
 		'function-definition': {
-			pattern: /\b(?:program|shared|main|program|always|fn)\b/,
+			pattern: /\b(?:program|shared|main|program|always|fn|import)\b/,
 			lookbehind: true,
 			alias: 'system-block'
 		},
 
-		'keyword': /\b(?:let|const|channel|while|for|in|loop|atomic|if|else|run|send|await|seq|first|receive)\b/,
+		'keyword': /\b(?:let|as|const|channel|while|for|in|loop|atomic|if|else|run|send|await|seq|first|receive|private)\b/,
 
         'function': /\b\w+(?=\()/,
 		// Hex, oct, bin, dec numbers with visual separators and type suffix
