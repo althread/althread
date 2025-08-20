@@ -20,7 +20,7 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
-        token::{datatype::DataType, literal::Literal},
+        token::{datatype::DataType, identifier::Identifier, literal::Literal, object_identifier::ObjectIdentifier},
     },
     compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
@@ -54,6 +54,18 @@ pub enum SideEffectExpression {
     Expression(Node<Expression>),
     RunCall(Node<RunCall>),
     FnCall(Node<FnCall>),
+    Bracket(Node<BracketExpression>),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct BracketExpression {
+    pub content: BracketContent,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum BracketContent {
+    Range(Node<RangeListExpression>),
+    ListLiteral(Vec<Node<Expression>>),
 }
 
 impl NodeBuilder for SideEffectExpression {
@@ -64,8 +76,32 @@ impl NodeBuilder for SideEffectExpression {
             Rule::expression => Ok(Self::Expression(Node::build(pair, filepath)?)),
             Rule::run_call => Ok(Self::RunCall(Node::build(pair, filepath)?)),
             Rule::fn_call => Ok(Self::FnCall(Node::build(pair, filepath)?)),
+            Rule::bracket_expression => Ok(Self::Bracket(Node::build(pair, filepath)?)),
             _ => Err(no_rule!(pair, "SideEffectExpression", filepath)),
         }
+    }
+}
+
+impl NodeBuilder for BracketExpression {
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
+        let pair = pairs.next().unwrap();
+
+        let content = match pair.as_rule() {
+            Rule::range_expression => {
+                let range_node = Node::build(pair, filepath)?;
+                BracketContent::Range(range_node)
+            }
+            Rule::list_literal_inner => {
+                let expressions: Result<Vec<_>, _> = pair
+                    .into_inner()
+                    .map(|expr_pair| Node::build(expr_pair, filepath))
+                    .collect();
+                BracketContent::ListLiteral(expressions?)
+            }
+            _ => return Err(no_rule!(pair, "BracketExpression", filepath)),
+        };
+
+        Ok(BracketExpression { content })
     }
 }
 
@@ -75,6 +111,95 @@ impl InstructionBuilder for SideEffectExpression {
             Self::Expression(node) => node.compile(state),
             Self::RunCall(node) => node.compile(state),
             Self::FnCall(node) => node.compile(state),
+            Self::Bracket(node) => node.compile(state),
+        }
+    }
+}
+
+impl InstructionBuilder for BracketExpression {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
+        match &self.content {
+            BracketContent::Range(range_node) => {
+                // Create an Expression::Range and compile it
+                let range_expr = Node {
+                    pos: range_node.pos.clone(),
+                    value: Expression::Range(range_node.clone()),
+                };
+                range_expr.compile(state)
+            },
+            BracketContent::ListLiteral(expressions) => {
+                let mut instructions = Vec::new();
+
+                // Infer element type from first expression if available
+                let element_type = if let Some(first_expr) = expressions.first() {
+                    let local_expr = LocalExpressionNode::from_expression(&first_expr.value, &state.program_stack)?;
+                    local_expr.datatype(state).map_err(|err| {
+                        AlthreadError::new(
+                            ErrorType::ExpressionError,
+                            Some(first_expr.pos.clone()),
+                            format!("Cannot infer list element type: {}", err),
+                        )
+                    })?
+                } else {
+                    // Empty list - will be handled by declaration context
+                    // The compiler cannot determine the datatype of an empty list
+                    // This will be modified in the future, when the first element is added
+                    DataType::Void
+                };
+
+                // Compile each expression onto the stack
+                for (i, expr) in expressions.iter().enumerate() {
+                    // Compile the expression
+                    let builder = expr.compile(state)?;
+                    instructions.extend(builder.instructions);
+                    
+                    // Type check - we can determine types even for function calls
+                    // so it is possible to have a list of function calls
+                    if element_type != DataType::Void {
+                        let local_expr = LocalExpressionNode::from_expression(&expr.value, &state.program_stack)?;
+                        let expr_type = local_expr.datatype(state).map_err(|err| {
+                            AlthreadError::new(
+                                ErrorType::ExpressionError,
+                                Some(expr.pos.clone()),
+                                format!("Cannot determine type of list element {}: {}", i, err),
+                            )
+                        })?;
+                        
+                        if expr_type != element_type {
+                            return Err(AlthreadError::new(
+                                ErrorType::ExpressionError,
+                                Some(expr.pos.clone()),
+                                format!("List element {} has type {:?}, expected {:?}", i, expr_type, element_type),
+                            ));
+                        }
+                    }
+                }
+
+                // Create list from stack elements
+                instructions.push(Instruction {
+                    pos: None,
+                    control: InstructionType::CreateListFromStack {
+                        element_count: expressions.len(),
+                        element_type: element_type.clone(),
+                    },
+                });
+
+                // Update stack - remove individual elements and add the list
+                for _ in 0..expressions.len() {
+                    state.program_stack.pop();
+                }
+
+                let list_type = DataType::List(Box::new(element_type));
+                state.program_stack.push(Variable {
+                    name: "".to_string(),
+                    depth: state.current_stack_depth,
+                    mutable: false,
+                    datatype: list_type,
+                    declare_pos: None,
+                });
+
+                Ok(InstructionBuilderOk::from_instructions(instructions))
+            }
         }
     }
 }
@@ -85,6 +210,26 @@ impl AstDisplay for SideEffectExpression {
             Self::Expression(node) => node.ast_fmt(f, prefix),
             Self::RunCall(node) => node.ast_fmt(f, prefix),
             Self::FnCall(node) => node.ast_fmt(f, prefix),
+            Self::Bracket(node) => node.ast_fmt(f, prefix),
+        }
+    }
+}
+
+impl AstDisplay for BracketExpression {
+    fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
+        match &self.content {
+            BracketContent::Range(range) => {
+                writeln!(f, "{}RangeExpression", prefix)?;
+                range.ast_fmt(f, &prefix.add_branch())
+            }
+            BracketContent::ListLiteral(exprs) => {
+                writeln!(f, "{}ListLiteral", prefix)?;
+                let new_prefix = prefix.add_branch();
+                for expr in exprs {
+                    expr.ast_fmt(f, &new_prefix)?;
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -145,6 +290,63 @@ pub fn parse_expr(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Node<Exp
                 },
                 value: Expression::FnCall(Node::build(primary, filepath)?),
             }),
+            Rule::index_access => {
+                // Convert obj[index] to obj.at(index)
+                let pos = Pos {
+                    line: primary.line_col().0,
+                    col: primary.line_col().1,
+                    start: primary.as_span().start(),
+                    end: primary.as_span().end(),
+                    file_path: filepath.to_string(),
+                };
+                
+                let mut inner = primary.into_inner();
+                let object_pair = inner.next().unwrap();
+                let index_pair = inner.next().unwrap();
+                
+                // Parse the object identifier and index expression
+                let object_id: Node<ObjectIdentifier> = Node::build(object_pair, filepath)?;
+                let index_expr: Node<Expression> = Node::build(index_pair, filepath)?;
+                
+                // Create a function call: object.at(index)
+                // Build object.at as the function name
+                let mut parts = object_id.value.parts.clone();
+                parts.push(Node {
+                    pos: pos.clone(),
+                    value: Identifier {
+                        value: "at".to_string(),
+                    },
+                });
+                
+                let fn_name = Node {
+                    pos: pos.clone(),
+                    value: ObjectIdentifier { parts },
+                };
+                
+                // Build tuple expression with the index
+                let tuple_expr = Node {
+                    pos: pos.clone(),
+                    value: Expression::Tuple(Node {
+                        pos: pos.clone(),
+                        value: TupleExpression {
+                            values: vec![index_expr],
+                        },
+                    }),
+                };
+                
+                let fn_call = Node {
+                    pos: pos.clone(),
+                    value: FnCall {
+                        fn_name,
+                        values: Box::new(tuple_expr),
+                    },
+                };
+                
+                Ok(Node {
+                    pos,
+                    value: Expression::FnCall(fn_call),
+                })
+            },
             _ => Ok(Node {
                 pos: Pos {
                     line: primary.line_col().0,
@@ -326,7 +528,8 @@ impl LocalExpressionNode {
                         .rev()
                         .find(|v| &v.name == receiver_name);
                     if let Some(var) = var {
-                        if let Some(interfaces) = state.stdlib().get_interfaces(&var.datatype) {
+                        let interfaces = state.stdlib().interfaces(&var.datatype);
+                        if !interfaces.is_empty() {
                             let method_name =
                                 &node.value.fn_name.value.parts.last().unwrap().value.value;
                             if let Some(method) = interfaces.iter().find(|m| &m.name == method_name)
