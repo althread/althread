@@ -746,7 +746,7 @@ impl<'a> RunningProgramState<'a> {
                         receiver_channel.clone(),
                     )
                     .map_err(|msg| {
-                        AlthreadError::new(ErrorType::RuntimeError, cur_inst.pos, msg)
+                        AlthreadError::new(ErrorType::RuntimeError, cur_inst.pos, format!("Failed to connect channels: {}", msg))
                     })?;
                 // A connection has the same effect as a send globally, if some data was waiting to be sent
                 if is_data_waiting {
@@ -757,6 +757,44 @@ impl<'a> RunningProgramState<'a> {
                             channel_name: receiver_channel.clone(),
                         }),
                     ));
+                }
+                1
+            }
+            InstructionType::CreateListFromStack { element_count, element_type } => {
+                // Pop elements from the stack and create a list
+                let mut elements = Vec::new();
+                for _ in 0..*element_count {
+                    let element = self
+                        .memory
+                        .pop()
+                        .expect("Panic: stack is empty, cannot create list");
+                    elements.insert(0, element); // Insert at beginning to maintain order
+                }
+                
+                // Use the provided element type
+                let list = Literal::List(element_type.clone(), elements);
+                self.memory.push(list);
+                1
+            }
+            InstructionType::ConvertEmptyListType { to_element_type } => {
+                // Convert the type of an empty list on top of stack
+                let list = self
+                    .memory
+                    .pop()
+                    .expect("Panic: stack is empty, cannot convert list type");
+                
+                if let Literal::List(current_type, elements) = list {
+                    if elements.is_empty() {
+                        // Only convert empty lists
+                        let new_list = Literal::List(to_element_type.clone(), elements);
+                        self.memory.push(new_list);
+                    } else {
+                        // Non-empty lists keep their current type
+                        let old_list = Literal::List(current_type, elements);
+                        self.memory.push(old_list);
+                    }
+                } else {
+                    panic!("Expected list on stack for type conversion");
                 }
                 1
             }
