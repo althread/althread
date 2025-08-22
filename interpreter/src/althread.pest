@@ -106,7 +106,7 @@ side_effect_expression    = { run_call | fn_call | expression |  bracket_express
 
 bracket_expression = { "[" ~ (range_expression | list_literal_inner) ~ "]" }
 
-list_literal_inner = { (expression ~ ("," ~ expression)*)? }
+list_literal_inner = { (side_effect_expression ~ ("," ~ side_effect_expression)*)? }
 
 binary_assignment          = { 
     (index_access | object_identifier) ~ 
@@ -135,7 +135,7 @@ range_expression = {
 
 primary_expression = _{ index_access | fn_call | literal | object_identifier | "(" ~ expression ~ ")" }
 
-index_access = { object_identifier ~ "[" ~ expression ~ "]" }
+index_access = { object_identifier ~ ("[" ~ expression ~ "]")+ }
 
 unary_expression = _{ unary_operator? ~ primary_expression }
 unary_operator   =  { POS_OP | NEG_OP | NOT_OP }

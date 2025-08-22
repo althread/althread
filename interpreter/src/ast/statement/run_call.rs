@@ -16,7 +16,7 @@ use crate::{
 
 use super::expression::Expression;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RunCall {
     pub identifier: Node<ObjectIdentifier>,
     pub args: Node<Expression>,

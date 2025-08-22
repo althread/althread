@@ -49,7 +49,7 @@ lazy_static::lazy_static! {
     };
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum SideEffectExpression {
     Expression(Node<Expression>),
     RunCall(Node<RunCall>),
@@ -65,7 +65,7 @@ pub struct BracketExpression {
 #[derive(Debug, PartialEq, Clone)]
 pub enum BracketContent {
     Range(Node<RangeListExpression>),
-    ListLiteral(Vec<Node<Expression>>),
+    ListLiteral(Vec<Node<SideEffectExpression>>),
 }
 
 impl NodeBuilder for SideEffectExpression {
@@ -130,40 +130,107 @@ impl InstructionBuilder for BracketExpression {
             BracketContent::ListLiteral(expressions) => {
                 let mut instructions = Vec::new();
 
-                // Infer element type from first expression if available
+                // Determine element type from first expression
                 let element_type = if let Some(first_expr) = expressions.first() {
-                    let local_expr = LocalExpressionNode::from_expression(&first_expr.value, &state.program_stack)?;
-                    local_expr.datatype(state).map_err(|err| {
-                        AlthreadError::new(
-                            ErrorType::ExpressionError,
-                            Some(first_expr.pos.clone()),
-                            format!("Cannot infer list element type: {}", err),
-                        )
-                    })?
+                    match &first_expr.value {
+                        SideEffectExpression::Expression(node) => {
+                            let local_expr = LocalExpressionNode::from_expression(&node.value, &state.program_stack)?;
+                            local_expr.datatype(state).map_err(|err| {
+                                AlthreadError::new(
+                                    ErrorType::ExpressionError,
+                                    Some(node.pos.clone()),
+                                    format!("Cannot infer type of list element: {}", err),
+                                )
+                            })?
+                        },
+                        SideEffectExpression::FnCall(node) => {
+                            let local_expr = LocalExpressionNode::FnCall(Box::new(node.clone()));
+                            local_expr.datatype(state).map_err(|err| {
+                                AlthreadError::new(
+                                    ErrorType::ExpressionError,
+                                    Some(node.pos.clone()),
+                                    format!("Cannot infer list element type from function call: {}", err),
+                                )
+                            })?
+                        },
+                        SideEffectExpression::RunCall(_) => {
+                            return Err(AlthreadError::new(
+                                ErrorType::ExpressionError,
+                                Some(first_expr.pos.clone()),
+                                "Run calls cannot be used in list literals".to_string(),
+                            ));
+                        },
+                        SideEffectExpression::Bracket(node) => {
+                            // Compile the nested bracket to get its type
+                            let _nested_builder = node.compile(state)?;
+                            let nested_type = if let Some(last_var) = state.program_stack.last() {
+                                let t = last_var.datatype.clone();
+                                state.program_stack.pop(); // Remove the temporary variable
+                                t
+                            } else {
+                                DataType::Void
+                            };
+                            nested_type
+                        }
+                    }
                 } else {
-                    // Empty list - will be handled by declaration context
-                    // The compiler cannot determine the datatype of an empty list
-                    // This will be modified in the future, when the first element is added
-                    DataType::Void
+                    DataType::Void // Empty list
                 };
 
                 // Compile each expression onto the stack
                 for (i, expr) in expressions.iter().enumerate() {
+                    // Forbid run calls in list literals
+                    if matches!(expr.value, SideEffectExpression::RunCall(_)) {
+                        return Err(AlthreadError::new(
+                            ErrorType::ExpressionError,
+                            Some(expr.pos.clone()),
+                            "Run calls cannot be used in list literals".to_string(),
+                        ));
+                    }
+
                     // Compile the expression
                     let builder = expr.compile(state)?;
                     instructions.extend(builder.instructions);
                     
-                    // Type check - we can determine types even for function calls
-                    // so it is possible to have a list of function calls
+                    // Type check if we have a determined element type
                     if element_type != DataType::Void {
-                        let local_expr = LocalExpressionNode::from_expression(&expr.value, &state.program_stack)?;
-                        let expr_type = local_expr.datatype(state).map_err(|err| {
-                            AlthreadError::new(
-                                ErrorType::ExpressionError,
-                                Some(expr.pos.clone()),
-                                format!("Cannot determine type of list element {}: {}", i, err),
-                            )
-                        })?;
+                        let expr_type = match &expr.value {
+                            SideEffectExpression::Expression(node) => {
+                                let local_expr = LocalExpressionNode::from_expression(&node.value, &state.program_stack)?;
+                                local_expr.datatype(state).map_err(|err| {
+                                    AlthreadError::new(
+                                        ErrorType::ExpressionError,
+                                        Some(expr.pos.clone()),
+                                        format!("Cannot determine type of list element {}: {}", i, err),
+                                    )
+                                })?
+                            },
+                            SideEffectExpression::FnCall(node) => {
+                                let local_expr = LocalExpressionNode::FnCall(Box::new(node.clone()));
+                                local_expr.datatype(state).map_err(|err| {
+                                    AlthreadError::new(
+                                        ErrorType::ExpressionError,
+                                        Some(expr.pos.clone()),
+                                        format!("Cannot determine type of function call in list element {}: {}", i, err),
+                                    )
+                                })?
+                            },
+                            SideEffectExpression::Bracket(_) => {
+                                // Get type from the variable that was just pushed to stack
+                                if let Some(last_var) = state.program_stack.last() {
+                                    last_var.datatype.clone()
+                                } else {
+                                    return Err(AlthreadError::new(
+                                        ErrorType::ExpressionError,
+                                        Some(expr.pos.clone()),
+                                        "Cannot determine type of bracket expression".to_string(),
+                                    ));
+                                }
+                            },
+                            SideEffectExpression::RunCall(_) => {
+                                unreachable!("Run calls already filtered out above");
+                            }
+                        };
                         
                         if expr_type != element_type {
                             return Err(AlthreadError::new(
