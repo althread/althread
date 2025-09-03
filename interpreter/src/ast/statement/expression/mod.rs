@@ -49,11 +49,23 @@ lazy_static::lazy_static! {
     };
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum SideEffectExpression {
     Expression(Node<Expression>),
     RunCall(Node<RunCall>),
     FnCall(Node<FnCall>),
+    Bracket(Node<BracketExpression>),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct BracketExpression {
+    pub content: BracketContent,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum BracketContent {
+    Range(Node<RangeListExpression>),
+    ListLiteral(Vec<Node<SideEffectExpression>>),
 }
 
 impl NodeBuilder for SideEffectExpression {
@@ -64,8 +76,32 @@ impl NodeBuilder for SideEffectExpression {
             Rule::expression => Ok(Self::Expression(Node::build(pair, filepath)?)),
             Rule::run_call => Ok(Self::RunCall(Node::build(pair, filepath)?)),
             Rule::fn_call => Ok(Self::FnCall(Node::build(pair, filepath)?)),
+            Rule::bracket_expression => Ok(Self::Bracket(Node::build(pair, filepath)?)),
             _ => Err(no_rule!(pair, "SideEffectExpression", filepath)),
         }
+    }
+}
+
+impl NodeBuilder for BracketExpression {
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
+        let pair = pairs.next().unwrap();
+
+        let content = match pair.as_rule() {
+            Rule::range_expression => {
+                let range_node = Node::build(pair, filepath)?;
+                BracketContent::Range(range_node)
+            }
+            Rule::list_literal_inner => {
+                let expressions: Result<Vec<_>, _> = pair
+                    .into_inner()
+                    .map(|expr_pair| Node::build(expr_pair, filepath))
+                    .collect();
+                BracketContent::ListLiteral(expressions?)
+            }
+            _ => return Err(no_rule!(pair, "BracketExpression", filepath)),
+        };
+
+        Ok(BracketExpression { content })
     }
 }
 
@@ -75,6 +111,162 @@ impl InstructionBuilder for SideEffectExpression {
             Self::Expression(node) => node.compile(state),
             Self::RunCall(node) => node.compile(state),
             Self::FnCall(node) => node.compile(state),
+            Self::Bracket(node) => node.compile(state),
+        }
+    }
+}
+
+impl InstructionBuilder for BracketExpression {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
+        match &self.content {
+            BracketContent::Range(range_node) => {
+                // Create an Expression::Range and compile it
+                let range_expr = Node {
+                    pos: range_node.pos.clone(),
+                    value: Expression::Range(range_node.clone()),
+                };
+                range_expr.compile(state)
+            },
+            BracketContent::ListLiteral(expressions) => {
+                let mut instructions = Vec::new();
+
+                // Determine element type from first expression
+                let element_type = if let Some(first_expr) = expressions.first() {
+                    match &first_expr.value {
+                        SideEffectExpression::Expression(node) => {
+                            let local_expr = LocalExpressionNode::from_expression(&node.value, &state.program_stack)?;
+                            local_expr.datatype(state).map_err(|err| {
+                                AlthreadError::new(
+                                    ErrorType::ExpressionError,
+                                    Some(node.pos.clone()),
+                                    format!("Cannot infer type of list element: {}", err),
+                                )
+                            })?
+                        },
+                        SideEffectExpression::FnCall(node) => {
+                            let local_expr = LocalExpressionNode::FnCall(Box::new(node.clone()));
+                            local_expr.datatype(state).map_err(|err| {
+                                AlthreadError::new(
+                                    ErrorType::ExpressionError,
+                                    Some(node.pos.clone()),
+                                    format!("Cannot infer list element type from function call: {}", err),
+                                )
+                            })?
+                        },
+                        SideEffectExpression::RunCall(_) => {
+                            return Err(AlthreadError::new(
+                                ErrorType::ExpressionError,
+                                Some(first_expr.pos.clone()),
+                                "Run calls cannot be used in list literals".to_string(),
+                            ));
+                        },
+                        SideEffectExpression::Bracket(node) => {
+                            // Compile the nested bracket to get its type
+                            let _nested_builder = node.compile(state)?;
+                            let nested_type = if let Some(last_var) = state.program_stack.last() {
+                                let t = last_var.datatype.clone();
+                                state.program_stack.pop(); // Remove the temporary variable
+                                t
+                            } else {
+                                DataType::Void
+                            };
+                            nested_type
+                        }
+                    }
+                } else {
+                    DataType::Void // Empty list
+                };
+
+                // Compile each expression onto the stack
+                for (i, expr) in expressions.iter().enumerate() {
+                    // Forbid run calls in list literals
+                    if matches!(expr.value, SideEffectExpression::RunCall(_)) {
+                        return Err(AlthreadError::new(
+                            ErrorType::ExpressionError,
+                            Some(expr.pos.clone()),
+                            "Run calls cannot be used in list literals".to_string(),
+                        ));
+                    }
+
+                    // Compile the expression
+                    let builder = expr.compile(state)?;
+                    instructions.extend(builder.instructions);
+                    
+                    // Type check if we have a determined element type
+                    if element_type != DataType::Void {
+                        let expr_type = match &expr.value {
+                            SideEffectExpression::Expression(node) => {
+                                let local_expr = LocalExpressionNode::from_expression(&node.value, &state.program_stack)?;
+                                local_expr.datatype(state).map_err(|err| {
+                                    AlthreadError::new(
+                                        ErrorType::ExpressionError,
+                                        Some(expr.pos.clone()),
+                                        format!("Cannot determine type of list element {}: {}", i, err),
+                                    )
+                                })?
+                            },
+                            SideEffectExpression::FnCall(node) => {
+                                let local_expr = LocalExpressionNode::FnCall(Box::new(node.clone()));
+                                local_expr.datatype(state).map_err(|err| {
+                                    AlthreadError::new(
+                                        ErrorType::ExpressionError,
+                                        Some(expr.pos.clone()),
+                                        format!("Cannot determine type of function call in list element {}: {}", i, err),
+                                    )
+                                })?
+                            },
+                            SideEffectExpression::Bracket(_) => {
+                                // Get type from the variable that was just pushed to stack
+                                if let Some(last_var) = state.program_stack.last() {
+                                    last_var.datatype.clone()
+                                } else {
+                                    return Err(AlthreadError::new(
+                                        ErrorType::ExpressionError,
+                                        Some(expr.pos.clone()),
+                                        "Cannot determine type of bracket expression".to_string(),
+                                    ));
+                                }
+                            },
+                            SideEffectExpression::RunCall(_) => {
+                                unreachable!("Run calls already filtered out above");
+                            }
+                        };
+                        
+                        if expr_type != element_type {
+                            return Err(AlthreadError::new(
+                                ErrorType::ExpressionError,
+                                Some(expr.pos.clone()),
+                                format!("List element {} has type {:?}, expected {:?}", i, expr_type, element_type),
+                            ));
+                        }
+                    }
+                }
+
+                // Create list from stack elements
+                instructions.push(Instruction {
+                    pos: None,
+                    control: InstructionType::CreateListFromStack {
+                        element_count: expressions.len(),
+                        element_type: element_type.clone(),
+                    },
+                });
+
+                // Update stack - remove individual elements and add the list
+                for _ in 0..expressions.len() {
+                    state.program_stack.pop();
+                }
+
+                let list_type = DataType::List(Box::new(element_type));
+                state.program_stack.push(Variable {
+                    name: "".to_string(),
+                    depth: state.current_stack_depth,
+                    mutable: false,
+                    datatype: list_type,
+                    declare_pos: None,
+                });
+
+                Ok(InstructionBuilderOk::from_instructions(instructions))
+            }
         }
     }
 }
@@ -85,6 +277,26 @@ impl AstDisplay for SideEffectExpression {
             Self::Expression(node) => node.ast_fmt(f, prefix),
             Self::RunCall(node) => node.ast_fmt(f, prefix),
             Self::FnCall(node) => node.ast_fmt(f, prefix),
+            Self::Bracket(node) => node.ast_fmt(f, prefix),
+        }
+    }
+}
+
+impl AstDisplay for BracketExpression {
+    fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
+        match &self.content {
+            BracketContent::Range(range) => {
+                writeln!(f, "{}RangeExpression", prefix)?;
+                range.ast_fmt(f, &prefix.add_branch())
+            }
+            BracketContent::ListLiteral(exprs) => {
+                writeln!(f, "{}ListLiteral", prefix)?;
+                let new_prefix = prefix.add_branch();
+                for expr in exprs {
+                    expr.ast_fmt(f, &new_prefix)?;
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -326,7 +538,8 @@ impl LocalExpressionNode {
                         .rev()
                         .find(|v| &v.name == receiver_name);
                     if let Some(var) = var {
-                        if let Some(interfaces) = state.stdlib().get_interfaces(&var.datatype) {
+                        let interfaces = state.stdlib().interfaces(&var.datatype);
+                        if !interfaces.is_empty() {
                             let method_name =
                                 &node.value.fn_name.value.parts.last().unwrap().value.value;
                             if let Some(method) = interfaces.iter().find(|m| &m.name == method_name)

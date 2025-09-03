@@ -6,7 +6,7 @@ use crate::{
         block::Block,
         node::Node,
         statement::{
-            assignment::Assignment,
+            assignment::{Assignment},
             channel_declaration::ChannelDeclaration,
             expression::{primary_expression::PrimaryExpression, Expression, SideEffectExpression},
             Statement,
@@ -32,6 +32,10 @@ impl Ast {
 
         // display the control flow graph for debugging
         // cfg.display();
+
+        // cfg.display_ascii_flowchart();
+
+        // cfg.display_dot();
 
         // we need to return the function at line does not return a value
         // and say on which line it does not return a value
@@ -293,6 +297,8 @@ impl Ast {
             Statement::Assignment(assignment) => {
                 // handle assignments like: p1 = a.at(i);
                 let Assignment::Binary(binary) = &assignment.value;
+                
+                // Only handle identifier assignments for prescan
                 let var_name = &binary.value.identifier.value.parts[0].value.value;
 
                 // Get the right-hand side expression

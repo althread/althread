@@ -6,7 +6,11 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
-        statement::expression::SideEffectExpression,
+        statement::{
+            expression::{
+                SideEffectExpression, 
+            },
+        },
         token::{
             binary_assignment_operator::BinaryAssignmentOperator,
             object_identifier::ObjectIdentifier,
@@ -24,7 +28,6 @@ pub struct BinaryAssignment {
     pub operator: Node<BinaryAssignmentOperator>,
     pub value: Node<SideEffectExpression>,
 }
-
 impl NodeBuilder for BinaryAssignment {
     fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let identifier = Node::build(pairs.next().unwrap(), filepath)?;
@@ -43,10 +46,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         let mut builder = InstructionBuilderOk::new();
 
-        // Get the full variable name (e.g., "fibo.N")
-        let full_var_name = self
-            .value
-            .identifier
+        let full_var_name = self.value.identifier
             .value
             .parts
             .iter()
@@ -65,6 +65,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
         let unstack_len = state.unstack_current_depth();
 
         if let Some(g_val) = state.global_table().get(&full_var_name) {
+            // Global variable assignment
             if g_val.datatype != rdatatype {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
@@ -94,6 +95,7 @@ impl InstructionBuilder for Node<BinaryAssignment> {
                 },
             });
         } else {
+            // Local variable assignment
             let mut var_idx = 0;
             let mut l_var = None;
             for var in state.program_stack.iter().rev() {
@@ -151,6 +153,7 @@ impl AstDisplay for BinaryAssignment {
         writeln!(f, "{}binary_assign", prefix)?;
 
         let prefix = prefix.add_branch();
+
         let full_name = self
             .identifier
             .value
@@ -160,6 +163,7 @@ impl AstDisplay for BinaryAssignment {
             .collect::<Vec<_>>()
             .join(".");
         writeln!(f, "{}ident: {}", &prefix, full_name)?;
+
         writeln!(f, "{}op: {}", &prefix, self.operator)?;
 
         let prefix = prefix.switch();

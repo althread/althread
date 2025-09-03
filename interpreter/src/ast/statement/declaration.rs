@@ -125,19 +125,47 @@ impl InstructionBuilder for Declaration {
                 .clone();
             let unstack_len = state.unstack_current_depth();
 
-            if let Some(datatype) = datatype {
-                if datatype != computed_datatype {
+            if let Some(declared_datatype) = datatype {
+                // Special case: allow assignment of empty list (list(void)) to typed list
+                let types_compatible = if let (DataType::List(declared_elem), DataType::List(computed_elem)) = (&declared_datatype, &computed_datatype) {
+                    // Allow list(void) to be assigned to list(T) for any T (empty list case)
+                    **computed_elem == DataType::Void || declared_elem == computed_elem
+                } else {
+                    declared_datatype == computed_datatype
+                };
+
+                if !types_compatible {
                     return Err(AlthreadError::new(
                         ErrorType::TypeError,
                         Some(self.datatype.as_ref().unwrap().pos.clone()),
                         format!(
                             "Declared type and assignment do not match (found :{} = {})",
-                            datatype, computed_datatype
+                            declared_datatype, computed_datatype
                         ),
                     ));
                 }
+                
+                // For empty list assignment, add conversion instruction
+                if let (DataType::List(declared_elem), DataType::List(computed_elem)) = (&declared_datatype, &computed_datatype) {
+                    if **computed_elem == DataType::Void {
+                        // Add instruction to convert empty list to declared type
+                        builder.instructions.push(Instruction {
+                            control: InstructionType::ConvertEmptyListType {
+                                to_element_type: (**declared_elem).clone(),
+                            },
+                            pos: Some(self.keyword.pos.clone()),
+                        });
+                        // Use declared type for the variable
+                        datatype = Some(declared_datatype);
+                    } else {
+                        datatype = Some(computed_datatype);
+                    }
+                } else {
+                    datatype = Some(computed_datatype);
+                }
+            } else {
+                datatype = Some(computed_datatype);
             }
-            datatype = Some(computed_datatype);
 
             builder.instructions.push(Instruction {
                 control: InstructionType::Declaration { unstack_len },

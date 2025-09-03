@@ -3,7 +3,7 @@ use std::fmt;
 use crate::{
     ast::{
         statement::{expression::LocalExpressionNode, waiting_case::WaitDependency},
-        token::{binary_assignment_operator::BinaryAssignmentOperator, literal::Literal},
+        token::{binary_assignment_operator::BinaryAssignmentOperator, literal::Literal, datatype::DataType},
     },
     error::Pos,
 };
@@ -42,6 +42,13 @@ pub enum InstructionType {
 
     Declaration {
         unstack_len: usize,
+    },
+    CreateListFromStack {
+        element_count: usize,
+        element_type: DataType,
+    },
+    ConvertEmptyListType {
+        to_element_type: DataType,
     },
     RunCall {
         name: String,
@@ -151,6 +158,12 @@ impl fmt::Display for InstructionType {
             Self::Declaration { unstack_len } => {
                 write!(f, "declare var with value (unstack {})", unstack_len)?
             }
+            Self::CreateListFromStack { element_count, element_type } => {
+                write!(f, "create list from stack ({} elements of type {:?})", element_count, element_type)?;
+            }
+            Self::ConvertEmptyListType { to_element_type } => {
+                write!(f, "convert empty list to type {:?}", to_element_type)?;
+            }
             Self::Push(l) => write!(f, "push ({})", l)?,
             Self::WaitStart { start_atomic, .. } => {
                 write!(f, "await start")?;
@@ -240,6 +253,8 @@ impl InstructionType {
             | Self::FnCall {..}
             | Self::Return {..}
             | Self::Declaration {..}
+            | Self::CreateListFromStack {..}
+            | Self::ConvertEmptyListType {..}
             | Self::AtomicEnd
             | Self::EndProgram
             | Self::Exit

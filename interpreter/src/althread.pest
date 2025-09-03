@@ -102,7 +102,11 @@ pattern = { identifier | literal }
 /// - **Binary Assignments**: Assign the result of an expression to a variable (e.g., a = b + c).
 assignment = { binary_assignment }
 
-side_effect_expression    = { run_call | fn_call | expression | ("[" ~ range_expression ~ "]") }
+side_effect_expression    = { run_call | fn_call | expression |  bracket_expression }
+
+bracket_expression = { "[" ~ (range_expression | list_literal_inner) ~ "]" }
+
+list_literal_inner = { (side_effect_expression ~ ("," ~ side_effect_expression)*)? }
 
 binary_assignment          = { 
     object_identifier ~ 
@@ -114,6 +118,7 @@ binary_assignment_operator = { ASSIGN_OP | ADD_ASSIGN_OP | SUB_ASSIGN_OP | MUL_A
 /// Declarations introduce new variables, which can be mutable (let) or immutable (const).
 declaration         = { declaration_keyword ~ identifier ~ (":" ~ datatype)? ~ ("=" ~ side_effect_expression)? }
 declaration_keyword = { LET_KW | CONST_KW }
+
 
 receive_expression = { RECEIVE_KW ~ object_identifier? ~ pattern_list ~ ("=>" ~ statement)? }
 
