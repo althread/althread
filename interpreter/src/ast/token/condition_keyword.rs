@@ -5,6 +5,7 @@ pub enum ConditionKeyword {
     Always,
     Never,
     Eventually,
+    Ltl
 }
 
 impl fmt::Display for ConditionKeyword {
@@ -13,6 +14,7 @@ impl fmt::Display for ConditionKeyword {
             ConditionKeyword::Always => write!(f, "always"),
             ConditionKeyword::Never => write!(f, "never"),
             ConditionKeyword::Eventually => write!(f, "eventually"),
+            ConditionKeyword::Ltl => write!(f, "ltl"),
         }
     }
 }

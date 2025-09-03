@@ -92,6 +92,7 @@ impl Ast {
                         Rule::ALWAYS_KW => ConditionKeyword::Always,
                         Rule::NEVER_KW => ConditionKeyword::Never,
                         Rule::EVENTUALLY_KW => ConditionKeyword::Eventually,
+                        Rule::LTL_KW => ConditionKeyword::Ltl,
                         _ => return Err(no_rule!(keyword_pair, "condition keyword", filepath)),
                     };
                     let condition_block = Node::build(pairs.next().unwrap(), filepath)?;
