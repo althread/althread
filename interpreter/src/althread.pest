@@ -175,15 +175,18 @@ ltl_primary = _{ ltl_operand | "(" ~ ltl_expression ~ ")" }
 ltl_operand = { BOOL | object_identifier | "(" ~ expression ~ ")" }
 
 ltl_unary_expression = _{ ltl_unary_operator? ~ ltl_primary }
-ltl_unary_operator = { NOT_OP | LTL_ALWAYS_OP | LTL_EVENTUALLY_OP | ALWAYS_KW | EVENTUALLY_KW }
+ltl_unary_operator = { NOT_OP | ltl_always_operator | ltl_eventually_operator }
+
+ltl_always_operator = { LTL_ALWAYS_OP | ALWAYS_KW }
+ltl_eventually_operator = { LTL_EVENTUALLY_OP | EVENTUALLY_KW}
+LTL_ALWAYS_OP = { "[]" }
+LTL_EVENTUALLY_OP = { "<>" }
 
 ltl_binary_expression = _{ ltl_unary_expression ~ (ltl_binary_operator ~ ltl_unary_expression)*}
 ltl_binary_operator = _{ ltl_temporal_op | ltl_logical_op }
 ltl_temporal_op = { LTL_UNTIL_OP | LTL_WEAK_UNTIL_OP | LTL_RELEASE_OP }
 ltl_logical_op = { AND_OP | OR_OP | LTL_IMPLIES_OP | LTL_EQUIVALENT_OP }
 
-LTL_ALWAYS_OP = { "[]" }
-LTL_EVENTUALLY_OP = { "<>" }
 LTL_UNTIL_OP = { "U" }
 LTL_WEAK_UNTIL_OP = { "W" }
 LTL_RELEASE_OP  = { "V" }

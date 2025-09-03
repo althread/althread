@@ -22,6 +22,56 @@ use crate::{
     parser::Rule,
 };
 
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum LtlPrimaryExpression {
+    Literal(Node<Literal>),
+    Identifier(Node<ObjectIdentifier>),
+    Expression(Box<Node<Expression>>),
+}
+
+impl LtlPrimaryExpression {
+    pub fn build(pair: Pair<Rule>, filepath: &str) -> AlthreadResult<Node<Self>> {
+        Ok(Node {
+            pos: Pos {
+                line: pair.line_col().0,
+                col: pair.line_col().1,
+                start: pair.as_span().start(),
+                end: pair.as_span().end(),
+                file_path: filepath.to_string(),
+            },
+            value: match pair.as_rule() {
+                Rule::literal => Self::Literal(Node::build(pair, filepath)?),
+                Rule::object_identifier => Self::Identifier(Node::build(pair, filepath)?),
+                Rule::expression => Self::Expression(Box::new(Node::build(pair, filepath)?)),
+                _ => return Err(no_rule!(pair, "LTL PrimaryExpression", filepath)),
+            },
+        })
+    }
+}
+
+impl AstDisplay for LtlPrimaryExpression {
+    fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &crate::ast::display::Prefix) -> fmt::Result {
+        match self {
+            Self::Literal(node) => node.ast_fmt(f, prefix),
+            LtlPrimaryExpression::Identifier(value) => {
+                return writeln!(
+                    f,
+                    "{prefix}ident: {}",
+                    value
+                        .value
+                        .parts
+                        .iter()
+                        .map(|p| p.value.value.as_str())
+                        .collect::<Vec<_>>()
+                        .join(".")
+                );
+            }
+            LtlPrimaryExpression::Expression(node) => node.ast_fmt(f, prefix),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum PrimaryExpression {
     Literal(Node<Literal>),
