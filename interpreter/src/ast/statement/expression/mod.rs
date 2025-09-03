@@ -357,63 +357,6 @@ pub fn parse_expr(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Node<Exp
                 },
                 value: Expression::FnCall(Node::build(primary, filepath)?),
             }),
-            Rule::index_access => {
-                // Convert obj[index] to obj.at(index)
-                let pos = Pos {
-                    line: primary.line_col().0,
-                    col: primary.line_col().1,
-                    start: primary.as_span().start(),
-                    end: primary.as_span().end(),
-                    file_path: filepath.to_string(),
-                };
-                
-                let mut inner = primary.into_inner();
-                let object_pair = inner.next().unwrap();
-                let index_pair = inner.next().unwrap();
-                
-                // Parse the object identifier and index expression
-                let object_id: Node<ObjectIdentifier> = Node::build(object_pair, filepath)?;
-                let index_expr: Node<Expression> = Node::build(index_pair, filepath)?;
-                
-                // Create a function call: object.at(index)
-                // Build object.at as the function name
-                let mut parts = object_id.value.parts.clone();
-                parts.push(Node {
-                    pos: pos.clone(),
-                    value: Identifier {
-                        value: "at".to_string(),
-                    },
-                });
-                
-                let fn_name = Node {
-                    pos: pos.clone(),
-                    value: ObjectIdentifier { parts },
-                };
-                
-                // Build tuple expression with the index
-                let tuple_expr = Node {
-                    pos: pos.clone(),
-                    value: Expression::Tuple(Node {
-                        pos: pos.clone(),
-                        value: TupleExpression {
-                            values: vec![index_expr],
-                        },
-                    }),
-                };
-                
-                let fn_call = Node {
-                    pos: pos.clone(),
-                    value: FnCall {
-                        fn_name,
-                        values: Box::new(tuple_expr),
-                    },
-                };
-                
-                Ok(Node {
-                    pos,
-                    value: Expression::FnCall(fn_call),
-                })
-            },
             _ => Ok(Node {
                 pos: Pos {
                     line: primary.line_col().0,

@@ -6,7 +6,7 @@ use crate::{
         block::Block,
         node::Node,
         statement::{
-            assignment::{binary_assignment::AssignmentTarget, Assignment},
+            assignment::{Assignment},
             channel_declaration::ChannelDeclaration,
             expression::{primary_expression::PrimaryExpression, Expression, SideEffectExpression},
             Statement,
@@ -298,9 +298,8 @@ impl Ast {
                 // handle assignments like: p1 = a.at(i);
                 let Assignment::Binary(binary) = &assignment.value;
                 
-                // Only handle identifier assignments for prescan (not index assignments)
-                if let AssignmentTarget::Identifier(identifier) = &binary.value.target {
-                    let var_name = &identifier.value.parts[0].value.value;
+                // Only handle identifier assignments for prescan
+                let var_name = &binary.value.identifier.value.parts[0].value.value;
 
                 // Get the right-hand side expression
                 let rhs = &binary.value.value;
@@ -320,7 +319,6 @@ impl Ast {
                         var_to_program.insert(var_name.clone(), element_type);
                     }
                 }
-                } // Close the if let for Identifier
             }
             Statement::Atomic(atomic_statement) => {
                 self.scan_statement_for_run_statements(
