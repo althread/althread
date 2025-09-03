@@ -34,3 +34,37 @@ impl fmt::Display for UnaryOperator {
         write!(f, "{}", op)
     }
 }
+
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LtlUnaryOperator {
+    Not,
+    Always,
+    Eventually
+}
+
+impl NodeBuilder for LtlUnaryOperator {
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
+        let pair = pairs.next().unwrap();
+        match pair.as_rule() {
+            Rule::NOT_OP => Ok(Self::Not),
+            Rule::LTL_ALWAYS_OP => Ok(Self::Always),
+            Rule::ALWAYS_KW => Ok(Self::Always),
+            Rule::LTL_EVENTUALLY_OP => Ok(Self::Eventually),
+            Rule::EVENTUALLY_KW => Ok(Self::Eventually),
+            _ => Err(no_rule!(pair, "LTL UnaryOperator", filepath)),
+        }
+    }
+}
+
+impl fmt::Display for LtlUnaryOperator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let op = match self {
+            LtlUnaryOperator::Not => "!",
+            LtlUnaryOperator::Always => "always",
+            LtlUnaryOperator::Eventually => "eventually",
+        };
+
+        write!(f, "{}", op)
+    }
+}
