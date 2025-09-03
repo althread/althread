@@ -13,10 +13,11 @@ private_directive = { "@" ~ PRIVATE_KW }
 /// - **Condition Block**: Monitors conditions at each atomic step (e.g., always, never, eventually).
 /// - **Program Block**: Encapsulates code that runs concurrently in parallel processes.
 /// - **Function Block**: User-defined functions
-blocks = _{ import_block | main_block | global_block | condition_block | program_block | function_block }
+blocks = _{ import_block | main_block | global_block | condition_block | ltl_condition_block | program_block | function_block }
 
 global_block    = { GLOBAL_KW ~ code_block }
 condition_block = { condition_keywords ~ expression_block }
+ltl_condition_block = { LTL_KW ~ ltl_block }
 program_block   = { private_directive? ~ PROGRAM_KW ~ identifier ~ arg_list ~ code_block }
 main_block      = { private_directive? ~ MAIN_KW ~ code_block }
 
@@ -24,7 +25,10 @@ code_block           = { "{" ~ statement* ~ "}" }
 expression_block     = { "{" ~ expression_statement* ~ "}" }
 expression_statement = { expression ~ ";" }
 
-condition_keywords = _{ ALWAYS_KW | NEVER_KW | EVENTUALLY_KW | LTL_KW }
+condition_keywords = _{ ALWAYS_KW | NEVER_KW | EVENTUALLY_KW }
+
+ltl_block = { "{" ~ ltl_expression_statement* ~ "}"}
+ltl_expression_statement = { ltl_expression ~ ";" }
 
 /// ## Statements
 /// Statements are the executable instructions in the language.
@@ -163,6 +167,29 @@ loop_control = { LOOP_KW ~ statement }
 for_control = { FOR_KW ~ identifier ~ "in" ~ list_expression ~ statement }
 
 list_expression = _{ (range_expression | expression) }
+
+/// ### LTL Expressions
+ltl_expression = { ltl_binary_expression }
+
+ltl_primary = _{ ltl_operand | "(" ~ ltl_expression ~ ")" }
+ltl_operand = { BOOL | object_identifier | "(" ~ expression ~ ")" }
+
+ltl_unary_expression = _{ ltl_unary_operator? ~ ltl_primary }
+ltl_unary_operator = { NOT_OP | LTL_ALWAYS_OP | LTL_EVENTUALLY_OP | ALWAYS_KW | EVENTUALLY_KW }
+
+ltl_binary_expression = _{ ltl_unary_expression ~ (ltl_binary_operator ~ ltl_unary_expression)*}
+ltl_binary_operator = _{ ltl_temporal_op | ltl_logical_op }
+ltl_temporal_op = { LTL_UNTIL_OP | LTL_WEAK_UNTIL_OP | LTL_RELEASE_OP }
+ltl_logical_op = { AND_OP | OR_OP | LTL_IMPLIES_OP | LTL_EQUIVALENT_OP }
+
+LTL_ALWAYS_OP = { "[]" }
+LTL_EVENTUALLY_OP = { "<>" }
+LTL_UNTIL_OP = { "U" }
+LTL_WEAK_UNTIL_OP = { "W" }
+LTL_RELEASE_OP  = { "V" }
+LTL_IMPLIES_OP = { "=>" }
+LTL_EQUIVALENT_OP = { "<=>" }
+
 /// ## Tokens
 /// This section defines the keywords, operators, datatypes, and other tokens used in Althread.
 
