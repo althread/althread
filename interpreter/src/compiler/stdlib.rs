@@ -5,7 +5,7 @@ use std::{
     rc::Rc,
 };
 
-use crate::ast::token::{datatype::DataType, literal::Literal};
+use crate::{ast::token::{datatype::DataType, literal::Literal}, error::{AlthreadError, ErrorType, Pos}};
 
 #[derive(Clone)]
 pub struct Interface {
@@ -13,7 +13,7 @@ pub struct Interface {
     pub args: Vec<DataType>,
     pub ret: DataType,
     //pub f: Mutex<Box<dyn Fn(&mut Literal, &mut Literal) -> Literal + Send + Sync>>,
-    pub f: Rc<dyn Fn(&mut Literal, &mut Literal) -> Literal>,
+    pub f: Rc<dyn Fn(&mut Literal, &mut Literal, Option<Pos>) -> Result<Literal, AlthreadError>>,
 }
 
 #[derive(Debug)]
@@ -63,49 +63,87 @@ impl Stdlib {
                     name: "len".to_string(),
                     args: vec![],
                     ret: DataType::Integer,
-                    f: Rc::new(|list, _| match list {
-                        Literal::List(_, v) => Literal::Int(v.len() as i64),
-                        _ => panic!("Expected List"),
-                    }),
+                    f: Rc::new(|list, v, pos| {
+                        let args = v.to_tuple().unwrap();
+                        if !args.is_empty() {
+                            return Err(AlthreadError::new(
+                                ErrorType::RuntimeError,
+                                pos,
+                                ".len() expects no arguments: l.len();".to_string()
+                            ));
+                        }
+                        match list {
+                            Literal::List(_, v) => Ok(Literal::Int(v.len() as i64)),
+                            _ => Err(AlthreadError::new(
+                                ErrorType::RuntimeError,
+                                pos,
+                                "Expected List".to_string()
+                            )),
+                        }
+                    })
                 });
                 new_interfaces.push(Interface {
                     name: "push".to_string(),
                     args: vec![t.as_ref().clone()],
                     ret: DataType::Void,
-                    f: Rc::new(|list, v| {
+                    f: Rc::new(|list, v, pos| {
                         let v = v.to_tuple().unwrap();
                         if let Literal::List(dtype, list) = list {
                             if v.len() != 1 {
-                                panic!("Expected Tuple with one element");
+                                return Err(AlthreadError::new(
+                                    ErrorType::RuntimeError,
+                                    pos,
+                                    ".push() expects exactly one argument: l.push(value);".to_string()
+                                ));
                             }
                             if dtype != &v[0].get_datatype() {
-                                panic!("List of type {} can only accept values of the same type ({} given)", dtype, v[0].get_datatype());
+                                return Err(AlthreadError::new(
+                                    ErrorType::RuntimeError,
+                                    pos,
+                                    format!("List of type {} can only accept values of the same type ({} given)", dtype, v[0].get_datatype())
+                                ));
                             }
                             list.push(v[0].clone());
                         }
                         else {
-                            panic!("Expected List") 
+                            Err(AlthreadError::new(
+                                ErrorType::RuntimeError,
+                                pos,
+                                "Expected List".to_string()
+                            ))?;
                         }
-                        Literal::Null
+                        Ok(Literal::Null)
                     }),
                 });
                 new_interfaces.push(Interface {
                     name: "remove".to_string(),
                     args: vec![DataType::Integer],
                     ret: t.as_ref().clone(),
-                    f: Rc::new(|list, v| {
+                    f: Rc::new(|list, v, pos| {
                         let args = v.to_tuple().unwrap();
                         if args.len() != 1 {
-                            panic!("Expected Tuple with one element.");
+                            return Err(AlthreadError::new(
+                                ErrorType::RuntimeError,
+                                pos,
+                                ".remove() expects one argument: l.remove(index);".to_string()
+                            ));
                         }
                         let idx = args[0].to_integer().unwrap();
                         if let Literal::List(_dtype, list) = list {
                             if idx < 0 || idx as usize >= list.len() {
-                                panic!("Index out of bounds");
+                                return Err(AlthreadError::new(
+                                    ErrorType::RuntimeError,
+                                    pos,
+                                    format!("Index out of bounds: {}", idx)
+                                ));
                             }
-                            return list.remove(idx as usize);
+                            Ok(list.remove(idx as usize))
                         } else {
-                            panic!("Expected List")
+                            Err(AlthreadError::new(
+                                ErrorType::RuntimeError,
+                                pos,
+                                "Expected List".to_string()
+                            ))
                         }
                     }),
                 });
@@ -113,41 +151,65 @@ impl Stdlib {
                     name: "set".to_string(),
                     args: vec![DataType::Integer, t.as_ref().clone()],
                     ret: DataType::Void,
-                    f: Rc::new(|list, v| {
+                    f: Rc::new(|list, v, pos| {
                         let v = v.to_tuple().unwrap();
                         if v.len() != 2 {
-                            panic!("Expected Tuple with two elements");
+                            return Err(AlthreadError::new(
+                                ErrorType::RuntimeError,
+                                pos,
+                                ".set() expects two arguments: l.set(index, value);".to_string()
+                            ));
                         }
                         let idx = v[0].to_integer().unwrap() as usize;
                         if let Literal::List(dtype, list) = list {
                             if idx >= list.len() {
-                                panic!("Index out of bounds");
+                                return Err(AlthreadError::new(
+                                    ErrorType::RuntimeError,
+                                    pos,
+                                    format!("Index out of bounds: {}", idx)
+                                ));
                             }
                             if dtype != &v[1].get_datatype() {
-                                panic!("List of type {:?} can only accept values of the same type ({} given)", dtype, v[1].get_datatype());
+                                return Err(AlthreadError::new(
+                                    ErrorType::RuntimeError,
+                                    pos,
+                                    format!("List of type {:?} can only accept values of the same type ({} given)", dtype, v[1].get_datatype())
+                                ));
                             }
                             list[idx] = v[1].clone();
                         }
                         else {
-                            panic!("Expected List")
+                            return Err(AlthreadError::new(
+                                ErrorType::RuntimeError,
+                                pos,
+                                "Expected List".to_string()
+                            ));
                         }
-                        Literal::Null
+                        Ok(Literal::Null)
                     }),
                 });
                 new_interfaces.push(Interface {
                     name: "at".to_string(),
                     args: vec![DataType::Integer],
                     ret: t.as_ref().clone(),
-                    f: Rc::new(|list, v| {
+                    f: Rc::new(|list, v, pos| {
                         let v = v.to_tuple().unwrap();
                         let v = v.first().unwrap().to_integer().unwrap();
                         if let Literal::List(_dtype, list) = list {
                             if v < 0 || v as usize >= list.len() {
-                                panic!("Index out of bounds: {}", v);
+                                return Err(AlthreadError::new(
+                                    ErrorType::RuntimeError,
+                                    pos,
+                                    format!("Index out of bounds: {}", v)
+                                ));
                             }
-                            return list[v as usize].clone();
+                            Ok(list[v as usize].clone())
                         } else {
-                            panic!("Expected List")
+                            return Err(AlthreadError::new(
+                                ErrorType::RuntimeError,
+                                pos,
+                                "Expected List".to_string()
+                            ));
                         }
                     }),
                 });

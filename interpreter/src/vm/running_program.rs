@@ -526,7 +526,7 @@ impl<'a> RunningProgramState<'a> {
                             Literal::Tuple(args)
                         }
                     };
-                    let ret = interface.f.as_ref()(&mut lit, &mut args);
+                    let ret = interface.f.as_ref()(&mut lit, &mut args, cur_inst.pos.clone())?;
 
                     //update the memory with object literal
                     self.memory[v_idx] = lit;
