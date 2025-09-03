@@ -767,7 +767,11 @@ impl<'a> RunningProgramState<'a> {
                     let element = self
                         .memory
                         .pop()
-                        .expect("Panic: stack is empty, cannot create list");
+                        .ok_or_else(|| AlthreadError::new(
+                            ErrorType::RuntimeError,
+                            None,
+                            "Stack is empty, cannot create list".to_string(),
+                        ))?;
                     elements.insert(0, element); // Insert at beginning to maintain order
                 }
                 
@@ -778,10 +782,16 @@ impl<'a> RunningProgramState<'a> {
             }
             InstructionType::ConvertEmptyListType { to_element_type } => {
                 // Convert the type of an empty list on top of stack
-                let list = self
-                    .memory
-                    .pop()
-                    .expect("Panic: stack is empty, cannot convert list type");
+                let list = match self.memory.pop() {
+                    Some(val) => val,
+                    None => {
+                        return Err(AlthreadError::new(
+                            ErrorType::RuntimeError,
+                            cur_inst.pos,
+                            "Stack is empty, cannot convert list type".to_string(),
+                        ));
+                    }
+                };
                 
                 if let Literal::List(current_type, elements) = list {
                     if elements.is_empty() {

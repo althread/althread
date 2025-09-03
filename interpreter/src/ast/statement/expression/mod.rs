@@ -20,7 +20,7 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
-        token::{datatype::DataType, identifier::Identifier, literal::Literal, object_identifier::ObjectIdentifier},
+        token::{datatype::DataType, literal::Literal},
     },
     compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
