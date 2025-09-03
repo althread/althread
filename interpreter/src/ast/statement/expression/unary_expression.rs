@@ -6,8 +6,8 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::Node,
-        statement::waiting_case::WaitDependency,
-        token::{datatype::DataType, literal::Literal, unary_operator::UnaryOperator},
+        statement::{expression::LtlExpression, waiting_case::WaitDependency},
+        token::{datatype::DataType, literal::Literal, unary_operator::{LtlUnaryOperator, UnaryOperator}},
     },
     compiler::{CompilerState, Variable},
     error::{AlthreadResult, Pos},
@@ -16,6 +16,49 @@ use crate::{
 };
 
 use super::{Expression, LocalExpressionNode};
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct LtlUnaryExpression {
+    pub operator: Node<LtlUnaryOperator>,
+    pub operand: Box<Node<LtlExpression>>,
+}
+
+impl LtlUnaryExpression {
+    pub fn build(
+        operator: Pair<Rule>,
+        operand: Node<LtlExpression>,
+        filepath: &str,
+    ) -> AlthreadResult<Node<Self>> {
+        Ok(Node {
+            pos: Pos {
+                line: operator.line_col().0,
+                col: operator.line_col().1,
+                start: operator.as_span().start(),
+                end: operand.pos.end,
+                file_path: filepath.to_string(),
+            },
+            value: Self {
+                operator: Node::build(operator, filepath)?,
+                operand: Box::new(operand),
+            },
+        })
+    }
+}
+
+impl AstDisplay for LtlUnaryExpression {
+    fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
+        writeln!(f, "{}LTL unary_expr", prefix)?;
+        let prefix = &prefix.add_branch();
+        writeln!(f, "{}op: {}", prefix, self.operator)?;
+
+        let prefix = &prefix.switch();
+        writeln!(f, "{}expr", prefix)?;
+        self.operand.ast_fmt(f, &prefix.add_leaf())?;
+
+        Ok(())
+    }
+}
+
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct UnaryExpression {
