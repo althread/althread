@@ -88,7 +88,7 @@ impl NodeBuilder for LtlBinaryOperator {
             Rule::LTL_EQUIVALENT_OP => Ok(Self::Equivalent),
             Rule::AND_OP => Ok(Self::And),
             Rule::OR_OP => Ok(Self::Or),
-            _ => Err(no_rule!(pair, "LtlBinaryOperator", filepath)),
+            _ => Err(no_rule!(pair, "LTL BinaryOperator", filepath)),
         }
     }
 }

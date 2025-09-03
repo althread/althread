@@ -6,8 +6,8 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::Node,
-        statement::waiting_case::WaitDependency,
-        token::{binary_operator::BinaryOperator, datatype::DataType, literal::Literal},
+        statement::{expression::LtlExpression, waiting_case::WaitDependency},
+        token::{binary_operator::{BinaryOperator, LtlBinaryOperator}, datatype::DataType, literal::Literal},
     },
     compiler::{CompilerState, Variable},
     error::{AlthreadResult, Pos},
@@ -16,6 +16,57 @@ use crate::{
 };
 
 use super::{Expression, LocalExpressionNode};
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct LtlBinaryExpression {
+    pub left: Box<Node<LtlExpression>>,
+    pub operator: Node<LtlBinaryOperator>,
+    pub right: Box<Node<LtlExpression>>,
+}
+
+impl LtlBinaryExpression {
+    pub fn build(
+        left: Node<LtlExpression>,
+        operator: Pair<Rule>,
+        right: Node<LtlExpression>,
+        filepath: &str,
+    ) -> AlthreadResult<Node<Self>> {
+        Ok(Node {
+            pos: Pos {
+                start: left.pos.start,
+                end: right.pos.end,
+                line: left.pos.line,
+                col: left.pos.col,
+                file_path: filepath.to_string(),
+            },
+            value: Self {
+                left: Box::new(left),
+                operator: Node::build(operator, filepath)?,
+                right: Box::new(right),
+            },
+        })
+    }
+}
+
+impl AstDisplay for LtlBinaryExpression {
+    fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
+        writeln!(f, "{prefix}LTL binary_expr")?;
+
+        let prefix = &prefix.add_branch();
+        writeln!(f, "{}left", prefix)?;
+        self.left.ast_fmt(f, &prefix.add_leaf())?;
+
+        writeln!(f, "{}op: {}", prefix, self.operator)?;
+
+        let prefix = &prefix.switch();
+        writeln!(f, "{}right", prefix)?;
+        self.right.ast_fmt(f, &prefix.add_leaf())?;
+
+        Ok(())
+    }
+}
+
+
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct BinaryExpression {
