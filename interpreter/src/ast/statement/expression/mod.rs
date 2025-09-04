@@ -6,15 +6,15 @@ pub mod unary_expression;
 
 use std::{collections::HashSet, fmt};
 
-use binary_expression::{BinaryExpression, LocalBinaryExpressionNode};
+use binary_expression::{BinaryExpression, LocalBinaryExpressionNode, LtlBinaryExpression};
 use list_expression::{LocalRangeListExpressionNode, RangeListExpression};
 use pest::{
     iterators::{Pair, Pairs},
     pratt_parser::PrattParser,
 };
-use primary_expression::{LocalPrimaryExpressionNode, LocalVarNode, PrimaryExpression};
+use primary_expression::{LocalPrimaryExpressionNode, LocalVarNode, PrimaryExpression, LtlPrimaryExpression};
 use tuple_expression::{LocalTupleExpressionNode, TupleExpression};
-use unary_expression::{LocalUnaryExpressionNode, UnaryExpression};
+use unary_expression::{LocalUnaryExpressionNode, UnaryExpression, LtlUnaryExpression};
 
 use crate::{
     ast::{
@@ -46,6 +46,28 @@ lazy_static::lazy_static! {
             .op(Op::infix(Rule::term_operator, Left))
             .op(Op::infix(Rule::factor_operator, Left))
             .op(Op::prefix(Rule::unary_operator))
+    };
+}
+
+lazy_static::lazy_static! {
+    static ref LTL_PRATT_PARSER: PrattParser<Rule> = {
+        use pest::pratt_parser::{Assoc::*, Op};
+
+        PrattParser::new()
+            .op(Op::prefix(Rule::ltl_unary_operator))   // !, [], <>
+
+            // Implication and equivalence 
+            .op(Op::infix(Rule::ltl_implies, Right))  // =>
+            .op(Op::infix(Rule::ltl_equivalent, Right)) // <=>
+
+            // Temporal operators
+            .op(Op::infix(Rule::ltl_until, Right))  // U
+            .op(Op::infix(Rule::ltl_weak_until, Right)) // W
+            .op(Op::infix(Rule::ltl_release, Right))  // V
+
+            // Logical binary ops
+            .op(Op::infix(Rule::or_operator, Left))
+            .op(Op::infix(Rule::and_operator, Left))
     };
 }
 
@@ -300,6 +322,86 @@ impl AstDisplay for BracketExpression {
         }
     }
 }
+
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum LtlExpression {
+    LtlBinary(Node<LtlBinaryExpression>),
+    LtlUnary(Node<LtlUnaryExpression>),
+    LtlPrimary(Node<LtlPrimaryExpression>),
+}
+
+impl NodeBuilder for LtlExpression {
+    fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
+        parse_ltl_expr(pairs, filepath).map(|node| node.value)
+    }
+
+}
+
+pub fn parse_ltl_expr(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Node<LtlExpression>> {
+    LTL_PRATT_PARSER
+        .map_primary(|primary| match primary.as_rule() {
+            Rule::ltl_operand => {
+                let primary_expr = LtlPrimaryExpression::build(primary.clone(), filepath)?;
+                Ok(Node {
+                    pos: Pos {
+                        line: primary.line_col().0,
+                        col: primary.line_col().1,
+                        start: primary.as_span().start(),
+                        end: primary.as_span().end(),
+                        file_path: filepath.to_string(),
+                    },
+                    value: LtlExpression::LtlPrimary(primary_expr),
+                })
+            }
+            Rule::ltl_expression => {
+                parse_ltl_expr(primary.into_inner(), filepath)
+            }
+            _ => Err(no_rule!(primary, "LTL primary expression", filepath)),
+        })
+        .map_infix(|left, op, right| {
+            // handle binary LTL ops
+            let binary_expr = LtlBinaryExpression::build(left?, op.clone(), right?, filepath)?;
+            Ok(Node {
+                pos: Pos {
+                    line: op.line_col().0,
+                    col: op.line_col().1,
+                    start: op.as_span().start(),
+                    end: op.as_span().end(),
+                    file_path: filepath.to_string(),
+                },
+                value: LtlExpression::LtlBinary(binary_expr),
+            })
+        })
+        .map_prefix(|op, right| {
+            // handle unary LTL ops
+            let unary_expr = LtlUnaryExpression::build(op.clone(), right?, filepath)?;
+            Ok(Node {
+                pos: Pos {
+                    line: op.line_col().0,
+                    col: op.line_col().1,
+                    start: op.as_span().start(),
+                    end: op.as_span().end(),
+                    file_path: filepath.to_string(),
+                },
+                value: LtlExpression::LtlUnary(unary_expr),
+            })
+        })
+        .parse(pairs)
+}
+
+
+
+impl AstDisplay for LtlExpression {
+    fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
+        match self {
+            Self::LtlBinary(node) => node.ast_fmt(f, prefix),
+            Self::LtlUnary(node) => node.ast_fmt(f, prefix),
+            Self::LtlPrimary(node) => node.ast_fmt(f, prefix),
+        }
+    }
+}
+
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {

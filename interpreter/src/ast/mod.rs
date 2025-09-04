@@ -1,10 +1,12 @@
 pub mod block;
 pub mod condition_block;
+pub mod ltl_condition_block;
 pub mod display;
 pub mod import_block;
 pub mod node;
 pub mod statement;
 pub mod token;
+
 
 use std::{
     collections::HashMap,
@@ -20,9 +22,7 @@ use pest::iterators::Pairs;
 use token::{args_list::ArgsList, condition_keyword::ConditionKeyword, datatype::DataType};
 
 use crate::{
-    error::{AlthreadError, AlthreadResult, ErrorType, Pos},
-    no_rule,
-    parser::Rule,
+    ast::ltl_condition_block::LtlConditionBlock, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, no_rule, parser::Rule
 };
 
 #[derive(Debug)]
@@ -32,6 +32,7 @@ pub struct Ast {
     pub global_block: Option<Node<Block>>,
     pub function_blocks: HashMap<String, (Node<ArgsList>, DataType, Node<Block>, bool)>,
     pub import_block: Option<Node<ImportBlock>>,
+    pub ltl_block: Option<Node<LtlConditionBlock>>,
 }
 
 impl Ast {
@@ -42,6 +43,7 @@ impl Ast {
             global_block: None,
             function_blocks: HashMap::new(),
             import_block: None,
+            ltl_block: None,
         }
     }
     /// Builds an AST from the given pairs of rules.
@@ -92,12 +94,24 @@ impl Ast {
                         Rule::ALWAYS_KW => ConditionKeyword::Always,
                         Rule::NEVER_KW => ConditionKeyword::Never,
                         Rule::EVENTUALLY_KW => ConditionKeyword::Eventually,
-                        Rule::LTL_KW => ConditionKeyword::Ltl,
                         _ => return Err(no_rule!(keyword_pair, "condition keyword", filepath)),
                     };
                     let condition_block = Node::build(pairs.next().unwrap(), filepath)?;
                     ast.condition_blocks
                         .insert(condition_keyword, condition_block);
+                }
+                Rule::ltl_condition_block => {
+                    if ast.ltl_block.is_some() {
+                        return Err(AlthreadError::new(
+                            ErrorType::SyntaxError,
+                            Some(Pos::from_span(pair.as_span(), filepath)),
+                            "Only one ltl block is allowed per file.".to_string(),
+                        ));
+                    }
+                    let mut pairs = pair.into_inner();
+                    pairs.next(); // consume the "ltl" keyword
+                    let ltl_block = Node::build(pairs.next().unwrap(), filepath)?;
+                    ast.ltl_block = Some(ltl_block);
                 }
                 Rule::program_block => {
                     let mut pairs = pair.into_inner();
@@ -183,6 +197,12 @@ impl AstDisplay for Ast {
         for (condition_name, condition_node) in &self.condition_blocks {
             writeln!(f, "{}{}", prefix, condition_name)?;
             condition_node.ast_fmt(f, &prefix.add_branch())?;
+            writeln!(f, "")?;
+        }
+
+        if let Some(ltl_block) = &self.ltl_block {
+            writeln!(f, "{}ltl", prefix)?;
+            ltl_block.ast_fmt(f, &prefix.add_branch())?;
             writeln!(f, "")?;
         }
 
