@@ -48,10 +48,8 @@ impl NodeBuilder for LtlUnaryOperator {
         let pair = pairs.next().unwrap();
         match pair.as_rule() {
             Rule::NOT_OP => Ok(Self::Not),
-            Rule::LTL_ALWAYS_OP => Ok(Self::Always),
-            Rule::ALWAYS_KW => Ok(Self::Always),
-            Rule::LTL_EVENTUALLY_OP => Ok(Self::Eventually),
-            Rule::EVENTUALLY_KW => Ok(Self::Eventually),
+            Rule::ltl_always_operator => Ok(Self::Always),
+            Rule::ltl_eventually_operator => Ok(Self::Eventually),
             _ => Err(no_rule!(pair, "LTL UnaryOperator", filepath)),
         }
     }

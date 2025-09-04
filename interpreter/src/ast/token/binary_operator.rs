@@ -82,10 +82,15 @@ impl NodeBuilder for LtlBinaryOperator {
         let pair = pairs.next().unwrap();
         match pair.as_rule() {
             Rule::LTL_UNTIL_OP => Ok(Self::Until),
+            Rule::LTL_UNTIL_KW => Ok(Self::Until),
             Rule::LTL_WEAK_UNTIL_OP => Ok(Self::WeakUntil),
+            Rule::LTL_WEAK_UNTIL_KW => Ok(Self::WeakUntil),
             Rule::LTL_RELEASE_OP => Ok(Self::Release),
+            Rule::LTL_RELEASE_KW => Ok(Self::Release),
             Rule::LTL_IMPLIES_OP => Ok(Self::Implies),
+            Rule::LTL_IMPLIES_KW => Ok(Self::Implies),
             Rule::LTL_EQUIVALENT_OP => Ok(Self::Equivalent),
+            Rule::LTL_EQUIVALENT_KW => Ok(Self::Equivalent),
             Rule::AND_OP => Ok(Self::And),
             Rule::OR_OP => Ok(Self::Or),
             _ => Err(no_rule!(pair, "LTL BinaryOperator", filepath)),
