@@ -174,7 +174,7 @@ ltl_expression = { ltl_binary_expression }
 ltl_primary = _{ ltl_operand | "(" ~ ltl_expression ~ ")" }
 ltl_operand = { BOOL | object_identifier | "(" ~ expression ~ ")" }
 
-ltl_unary_expression = _{ ltl_unary_operator? ~ ltl_primary }
+ltl_unary_expression = _{ ltl_unary_operator* ~ ltl_primary }
 ltl_unary_operator = { NOT_OP | ltl_always_operator | ltl_eventually_operator }
 
 ltl_always_operator = { LTL_ALWAYS_OP | ALWAYS_KW }
@@ -184,8 +184,16 @@ LTL_EVENTUALLY_OP = { "<>" }
 
 ltl_binary_expression = _{ ltl_unary_expression ~ (ltl_binary_operator ~ ltl_unary_expression)*}
 ltl_binary_operator = _{ ltl_temporal_op | ltl_logical_op }
-ltl_temporal_op = { LTL_UNTIL_OP | LTL_WEAK_UNTIL_OP | LTL_RELEASE_OP }
-ltl_logical_op = { AND_OP | OR_OP | LTL_IMPLIES_OP | LTL_EQUIVALENT_OP }
+ltl_temporal_op = _{ ltl_until | ltl_weak_until | ltl_release }
+ltl_logical_op = _{ and_operator | or_operator | ltl_implies | ltl_equivalent }
+
+ltl_until = { LTL_UNTIL_OP | LTL_UNTIL_KW }
+ltl_weak_until = { LTL_WEAK_UNTIL_OP | LTL_WEAK_UNTIL_KW }
+LTL_WEAK_UNTIL_KW = {(LTL_WEAK_KW ~ LTL_UNTIL_KW)}
+ltl_release = { LTL_RELEASE_OP | LTL_RELEASE_KW }
+
+ltl_implies = { LTL_IMPLIES_OP | LTL_IMPLIES_KW }
+ltl_equivalent = { LTL_EQUIVALENT_OP | LTL_EQUIVALENT_KW }
 
 LTL_UNTIL_OP = { "U" }
 LTL_WEAK_UNTIL_OP = { "W" }
@@ -206,6 +214,11 @@ KEYWORDS = _{
   | EVENTUALLY_KW
   | NEVER_KW
   | LTL_KW
+  | LTL_UNTIL_KW
+  | LTL_WEAK_KW
+  | LTL_RELEASE_KW
+  | LTL_IMPLIES_KW
+  | LTL_EQUIVALENT_KW
   | RUN_KW
   | LET_KW
   | CONST_KW
@@ -232,6 +245,12 @@ ALWAYS_KW  =  { "always" }
 EVENTUALLY_KW  =  { "eventually" }
 NEVER_KW   =  { "never" }
 LTL_KW     =  { "ltl" }
+LTL_UNTIL_KW = { "until" }
+LTL_WEAK_KW = { "weak" }
+LTL_RELEASE_KW = { "release" }
+LTL_IMPLIES_KW = { "implies" }
+LTL_EQUIVALENT_KW = { "equals" }
+
 RUN_KW     = _{ "run" }
 
 FIRST_KW = { "first" }
