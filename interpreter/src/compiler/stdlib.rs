@@ -63,15 +63,16 @@ impl Stdlib {
                     name: "len".to_string(),
                     args: vec![],
                     ret: DataType::Integer,
-                    f: Rc::new(|list, v, pos| {
-                        let args = v.to_tuple().unwrap();
-                        if !args.is_empty() {
-                            return Err(AlthreadError::new(
-                                ErrorType::RuntimeError,
-                                pos,
-                                ".len() expects no arguments: l.len();".to_string()
-                            ));
-                        }
+                    f: Rc::new(|list, _v, pos| {
+                        // let args = v.to_tuple().unwrap();
+                        // TODO!: for in control uses len with args???
+                        // if !args.is_empty() {
+                        //     return Err(AlthreadError::new(
+                        //         ErrorType::RuntimeError,
+                        //         pos,
+                        //         ".len() expects no arguments: l.len();".to_string()
+                        //     ));
+                        // }
                         match list {
                             Literal::List(_, v) => Ok(Literal::Int(v.len() as i64)),
                             _ => Err(AlthreadError::new(
