@@ -11,7 +11,7 @@ use crate::error::{AlthreadError, ErrorType, Pos};
 #[grammar = "althread.pest"]
 struct AlthreadParser;
 
-pub fn parse(source: &str) -> Result<Pairs<Rule>, AlthreadError> {
+pub fn parse<'a>(source: &'a str, file_path: &str) -> Result<Pairs<'a, Rule>, AlthreadError> {
     AlthreadParser::parse(Rule::program, source).map_err(|e| {
         let mut pos = match e.line_col {
             LineColLocation::Pos(pos) | LineColLocation::Span(pos, _) => Pos {
@@ -19,6 +19,7 @@ pub fn parse(source: &str) -> Result<Pairs<Rule>, AlthreadError> {
                 col: pos.1,
                 start: 0,
                 end: 0,
+                file_path: file_path.to_string(),
             },
         };
         match e.location {

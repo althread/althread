@@ -96,6 +96,14 @@ impl DataType {
         }
     }
 
+    pub fn is_process(&self) -> (bool, String) {
+        match self {
+            Self::List(datatype) => datatype.is_process(),
+            Self::Process(name) => (true, name.clone()),
+            _ => (false, String::new()),
+        }
+    }
+
     pub fn tuple_unwrap(&self) -> Vec<DataType> {
         match self {
             Self::Tuple(v) => v.clone(),
@@ -105,7 +113,7 @@ impl DataType {
 }
 
 impl NodeBuilder for DataType {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let pair = pairs.next().unwrap();
         match pair.as_rule() {
             Rule::BOOL_TYPE => Ok(Self::Boolean),
@@ -118,10 +126,10 @@ impl NodeBuilder for DataType {
             )),
             Rule::LIST_TYPE => {
                 let mut pairs = pair.into_inner();
-                let datatype = DataType::build(pairs.next().unwrap().into_inner())?;
+                let datatype = DataType::build(pairs.next().unwrap().into_inner(), filepath)?;
                 Ok(Self::List(Box::new(datatype)))
             }
-            _ => Err(no_rule!(pair, "DataType")),
+            _ => Err(no_rule!(pair, "DataType", filepath)),
         }
     }
 }

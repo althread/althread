@@ -1,0 +1,29 @@
+fn fibonacci_recursive(n: int, a: int, b: int) -> int {
+  if n == 0 {
+    return a;
+  } else {
+    return fibonacci_recursive(n - 1, b, a + b);
+  }
+}
+
+fn fibonacci_iterative(n: int, a: int, b: int) -> int {
+  for i in 1..n {
+    let c = a + b;
+    a = b;
+    b = c;
+  }
+  return b;
+}
+
+main {
+    let n = 10;
+    let res = fibonacci_recursive(n, 0, 1);
+    print("Fibonacci recursive of " + n + ": " + res);
+
+    let res = fibonacci_iterative(n, 0, 1);
+    print("Fibonacci iterative of " + n + ": " + res);
+}
+
+// Outputs:
+// Fibonacci recursive of 10: 55
+// Fibonacci iterative of 10: 55

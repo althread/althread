@@ -1,0 +1,123 @@
+.file-tabs-container {
+  display: flex;
+  background-color: #1e1e1e;
+  height: 40px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  gap: 0;
+  box-sizing: border-box;
+}
+
+/* VSCode-style scrollbar for file tabs */
+.file-tabs-container::-webkit-scrollbar {
+  height: 3px;
+}
+
+.file-tabs-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.file-tabs-container::-webkit-scrollbar-thumb {
+  background: rgba(121, 121, 121, 0.4);
+  border-radius: 2px;
+}
+
+.file-tabs-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(121, 121, 121, 0.6);
+}
+
+.file-tabs-container::-webkit-scrollbar-thumb:active {
+  background: rgba(121, 121, 121, 0.8);
+}
+
+.file-tabs-container::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.file-tab {
+  display: flex;
+  align-items: center;
+  padding: 0 4px 0 10px;
+  background-color: #1e1e1e;
+  color: #cccccc;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  border-bottom: 2px solid transparent; /* Reserve space for bottom border */
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+  position: relative;
+  height: 37px; /* Adjust height to accommodate scrollbar */
+  box-sizing: border-box;
+}
+
+.file-tab:not(.active):hover {
+  background-color: #2d2d2d;
+}
+
+.file-tab.active {
+  background-color: #232323;
+  color: #ffffff;
+  border-bottom: 2px solid var(--ifm-color-primary); /* Orange top border for active tab */
+  z-index: 1;
+}
+
+.file-tab .codicon-file {
+  margin-right: 6px;
+}
+
+.tab-label {
+  padding-right: 8px;
+}
+
+.tab-close-button {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 3px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.tab-close-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.file-tab:not(.active) .tab-close-button {
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.file-tab:hover .tab-close-button {
+    opacity: 1;
+}
+
+/* Read-only file tab styling */
+.file-tab.read-only {
+  background-color: #2d2d2d;
+  opacity: 0.9;
+}
+
+.file-tab.read-only .tab-label {
+  font-style: italic;
+  color: #b0b0b0;
+}
+
+.file-tab.read-only.active {
+  background-color: #333333;
+  border-bottom-color: #858585;
+}
+
+.read-only-icon {
+  font-size: 11px;
+  color: #858585;
+  margin-left: 4px;
+  margin-right: 2px;
+}

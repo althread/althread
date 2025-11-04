@@ -22,12 +22,12 @@ pub enum Assignment {
 }
 
 impl NodeBuilder for Assignment {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let pair = pairs.next().unwrap();
 
         match pair.as_rule() {
-            Rule::binary_assignment => Ok(Self::Binary(Node::build(pair)?)),
-            _ => Err(no_rule!(pair, "Assignment")),
+            Rule::binary_assignment => Ok(Self::Binary(Node::build(pair, filepath)?)),
+            _ => Err(no_rule!(pair, "Assignment", filepath)),
         }
     }
 }

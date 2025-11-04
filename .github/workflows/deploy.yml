@@ -77,7 +77,15 @@ jobs:
         run: |
           cd web
           pnpm install
-          pnpm build --public-url /editor
+          pnpm generate-examples # Generate examples from filesystem
+          pnpm build-lezer # Build the Lezer parser
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "Building for production (main branch)"
+            pnpm build --public-url /editor
+          else
+            echo "Building for development (dev branch)"
+            pnpm build --public-url /dev/editor
+          fi
           mv dist ../editor
 
       - name: Upload Built Web Editor
@@ -130,7 +138,7 @@ jobs:
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             pnpm --prefix ./doc run build
           else
-            pnpm --prefix ./doc run build -- --out-dir build/dev
+            pnpm --prefix ./doc run build:dev
           fi
   
       - name: Deploy to althread.github.io 

@@ -18,12 +18,20 @@ pub struct Block {
     pub children: Vec<Node<Statement>>,
 }
 
+impl Block {
+    pub fn new() -> Self {
+        Self {
+            children: Vec::new(),
+        }
+    }
+}
+
 impl NodeBuilder for Block {
-    fn build(pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let mut block = Self::new();
 
         for pair in pairs {
-            let node = Node::build(pair)?;
+            let node = Node::build(pair, filepath)?;
             block.children.push(node);
         }
 
@@ -47,14 +55,6 @@ impl InstructionBuilder for Block {
             });
         }
         Ok(builder)
-    }
-}
-
-impl Block {
-    pub fn new() -> Self {
-        Self {
-            children: Vec::new(),
-        }
     }
 }
 

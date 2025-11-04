@@ -41,6 +41,7 @@ impl BinaryExpression {
         left: Node<Expression>,
         operator: Pair<Rule>,
         right: Node<Expression>,
+        filepath: &str,
     ) -> AlthreadResult<Node<Self>> {
         Ok(Node {
             pos: Pos {
@@ -48,10 +49,11 @@ impl BinaryExpression {
                 end: right.pos.end,
                 line: left.pos.line,
                 col: left.pos.col,
+                file_path: filepath.to_string(),
             },
             value: Self {
                 left: Box::new(left),
-                operator: Node::build(operator)?,
+                operator: Node::build(operator, filepath)?,
                 right: Box::new(right),
             },
         })
@@ -80,10 +82,19 @@ impl LocalBinaryExpressionNode {
         let left_type = self.left.datatype(state)?;
         let right_type = self.right.datatype(state)?;
         match self.operator {
-            BinaryOperator::Add
-            | BinaryOperator::Subtract
-            | BinaryOperator::Multiply
-            | BinaryOperator::Divide => {
+            BinaryOperator::Add => {
+                if left_type.is_a_number() && left_type == right_type {
+                    Ok(left_type)
+                } else if left_type == DataType::String || right_type == DataType::String {
+                    Ok(DataType::String)
+                } else {
+                    Err(format!(
+                        "addition can only be performed between two identical number types or when at least one operand is a string (found {} + {})",
+                        left_type, right_type
+                    ))
+                }
+            }
+            BinaryOperator::Subtract | BinaryOperator::Multiply | BinaryOperator::Divide => {
                 if left_type.is_a_number() && left_type == right_type {
                     Ok(left_type)
                 } else {
@@ -142,7 +153,7 @@ impl LocalBinaryExpressionNode {
             BinaryOperator::LessThan => left.less_than(&right),
             BinaryOperator::LessThanOrEqual => left.less_than_or_equal(&right),
             BinaryOperator::GreaterThan => left.greater_than(&right),
-            BinaryOperator::GreaterThanOrEqual => right.greater_than_or_equal(&right),
+            BinaryOperator::GreaterThanOrEqual => left.greater_than_or_equal(&right),
             BinaryOperator::And => left.and(&right),
             BinaryOperator::Or => left.or(&right),
         }

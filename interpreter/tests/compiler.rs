@@ -1,7 +1,12 @@
+use std::collections::HashMap;
+
 use althread::{
     ast::{
         statement::expression::{
-            binary_expression::LocalBinaryExpressionNode, primary_expression::{LocalLiteralNode, LocalPrimaryExpressionNode, LocalVarNode}, tuple_expression::LocalTupleExpressionNode, Expression, LocalExpressionNode
+            binary_expression::LocalBinaryExpressionNode,
+            primary_expression::{LocalLiteralNode, LocalPrimaryExpressionNode, LocalVarNode},
+            tuple_expression::LocalTupleExpressionNode,
+            LocalExpressionNode,
         },
         token::{
             binary_assignment_operator::BinaryAssignmentOperator, binary_operator::BinaryOperator,
@@ -10,6 +15,7 @@ use althread::{
         Ast,
     },
     error::Pos,
+    module_resolver::StandardFileSystem,
     vm::instruction::{Instruction, InstructionType},
 };
 
@@ -32,6 +38,7 @@ main {
                 col: 13,
                 start: 20,
                 end: 21,
+                file_path: "".to_string(),
             }),
             control: InstructionType::Expression(LocalExpressionNode::Primary(
                 LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
@@ -45,6 +52,7 @@ main {
                 col: 5,
                 start: 12,
                 end: 15,
+                file_path: "".to_string(),
             }),
             control: InstructionType::Declaration { unstack_len: 1 },
         },
@@ -54,6 +62,7 @@ main {
                 col: 13,
                 start: 35,
                 end: 37,
+                file_path: "".to_string(),
             }),
             control: InstructionType::Expression(LocalExpressionNode::Primary(
                 LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
@@ -67,6 +76,7 @@ main {
                 col: 5,
                 start: 27,
                 end: 30,
+                file_path: "".to_string(),
             }),
             control: InstructionType::Declaration { unstack_len: 1 },
         },
@@ -76,6 +86,7 @@ main {
                 col: 13,
                 start: 51,
                 end: 53,
+                file_path: "".to_string(),
             }),
             control: InstructionType::Expression(LocalExpressionNode::Primary(
                 LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
@@ -89,6 +100,7 @@ main {
                 col: 5,
                 start: 43,
                 end: 46,
+                file_path: "".to_string(),
             }),
             control: InstructionType::Declaration { unstack_len: 1 },
         },
@@ -98,6 +110,7 @@ main {
                 col: 18,
                 start: 72,
                 end: 81,
+                file_path: "".to_string(),
             }),
             control: InstructionType::Expression(LocalExpressionNode::Binary(
                 LocalBinaryExpressionNode {
@@ -123,6 +136,7 @@ main {
                 col: 5,
                 start: 59,
                 end: 62,
+                file_path: "".to_string(),
             }),
             control: InstructionType::Declaration { unstack_len: 1 },
         },
@@ -136,17 +150,23 @@ main {
                 col: 6,
                 start: 6,
                 end: 84,
+                file_path: "".to_string(),
             }),
             control: InstructionType::EndProgram,
         },
     ];
 
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
     // parse code with pest
-    let pairs = althread::parser::parse(input).unwrap();
+    let pairs = althread::parser::parse(input, "").unwrap();
 
-    let ast = Ast::build(pairs).unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
 
-    let compiled_project = ast.compile().unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
 
     assert_eq!(
         compiled_project
@@ -180,6 +200,7 @@ main {
                 col: 13,
                 start: 20,
                 end: 21,
+                file_path: "".to_string(),
             }),
             control: InstructionType::Expression(LocalExpressionNode::Primary(
                 LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
@@ -193,6 +214,7 @@ main {
                 col: 5,
                 start: 12,
                 end: 15,
+                file_path: "".to_string(),
             }),
             control: InstructionType::Declaration { unstack_len: 1 },
         },
@@ -202,6 +224,7 @@ main {
                 col: 11,
                 start: 33,
                 end: 38,
+                file_path: "".to_string(),
             }),
             control: InstructionType::Expression(LocalExpressionNode::Binary(
                 LocalBinaryExpressionNode {
@@ -223,6 +246,7 @@ main {
                 col: 11,
                 start: 33,
                 end: 38,
+                file_path: "".to_string(),
             }),
             control: InstructionType::JumpIf {
                 jump_false: 8,
@@ -235,6 +259,7 @@ main {
                 col: 13,
                 start: 53,
                 end: 58,
+                file_path: "".to_string(),
             }),
             control: InstructionType::Expression(LocalExpressionNode::Binary(
                 LocalBinaryExpressionNode {
@@ -255,7 +280,8 @@ main {
                 line: 5,
                 col: 9,
                 start: 49,
-                end: 50,
+                end: 51,
+                file_path: "".to_string(),
             }),
             control: InstructionType::LocalAssignment {
                 index: 0,
@@ -269,6 +295,7 @@ main {
                 col: 12,
                 start: 71,
                 end: 77,
+                file_path: "".to_string(),
             }),
             control: InstructionType::Expression(LocalExpressionNode::Binary(
                 LocalBinaryExpressionNode {
@@ -290,6 +317,7 @@ main {
                 col: 12,
                 start: 71,
                 end: 77,
+                file_path: "".to_string(),
             }),
             control: InstructionType::JumpIf {
                 jump_false: 3,
@@ -310,6 +338,7 @@ main {
                 col: 19,
                 start: 78,
                 end: 108,
+                file_path: "".to_string(),
             }),
             control: InstructionType::Empty,
         },
@@ -319,6 +348,7 @@ main {
                 col: 5,
                 start: 27,
                 end: 114,
+                file_path: "".to_string(),
             }),
             control: InstructionType::Jump(-8),
         },
@@ -328,17 +358,16 @@ main {
                 col: 10,
                 start: 124,
                 end: 132,
+                file_path: "".to_string(),
             }),
             control: InstructionType::Expression(LocalExpressionNode::Tuple(
                 LocalTupleExpressionNode {
                     values: vec![LocalExpressionNode::Primary(
-                        LocalPrimaryExpressionNode::Literal(
-                            LocalLiteralNode {
-                                value: Literal::String("\"done\"".to_string())
-                            }
-                        )
+                        LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                            value: Literal::String("done".to_string()),
+                        }),
                     )],
-                }
+                },
             )),
         },
         Instruction {
@@ -347,6 +376,7 @@ main {
                 col: 5,
                 start: 119,
                 end: 132,
+                file_path: "".to_string(),
             }),
             control: InstructionType::FnCall {
                 name: "print".to_string(),
@@ -361,6 +391,7 @@ main {
                 col: 5,
                 start: 119,
                 end: 132,
+                file_path: "".to_string(),
             }),
             control: InstructionType::Unstack { unstack_len: 1 },
         },
@@ -374,17 +405,23 @@ main {
                 col: 6,
                 start: 6,
                 end: 135,
+                file_path: "".to_string(),
             }),
             control: InstructionType::EndProgram,
         },
     ];
 
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
     // parse code with pest
-    let pairs = althread::parser::parse(input).unwrap();
+    let pairs = althread::parser::parse(input, "").unwrap();
 
-    let ast = Ast::build(pairs).unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
 
-    let compiled_project = ast.compile().unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
 
     assert_eq!(
         compiled_project

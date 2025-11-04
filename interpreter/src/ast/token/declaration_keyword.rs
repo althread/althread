@@ -11,12 +11,12 @@ pub enum DeclarationKeyword {
 }
 
 impl NodeBuilder for DeclarationKeyword {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let pair = pairs.next().unwrap();
         match pair.as_rule() {
             Rule::LET_KW => Ok(Self::Let),
             Rule::CONST_KW => Ok(Self::Const),
-            _ => Err(no_rule!(pair, "DeclarationKeyword")),
+            _ => Err(no_rule!(pair, "DeclarationKeyword", filepath)),
         }
     }
 }

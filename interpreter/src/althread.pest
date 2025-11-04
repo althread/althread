@@ -3,24 +3,28 @@
 
 program = _{ SOI ~ blocks* ~ EOI }
 
+/// Directives
+private_directive = { "@" ~ PRIVATE_KW }
+
 /// ## Program Structure
 /// The main building blocks of an Althread program are:
 /// - **Main Block**: The entry point of the program.
 /// - **Shared Block**: Declares global variables accessible across different parts of the program.
 /// - **Condition Block**: Monitors conditions at each atomic step (e.g., always, never, eventually).
 /// - **Program Block**: Encapsulates code that runs concurrently in parallel processes.
-blocks = _{ main_block | global_block | condition_block | program_block }
+/// - **Function Block**: User-defined functions
+blocks = _{ import_block | main_block | global_block | condition_block | program_block | function_block }
 
 global_block    = { GLOBAL_KW ~ code_block }
 condition_block = { condition_keywords ~ expression_block }
-program_block   = { PROGRAM_KW ~ identifier ~ arg_list ~ code_block }
-main_block      = { MAIN_KW ~ code_block }
+program_block   = { private_directive? ~ PROGRAM_KW ~ identifier ~ arg_list ~ code_block }
+main_block      = { private_directive? ~ MAIN_KW ~ code_block }
 
 code_block           = { "{" ~ statement* ~ "}" }
 expression_block     = { "{" ~ expression_statement* ~ "}" }
 expression_statement = { expression ~ ";" }
 
-condition_keywords = _{ ALWAYS_KW | NEVER_KW }
+condition_keywords = _{ ALWAYS_KW | NEVER_KW | EVENTUALLY_KW }
 
 /// ## Statements
 /// Statements are the executable instructions in the language.
@@ -42,7 +46,9 @@ statement = {
   | call_statement
   | code_block
   | break_loop_statement
+  | return_statement
 }
+
 
 break_loop_statement = { (BREAK_KW | CONTINUE_KW) ~ identifier? ~ ";" }
 assignment_statement  = _{ assignment ~ ";" }
@@ -56,8 +62,23 @@ run_statement         = _{ run_call ~ ";" }
 send_statement         = _{ send_call ~ ";" }
 channel_declaration_statement = _{ channel_declaration ~ ";" }
 
+// Functions
+function_block = { private_directive? ~ FN_KW ~ identifier ~ arg_list ~ RARROW ~ datatype ~ code_block }
+return_statement = { RETURN_KW ~ expression? ~ ";" }
+
+
+// Import block definition
+import_block = { IMPORT_KW ~ "[" ~ import_list? ~ "]" }
+import_list = { import_item ~ ("," ~ import_item)* ~ ","? }
+import_item = { import_path ~ (AS_KW ~ identifier)? }
+import_path = { import_segment ~ ("/" ~ import_segment)* }
+import_segment = { domain_identifier | identifier }
+domain_identifier = @{ ASCII_ALPHA ~ domain_char* }
+domain_char = _{ ASCII_ALPHANUMERIC | "_" | "." | "-" }
+
+
 fn_call  = { object_identifier ~ tuple_expression }
-run_call = { RUN_KW ~ identifier ~ tuple_expression }
+run_call = { RUN_KW ~ object_identifier ~ tuple_expression }
 send_call = { SEND_KW ~ object_identifier ~ tuple_expression }
 channel_declaration = { 
     CHANNEL_KW ~ 
@@ -70,7 +91,7 @@ channel_declaration = {
 type_list = { "(" ~ datatype ~ ("," ~ datatype)* ~ ")" }
 pattern_list = { "(" ~ pattern ~ ("," ~ pattern)* ~ ")" }
 arg_list = { 
-  ( "(" ~ ")") 
+  ( "(" ~ ")")
   | ("(" ~ (identifier ~ ":" ~ datatype) ~ ("," ~ identifier ~ ":" ~ datatype)* ~ ")" )
 }
 pattern = { identifier | literal }
@@ -81,10 +102,14 @@ pattern = { identifier | literal }
 /// - **Binary Assignments**: Assign the result of an expression to a variable (e.g., a = b + c).
 assignment = { binary_assignment }
 
-side_effect_expression    = { run_call | fn_call | expression | ("[" ~ range_expression ~ "]") }
+side_effect_expression    = { run_call | fn_call | expression |  bracket_expression }
+
+bracket_expression = { "[" ~ (range_expression | list_literal_inner) ~ "]" }
+
+list_literal_inner = { (side_effect_expression ~ ("," ~ side_effect_expression)*)? }
 
 binary_assignment          = { 
-    identifier ~ 
+    object_identifier ~ 
     binary_assignment_operator ~ 
     side_effect_expression }
 binary_assignment_operator = { ASSIGN_OP | ADD_ASSIGN_OP | SUB_ASSIGN_OP | MUL_ASSIGN_OP | DIV_ASSIGN_OP | MOD_ASSIGN_OP }
@@ -94,15 +119,12 @@ binary_assignment_operator = { ASSIGN_OP | ADD_ASSIGN_OP | SUB_ASSIGN_OP | MUL_A
 declaration         = { declaration_keyword ~ identifier ~ (":" ~ datatype)? ~ ("=" ~ side_effect_expression)? }
 declaration_keyword = { LET_KW | CONST_KW }
 
+
 receive_expression = { RECEIVE_KW ~ object_identifier? ~ pattern_list ~ ("=>" ~ statement)? }
 
 /// ### Expressions
 /// Expressions evaluate values based on arithmetic and logical operations, following standard precedence rules.
-expression = {
-    binary_expression
-  | unary_expression
-  | primary_expression
-}
+expression = { binary_expression }
 
 tuple_expression = {
  ("(" ~ ")") | ("(" ~ expression ~ ("," ~ expression)* ~ ")")
@@ -111,7 +133,7 @@ range_expression = {
 	(expression ~ LIST_OP ~ expression)
 }
 
-primary_expression = _{ literal | identifier | "(" ~ expression ~ ")" }
+primary_expression = _{ fn_call | literal | object_identifier | "(" ~ expression ~ ")" }
 
 unary_expression = _{ unary_operator? ~ primary_expression }
 unary_operator   =  { POS_OP | NEG_OP | NOT_OP }
@@ -121,7 +143,7 @@ binary_operator     = _{ or_operator | and_operator | equality_operator | compar
 or_operator         =  { OR_OP }
 and_operator        =  { AND_OP }
 equality_operator   =  { EQ_OP | NE_OP }
-comparison_operator =  { LT_OP | GT_OP | LE_OP | GE_OP }
+comparison_operator =  { LE_OP | GE_OP | LT_OP | GT_OP }
 term_operator       =  { ADD_OP | SUB_OP }
 factor_operator     =  { MUL_OP | DIV_OP | MOD_OP }
 
@@ -151,6 +173,7 @@ KEYWORDS = _{
   | GLOBAL_KW
   | PROGRAM_KW
   | ALWAYS_KW
+  | EVENTUALLY_KW
   | NEVER_KW
   | RUN_KW
   | LET_KW
@@ -158,6 +181,11 @@ KEYWORDS = _{
   | IF_KW
   | ELSE_KW
   | WHILE_KW
+  | FN_KW
+  | RETURN_KW
+  | IMPORT_KW
+  | AS_KW
+  | PRIVATE_KW
   | BOOL
   | INT_TYPE
   | FLOAT_TYPE
@@ -168,8 +196,9 @@ KEYWORDS = _{
 MAIN_KW    = _{ "main" }
 GLOBAL_KW  = _{ "shared" }
 PROGRAM_KW = _{ "program" }
-WAIT_KW    = _{ "wait" }
+WAIT_KW    = _{ "await" }
 ALWAYS_KW  =  { "always" }
+EVENTUALLY_KW  =  { "eventually" }
 NEVER_KW   =  { "never" }
 RUN_KW     = _{ "run" }
 
@@ -196,6 +225,16 @@ FALSE_KW = _{ "false" }
 NULL_KW  = _{ "null" }
 
 ATOMIC_KW = _{ "atomic" }
+
+PRIVATE_KW = _{ "private" }
+
+// Functions
+FN_KW = _{ "fn" }
+RETURN_KW = _{ "return" }
+RARROW = { "->" }
+
+IMPORT_KW = _{ "import" }
+AS_KW = _{ "as" }
 
 /// ### Operators
 /// Operators are used for arithmetic, logical operations, and assignments.
@@ -236,7 +275,7 @@ INT_TYPE   = { "int" }
 FLOAT_TYPE = { "float" }
 STR_TYPE   = { "string" }
 VOID_TYPE  = { "void" }
-PROCESS_TYPE = { "proc" ~ "(" ~ identifier ~ ")" }
+PROCESS_TYPE = { "proc" ~ "(" ~ object_identifier ~ ")" }
 LIST_TYPE  = { "list" ~ "(" ~ datatype ~ ")" }
 
 /// ### Literals
@@ -251,7 +290,7 @@ NULL    = @{ NULL_KW }
 /// ### Identifiers
 /// Identifiers are used for naming variables, functions, and other constructs.
 identifier        = { IDENT }
-object_identifier = { (IDENT ~ "." ~ object_identifier) | IDENT }
+object_identifier = { IDENT ~ ("." ~ IDENT)* }
 
 reserved_keywords = { (KEYWORDS | datatype) ~ !IDENT_CHAR }
 

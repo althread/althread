@@ -46,6 +46,10 @@ Les variables en althread peuvent prendre les types suivants :
 - **Chaîne de caractères** : `string`
 - **Processus exécutant un programme `A`** : `proc(A)`
 - **Tableau d'élement de type TYPE** : `list(TYPE)`
+:::tip Méthodes des listes
+Les listes disposent de méthodes intégrées comme `push()`, `len()`, `at()`, `set()` et `remove()`. 
+Consultez la [référence des méthodes de listes](../../api/lists.md) pour une documentation complète.
+:::
 
 
 ### Typage statique
@@ -101,11 +105,11 @@ Les variables déclarées dans une structure de contrôle sont visibles uniqueme
 
 ## Instructions bloquantes
 
-En althread, la seul instruction bloquante est l'attente d'une condition avec l'instruction `wait`. Cette instruction permet de mettre en pause l'exécution d'un processus jusqu'à ce que la condition soit vérifiée.
+En althread, la seul instruction bloquante est l'attente d'une condition avec l'instruction `await`. Cette instruction permet de mettre en pause l'exécution d'un processus jusqu'à ce que la condition soit vérifiée.
 
 ```althread
 program A() {
-    wait X == 5;
+    await X == 5;
     print("x est égal à 5");
 }
 ```
@@ -115,28 +119,28 @@ La condition peut être une expression booléenne comme dans l'exemple précéde
 ```althread
 program A() {
 
-    wait receive channel_name(x);
+    await receive channel_name(x);
 
     print("message reçu");
     // x n'est pas dans le scope
 }
 ```
-Dans l'exemple précédent, `x` n'est pas dans le scope après l'instruction `wait` car l'instruction `receive` est suivie de manière optionnelle d'un bloc d'instruction, permettant d'utiliser les variables reçues.
+Dans l'exemple précédent, `x` n'est pas dans le scope après l'instruction `await` car l'instruction `receive` est suivie de manière optionnelle d'un bloc d'instruction, permettant d'utiliser les variables reçues.
 
 ```althread	
 program A() {
-    wait receive channel_name(x) => {
+    await receive channel_name(x) => {
         print("message reçu, x=", x);
         // x est dans le scope
     }
 }
 ```
 
-L'instruction `wait` peut aussi être utilisée pour attendre une condition parmis plusieurs conditions en la faisant suivre de l'instruction `first` ou `all`.
+L'instruction `await` peut aussi être utilisée pour attendre une condition parmis plusieurs conditions en la faisant suivre de l'instruction `first` ou `all`.
 
 ```althread
 program A() {
-    wait first {
+    await first {
         receive channel_name1(x) => {
             print("message reçu, x=", x);
         }
@@ -160,7 +164,7 @@ Une expression atomique est la plus petite unité d'exécution. En althread, il 
 - **Affectation** : `x = 5;`,  `x++;`, `x += 1`;
 - **Opération arithmétique** : `x + y;`, `x - y;`, `x * y;`, `x / y;`, `x % y;`
 - **Scope atomique**: `atomic { ... }`
-- **Appel de fonction** : `print("Hello world");`, `wait x == 5;`
+- **Appel de fonction** : `print("Hello world");`, `await x == 5;`
 - **Exécution de processus** : `run A();`
 
 :::note

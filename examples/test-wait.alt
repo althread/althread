@@ -5,18 +5,18 @@ shared {
 
 main {
 
-    print("wait first");
+    print("await first");
     //print "CASE 1" (because the keyword first is used)
-    wait first {
+    await first {
         (VA == 0) => { print("CASE 0"); }
         (VA == 1) => { print("CASE 1"); VA = 2; }
         (VA == 2) => { print("CASE 2"); }
     }
     
-    print("wait seq");
+    print("await seq");
     VA = 1;
     //print "CASE 1" and "CASE 2"
-    wait seq {
+    await seq {
         (VA == 0) => { print("CASE 0"); }
         (VA == 1) => { print("CASE 1"); VA = 2; }
         (VA == 2) => { print("CASE 2"); }
@@ -29,12 +29,12 @@ main {
 
     VA = 0; // comment to see a deadlock
     
-    wait (VA == 0);
-    print("wait condition");
+    await (VA == 0);
+    print("await condition");
 }
 /**
 `condition` is a boolean expression
-`wait condition` is a statement that waits for the condition to be true
+`await condition` is a statement that waits for the condition to be true
 
 ```
 first { 
@@ -44,7 +44,7 @@ first {
 ``` 
 is an boolean expression that is true if one of the conditions is true. Each condition is evaluated sequentially from top to bottom, if one condition is true, it executes only the first corresponding block and then goes to the first instruction outside the block, hence:
 ```
-wait first {
+await first {
     condition1 => block1,
     condition2 => block2,
 }
@@ -60,7 +60,7 @@ seq {
 ```
 is an boolean expression that evaluates to true if one of the conditions is true, however here, when the block corresponding to the first true condition is executed, the remaining conditions are also evaluated, and the blocks associated with all the true conditions are executed sequentially from top to bottom. Hence,
 ```
-wait seq {
+await seq {
     condition1 => block1,
     condition2 => block2,
 }

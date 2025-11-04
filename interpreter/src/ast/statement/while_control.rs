@@ -24,9 +24,9 @@ pub struct WhileControl {
 }
 
 impl NodeBuilder for WhileControl {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
-        let condition = Node::build(pairs.next().unwrap())?;
-        let then_block = Node::build(pairs.next().unwrap())?;
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
+        let condition = Node::build(pairs.next().unwrap(), filepath)?;
+        let then_block = Node::build(pairs.next().unwrap(), filepath)?;
 
         Ok(Self {
             condition,
@@ -53,7 +53,7 @@ impl InstructionBuilder for Node<WhileControl> {
         {
             return Err(AlthreadError::new(
                 ErrorType::TypeError,
-                Some(self.value.condition.pos),
+                Some(self.value.condition.pos.clone()),
                 "condition must be a boolean".to_string(),
             ));
         }
@@ -65,7 +65,7 @@ impl InstructionBuilder for Node<WhileControl> {
 
         builder.extend(cond_builder);
         builder.instructions.push(Instruction {
-            pos: Some(self.value.condition.pos),
+            pos: Some(self.value.condition.pos.clone()),
             control: InstructionType::JumpIf {
                 jump_false: (block_len + 2) as i64,
                 unstack_len,
@@ -74,7 +74,7 @@ impl InstructionBuilder for Node<WhileControl> {
         builder.extend(block_builder);
 
         builder.instructions.push(Instruction {
-            pos: Some(self.pos),
+            pos: Some(self.pos.clone()),
             control: InstructionType::Jump(-(builder.instructions.len() as i64)),
         });
 

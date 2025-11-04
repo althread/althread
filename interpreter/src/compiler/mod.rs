@@ -1,17 +1,31 @@
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::rc::Rc;
 
+pub mod compiler;
+pub mod prescan;
 pub mod stdlib;
 
 use crate::ast::statement::expression::LocalExpressionNode;
 use crate::error::Pos;
 use crate::vm::instruction::Instruction;
 use crate::{
-    ast::token::{datatype::DataType, literal::Literal},
+    ast::token::{datatype::DataType, identifier::Identifier, literal::Literal},
     vm::instruction::ProgramCode,
 };
 
+#[derive(Debug, Clone)]
+pub struct FunctionDefinition {
+    pub name: String,
+    pub arguments: Vec<(Identifier, DataType)>,
+    pub return_type: DataType,
+    pub body: Vec<Instruction>,
+    pub pos: Pos,
+    pub is_private: bool,
+}
+
+#[derive(Debug)]
 pub struct InstructionBuilderOk {
     pub instructions: Vec<Instruction>,
 
@@ -82,42 +96,161 @@ pub struct Variable {
 }
 
 #[derive(Debug)]
-pub struct CompilerState {
-    pub global_table: HashMap<String, Variable>,
-    pub program_stack: Vec<Variable>,
-    pub current_stack_depth: usize,
+pub struct CompilationContext {
+    pub stdlib: Rc<stdlib::Stdlib>,
 
-    /// Store the channels data types that can be attached to a program
-    /// The key is the program name and the channel name
+    // Add channel state
     pub channels: HashMap<(String, String), (Vec<DataType>, Pos)>,
     pub undefined_channels: HashMap<(String, String), (Vec<DataType>, Pos)>,
+}
 
-    // The names of the available programs and arguments
-    pub program_arguments: HashMap<String, Vec<DataType>>,
+impl CompilationContext {
+    pub fn new() -> Self {
+        Self {
+            stdlib: Rc::new(stdlib::Stdlib::new()),
+            channels: HashMap::new(),
+            undefined_channels: HashMap::new(),
+        }
+    }
+}
 
-    pub stdlib: stdlib::Stdlib,
-
+#[derive(Debug)]
+pub struct CompilerState {
+    pub program_stack: Vec<Variable>,
+    pub current_stack_depth: usize,
     pub current_program_name: String,
+
+    // pub current_file_path: Option<String>,
     pub is_atomic: bool,
     pub is_shared: bool,
+    pub in_function: bool,
+    pub method_call_stack_offset: usize,
+
+    // Reference to shared context
+    pub context: Rc<RefCell<CompilationContext>>,
+    
+    // add always and eventually conditions
+    pub always_conditions: Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
+    pub eventually_conditions: Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
+
+    pub user_functions: HashMap<String, FunctionDefinition>,
+    pub global_table: HashMap<String, Variable>,
+    pub program_arguments: HashMap<String, (Vec<DataType>, bool)>,
+    pub programs_code: HashMap<String, ProgramCode>,
+    pub global_memory: BTreeMap<String, Literal>,
 }
 
 impl CompilerState {
-    pub fn new() -> Self {
+    pub fn new_with_context(context: Rc<RefCell<CompilationContext>>) -> Self {
         Self {
-            global_table: HashMap::new(),
             program_stack: Vec::new(),
             current_stack_depth: 0,
-            channels: HashMap::new(),
-            undefined_channels: HashMap::new(),
             current_program_name: String::new(),
-            program_arguments: HashMap::new(),
             is_atomic: false,
             is_shared: false,
-            stdlib: stdlib::Stdlib::new(),
+            in_function: false,
+            method_call_stack_offset: 0,
+            context,
+            user_functions: HashMap::new(),
+            global_table: HashMap::new(),
+            program_arguments: HashMap::new(),
+            global_memory: BTreeMap::new(),
+            always_conditions: Vec::new(),
+            eventually_conditions: Vec::new(),
+            programs_code: HashMap::new(),
         }
     }
 
+    pub fn stdlib(&self) -> Rc<stdlib::Stdlib> {
+        self.context.borrow().stdlib.clone()
+    }
+
+    pub fn stdlib_mut(&mut self) -> Rc<stdlib::Stdlib> {
+        Rc::clone(&self.context.borrow_mut().stdlib)
+    }
+
+    pub fn user_functions(&self) -> &HashMap<String, FunctionDefinition> {
+        &self.user_functions
+    }
+
+    pub fn user_functions_mut(&mut self) -> &mut HashMap<String, FunctionDefinition> {
+        &mut self.user_functions
+    }
+
+    pub fn global_table(&self) -> &HashMap<String, Variable> {
+        &self.global_table
+    }
+
+    pub fn global_table_mut(&mut self) -> &mut HashMap<String, Variable> {
+        &mut self.global_table
+    }
+
+    pub fn global_memory(&self) -> &BTreeMap<String, Literal> {
+        &self.global_memory
+    }
+
+    pub fn global_memory_mut(&mut self) -> &mut BTreeMap<String, Literal> {
+        &mut self.global_memory
+    }
+
+    pub fn channels(&self) -> std::cell::Ref<'_, HashMap<(String, String), (Vec<DataType>, Pos)>> {
+        std::cell::Ref::map(self.context.borrow(), |ctx| &ctx.channels)
+    }
+
+    pub fn channels_mut(
+        &self,
+    ) -> std::cell::RefMut<'_, HashMap<(String, String), (Vec<DataType>, Pos)>> {
+        std::cell::RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.channels)
+    }
+
+    pub fn undefined_channels(
+        &self,
+    ) -> std::cell::Ref<'_, HashMap<(String, String), (Vec<DataType>, Pos)>> {
+        std::cell::Ref::map(self.context.borrow(), |ctx| &ctx.undefined_channels)
+    }
+
+    pub fn undefined_channels_mut(
+        &self,
+    ) -> std::cell::RefMut<'_, HashMap<(String, String), (Vec<DataType>, Pos)>> {
+        std::cell::RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.undefined_channels)
+    }
+
+    pub fn program_arguments(&self) -> &HashMap<String, (Vec<DataType>, bool)> {
+        &self.program_arguments
+    }
+
+    pub fn program_arguments_mut(&mut self) -> &mut HashMap<String, (Vec<DataType>, bool)> {
+        &mut self.program_arguments
+    }
+
+    pub fn always_conditions(&self) -> &Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)> {
+        &self.always_conditions
+    }
+
+    pub fn always_conditions_mut(&mut self) -> &mut Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)> {
+        &mut self.always_conditions
+    }
+
+    pub fn eventually_conditions(&self) -> &Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)> {
+        &self.eventually_conditions
+    }
+
+    pub fn eventually_conditions_mut(&mut self) -> &mut Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)> {
+        &mut self.eventually_conditions
+    }
+
+    pub fn programs_code(&self) -> &HashMap<String, ProgramCode> {
+        &self.programs_code
+    }
+
+    pub fn programs_code_mut(&mut self) -> &mut HashMap<String, ProgramCode> {
+        &mut self.programs_code
+    }
+
+
+    /// Pop all variables from the program stack that have the same depth as the current stack depth
+    /// and decrease the current stack depth by one.
+    /// Returns the number of variables that were popped.
     pub fn unstack_current_depth(&mut self) -> usize {
         let mut unstack_len = 0;
         while self.program_stack.len() > 0
@@ -134,13 +267,18 @@ impl CompilerState {
 #[derive(Debug)]
 pub struct CompiledProject {
     pub programs_code: HashMap<String, ProgramCode>,
+    pub program_arguments: HashMap<String, (Vec<DataType>, bool)>,
+    pub user_functions: HashMap<String, FunctionDefinition>,
     pub global_memory: BTreeMap<String, Literal>,
+    pub global_table: HashMap<String, Variable>,
 
     /// The conditions that should always be true
     /// The first element is the variables that are used in the condition
     /// The second element is the two instructions that are used to check the condition
     /// (the first in struction is the read operation and the second is the expression)
     pub always_conditions: Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
+    /// conditions that must be true at least once in each possible executions
+    pub eventually_conditions: Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
 
     pub stdlib: Rc<stdlib::Stdlib>,
 }

@@ -6,7 +6,7 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
-        token::datatype::DataType,
+        token::{datatype::DataType, object_identifier::ObjectIdentifier},
     },
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
@@ -23,10 +23,26 @@ pub struct SendStatement {
 }
 
 impl NodeBuilder for SendStatement {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
-        let channel = String::from(pairs.next().unwrap().as_str());
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
+        let pair = pairs.next().unwrap();
 
-        let values: Node<Expression> = Expression::build_top_level(pairs.next().unwrap())?;
+        let channel = if pair.as_rule() == Rule::object_identifier {
+            // Parse the object_identifier and convert it to a string
+            let object_id = Node::<ObjectIdentifier>::build(pair, filepath)?;
+            object_id
+                .value
+                .parts
+                .iter()
+                .map(|p| p.value.value.as_str())
+                .collect::<Vec<_>>()
+                .join(".")
+        } else {
+            // Fallback for simple identifier (shouldn't happen with current grammar)
+            pair.as_str().to_string()
+        };
+
+        let values: Node<Expression> =
+            Expression::build_top_level(pairs.next().unwrap(), filepath)?;
 
         if !values.value.is_tuple() {
             return Err(AlthreadError::new(
@@ -51,7 +67,7 @@ impl InstructionBuilder for Node<SendStatement> {
             _ => {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(self.pos),
+                    Some(self.pos.clone()),
                     "Send statement expects a tuple of values".to_string(),
                 ))
             }
@@ -67,28 +83,23 @@ impl InstructionBuilder for Node<SendStatement> {
             .clone();
         let unstack_len = state.unstack_current_depth();
 
-        if state
-            .channels
+        let channel_info = state
+            .channels()
             .get(&(state.current_program_name.clone(), channel_name.clone()))
-            .is_none()
-        {
-            state.undefined_channels.insert(
+            .cloned();
+
+        if channel_info.is_none() {
+            state.undefined_channels_mut().insert(
                 (state.current_program_name.clone(), channel_name.clone()),
-                (vec![rdatatype], self.pos),
+                (vec![rdatatype], self.pos.clone()),
             );
         } else {
-            let (channel_types, pos) = state
-                .channels
-                .get(&(
-                    state.current_program_name.clone(),
-                    self.value.channel.clone(),
-                ))
-                .unwrap();
+            let (channel_types, pos) = channel_info.unwrap();
 
             if channel_types.len() != tuple.values.len() {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(self.pos),
+                    Some(self.pos.clone()),
                     format!(
                         "Channel {}, bound at line {}, expects {} values, but {} were given",
                         self.value.channel,
@@ -104,7 +115,7 @@ impl InstructionBuilder for Node<SendStatement> {
             if channel_types != rdatatype {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(self.pos),
+                    Some(self.pos.clone()),
                     format!("Channel {}, bound at line {}, expects values of types {}, but {} were given", self.value.channel, pos.line, channel_types, rdatatype)
                 ));
             }
@@ -115,7 +126,7 @@ impl InstructionBuilder for Node<SendStatement> {
                 channel_name: channel_name.clone(),
                 unstack_len,
             },
-            pos: Some(self.pos),
+            pos: Some(self.pos.clone()),
         });
 
         Ok(builder)

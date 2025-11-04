@@ -1,0 +1,614 @@
+.file-explorer {
+  background-color: #1e1e1e;
+  color: #cccccc;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+}
+
+.file-explorer-header {
+  padding: 8px 12px;
+  text-transform: uppercase;
+  font-size: 10px;
+  color: #cccccc;
+  flex-shrink: 0;
+  border-bottom: 1px solid #333333;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 32px;
+}
+
+.file-explorer-header h3 {
+    margin: 0;
+    font-weight: normal;
+    flex-shrink: 0;
+}
+
+.file-explorer-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.file-explorer-actions .header-action-btn {
+  position: relative;
+}
+
+.file-explorer-actions .header-action-btn:hover::after {
+  content: attr(title);
+  position: absolute;
+  left: 44px;
+  top: 50%;
+  transform: translate(-100%, 80%);
+  background: #2d2d2d;
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 1001;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  border: 1px solid #333;
+  pointer-events: none;
+}
+
+.file-explorer-actions button {
+    background: none;
+    border: none;
+    color: #cccccc;
+    cursor: pointer;
+    padding: 2px;
+    margin-left: 0;
+    font-size: 16px;
+    line-height: 1;
+    border-radius: 2px;
+}
+
+.file-explorer-actions button:hover {
+    background-color: #3c3c3c;
+}
+
+.file-explorer-actions button:disabled {
+    opacity: 0.5;
+    cursor: default;
+    background-color: transparent;
+}
+
+.file-explorer-content {
+  padding: 5px 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex-grow: 1;
+}
+
+/* Custom scrollbar for File Explorer consistency - hover-only */
+.file-explorer-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.file-explorer-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.file-explorer-content::-webkit-scrollbar-thumb {
+  background: transparent;
+  transition: background 0.2s ease;
+}
+
+.file-explorer-content:hover::-webkit-scrollbar-thumb {
+  background: rgba(85, 85, 85, 0.6);
+}
+
+.file-explorer-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(102, 102, 102, 0.8);
+}
+
+.file, .directory-header {
+  display: flex;
+  align-items: center;
+  padding: 4px 0px 4px 10px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  height: 26px; /* FIXED height to prevent ANY changes during rename */
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-left: 0;
+}
+
+.file:hover, .directory-header:hover {
+  background-color: #2d2d2d;
+}
+
+.file.active {
+  background-color: #232323;
+  border: 1px solid #3c3c3c;
+  border-left: 0;
+}
+
+.file .codicon, .directory-header .codicon {
+  margin-right: 6px;
+}
+
+/* Nested directory structure with CSS custom properties for unlimited depth */
+.directory-children {
+  --nesting-level: 1;
+}
+
+.directory-children .file, 
+.directory-children .directory-header {
+  padding-left: calc(26px + (var(--nesting-level) * 16px));
+}
+
+/* Progressively increase nesting level for each nested directory */
+.directory-children .directory-children {
+  --nesting-level: 2;
+}
+
+.directory-children .directory-children .directory-children {
+  --nesting-level: 3;
+}
+
+.directory-children .directory-children .directory-children .directory-children {
+  --nesting-level: 4;
+}
+
+.directory-children .directory-children .directory-children .directory-children .directory-children {
+  --nesting-level: 5;
+}
+
+.directory-children .directory-children .directory-children .directory-children .directory-children .directory-children {
+  --nesting-level: 6;
+}
+
+.directory-children .directory-children .directory-children .directory-children .directory-children .directory-children .directory-children {
+  --nesting-level: 7;
+}
+
+.directory-children .directory-children .directory-children .directory-children .directory-children .directory-children .directory-children .directory-children {
+  --nesting-level: 8;
+}
+
+.directory-children .directory-children .directory-children .directory-children .directory-children .directory-children .directory-children .directory-children .directory-children {
+  --nesting-level: 9;
+}
+
+.directory-children .directory-children .directory-children .directory-children .directory-children .directory-children .directory-children .directory-children .directory-children .directory-children {
+  --nesting-level: 10;
+}
+
+.file-entry-input {
+  display: flex;
+  align-items: center;
+  /* Use same padding as files and directory headers */
+  padding: 4px 0 4px 10px;
+}
+
+/* Nested input should follow same pattern as files and directory headers */
+.directory-children .file-entry-input {
+  padding-left: calc(26px + (var(--nesting-level) * 16px));
+}
+
+.file-entry-input .codicon {
+  margin-right: 6px;
+}
+
+.file-entry-input input {
+  background-color: #1e1e1e;
+  color: #cccccc;
+  border: 1px solid var(--ifm-color-primary);
+  outline: none;
+  width: 100%;
+  padding: 2px 4px;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* Rename input styling - use same as creation input */
+.rename-input {
+  background-color: #1e1e1e;
+  color: #cccccc;
+  border: 1px solid var(--ifm-color-primary);
+  outline: none;
+  width: 100%;
+  padding: 2px 4px;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.rename-input:focus {
+  border-color: var(--ifm-color-primary);
+}
+
+/* Drag and drop styles */
+.file-explorer.drag-over {
+  outline: 2px dashed #3794ff;
+  outline-offset: -2px;
+}
+
+.directory.drag-over {
+  background-color: #2a2d2e;
+  border-left: 3px solid #3794ff;
+}
+
+.file.dragging,
+.directory.dragging {
+  opacity: 0.5;
+}
+
+/* Multi-select styles */
+.file.selected,
+.directory.selected > .directory-header {
+  background-color: #094771;
+  border: 1px solid #3794ff;
+  border-left: 0;
+}
+
+/* Keep transparent borders for consecutive selected items to prevent layout shift */
+.file.selected + .file.selected,
+.file.selected + .directory.selected > .directory-header,
+.directory.selected + .file.selected,
+.directory.selected + .directory.selected > .directory-header,
+.directory.selected .directory-children .file.selected:first-child,
+.directory.selected .directory-children .directory.selected:first-child > .directory-header,
+.directory:has(.directory-children .file.selected:last-child) + .file.selected,
+.directory:has(.directory-children .file.selected:last-child) + .directory.selected > .directory-header,
+.directory:has(.directory-children .directory.selected:last-child) + .file.selected,
+.directory:has(.directory-children .directory.selected:last-child) + .directory.selected > .directory-header {
+  border-top: 1px solid transparent;
+}
+
+.file.selected:hover,
+.directory.selected > .directory-header:hover {
+  background-color: #0e5a8a;
+}
+
+/* Improve chevron click area */
+.directory-header .codicon-chevron-down,
+.directory-header .codicon-chevron-right {
+  padding: 2px;
+  border-radius: 2px;
+  margin-right: 4px;
+  cursor: pointer;
+}
+
+.directory-header .codicon-chevron-down:hover,
+.directory-header .codicon-chevron-right:hover {
+  background-color: #3c3c3c;
+}
+
+
+
+.file-entry-error {
+  color: #d8d7d7;
+  background: #821910;
+  border: 1px solid #e22a19;
+  padding: 4px 8px;
+  font-size: 0.95em;
+  box-shadow: 0 2px 8px rgba(229,20,0,0.15);
+  position: absolute;
+  top: 100%; /* Position below the input */
+  z-index: 1000; /* Ensure it's above other content */
+  word-wrap: break-word; /* Allow text to wrap */
+  white-space: normal; /* Allow text to wrap */
+}
+
+/* Error positioning for creation inputs (with proper nesting) */
+.file-entry-input ~ .file-entry-error {
+  left: 32px; /* Align with creation input text (10px padding + 16px icon + 6px margin) */
+  right: 0;
+}
+
+/* Error positioning for rename inputs (no nesting, in-place) */
+.file-entry-rename-input ~ .file-entry-error {
+  left: 22px; /* Align with rename input text (0px padding + 16px icon + 6px margin) */
+  right: 0;
+}
+
+.file-entry-input-wrapper:has(.file-entry-error) input {
+  border: 1px solid #e22a19;
+}
+
+/* File entry input wrapper (needed for error positioning) */
+.file-entry-input-wrapper {
+  position: relative;
+  /* Reset any padding that might be inherited from directory nesting */
+  padding: 0;
+  /* Take full width when renaming */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  /* Don't inherit directory nesting - rename in place */
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+}
+
+/* Only apply nesting to creation inputs, not rename inputs */
+.directory-children > .file-entry-input {
+  padding-left: calc(26px + (var(--nesting-level) * 16px));
+}
+
+/* Rename input container - same styling as creation but no nesting */
+.file-entry-rename-input {
+  display: flex;
+  align-items: center;
+  /* Use same padding as files and directory headers but no nesting */
+  padding: 4px 0 4px 0;
+}
+
+.file-entry-rename-input .codicon {
+  margin-right: 6px;
+}
+
+/* Override nesting for rename inputs specifically */
+.directory-children .file-entry-input-wrapper .file-entry-rename-input {
+  padding-left: 0 !important;
+  padding: 4px 0 4px 0 !important;
+}
+
+/* Confirmation Dialog Styles */
+.confirmation-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(1px);
+}
+
+.confirmation-dialog {
+  background-color: #1e1e1e;
+  border: 1px solid #333333;
+  border-radius: 3px;
+  min-width: 400px;
+  max-width: 500px;
+  color: #cccccc;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+  overflow: hidden;
+}
+
+.confirmation-dialog-header {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  font-size: 14px;
+  font-weight: normal;
+  color: #ffffff;
+  border-bottom: 1px solid #333333;
+  margin-bottom: 0;
+}
+
+.confirmation-dialog-header .codicon {
+  margin-right: 10px;
+  font-size: 16px;
+  color: #cccccc;
+}
+
+.confirmation-dialog-body {
+  padding: 16px;
+  line-height: 1.5;
+  font-size: 13px;
+  color: #cccccc;
+}
+
+.confirmation-dialog-file-name {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  background-color: #252526;
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--ifm-color-primary);
+  border: 1px solid #3c3c3c;
+}
+
+.confirmation-dialog-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  padding: 16px 16px 16px 16px;
+  border-top: 1px solid #333333;
+  background-color: #252526;
+}
+
+.confirmation-dialog-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: normal;
+  transition: all 0.2s;
+  font-family: inherit;
+  min-width: 70px;
+  text-align: center;
+  line-height: 1.4;
+  vertical-align: middle;
+}
+
+.confirmation-dialog-actions .button-primary {
+  background-color: var(--ifm-color-primary);
+  color: #ffffff;
+  border-color: var(--ifm-color-primary-darker);
+}
+
+.confirmation-dialog-actions .button-primary:hover {
+  background-color: var(--ifm-color-primary-lightest);
+  border-color: var(--ifm-color-prim);
+}
+
+.confirmation-dialog-actions .button-primary:focus {
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(14, 99, 156, 0.3);
+}
+
+.confirmation-dialog-actions .button-secondary {
+  background-color: #2d2d2d;
+  color: #cccccc;
+  border-color: #3c3c3c;
+}
+
+.confirmation-dialog-actions .button-secondary:hover {
+  background-color: #3d3d3d;
+  border-color: #464647;
+}
+
+.confirmation-dialog-actions .button-secondary:focus {
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(14, 99, 156, 0.3);
+}
+
+/* Special styling for destructive actions */
+.confirmation-dialog-actions .button-destructive {
+  background-color: #c74e39;
+  color: #ffffff;
+  border-color: #c74e39;
+}
+
+.confirmation-dialog-actions .button-destructive:hover {
+  background-color: #d73527;
+  border-color: #d73527;
+}
+
+.confirmation-dialog-actions .button-destructive:focus {
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(199, 78, 57, 0.3);
+}
+
+/* Button icons in dialogs */
+.confirmation-dialog-actions button .codicon {
+  margin-right: 6px;
+  font-size: 12px;
+}
+
+/* Responsive dialog adjustments */
+@media (max-width: 768px) {
+  .confirmation-dialog {
+    min-width: 320px;
+    max-width: 90vw;
+    margin: 0 16px;
+  }
+  
+  .confirmation-dialog-actions {
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+  
+  .confirmation-dialog-actions button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Dialog animation */
+.confirmation-dialog-overlay {
+  animation: fadeIn 0.15s ease-out;
+}
+
+.confirmation-dialog {
+  animation: slideUp 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Context Menu Styles */
+.context-menu {
+  background-color: #252526;
+  border: 1px solid #454545;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  min-width: 120px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.context-menu button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  color: #cccccc;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+
+.context-menu button:hover {
+  background-color: #094771;
+}
+
+.context-menu button i {
+  margin-right: 8px;
+  font-size: 14px;
+}
+
+.context-menu-separator {
+  height: 1px;
+  background-color: #454545;
+  margin: 4px 0;
+}
+
+.header-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px !important;
+  font-size: 11px !important;
+  transition: background-color 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.header-action-btn span {
+  font-size: 10px;
+  font-weight: normal;
+  white-space: nowrap;
+}
+
+.header-action-btn i {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+/* Read-only items in deps directory */
+.file.read-only, 
+.directory-header.read-only {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.file.read-only:hover, 
+.directory-header.read-only:hover {
+  background-color: transparent;
+}
+
+.file.read-only .codicon, 
+.directory-header.read-only .codicon {
+  opacity: 0.6;
+}

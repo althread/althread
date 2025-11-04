@@ -25,7 +25,7 @@ pub struct ChannelDeclaration {
 }
 
 impl NodeBuilder for ChannelDeclaration {
-    fn build(mut pairs: Pairs<Rule>) -> AlthreadResult<Self> {
+    fn build(mut pairs: Pairs<Rule>, _filepath: &str) -> AlthreadResult<Self> {
         let mut left_pairs = pairs.next().unwrap().into_inner();
         let left_prog = String::from(left_pairs.next().unwrap().as_str());
         let left_name = String::from(left_pairs.next().unwrap().as_str());
@@ -67,7 +67,7 @@ fn get_var_id(
         .position(|var| var.name == var_name)
         .ok_or(AlthreadError::new(
             ErrorType::VariableError,
-            Some(*pos),
+            Some(pos.clone()),
             format!("Variable '{}' not found", var_name),
         ))?;
 
@@ -82,7 +82,7 @@ fn get_prog_name(var_name: &str, state: &mut CompilerState, pos: &Pos) -> Althre
             _ => {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(*pos),
+                    Some(pos.clone()),
                     format!(
                         "Variable '{}' is not a process (found {})",
                         var_name,
@@ -105,11 +105,15 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
 
         // check if a channel with the same name already exists on this program
         let left_key = (left_prog.clone(), dec.ch_left_name.clone());
-        if let Some(used) = state.undefined_channels.remove(&left_key) {
+
+        // CLONE the undefined channels data to avoid holding a reference
+        let left_undefined = state.undefined_channels().get(&left_key).cloned();
+        if let Some(used) = left_undefined {
+            state.undefined_channels_mut().remove(&left_key);
             if used.0 != dec.datatypes {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(self.pos),
+                    Some(self.pos.clone()),
                     format!(
                         "Channel declared with types ({}) but used with different types at line {}",
                         dec.datatypes
@@ -122,12 +126,15 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
                 ));
             }
         }
-        if let Some((datatypes, pos)) = state.channels.get(&left_key) {
+
+        // CLONE the channels data to avoid holding a reference
+        let left_channel_info = state.channels().get(&left_key).cloned();
+        if let Some((datatypes, pos)) = left_channel_info {
             // check if the datatypes are the same
-            if datatypes != &dec.datatypes {
+            if datatypes != dec.datatypes {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(self.pos),
+                    Some(self.pos.clone()),
                     format!(
                         "Channel already attached to program '{}' with different types at line {}",
                         left_prog, pos.line
@@ -136,16 +143,20 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
             }
         } else {
             state
-                .channels
+                .channels_mut()
                 .insert(left_key, (dec.datatypes.clone(), self.pos.clone()));
         }
 
         let right_key = (right_prog.clone(), dec.ch_right_name.clone());
-        if let Some(used) = state.undefined_channels.remove(&right_key) {
+
+        // CLONE the undefined channels data to avoid holding a reference
+        let right_undefined = state.undefined_channels().get(&right_key).cloned();
+        if let Some(used) = right_undefined {
+            state.undefined_channels_mut().remove(&right_key);
             if used.0 != dec.datatypes {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(self.pos),
+                    Some(self.pos.clone()),
                     format!(
                         "Channel declared with types ({}) but used with different types at line {}",
                         dec.datatypes
@@ -158,12 +169,15 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
                 ));
             }
         }
-        if let Some((datatypes, pos)) = state.channels.get(&right_key) {
+
+        // CLONE the channels data to avoid holding a reference
+        let right_channel_info = state.channels().get(&right_key).cloned();
+        if let Some((datatypes, pos)) = right_channel_info {
             // check if the datatypes are the same
-            if datatypes != &dec.datatypes {
+            if datatypes != dec.datatypes {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(self.pos),
+                    Some(self.pos.clone()),
                     format!(
                         "Channel already attached to program '{}' with different types at line {}",
                         right_prog, pos.line
@@ -172,7 +186,7 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
             }
         } else {
             state
-                .channels
+                .channels_mut()
                 .insert(right_key, (dec.datatypes.clone(), self.pos.clone()));
         }
 
@@ -183,7 +197,7 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
                 sender_channel: dec.ch_left_name.clone(),
                 receiver_channel: dec.ch_right_name.clone(),
             },
-            pos: Some(self.pos),
+            pos: Some(self.pos.clone()),
         }]))
     }
 }

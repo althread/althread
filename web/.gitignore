@@ -1,3 +1,7 @@
 node_modules
 dist
 .parcel-cache
+pkg
+.DS_Store
+lezer/parser.js
+lezer/parser.terms.js

@@ -52,7 +52,7 @@ Sending a message is an asynchronous operation, meaning the process sending the 
 
 ## Receiving Messages
 A message is received on a channel using the `receive` instruction.
-This is a particular operation that must be preceded by the `wait` instruction to make it blocking.
+This is a particular operation that must be preceded by the `await` instruction to make it blocking.
 Here's an example of message reception:
 
 ```althread
@@ -60,7 +60,7 @@ main {
     let p1 = run Prog1();
     channel p1.out (string, int)> self.in;
     // highlight-next-line
-    wait receive in (x, y) => {
+    await receive in (x, y) => {
         print("Message received: ", x, y);
     }
 }

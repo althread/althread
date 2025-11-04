@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 6
 ---
 
 # Creating Tests
@@ -48,35 +48,6 @@ In this example, the `always` block ensures that the variable `X` is always less
 It is not possible to use test blocks for variables local to a process.
 :::
 
-## The `assert` Function (Not Yet Implemented)
-
-The `assert` function is used to verify if a condition is satisfied. If the condition is not met, the test fails and displays an error message.
-
-Here’s an example of how to use the `assert` function:
-
-```althread
-shared {
-    let X: int;
-}
-
-program A() {
-    X++;
-}
-
-program B() {
-    X--;
-}
-
-main {
-    atomic {
-        run A();
-        run B();
-    }
-    
-    assert(X < 1, "X must be less than 1");
-}
-```
-
-:::info
-It is possible to use `assert` with variables local to a process.
+:::tip Assert function
+For more flexible checks, see the documentation of the [`assert()` function`](../api/fonctions-intégrées.md#assert-vérification) which allows testing conditions with custom error messages.
 :::

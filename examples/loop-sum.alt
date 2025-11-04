@@ -1,0 +1,22 @@
+shared {
+  let Sum = 0;
+}
+
+program A(my_id: int) {
+  loop {
+    Sum += 1;
+    Sum -= 1;
+  }
+}
+
+eventually {
+  Sum == 2;
+}
+
+main {
+  let n = 2;
+  let a:list(proc(A));
+  for i in 0..n {
+    let p = run A(i);
+  }
+}

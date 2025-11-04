@@ -32,7 +32,7 @@ pub enum Command {
     #[command(visible_alias = "p")]
     Compile(CompileCommand),
 
-    /// Compiles an input file into a supported output format
+    /// Runs an input file
     #[command(visible_alias = "r")]
     Run(RunCommand),
 
@@ -43,6 +43,26 @@ pub enum Command {
     /// Check the input program
     #[command()]
     Check(CheckCommand),
+
+    /// Initialize a new Althread package
+    #[command()]
+    Init(InitCommand),
+
+    /// Add a dependency to the current package
+    #[command()]
+    Add(AddCommand),
+
+    /// Remove a dependency from the current package
+    #[command()]
+    Remove(RemoveCommand),
+
+    /// Update dependencies
+    #[command()]
+    Update(UpdateCommand),
+
+    /// Install/fetch all dependencies
+    #[command()]
+    Install(InstallCommand),
 }
 
 /// Compiles an input file into a supported output format
@@ -91,6 +111,62 @@ pub struct RandomSearchCommand {
     /// Shared arguments
     #[clap(flatten)]
     pub common: SharedArgs,
+}
+
+/// Initialize a new Althread package
+#[derive(Debug, Clone, Parser)]
+pub struct InitCommand {
+    /// Package name (defaults to current directory name)
+    pub name: Option<String>,
+
+    /// Package version
+    #[clap(long, default_value = "0.1.0")]
+    pub version: String,
+
+    /// Package description
+    #[clap(long)]
+    pub description: Option<String>,
+
+    /// Author name
+    #[clap(long)]
+    pub author: Option<String>,
+
+    /// Force initialization even if alt.toml exists
+    #[clap(long)]
+    pub force: bool,
+}
+
+/// Add a dependency to the current package
+#[derive(Debug, Clone, Parser)]
+pub struct AddCommand {
+    /// Dependency specification (e.g., "github.com/user/repo@v1.0.0")
+    pub dependency: String,
+
+    /// Add as development dependency
+    #[clap(long)]
+    pub dev: bool,
+}
+
+/// Remove a dependency from the current package
+#[derive(Debug, Clone, Parser)]
+pub struct RemoveCommand {
+    /// Dependency name to remove
+    pub dependency: String,
+}
+
+/// Update dependencies
+#[derive(Debug, Clone, Parser)]
+pub struct UpdateCommand {
+    /// Update only specific dependency
+    pub dependency: Option<String>,
+}
+
+/// Install/fetch all dependencies
+#[derive(Debug, Clone, Parser)]
+pub struct InstallCommand {
+    /// Force reinstall even if already cached
+    #[clap(long)]
+    pub force: bool,
 }
 
 /// Common arguments of compile, watch, and query.

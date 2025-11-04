@@ -3,7 +3,7 @@ use std::fmt;
 use crate::{
     ast::{
         statement::{expression::LocalExpressionNode, waiting_case::WaitDependency},
-        token::{binary_assignment_operator::BinaryAssignmentOperator, literal::Literal},
+        token::{binary_assignment_operator::BinaryAssignmentOperator, literal::Literal, datatype::DataType},
     },
     error::Pos,
 };
@@ -12,6 +12,14 @@ use crate::{
 pub enum InstructionType {
     Empty,
     Expression(LocalExpressionNode),
+    ExpressionAndCleanup {
+        expression: LocalExpressionNode,
+        unstack_len: usize,
+    },
+    MakeTupleAndCleanup {
+        elements: Vec<LocalExpressionNode>,
+        unstack_len: usize,
+    },
     Push(Literal),
     Unstack {
         unstack_len: usize,
@@ -35,6 +43,13 @@ pub enum InstructionType {
     Declaration {
         unstack_len: usize,
     },
+    CreateListFromStack {
+        element_count: usize,
+        element_type: DataType,
+    },
+    ConvertEmptyListType {
+        to_element_type: DataType,
+    },
     RunCall {
         name: String,
         unstack_len: usize,
@@ -44,6 +59,9 @@ pub enum InstructionType {
         unstack_len: usize,
         variable_idx: Option<usize>,
         arguments: Option<Vec<usize>>,
+    },
+    Return {
+        has_value: bool,
     },
     JumpIf {
         jump_false: i64,
@@ -57,7 +75,7 @@ pub enum InstructionType {
     },
     ChannelPeek(String),
     ChannelPop(String),
-    
+
     WaitStart {
         dependencies: WaitDependency,
         start_atomic: bool,
@@ -88,6 +106,25 @@ impl fmt::Display for InstructionType {
         match self {
             Self::Empty => write!(f, "EMPTY")?,
             Self::Expression(a) => write!(f, "eval {}", a)?,
+            Self::ExpressionAndCleanup {
+                expression,
+                unstack_len,
+            } => {
+                write!(
+                    f,
+                    "eval {} and cleanup (unstack {})",
+                    expression, unstack_len
+                )
+            }?,
+            Self::MakeTupleAndCleanup {
+                elements,
+                unstack_len,
+            } => write!(
+                f,
+                "make tuple ({}) and cleanup (unstack {})",
+                elements.len(),
+                unstack_len
+            )?,
             Self::GlobalReads { variables, .. } => {
                 write!(f, "global_read {}", variables.join(","))?
             }
@@ -107,27 +144,36 @@ impl fmt::Display for InstructionType {
             } => write!(f, "jumpIf {} (unstack {})", jump_false, unstack_len)?,
             Self::Jump(a) => write!(f, "jump {}", a)?,
             Self::Unstack { unstack_len } => write!(f, "unstack {}", unstack_len)?,
-            Self::Destruct => write!(f, "destruct tuple", )?,
+            Self::Destruct => write!(f, "destruct tuple",)?,
             Self::RunCall { name, .. } => write!(f, "run {}()", name)?,
             Self::Break { unstack_len, .. } => write!(f, "break (unstack {})", unstack_len)?,
             Self::EndProgram => write!(f, "end program")?,
             Self::FnCall {
                 name, unstack_len, ..
             } => write!(f, "{}()  (unstack {})", name, unstack_len)?,
-            Self::Exit => write!(f, "exit")?,
+            Self::Return { has_value } => {
+                write!(f, "return {:?}", if *has_value { "value" } else { "void" })?
+            }
+            Self::Exit => write!(f, "exit")?, //TODO check again ???
             Self::Declaration { unstack_len } => {
                 write!(f, "declare var with value (unstack {})", unstack_len)?
             }
+            Self::CreateListFromStack { element_count, element_type } => {
+                write!(f, "create list from stack ({} elements of type {:?})", element_count, element_type)?;
+            }
+            Self::ConvertEmptyListType { to_element_type } => {
+                write!(f, "convert empty list to type {:?}", to_element_type)?;
+            }
             Self::Push(l) => write!(f, "push ({})", l)?,
             Self::WaitStart { start_atomic, .. } => {
-                write!(f, "wait start")?;
+                write!(f, "await start")?;
                 if *start_atomic {
                     write!(f, " atomic")?;
                 }
                 ()
             }
             Self::Wait { jump, unstack_len } => {
-                write!(f, "wait {} (unstack {})", jump, unstack_len)?
+                write!(f, "await {} (unstack {})", jump, unstack_len)?
             }
             Self::Send {
                 channel_name,
@@ -196,6 +242,8 @@ impl InstructionType {
             | Self::Wait {..}
             | Self::Empty
             | Self::Expression(_)
+            | Self::ExpressionAndCleanup {..}
+            | Self::MakeTupleAndCleanup {..}
             | Self::LocalAssignment {..}
             | Self::JumpIf {..}
             | Self::Jump(_)
@@ -203,7 +251,10 @@ impl InstructionType {
             | Self::Destruct
             | Self::Unstack {..}
             | Self::FnCall {..}
+            | Self::Return {..}
             | Self::Declaration {..}
+            | Self::CreateListFromStack {..}
+            | Self::ConvertEmptyListType {..}
             | Self::AtomicEnd
             | Self::EndProgram
             | Self::Exit
@@ -252,7 +303,7 @@ impl Instruction {
 
 impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.pos {
+        match &self.pos {
             Some(pos) => write!(f, "{}", pos.line)?,
             None => {}
         };

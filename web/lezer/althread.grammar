@@ -16,26 +16,46 @@
   statement @cut
 }
 
+//!directives
+
+PrivateDirective { "@" kw<"private"> }
 
 @top Project { project_block* }
+
 
 project_block {
   GlobalBlock |
   MainBlock |
   ProgramBlock |
-  ConditionBlock
+  ConditionBlock |
+  FunctionBlock | 
+  ImportBlock
 }
 
 GlobalBlock  { kw<"shared"> "{" shared_declaration* "}" }
-MainBlock    { kw<"main"> code_block }
-ProgramBlock { kw<"program"> ProgName "(" ")" code_block }
-ConditionBlock { kw<"always"> expression_block }
+MainBlock    { PrivateDirective? kw<"main"> code_block }
+ProgramBlock { PrivateDirective?kw<"program"> ProgName ArgList code_block }
+ConditionBlock { Condition expression_block }
+FunctionBlock { PrivateDirective? kw<"fn"> FnName ArgList ReturnType code_block }
+ImportBlock { kw<"import"> "[" ImportList "]" }
+
+ImportList { ImportItem ("," ImportItem)* ","? }
+ImportItem { ImportPath (kw<"as"> ImportAlias)? }
+ImportPath { identifier (ImportSlash identifier)* }
+ImportAlias { identifier }
+
+ReturnType {"->" Type}
+
+Condition {
+  kw<"always"> |
+  kw<"eventually">
+}
 
 code_block {
-  !statement "{" statement* "}"
+  "{" statement* "}"
 }
 expression_block {
-  !statement "{" (expression ";")* "}"
+  "{" (expression ";")* "}"
 }
 
 shared_declaration { 
@@ -55,10 +75,11 @@ statement {
   wait_statement |
   code_block |
   call_statement | 
-  assignment_statement
+  assignment_statement |
+  return_statement |
+  break_loop_statement
 }
 
-//!assign
 
 assignment_statement {
   AssignmentExpression semi
@@ -68,6 +89,16 @@ AssignmentExpression {
 }
 Variable { LocalVariableName | SharedVariableName | kw<"self"> }
 
+
+//!return_statement
+
+return_statement { kw<"return"> expression? semi}
+
+
+//!break_loop_statement
+break_loop_statement { (kw<"break"> | kw<"continue">) identifier? semi}
+
+//!assign
 
 //!variabledeclaration
 
@@ -123,7 +154,7 @@ IfStatement {
 run_statement {
    RunExpression ";"
 }
-RunExpression { kw<"run"> ProgName ArgList }
+RunExpression { kw<"run"> (ProgName | MemberExpression) ArgList }
 
 //!send_statement
 
@@ -133,7 +164,7 @@ send_statement {
 SendExpression { kw<"send"> object_identifier ArgList }
 
 //!wait_statement
-wait_statement  { kw<"wait"> (
+wait_statement  { kw<"await"> (
       WaitingBlock 
     | WaitingBlockCase) }
 
@@ -158,7 +189,18 @@ pattern { LocalVariableName | Literal }
 call_statement {
    CallExpression ";"
 }
-CallExpression { FnName ArgList }
+CallExpression {
+  (FnName | MemberExpression) ArgList
+}
+
+MemberExpression {
+  // case 1: a.b.c…   (recurse on MemberExpression)
+  MemberExpression "." identifier
+| // case 2: x.y     (simple identifier)
+  identifier "." identifier
+| // case 3: (….) . z
+  ParenthesizedExpression "." identifier
+}
 
 
 //!expression
@@ -172,7 +214,9 @@ expression[@isGroup=Expression] {
   RegExp |
   UnaryExpression |
   ParenthesizedExpression |
-  BinaryExpression
+  BinaryExpression |
+  CallExpression |
+  MemberExpression
 }
 
 //!expression_misc
@@ -201,11 +245,6 @@ commaSep<content> {
   (content ("," content)*)?
 }
 
-commaSep1<content> {
-  content ("," content)*
-}
-
-
 
 Literal { String | Number }
 
@@ -231,7 +270,6 @@ semi { ";" }
 
 FnName { identifier }
 
-PropertyName { identifier }
 ProgName { identifier }
 
 identifier { non_global_identifer | global_identifer }
@@ -240,6 +278,8 @@ LocalVariableName { non_global_identifer }
 SharedVariableName { global_identifer }
 
 @tokens {
+
+  ImportSlash { "/" }
   
   // Identifiers
   identifierChar { @asciiLetter | $[_$\u{a1}-\u{10ffff}] }
@@ -247,7 +287,6 @@ SharedVariableName { global_identifer }
   
   non_global_identifer { $[a-z] identifierTail }
   global_identifer { $[A-Z] identifierTail }
-  
 
 //!numberTokens
 
@@ -301,8 +340,8 @@ SharedVariableName { global_identifer }
 
   LineComment { "//" ![\n]* }
   
-  @precedence { "/*", LineComment, ArithOp<"/"> }
+  @precedence { LineComment, ImportSlash, "/*", ArithOp<"/"> }
 
-  @precedence { "/*", LineComment, RegExp }
+  @precedence { LineComment, ImportSlash, "/*", RegExp }
   
 }

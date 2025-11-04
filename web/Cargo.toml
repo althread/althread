@@ -11,4 +11,7 @@ wasm-bindgen = { workspace = true }
 althread = { workspace = true }
 serde = { workspace = true }
 serde-wasm-bindgen = { workspace = true }
+serde_json = { workspace = true }
 fastrand = { workspace = true }
+web-sys = { workspace = true, features = ["console"] }
+console_error_panic_hook = { workspace = true }

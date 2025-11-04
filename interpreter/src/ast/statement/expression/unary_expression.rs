@@ -35,16 +35,21 @@ impl fmt::Display for LocalUnaryExpressionNode {
 }
 
 impl UnaryExpression {
-    pub fn build(operator: Pair<Rule>, operand: Node<Expression>) -> AlthreadResult<Node<Self>> {
+    pub fn build(
+        operator: Pair<Rule>,
+        operand: Node<Expression>,
+        filepath: &str,
+    ) -> AlthreadResult<Node<Self>> {
         Ok(Node {
             pos: Pos {
                 line: operator.line_col().0,
                 col: operator.line_col().1,
                 start: operator.as_span().start(),
                 end: operand.pos.end,
+                file_path: filepath.to_string(),
             },
             value: Self {
-                operator: Node::build(operator)?,
+                operator: Node::build(operator, filepath)?,
                 operand: Box::new(operand),
             },
         })

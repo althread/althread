@@ -1,0 +1,10 @@
+fn max(a: int, b: int) -> int {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+main {
+    print("The max between 5 and 10 is", max(5, 10));
+}

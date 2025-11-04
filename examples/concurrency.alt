@@ -1,0 +1,60 @@
+shared {
+    let A = 1;
+    let B = 0;
+    let Start = false;
+    let WorkersFinished = 0;  // Counts finished workers
+}
+
+fn process_message(value: int, flag: bool) -> void {
+    print("Processing message: value=" + value + ", flag=" + flag);
+    atomic {
+        if flag {
+            A = value;
+        } else {
+            B = value;
+        }
+        WorkersFinished += 1; 
+    }
+}
+
+fn verify_state() -> bool {
+    return (A == 125 && B == 125);
+}
+
+program Worker() {
+    await Start;
+    await receive in (x, y) => {
+        process_message(x, y);
+    };
+}
+
+main {
+    let worker1 = run Worker();
+    let worker2 = run Worker();
+
+    channel self.out (int, bool)> worker1.in;
+    channel self.out2 (int, bool)> worker2.in;
+    
+    atomic { Start = true; }
+    
+    send out(125, true);
+    send out2(125, false);
+
+    // Waits for both workers to finish processing
+    await WorkersFinished == 2;
+
+    if verify_state() {
+        print("Channel test successful!");
+    } else {
+        print("Channel test failed!");
+    }
+}
+
+// Output:
+// Processing message: value=125, flag=true
+// Processing message: value=125, flag=false
+// Channel test successful!
+// or
+// Processing message: value=125, flag=false
+// Processing message: value=125, flag=true
+// Channel test successful!
