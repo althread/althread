@@ -4,10 +4,21 @@ const THEME_PRIMARY = "hsla(29.329, 66.552%, 52.544%)";
 const baseOptions = {
   edges: {
     arrows: "to",
+    font: {
+      size: 0, // Hide labels by default
+      color: '#cccccc',
+      strokeWidth: 0,
+    },
+    color: {
+      color: '#666',
+      highlight: THEME_PRIMARY,
+      hover: THEME_PRIMARY,
+    },
   },
   interaction: {
     hover: true,
-    multiselect: true
+    multiselect: false, // Disable multiselect to make edge selection clearer
+    selectConnectedEdges: false,
   },
   physics: {
     enabled: true,
@@ -54,8 +65,8 @@ const darkTheme = {
     hierarchical: {
       direction: "LR",
       sortMethod: "directed",
-      levelSeparation: 150,
-      nodeSpacing: 500,
+      levelSeparation: 100,
+      nodeSpacing: 100,
     },
   },
   nodes: {
@@ -63,7 +74,7 @@ const darkTheme = {
     shapeProperties: {
         borderRadius: 4,
     },
-    margin: 12,
+    margin: 5,
     color: {
         background: '#2a2a2e',
         border: '#444',
@@ -85,8 +96,7 @@ const darkTheme = {
         bold: { color: THEME_PRIMARY }, // was '#9cdcfe'
         ital: { color: '#a0a0a0', size: 11 },
     },
-    widthConstraint: { minimum: 50 },
-    heightConstraint: { minimum: 50, valign: 'top'}
+    // Removed large constraints to allow smaller nodes
   }
 };
 

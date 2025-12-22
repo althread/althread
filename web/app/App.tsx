@@ -8,7 +8,6 @@ import createEditor from '@components/editor/Editor';
 import Graph from "@components/graph/Graph";
 import { Logo } from "@assets/images/Logo";
 import { renderMessageFlowGraph } from "@components/graph/CommGraph";
-import { rendervmStates } from "@components/graph/vmStatesDisplay";
 import { nodeToString } from "@components/graph/Node";
 import type { FileSystemEntry } from '@components/fileexplorer/FileExplorer';
 import '@components/fileexplorer/FileExplorer.css';
@@ -325,6 +324,53 @@ export default function App() {
   const [executionError, setExecutionError] = createSignal(false);
   const [structuredError, setStructuredError] = createSignal<any>(null);
   const [graphKey, setGraphKey] = createSignal(0);
+  const [runGraphKey, setRunGraphKey] = createSignal(0);
+
+  // Build a compact execution graph from vm_states (Run -> VM states tab)
+  const runGraphNodes = () => {
+    const vms = vm_states();
+    return vms.map((vm, i) => {
+      const fullLabel = nodeToString(vm);
+      return {
+        id: i,
+        level: i,
+        label: `${i}`,
+        fullLabel,
+        borderWidth: 1,
+        font: {
+          size: 10,
+          color: '#ffffff'
+        },
+        color: {
+          border: "#a6dfa6",
+          background: "#314d31",
+          highlight: {
+            border: "hsla(29.329, 66.552%, 52.544%)",
+            background: "#314d31"
+          },
+          hover: {
+            border: "hsla(29.329, 66.552%, 52.544%)",
+            background: "#314d31"
+          }
+        }
+      };
+    });
+  };
+
+  const runGraphEdges = () => {
+    const vms = vm_states();
+    const edges: any[] = [];
+    for (let i = 0; i < vms.length - 1; i++) {
+      edges.push({
+        id: i,
+        from: i,
+        to: i + 1,
+        label: `step ${i + 1}`,
+        font: { size: 0 }
+      });
+    }
+    return edges;
+  };
 
   // Interactive mode state
   const [isInteractiveMode, setIsInteractiveMode] = createSignal(false);
@@ -573,14 +619,38 @@ export default function App() {
       } else if (activeTab() === "vm_states") {
         return (
           <div class="console">
-            {rendervmStates(vm_states())}
+            <Graph
+              key={runGraphKey()}
+              nodes={runGraphNodes()}
+              edges={runGraphEdges()}
+              vm_states={vm_states()}
+              setLoadingAction={setLoadingAction}
+              theme="dark"
+              onEdgeClick={(_edgeId: string, edgeData: any) => {
+                if (edgeData && edgeData.lines && editor.highlightLines) {
+                  editor.highlightLines(edgeData.lines);
+                }
+              }}
+            />
           </div>
         );
       }
     } else {
       return (
         <div class="console">
-          <Graph key={graphKey()} nodes={nodes()} edges={edges()} vm_states={vm_states()} setLoadingAction={setLoadingAction} theme="dark" />
+          <Graph 
+            key={graphKey()} 
+            nodes={nodes()} 
+            edges={edges()} 
+            vm_states={vm_states()} 
+            setLoadingAction={setLoadingAction} 
+            theme="dark" 
+            onEdgeClick={(_edgeId: string, edgeData: any) => {
+                if (edgeData && edgeData.lines && editor.highlightLines) {
+                    editor.highlightLines(edgeData.lines);
+                }
+            }}
+          />
         </div>
       );
     }
@@ -677,6 +747,7 @@ export default function App() {
                   console.log(res.message_flow_graph);
                   setCommGraphOut(res.message_flow_graph);
                   setVmStates(res.vm_states);
+                  setRunGraphKey(k => k + 1);
                   setStdout(res.stdout.join('\n'));
                   setActiveTab("console");
                 } catch(e: any) {
@@ -744,8 +815,14 @@ export default function App() {
                     return {
                       id: i,
                       level,
-                      label,
+                      label: `${i}`,
+                      fullLabel: label,
                       isViolationNode,
+                      borderWidth: 1,
+                      font: {
+                        size: 10,
+                        color: '#ffffff'
+                      },
                       color: {
                         border,
                         background,
@@ -762,14 +839,18 @@ export default function App() {
                   }));
 
                   let edges: any = [];
+                  let edgeId = 0;
                   res[1].nodes.forEach((n: any, i: number) => {
                     const {successors} = n[1];
                     successors.forEach(({lines, pid, name, to}: any) => {
                       to = nodeToString(to);
                       edges.push({
+                        id: edgeId++,
                         from: i,
                         to: nodes[to],
-                        label: name+'#'+pid+': '+lines.join(',')
+                        label: name+'#'+pid+': '+lines.join(','),
+                        lines: lines.map((l: any) => Number(l)),
+                        font: { size: 0 } // Start with hidden label
                       });
                     })
                     // console.log(node_entirely(n[0]));

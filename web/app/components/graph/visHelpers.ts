@@ -1,9 +1,12 @@
 import type { Network } from "vis-network";
 
-export function setupNodeClickZoom(network: Network) {
+export function setupNodeClickZoom(network: Network, onNodeClick?: (nodeId: string | number) => void) {
   network.on("click", function (params) {
     if (params.nodes && params.nodes.length > 0) {
       const nodeId = params.nodes[0];
+      if (onNodeClick) {
+        onNodeClick(nodeId);
+      }
       if (network) {
         network.selectNodes([nodeId]);
         network.focus(nodeId, {
@@ -13,6 +16,11 @@ export function setupNodeClickZoom(network: Network) {
             easingFunction: "easeInOutQuad"
           }
         });
+      }
+    } else {
+      // Deselect if clicking on empty space
+      if (onNodeClick) {
+        onNodeClick(null as any);
       }
     }
   });
@@ -62,5 +70,22 @@ export function createGraphToolbarHandlers(
         handleDownload,
         handleDetails
     };
+}
 
-};
+export function formatState(text: string): string {
+    // Escape HTML
+    let html = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+    // Bold: *text*
+    html = html.replace(/\*([^*]+)\*/g, "<b>$1</b>");
+
+    // Italics: _text_
+    html = html.replace(/_([^_]+)_/g, "<i>$1</i>");
+
+    return html;
+}

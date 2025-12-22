@@ -6,8 +6,8 @@ import {HighlightStyle} from "@codemirror/language"
 import { Tag } from "@lezer/highlight";
 import {keymap, highlightSpecialChars, drawSelection, highlightActiveLine, dropCursor,
     rectangularSelection, crosshairCursor,
-    lineNumbers, highlightActiveLineGutter, EditorView} from "@codemirror/view"
-import {Extension, EditorState, Compartment} from "@codemirror/state"
+    lineNumbers, highlightActiveLineGutter, EditorView, Decoration, DecorationSet} from "@codemirror/view"
+import {Extension, EditorState, Compartment, StateField, StateEffect} from "@codemirror/state"
 import {defaultHighlightStyle, syntaxHighlighting, indentOnInput, bracketMatching,
     foldGutter, foldKeymap} from "@codemirror/language"
 import {defaultKeymap, history, historyKeymap, toggleComment} from "@codemirror/commands"
@@ -66,6 +66,47 @@ const getLanguageExtension = (filePath: string): Extension => {
       return javascript(); // Default to JavaScript for unknown files
   }
 };
+
+// Define effect for highlighting lines
+const addHighlightEffect = StateEffect.define<number[]>();
+const clearHighlightEffect = StateEffect.define();
+
+// Define state field for line highlights
+const highlightField = StateField.define<DecorationSet>({
+  create() {
+    return Decoration.none;
+  },
+  update(highlights, tr) {
+    highlights = highlights.map(tr.changes);
+    for (let effect of tr.effects) {
+      if (effect.is(addHighlightEffect)) {
+        const lineNumbers = effect.value;
+        const decorations: any[] = [];
+        
+        // Sort line numbers to ensure decorations are added in order
+        const sortedLineNumbers = [...lineNumbers].sort((a, b) => a - b);
+        
+        for (const lineNum of sortedLineNumbers) {
+          if (lineNum > 0 && lineNum <= tr.state.doc.lines) {
+            const line = tr.state.doc.line(lineNum);
+            decorations.push(
+              Decoration.line({
+                attributes: { 
+                  style: "background-color: rgba(255, 165, 0, 0.2); border-left: 3px solid orange;" 
+                }
+              }).range(line.from)
+            );
+          }
+        }
+        highlights = Decoration.set(decorations);
+      } else if (effect.is(clearHighlightEffect)) {
+        highlights = Decoration.none;
+      }
+    }
+    return highlights;
+  },
+  provide: f => EditorView.decorations.from(f)
+});
 
 const basicSetup: Extension = (() => [
     lineNumbers(),
@@ -255,6 +296,7 @@ const createEditor = ({
   editor.createExtension(languageCompartment.of(getLanguageExtension(filePath)));
   editor.createExtension(linterCompartment.of(createLinterExtension(filePath)));
   editor.createExtension(readOnlyCompartment.of([]));
+  editor.createExtension(highlightField);
 
   // Safe wrapper for editor view operations
   const safeEditorView = () => {
@@ -306,6 +348,40 @@ const createEditor = ({
     return false;
   };
 
+  // Function to highlight specific lines
+  const highlightLines = (lineNumbers: number[]) => {
+    const view = safeEditorView();
+    if (view) {
+      try {
+        view.dispatch({
+          effects: addHighlightEffect.of(lineNumbers)
+        });
+        return true;
+      } catch (e) {
+        console.warn('Failed to highlight lines:', e);
+        return false;
+      }
+    }
+    return false;
+  };
+
+  // Function to clear line highlights
+  const clearHighlights = () => {
+    const view = safeEditorView();
+    if (view) {
+      try {
+        view.dispatch({
+          effects: clearHighlightEffect.of(null)
+        });
+        return true;
+      } catch (e) {
+        console.warn('Failed to clear highlights:', e);
+        return false;
+      }
+    }
+    return false;
+  };
+
   // Return editor with updateLanguage method and safe wrappers
   return {
     ...editor,
@@ -313,7 +389,9 @@ const createEditor = ({
     getCurrentFileName: () => currentFileName,
     safeEditorView,
     safeUpdateContent,
-    setReadOnly
+    setReadOnly,
+    highlightLines,
+    clearHighlights
   };
 }
 

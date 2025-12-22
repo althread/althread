@@ -10,6 +10,7 @@ export type Node = { // This represents the VM state in JS
 export type VisNode = {
   id: number;
   label: string;
+  fullLabel?: string;
   level?: number;
   color: Color;
   isViolationNode: boolean;
