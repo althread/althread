@@ -79,6 +79,10 @@ pub struct CheckCommand {
     /// Shared arguments
     #[clap(flatten)]
     pub common: SharedArgs,
+
+    /// max number of states to explore
+    #[clap(long, default_value_t = 100_000)]
+    pub max_states: u64,
 }
 
 /// Compiles an input file into a supported output format
@@ -100,6 +104,10 @@ pub struct RunCommand {
     #[clap(long)]
     pub interactive: bool,
 
+    /// max number of steps
+    #[clap(long, default_value_t = 100_000)]
+    pub max_steps: u64,
+
     /// seed
     #[clap(long)]
     pub seed: Option<u64>,
@@ -111,6 +119,14 @@ pub struct RandomSearchCommand {
     /// Shared arguments
     #[clap(flatten)]
     pub common: SharedArgs,
+
+    /// max number of steps per seed
+    #[clap(long, default_value_t = 100_000)]
+    pub max_steps: u64,
+
+    /// max number of seeds
+    #[clap(long, default_value_t = 10_000)]
+    pub max_seeds: u64,
 }
 
 /// Initialize a new Althread package

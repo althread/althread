@@ -3,7 +3,7 @@
 import { createSignal, createEffect, Show } from "solid-js";
 import Resizable from '@corvu/resizable'
 
-import init, { initialize, compile, run, check, start_interactive_session, get_next_interactive_states, execute_interactive_step } from '../pkg/althread_web';
+import init, { initialize, start_interactive_session, get_next_interactive_states, execute_interactive_step } from '../pkg/althread_web';
 import createEditor from '@components/editor/Editor';
 import Graph from "@components/graph/Graph";
 import { Logo } from "@assets/images/Logo";
@@ -25,6 +25,7 @@ import { LoadExampleDialog } from '@components/dialogs/LoadExampleDialog';
 import { EmptyEditor } from '@components/editor/EmptyEditor';
 import { formatAlthreadError } from '@utils/error';
 import ErrorDisplay from '@components/error/ErrorDisplay';
+import { workerClient } from '@utils/workerClient';
 
 init().then(() => {
   console.log('loaded');
@@ -55,10 +56,12 @@ export default function App() {
 
   // Initialize editor (no default file content)
   let editor = createEditor({
-    compile: (source: string) => {
-      const filePath = getPathFromId(mockFileSystem(), editorManager.activeFile()!.id) || editorManager.activeFile()!.name;
+    compile: async (source: string) => {
+      const activeFile = editorManager.activeFile();
+      if (!activeFile) return null;
+      const filePath = getPathFromId(mockFileSystem(), activeFile.id) || activeFile.name;
       const virtualFS = buildVirtualFileSystem(mockFileSystem());
-      return compile(source, filePath, virtualFS); // Now compile expects virtual_fs parameter
+      return await workerClient.compile(source, filePath, virtualFS); 
     }, 
     defaultValue: '// Welcome to Althread\n',
     filePath: 'untitled.alt',
@@ -755,7 +758,7 @@ export default function App() {
                   if (!filePath) {
                     filePath = editorManager.activeFile()!.name; // Fallback to name if ID not found
                   }
-                  let res = run(editor.editorView().state.doc.toString(), filePath, virtualFS); 
+                  let res = await workerClient.run(editor.editorView().state.doc.toString(), filePath, virtualFS); 
                   console.log(res);
                   if (res.debug.length === 0) {
                     resetSetOut();
@@ -793,7 +796,7 @@ export default function App() {
             <button
               class={`vscode-button${activeAction() === "check" ? " active" : ""}`}
               disabled={!editorManager.activeFile() || !isAltFile()}
-              onClick={() => {
+              onClick={async () => {
                 if (loadingAction() !== "check") setLoadingAction("check");
                 if (activeAction() !== "check") setActiveAction("check");
                 setActiveTab("vm_states");
@@ -811,7 +814,7 @@ export default function App() {
                     filePath = editorManager.activeFile()!.name; // Fallback to name if ID not found
                   }
 
-                  let res = check(editor.editorView().state.doc.toString(), filePath, virtualFS);
+                  let res = await workerClient.check(editor.editorView().state.doc.toString(), filePath, virtualFS);
                   setOut("No execution errors found.");
                   
                   console.log(res);

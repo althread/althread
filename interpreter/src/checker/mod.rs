@@ -28,7 +28,8 @@ pub struct GraphNode<'a> {
 
 #[derive(Debug)]
 pub struct StateGraph<'a> {
-    nodes: HashMap<Rc<VM<'a>>, GraphNode<'a>>,
+    pub nodes: HashMap<Rc<VM<'a>>, GraphNode<'a>>,
+    pub exhaustive: bool,
 }
 
 impl<'a> std::fmt::Display for StateLink<'a> {
@@ -79,7 +80,7 @@ impl<'a> Serialize for StateGraph<'a> {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("StateGraph", 1)?;
+        let mut state = serializer.serialize_struct("StateGraph", 2)?;
         state.serialize_field(
             "nodes",
             &self
@@ -88,6 +89,7 @@ impl<'a> Serialize for StateGraph<'a> {
                 .map(|(key, node)| (key.as_ref(), node))
                 .collect::<Vec<(&VM, &GraphNode)>>(),
         )?;
+        state.serialize_field("exhaustive", &self.exhaustive)?;
         state.end()
     }
 }
@@ -106,9 +108,11 @@ impl<'a> GraphNode<'a> {
 /// Checks a given project, returning a path from an initial state to the first state that violates an invariant. (return an empty vector if no invariant is violated)
 pub fn check_program<'a>(
     compiled_project: &'a CompiledProject,
+    max_states: Option<usize>,
 ) -> AlthreadResult<(Vec<StateLink<'a>>, StateGraph<'a>)> {
     let mut state_graph = StateGraph {
         nodes: HashMap::new(),
+        exhaustive: true,
     };
 
     //42 initialize a VM with the compiled project
@@ -127,6 +131,12 @@ pub fn check_program<'a>(
 
     //42 while the successor list isn't empty
     while !next_nodes.is_empty() {
+        if let Some(max) = max_states {
+            if state_graph.nodes.len() >= max {
+                state_graph.exhaustive = false;
+                break;
+            }
+        }
         //42 we pick on the the next nodes and remove it from the vector
         let current_node = next_nodes.pop().unwrap();
         let current_level = state_graph.nodes.get_mut(&current_node).unwrap().level;
@@ -200,6 +210,11 @@ pub fn check_program<'a>(
         } else if check_ret.is_ok_and(|x| x == 1) {
             state_graph.nodes.get_mut(&current_node).unwrap().eventually = true;
         }
+    }
+
+    //42 if the search was not exhaustive, we cannot check eventually violations
+    if !state_graph.exhaustive {
+        return Ok((vec![], state_graph));
     }
 
     //42 now checking eventually violations

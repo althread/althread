@@ -142,7 +142,7 @@ const createEditor = ({
     onValueChange,
     filePath = 'main.alt',
   }: {
-    compile: (code: string) => any,
+    compile: (code: string) => Promise<any>,
     defaultValue: string | undefined, 
     onValueChange: undefined | ((value:string) => void),
     filePath?: string,
@@ -234,15 +234,15 @@ const createEditor = ({
   // Create linter only for .alt files, but always include lintGutter for consistent spacing
   const createLinterExtension = (filePath: string): Extension => {
     if (filePath.endsWith('.alt')) {
-      const regexpLinter = linter(view => {
+      const regexpLinter = linter(async (view) => {
         console.log('linting .alt file');
         let diagnostics: Diagnostic[] = []
         
         const code = view.state.doc.toString();
         
         try {
-            compile(code)
-        } catch(e) {
+            await compile(code)
+        } catch(e: any) {
             console.log('Lint error:', e);
             
             // Check if error has position information

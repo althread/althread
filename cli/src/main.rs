@@ -123,19 +123,43 @@ pub fn check_command(cli_args: &CheckCommand) {
             exit(1);
         });
 
-    let checked = checker::check_program(&compiled_project).unwrap_or_else(|e| {
-        e.report(&input_map);
-        exit(1);
-    });
+    let checked = checker::check_program(&compiled_project, Some(cli_args.max_states as usize))
+        .unwrap_or_else(|e| {
+            e.report(&input_map);
+            exit(1);
+        });
 
     if checked.0.is_empty() {
-        println!("No invariant violated");
-        return;
+        if !checked.1.exhaustive {
+            println!(
+                "{}",
+                format!(
+                    "Warning: Maximum number of states ({}) reached. The search was not exhaustive.",
+                    cli_args.max_states
+                )
+                .yellow()
+            );
+            println!(
+                "{}",
+                "Note: Liveness properties (eventually) were not checked because the state space is incomplete."
+                .italic()
+            );
+        }
+        println!("✓ No invariant violated");
     } else {
-        println!("Invariant violated");
+        println!("✗ Invariant violated");
         for vm in checked.0.iter() {
             println!("========= {}#{:?}", vm.name, vm.pid);
         }
+    }
+
+    println!("\nVerification Statistics:");
+    println!("  States explored: {}", checked.1.nodes.len());
+    let max_depth = checked.1.nodes.values().map(|n| n.level).max().unwrap_or(0);
+    println!("  Maximum depth:  {}", max_depth);
+    
+    if !checked.0.is_empty() {
+        println!("  Violation path: {} steps", checked.0.len());
     }
 }
 
@@ -303,10 +327,12 @@ pub fn run_command(cli_args: &RunCommand) {
     let mut vm = althread::vm::VM::new(&compiled_project);
 
     vm.start(cli_args.seed.unwrap_or(fastrand::u64(0..(1 << 63))));
-    for _ in 0..100000 {
+    let mut step_count = 0;
+    while step_count < cli_args.max_steps {
         if vm.is_finished() {
             break;
         }
+        step_count += 1;
         let info = vm.next_random().unwrap_or_else(|err| {
             err.report(&input_map);
             exit(1);
@@ -360,6 +386,18 @@ pub fn run_command(cli_args: &RunCommand) {
         }
         vm_set.insert(vm.clone());
     }
+
+    if !vm.is_finished() && step_count >= cli_args.max_steps {
+        println!(
+            "{}",
+            format!(
+                "Error: Maximum number of steps ({}) reached. The program might be in an infinite loop. Use --max-steps to increase the limit.",
+                cli_args.max_steps
+            )
+            .red()
+        );
+    }
+
     if cli_args.verbose {
         for v in vm_execution.iter() {
             println!("======= VM step =======");
@@ -427,11 +465,11 @@ pub fn random_search_command(cli_args: &RandomSearchCommand) {
             exit(1);
         });
 
-    for s in 0..10000 {
-        println!("Seed: {}/10000", s);
+    for s in 0..cli_args.max_seeds {
+        println!("Seed: {}/{}", s, cli_args.max_seeds);
         let mut vm = althread::vm::VM::new(&compiled_project);
         vm.start(s);
-        for _ in 0..100000 {
+        for _ in 0..cli_args.max_steps {
             if vm.is_finished() {
                 break;
             }

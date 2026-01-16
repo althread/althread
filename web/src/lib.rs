@@ -414,7 +414,7 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
 }
 
 #[wasm_bindgen]
-pub fn check(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue, JsValue> {
+pub fn check(source: &str, filepath: &str, virtual_fs: JsValue, max_states: Option<usize>) -> Result<JsValue, JsValue> {
     // Convert the JS file system to a Rust HashMap
     let fs_map: HashMap<String, String> = serde_wasm_bindgen::from_value(virtual_fs)
         .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
@@ -436,7 +436,7 @@ pub fn check(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValu
         .compile(Path::new(filepath), virtual_filesystem, &mut input_map)
         .map_err(error_to_js)?;
 
-    let checked = checker::check_program(&compiled_project).map_err(error_to_js)?;
+    let checked = checker::check_program(&compiled_project, max_states).map_err(error_to_js)?;
 
     Ok(serde_wasm_bindgen::to_value(&checked).unwrap())
 }

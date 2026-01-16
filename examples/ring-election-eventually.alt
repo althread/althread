@@ -40,7 +40,7 @@ eventually {
 
 
 main {
-  let n = 5;
+  let n = 3;
   let a:list(proc(A));
   for i in 0..n {
     let p = run A(i);
