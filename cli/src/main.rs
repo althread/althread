@@ -148,8 +148,21 @@ pub fn check_command(cli_args: &CheckCommand) {
         println!("✓ No invariant violated");
     } else {
         println!("✗ Invariant violated");
-        for vm in checked.0.iter() {
-            println!("========= {}#{:?}", vm.name, vm.pid);
+        for link in checked.0.iter() {
+            println!(
+                "{}",
+                format!("-- {}#{} --", link.name, link.pid)
+                    .style(if link.pid == 0 {
+                        MAIN_STYLE
+                    } else {
+                        PROCESS_PALETTE[(link.pid.saturating_sub(1)) % PROCESS_PALETTE.len()]
+                    })
+            );
+            for line_num in &link.lines {
+                if let Some(line) = source.lines().nth(line_num.saturating_sub(1)) {
+                    println!("{:4} | {}", line_num, line);
+                }
+            }
         }
     }
 
@@ -192,24 +205,7 @@ pub fn run_interactive(
             return;
         }
 
-        fn delivered_message_preview(
-            prev_channels: &althread::vm::channels::ChannelsState,
-            next_channels: &althread::vm::channels::ChannelsState,
-        ) -> Option<String> {
-            for (key, next_state) in next_channels.iter() {
-                let prev_len = prev_channels.get(key).map(|s| s.len()).unwrap_or(0);
-                if next_state.len() == prev_len + 1 {
-                    if let Some(msg) = next_state.last() {
-                        return Some(format!("deliver {} -> {}", key.1, msg));
-                    }
-                }
-            }
-            None
-        }
-
-        let prev_channels = vm.current_state().1;
-
-        for (idx, (name, pid, insts, nvm)) in next_states.iter().enumerate() {
+        for (idx, (name, pid, insts, actions, nvm)) in next_states.iter().enumerate() {
             println!("======= VM next ({}) =======", idx);
             let preview_line: String = if let Some(first) = insts.first() {
                 if first.pos.is_some() {
@@ -223,13 +219,14 @@ pub fn run_interactive(
                 }
             } else {
                 // Delivery steps are schedulable transitions with no executed instruction.
-                if name.starts_with("__deliver__") {
-                    let next_channels = nvm.current_state().1;
-                    delivered_message_preview(prev_channels, next_channels)
-                        .unwrap_or_else(|| "deliver <unknown>".to_string())
-                } else {
-                    "<no instruction>".to_string()
+                let mut preview = None;
+                for action in actions {
+                    if let althread::vm::GlobalAction::Deliver(delivery_info) = action {
+                        preview = Some(format!("deliver {} -> {}", delivery_info.channel_name, delivery_info.message));
+                        break;
+                    }
                 }
+                preview.unwrap_or_else(|| "<no instruction>".to_string())
             };
             println!("{}:{}:{}", name, pid, preview_line);
 
@@ -273,7 +270,14 @@ pub fn run_interactive(
                 }
             }
         }
-        let (_, _, _, nvm) = next_states.get(selected as usize).unwrap();
+        let (_name, _pid, _insts, actions, nvm) = next_states.get(selected as usize).unwrap();
+        
+        for action in actions {
+            if let althread::vm::GlobalAction::Print(msg) = action {
+                println!("{}", msg);
+            }
+        }
+
         vm = nvm.clone();
     }
 }
@@ -337,6 +341,12 @@ pub fn run_command(cli_args: &RunCommand) {
             err.report(&input_map);
             exit(1);
         });
+
+        for action in info.actions.iter() {
+            if let althread::vm::GlobalAction::Print(msg) = action {
+                println!("{}", msg);
+            }
+        }
 
         if cli_args.verbose || cli_args.debug {
             let mut prev_line = 0;
@@ -478,6 +488,13 @@ pub fn random_search_command(cli_args: &RandomSearchCommand) {
                 err.report(&input_map);
                 exit(1);
             });
+
+            for action in info.actions.iter() {
+                if let althread::vm::GlobalAction::Print(msg) = action {
+                    println!("{}", msg);
+                }
+            }
+
             if info.invariant_error.is_err() {
                 println!("Error with seed {}:", s);
                 info.invariant_error.unwrap_err().report(&input_map);

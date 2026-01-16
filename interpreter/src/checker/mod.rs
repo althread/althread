@@ -6,12 +6,13 @@ use serde::ser::{Serialize, SerializeStruct, Serializer};
 use crate::{
     compiler::CompiledProject,
     error::{AlthreadError, AlthreadResult, ErrorType},
-    vm::{instruction::Instruction, VM},
+    vm::{GlobalAction, VM, instruction::Instruction},
 };
 
 #[derive(Debug, Clone)]
 pub struct StateLink<'a> {
     pub instructions: Vec<Instruction>,
+    pub actions: Vec<GlobalAction>,
     pub lines: Vec<usize>,
     pub pid: usize,
     pub name: String,
@@ -48,11 +49,12 @@ impl<'a> Serialize for StateLink<'a> {
         S: Serializer,
     {
         // 3 is the number of fields in the struct.
-        let mut state = serializer.serialize_struct("StateLink", 4)?;
+        let mut state = serializer.serialize_struct("StateLink", 5)?;
         state.serialize_field("lines", &self.lines)?;
         state.serialize_field("pid", &self.pid)?;
         state.serialize_field("name", &self.name)?;
         state.serialize_field("to", &self.to.as_ref())?;
+        state.serialize_field("actions", &self.actions)?;
         state.end()
     }
 }
@@ -144,7 +146,7 @@ pub fn check_program<'a>(
         let successors = current_node.next()?;
 
         //42 we go through all successors
-        for (name, pid, instructions, vm) in successors.into_iter() {
+        for (name, pid, instructions, actions, vm) in successors.into_iter() {
             let vm: Rc<VM<'_>> = Rc::new(vm);
 
             let mut lines: Vec<usize> = instructions
@@ -165,6 +167,7 @@ pub fn check_program<'a>(
                     to: vm.clone(),
                     lines,
                     instructions,
+                    actions,
                     pid,
                     name,
                 });

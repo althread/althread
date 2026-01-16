@@ -558,7 +558,6 @@ impl<'a> RunningProgramState<'a> {
                                 .map(|lit| lit.to_string())
                                 .collect::<Vec<_>>()
                                 .join(" ");
-                            println!("{}", str_val);
                             action = Some(GlobalAction::Print(str_val));
                             self.memory.push(Literal::Null);
 
@@ -690,7 +689,18 @@ impl<'a> RunningProgramState<'a> {
                 }
                 self.clock += 1;
                 let _receiver =
-                    channels.send(self.id, channel_name.clone(), value, self.clock);
+                    channels.send(self.id, channel_name.clone(), value.clone(), self.clock);
+                action = Some(GlobalAction::Send(crate::vm::SendInfo {
+                    from: crate::vm::ProcessInfo {
+                        process_id: self.id,
+                        process_name: self.name.clone(),
+                    },
+                    to: crate::vm::ChannelInfo {
+                        channel_name: channel_name.clone(),
+                    },
+                    message: value,
+                    n_msg: self.clock,
+                }));
                 1
             }
             InstructionType::ChannelPeek(channel_name) => {

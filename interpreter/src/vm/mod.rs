@@ -6,7 +6,7 @@ use std::{
     rc::Rc,
 };
 
-use channels::{ChannelLinkKey, Channels, ChannelsState, DeliveryInfo};
+use channels::{ChannelLinkKey, Channels, ChannelsState};
 use fastrand::Rng;
 
 use instruction::{Instruction, InstructionType, ProgramCode};
@@ -42,13 +42,41 @@ fn str_to_expr_error(pos: Option<Pos>) -> impl Fn(String) -> AlthreadError {
     return move |msg| AlthreadError::new(ErrorType::ExpressionError, pos.clone(), msg);
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
+pub struct ProcessInfo {
+    pub process_id: usize,
+    pub process_name: String,
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize)]
+pub struct ChannelInfo {
+    pub channel_name: String,
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize)]
+pub struct SendInfo {
+    pub from: ProcessInfo,
+    pub to: ChannelInfo,
+    pub message: Literal,
+    pub n_msg: usize,
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize)]
+pub struct DeliverInfo {
+    pub from: ProcessInfo,
+    pub to: ProcessInfo,
+    pub channel_name: String,
+    pub message: Literal,
+    pub sender_clock: usize,
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub enum GlobalAction {
     StartProgram(String, usize, Literal, Option<usize>, Option<Pos>),
     Print(String),
     Write(String),
-    /// VM-only: one message was delivered into a receiver mailbox.
-    Deliver(DeliveryInfo),
+    Send(SendInfo),
+    Deliver(DeliverInfo),
     Connect(usize, String),
     EndProgram,
     Wait,
@@ -207,6 +235,21 @@ impl<'a> VM<'a> {
                 }
             }
 
+            let from_name = self
+                .running_programs
+                .get(delivery_info.from_program_id)
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| format!("PID_{}", delivery_info.from_program_id));
+            let to_name = self
+                .running_programs
+                .get(delivery_info.to.program_id)
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| format!("PID_{}", delivery_info.to.program_id));
+
+            let (sender_id, sender_clock, _content) =
+                crate::vm::channels::parse_message_tuple(&delivery_info.message)
+                    .unwrap_or((delivery_info.from_program_id, 0, "".to_string()));
+
             return Ok(ExecutionStepInfo {
                 prog_name: format!(
                     "__deliver__ {}#{}",
@@ -215,7 +258,19 @@ impl<'a> VM<'a> {
                 prog_id: delivery_info.to.program_id,
                 instructions: Vec::new(),
                 invariant_error: Ok(0),
-                actions: vec![GlobalAction::Deliver(delivery_info)],
+                actions: vec![GlobalAction::Deliver(crate::vm::DeliverInfo {
+                    from: crate::vm::ProcessInfo {
+                        process_id: sender_id,
+                        process_name: from_name,
+                    },
+                    to: crate::vm::ProcessInfo {
+                        process_id: delivery_info.to.program_id,
+                        process_name: to_name,
+                    },
+                    channel_name: delivery_info.to.channel_name,
+                    message: delivery_info.message,
+                    sender_clock,
+                })],
             });
         }
 
@@ -314,6 +369,7 @@ impl<'a> VM<'a> {
                 }
                 GlobalAction::Exit => self.running_programs.clear(),
                 GlobalAction::Print(_) => {} // do nothing, this is just a print action
+                GlobalAction::Send(_) => {} // do nothing, sending is already handled
             }
         }
         if actions.end {
@@ -422,6 +478,7 @@ impl<'a> VM<'a> {
                 }
                 GlobalAction::Exit => self.running_programs.clear(),
                 GlobalAction::Print(_) => {} // do nothing, this is just a print action
+                GlobalAction::Send(_) => {} // do nothing, sending is already handled
             }
         }
         if actions.end {
@@ -442,7 +499,7 @@ impl<'a> VM<'a> {
     /**
      * List all the next possible state of the VM
      */
-    pub fn next(&self) -> AlthreadResult<Vec<(String, usize, Vec<Instruction>, VM<'a>)>> {
+    pub fn next(&self) -> AlthreadResult<Vec<(String, usize, Vec<Instruction>, Vec<GlobalAction>, VM<'a>)>> {
         if self.running_programs.len() == 0 {
             return Ok(Vec::new());
         }
@@ -459,7 +516,7 @@ impl<'a> VM<'a> {
 
             let mut vm = self.clone();
             if let Some(result) = vm.next_step_pid(program.id)? {
-                next_states.push((program.name.clone(), program.id, result.instructions, vm));
+                next_states.push((program.name.clone(), program.id, result.instructions, result.actions, vm));
             }
         }
 
@@ -468,7 +525,7 @@ impl<'a> VM<'a> {
             let mut vm = self.clone();
             let delivery_info = vm
                 .channels
-            .deliver_one(link)
+                .deliver_one(link)
                 .expect("pending link must have a deliverable message");
 
             if let Some(dependency) = vm.waiting_programs.get(&delivery_info.to.program_id) {
@@ -481,6 +538,21 @@ impl<'a> VM<'a> {
                 }
             }
 
+            let from_name = vm
+                .running_programs
+                .get(delivery_info.from_program_id)
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| format!("PID_{}", delivery_info.from_program_id));
+            let to_name = vm
+                .running_programs
+                .get(delivery_info.to.program_id)
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| format!("PID_{}", delivery_info.to.program_id));
+
+            let (sender_id, sender_clock, _content) =
+                crate::vm::channels::parse_message_tuple(&delivery_info.message)
+                    .unwrap_or((delivery_info.from_program_id, 0, "".to_string()));
+
             next_states.push((
                 format!(
                     "__deliver__ {}#{}",
@@ -488,6 +560,19 @@ impl<'a> VM<'a> {
                 ),
                 delivery_info.to.program_id,
                 Vec::new(),
+                vec![GlobalAction::Deliver(crate::vm::DeliverInfo {
+                    from: crate::vm::ProcessInfo {
+                        process_id: sender_id,
+                        process_name: from_name,
+                    },
+                    to: crate::vm::ProcessInfo {
+                        process_id: delivery_info.to.program_id,
+                        process_name: to_name,
+                    },
+                    channel_name: delivery_info.to.channel_name,
+                    message: delivery_info.message,
+                    sender_clock,
+                })],
                 vm,
             ));
         }

@@ -37,6 +37,7 @@ pub struct DeliveryInfo {
     pub from_program_id: usize,
     pub from_channel_name: String,
     pub to: ReceiverInfo,
+    pub message: Literal,
 }
 
 impl Channels {
@@ -161,7 +162,7 @@ impl Channels {
         self.states
             .entry((to_pid, to_channel.clone()))
             .or_insert_with(Vec::new)
-            .push(msg);
+            .push(msg.clone());
 
         // cleanup empty queues to keep state compact
         if let Some(queue) = self.pending_deliveries.get(&link) {
@@ -177,6 +178,7 @@ impl Channels {
                 program_id: to_pid,
                 channel_name: to_channel,
             },
+            message: msg,
         })
     }
 
@@ -236,6 +238,31 @@ impl Channels {
     pub fn get_waiting_send(&self) -> HashMap<(usize, String), Vec<Literal>> {
         self.waiting_send.clone()
     }
+}
+
+pub fn parse_message_tuple(msg: &Literal) -> Option<(usize, usize, String)> {
+    // Expected format: ((sender_id, sender_clock), content)
+    let Literal::Tuple(msg_tuple) = msg else {
+        return None;
+    };
+    if msg_tuple.len() < 2 {
+        return None;
+    }
+    let Literal::Tuple(sender_info) = msg_tuple.get(0)? else {
+        return None;
+    };
+    if sender_info.len() < 2 {
+        return None;
+    }
+    let Literal::Int(sender_id) = sender_info.get(0)? else {
+        return None;
+    };
+    let Literal::Int(sender_clock) = sender_info.get(1)? else {
+        return None;
+    };
+
+    let content = msg_tuple.get(1)?.to_string();
+    Some((*sender_id as usize, *sender_clock as usize, content))
 }
 
 #[cfg(test)]

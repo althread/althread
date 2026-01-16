@@ -815,7 +815,14 @@ export default function App() {
                   }
 
                   let res = await workerClient.check(editor.editorView().state.doc.toString(), filePath, virtualFS);
-                  setOut("No execution errors found.");
+                  
+                  if (res[0].length > 0) {
+                      setOut("Violation found! See the highlighted path in the VM states graph.");
+                  } else if (res[1].exhaustive) {
+                    setOut("Verification complete: No execution errors found.");
+                  } else {
+                    setOut("Warning: Exploration limit reached. The state space was not fully explored. No violation found in the explored part.");
+                  }
                   
                   console.log(res);
                   let colored_path: string[] = [];
