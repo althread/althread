@@ -167,21 +167,47 @@ pub fn run_interactive(
             println!("No next state");
             return;
         }
-        for (name, pid, insts, nvm) in next_states.iter() {
-            println!("======= VM next =======");
-            println!(
-                "{}:{}:{}",
-                name,
-                pid,
-                if insts[0].pos.is_some() {
+
+        fn delivered_message_preview(
+            prev_channels: &althread::vm::channels::ChannelsState,
+            next_channels: &althread::vm::channels::ChannelsState,
+        ) -> Option<String> {
+            for (key, next_state) in next_channels.iter() {
+                let prev_len = prev_channels.get(key).map(|s| s.len()).unwrap_or(0);
+                if next_state.len() == prev_len + 1 {
+                    if let Some(msg) = next_state.last() {
+                        return Some(format!("deliver {} -> {}", key.1, msg));
+                    }
+                }
+            }
+            None
+        }
+
+        let prev_channels = vm.current_state().1;
+
+        for (idx, (name, pid, insts, nvm)) in next_states.iter().enumerate() {
+            println!("======= VM next ({}) =======", idx);
+            let preview_line: String = if let Some(first) = insts.first() {
+                if first.pos.is_some() {
                     source
                         .lines()
-                        .nth(insts[0].pos.as_ref().unwrap().line)
+                        .nth(first.pos.as_ref().unwrap().line)
                         .unwrap_or_default()
+                        .to_string()
                 } else {
-                    "?"
+                    "?".to_string()
                 }
-            );
+            } else {
+                // Delivery steps are schedulable transitions with no executed instruction.
+                if name.starts_with("__deliver__") {
+                    let next_channels = nvm.current_state().1;
+                    delivered_message_preview(prev_channels, next_channels)
+                        .unwrap_or_else(|| "deliver <unknown>".to_string())
+                } else {
+                    "<no instruction>".to_string()
+                }
+            };
+            println!("{}:{}:{}", name, pid, preview_line);
 
             let s = nvm.current_state();
             println!("global: {:?}", s.0);
@@ -210,8 +236,18 @@ pub fn run_interactive(
         while selected < 0 || selected >= next_states.len() as i32 {
             println!("Enter an integer between 0 and {}:", next_states.len() - 1);
             let mut input = String::new();
-            stdin().read_line(&mut input).unwrap();
-            selected = input.trim().parse().unwrap();
+            let bytes_read = stdin().read_line(&mut input).unwrap();
+            if bytes_read == 0 {
+                println!("EOF on stdin, exiting interactive mode");
+                return;
+            }
+            match input.trim().parse() {
+                Ok(v) => selected = v,
+                Err(_) => {
+                    selected = -1;
+                    continue;
+                }
+            }
         }
         let (_, _, _, nvm) = next_states.get(selected as usize).unwrap();
         vm = nvm.clone();

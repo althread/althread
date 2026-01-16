@@ -11,7 +11,7 @@ use crate::{
 };
 
 use super::{
-    channels::{Channels, ReceiverInfo},
+    channels::Channels,
     instruction::{Instruction, InstructionType, ProgramCode},
     str_to_expr_error, GlobalAction, GlobalActions, GlobalMemory, Memory,
 };
@@ -689,9 +689,8 @@ impl<'a> RunningProgramState<'a> {
                     self.memory.pop();
                 }
                 self.clock += 1;
-                let receiver = channels.send(self.id, channel_name.clone(), value, self.clock);
-
-                action = Some(GlobalAction::Send(channel_name.clone(), receiver));
+                let _receiver =
+                    channels.send(self.id, channel_name.clone(), value, self.clock);
                 1
             }
             InstructionType::ChannelPeek(channel_name) => {
@@ -727,6 +726,7 @@ impl<'a> RunningProgramState<'a> {
                         .to_pid()
                         .expect("Panic: cannot convert to pid"),
                 };
+
                 let receiver_pid = match receiver_pid {
                     None => self.id,
                     Some(idx) => self
@@ -738,7 +738,7 @@ impl<'a> RunningProgramState<'a> {
                         .expect("Panic: cannot convert to pid"),
                 };
 
-                let is_data_waiting = channels
+                let _had_waiting = channels
                     .connect(
                         sender_pid,
                         sender_channel.clone(),
@@ -746,18 +746,15 @@ impl<'a> RunningProgramState<'a> {
                         receiver_channel.clone(),
                     )
                     .map_err(|msg| {
-                        AlthreadError::new(ErrorType::RuntimeError, cur_inst.pos, format!("Failed to connect channels: {}", msg))
+                        AlthreadError::new(
+                            ErrorType::RuntimeError,
+                            cur_inst.pos,
+                            format!("Failed to connect channels: {}", msg),
+                        )
                     })?;
-                // A connection has the same effect as a send globally, if some data was waiting to be sent
-                if is_data_waiting {
-                    action = Some(GlobalAction::Send(
-                        sender_channel.clone(),
-                        Some(ReceiverInfo {
-                            program_id: receiver_pid,
-                            channel_name: receiver_channel.clone(),
-                        }),
-                    ));
-                }
+
+                // Notify globally that the connection exists so any sender waiting for this connection can resume.
+                action = Some(GlobalAction::Connect(sender_pid, sender_channel.clone()));
                 1
             }
             InstructionType::CreateListFromStack { element_count, element_type } => {

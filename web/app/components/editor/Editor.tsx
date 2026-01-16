@@ -172,8 +172,18 @@ const createEditor = ({
     '.cm-cursor, .cm-dropCursor': {
       borderLeft: '2px solid #528bff'
     },
-    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
-      backgroundColor: '#264f78 !important' // VS Code style selection
+    // Selection: force visible highlight (some browsers + mix-blend-mode can make it look invisible).
+    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
+      backgroundColor: 'rgba(38, 79, 120, 0.70) !important'
+    },
+    '.cm-selectionLayer': {
+      mixBlendMode: 'normal'
+    },
+    '.cm-selectionLayer .cm-selectionBackground': {
+      mixBlendMode: 'normal'
+    },
+    '.cm-content ::selection': {
+      backgroundColor: 'rgba(38, 79, 120, 1.00)'
     },
     '.cm-gutters': {
       backgroundColor: '#1e1e1e',
@@ -194,7 +204,18 @@ const createEditor = ({
       backgroundColor: '#3a3f4b' // More noticeable active line gutter
     },
     '.cm-activeLine': {
-      backgroundColor: '#3a3f4b' // More noticeable active line background
+      // Avoid obscuring text selections on the active line.
+      backgroundColor: 'rgba(58, 63, 75, 0.35)',
+      boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.06)'
+    },
+    // highlightSelectionMatches(): make "other occurrences" subtle.
+    '.cm-selectionMatch': {
+      backgroundColor: 'rgba(255, 217, 102, 0.15)',
+      borderRadius: '2px'
+    },
+    // The match currently under the cursor (if any) can be slightly stronger.
+    '.cm-selectionMatch.cm-selectionMatch-main': {
+      backgroundColor: 'rgba(38, 79, 120, 0.30)'
     },
     '.cm-foldGutter': {
       width: '16px', // Fixed width for fold gutter

@@ -4,6 +4,11 @@ use crate::ast::token::literal::Literal;
 
 pub type ChannelsState = BTreeMap<(usize, String), Vec<Literal>>;
 
+/// Key for a directed link that carries in-flight messages.
+/// (from_pid, from_channel, to_pid, to_channel)
+pub type ChannelLinkKey = (usize, String, usize, String);
+pub type PendingDeliveriesState = BTreeMap<ChannelLinkKey, Vec<Literal>>;
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct Channels {
     /// states represent the input buffer of the channel
@@ -14,6 +19,11 @@ pub struct Channels {
     states: ChannelsState,
     connections: HashMap<(usize, String), (usize, String)>,
     waiting_send: HashMap<(usize, String), Vec<Literal>>,
+
+    /// Messages that have been sent but not yet delivered to the receiver mailbox.
+    /// Keyed by (from_pid, from_channel, to_pid, to_channel).
+    /// Delivery preserves per-link FIFO.
+    pending_deliveries: PendingDeliveriesState,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -22,12 +32,20 @@ pub struct ReceiverInfo {
     pub channel_name: String,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct DeliveryInfo {
+    pub from_program_id: usize,
+    pub from_channel_name: String,
+    pub to: ReceiverInfo,
+}
+
 impl Channels {
     pub fn new() -> Self {
         Self {
             states: BTreeMap::new(),
             connections: HashMap::new(),
             waiting_send: HashMap::new(),
+            pending_deliveries: BTreeMap::new(),
         }
     }
 
@@ -52,16 +70,17 @@ impl Channels {
         if let Some((to_program_id, to_channel_name)) =
             self.connections.get(&(program_id, channel_name.clone()))
         {
-            // get the state of the channel (create it if it doesn't exist)
-            if let Some(state) = self
-                .states
-                .get_mut(&(*to_program_id, to_channel_name.clone()))
-            {
-                state.push(msg);
-            } else {
-                self.states
-                    .insert((*to_program_id, to_channel_name.clone()), vec![msg]);
-            }
+            let link_key: ChannelLinkKey = (
+                program_id,
+                channel_name.clone(),
+                *to_program_id,
+                to_channel_name.clone(),
+            );
+            self.pending_deliveries
+                .entry(link_key)
+                .or_insert_with(Vec::new)
+                .push(msg);
+
             return Some(ReceiverInfo {
                 program_id: *to_program_id,
                 channel_name: to_channel_name.clone(),
@@ -102,13 +121,63 @@ impl Channels {
             .waiting_send
             .remove(&(program_id, channel_name.clone()))
         {
-            self.states
-                .entry((to_program_id, to_channel_name.clone()))
-                .or_insert(vec![])
+            let link_key: ChannelLinkKey = (
+                program_id,
+                channel_name.clone(),
+                to_program_id,
+                to_channel_name.clone(),
+            );
+            self.pending_deliveries
+                .entry(link_key)
+                .or_insert_with(Vec::new)
                 .extend(values);
             return Ok(true);
         }
         Ok(false)
+    }
+
+    /// Returns the list of links that currently have at least one pending message to deliver.
+    pub fn pending_links(&self) -> Vec<ChannelLinkKey> {
+        self.pending_deliveries
+            .iter()
+            .filter_map(|(k, v)| if v.is_empty() { None } else { Some(k.clone()) })
+            .collect()
+    }
+
+    pub fn has_pending_deliveries(&self) -> bool {
+        self.pending_deliveries.values().any(|v| !v.is_empty())
+    }
+
+    /// Deliver exactly one pending message for a given link.
+    pub fn deliver_one(&mut self, link: ChannelLinkKey) -> Option<DeliveryInfo> {
+        let (from_pid, from_channel, to_pid, to_channel) = link.clone();
+        let msg = {
+            let queue = self.pending_deliveries.get_mut(&link)?;
+            if queue.is_empty() {
+                return None;
+            }
+            queue.remove(0)
+        };
+        self.states
+            .entry((to_pid, to_channel.clone()))
+            .or_insert_with(Vec::new)
+            .push(msg);
+
+        // cleanup empty queues to keep state compact
+        if let Some(queue) = self.pending_deliveries.get(&link) {
+            if queue.is_empty() {
+                self.pending_deliveries.remove(&link);
+            }
+        }
+
+        Some(DeliveryInfo {
+            from_program_id: from_pid,
+            from_channel_name: from_channel,
+            to: ReceiverInfo {
+                program_id: to_pid,
+                channel_name: to_channel,
+            },
+        })
     }
 
     /**
@@ -156,7 +225,67 @@ impl Channels {
         return self.states.clone();
     }
 
+    pub fn get_pending_deliveries(&self) -> PendingDeliveriesState {
+        self.pending_deliveries.clone()
+    }
+
     pub fn get_connections(&self) -> HashMap<(usize, String), (usize, String)> {
         self.connections.clone()
+    }
+
+    pub fn get_waiting_send(&self) -> HashMap<(usize, String), Vec<Literal>> {
+        self.waiting_send.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn send_is_not_immediately_visible_until_delivery() {
+        let mut channels = Channels::new();
+
+        channels
+            .connect(1, "out".to_string(), 0, "in".to_string())
+            .unwrap();
+
+        let receiver = channels.send(1, "out".to_string(), Literal::Int(42), 1);
+        assert_eq!(receiver.unwrap().program_id, 0);
+
+        // Not delivered yet
+        assert_eq!(channels.peek(0, "in".to_string()), None);
+        assert!(channels.has_pending_deliveries());
+
+        channels
+            .deliver_one((1, "out".to_string(), 0, "in".to_string()))
+            .unwrap();
+        assert_eq!(channels.peek(0, "in".to_string()), Some(&Literal::Int(42)));
+    }
+
+    #[test]
+    fn delivery_can_interleave_between_senders() {
+        let mut channels = Channels::new();
+
+        channels
+            .connect(1, "out".to_string(), 0, "in".to_string())
+            .unwrap();
+        channels
+            .connect(2, "out".to_string(), 0, "in".to_string())
+            .unwrap();
+
+        channels.send(1, "out".to_string(), Literal::Int(1), 1);
+        channels.send(2, "out".to_string(), Literal::Int(2), 1);
+
+        // Choose to deliver sender 2 first, then sender 1.
+        channels
+            .deliver_one((2, "out".to_string(), 0, "in".to_string()))
+            .unwrap();
+        channels
+            .deliver_one((1, "out".to_string(), 0, "in".to_string()))
+            .unwrap();
+
+        assert_eq!(channels.pop(0, "in".to_string()), Some(Literal::Int(2)));
+        assert_eq!(channels.pop(0, "in".to_string()), Some(Literal::Int(1)));
     }
 }

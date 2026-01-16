@@ -16,6 +16,57 @@ use console_error_panic_hook;
 const SEND: u8 = b's';
 const RECV: u8 = b'r';
 
+fn find_delivered_message(
+    prev_channels: &althread::vm::channels::ChannelsState,
+    next_channels: &althread::vm::channels::ChannelsState,
+) -> Option<((usize, String), Literal)> {
+    for (key, next_state) in next_channels.iter() {
+        let prev_len = prev_channels.get(key).map(|s| s.len()).unwrap_or(0);
+        if next_state.len() == prev_len + 1 {
+            if let Some(msg) = next_state.last() {
+                return Some(((key.0, key.1.clone()), msg.clone()));
+            }
+        }
+    }
+    None
+}
+
+fn parse_message_tuple(msg: &Literal) -> Option<(usize, usize, String)> {
+    // Expected format: ((sender_id, sender_clock), content)
+    let Literal::Tuple(msg_tuple) = msg else {
+        return None;
+    };
+    if msg_tuple.len() < 2 {
+        return None;
+    }
+    let Literal::Tuple(sender_info) = msg_tuple.get(0)? else {
+        return None;
+    };
+    if sender_info.len() < 2 {
+        return None;
+    }
+    let Literal::Int(sender_id) = sender_info.get(0)? else {
+        return None;
+    };
+    let Literal::Int(sender_clock) = sender_info.get(1)? else {
+        return None;
+    };
+
+    let content = msg_tuple.get(1)?.to_string();
+    Some((*sender_id as usize, *sender_clock as usize, content))
+}
+
+fn delivery_preview(prev_vm: &althread::vm::VM, next_vm: &althread::vm::VM) -> Option<String> {
+    let prev_channels = prev_vm.current_state().1;
+    let next_channels = next_vm.current_state().1;
+    let ((receiver_pid, channel_name), msg) = find_delivered_message(prev_channels, next_channels)?;
+    let (sender_pid, sender_clock, content) = parse_message_tuple(&msg).unwrap_or((0, 0, msg.to_string()));
+    Some(format!(
+        "deliver {},{} <- {} @{} : {}",
+        receiver_pid, channel_name, sender_pid, sender_clock, content
+    ))
+}
+
 fn error_to_js(err: AlthreadError) -> JsValue {
     serde_wasm_bindgen::to_value(&err).unwrap()
 }
@@ -307,33 +358,38 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
             if let GlobalAction::Print(s_print) = p {
                 stdout.push(s_print.clone());
             }
-            match p {
-                GlobalAction::Send(s_chan_name, opt_receiver_info) => {
-                    let sender_name = get_prog_name(info.prog_id, &vm);
-                    let receiver_id = opt_receiver_info
-                        .as_ref()
-                        .map(|ri| ri.program_id)
-                        .unwrap_or(0);
+        }
 
-                    let clock = vm
-                        .running_programs
-                        .iter()
-                        .find(|p| p.id == pid)
-                        .map(|p| p.clock)
-                        .unwrap_or(0);
+        // Send events are now derived from executed instructions (Send is no longer a GlobalAction).
+        for inst in info.instructions.iter() {
+            if let InstructionType::Send { channel_name, .. } = &inst.control {
+                let sender_id = info.prog_id;
+                let sender_name = get_prog_name(sender_id, &vm);
 
-                    let event = MessageFlowEvent {
-                        sender: pid,
-                        receiver: receiver_id,
-                        evt_type: SEND,
-                        message: s_chan_name.clone(), // Channel name for SEND
-                        number: clock,
-                        actor_prog_name: sender_name,
-                        vm_state: vm.clone(), // State after send
-                    };
-                    message_flow_graph.push(event);
-                }
-                _ => {}
+                let receiver_id = vm
+                    .channels
+                    .get_connections()
+                    .get(&(sender_id, channel_name.clone()))
+                    .map(|(pid, _chan)| *pid)
+                    .unwrap_or(0);
+
+                let clock = vm
+                    .running_programs
+                    .iter()
+                    .find(|p| p.id == sender_id)
+                    .map(|p| p.clock)
+                    .unwrap_or(0);
+
+                let event = MessageFlowEvent {
+                    sender: sender_id,
+                    receiver: receiver_id,
+                    evt_type: SEND,
+                    message: channel_name.clone(),
+                    number: clock,
+                    actor_prog_name: sender_name,
+                    vm_state: vm.clone(),
+                };
+                message_flow_graph.push(event);
             }
         }
         if info.invariant_error.is_err() {
@@ -525,7 +581,7 @@ pub fn start_interactive_session(source: &str, filepath: &str, virtual_fs: JsVal
     }
     
     // Convert the result to a more JS-friendly format
-    let js_next_states: Vec<_> = next_states.into_iter().enumerate().map(|(index, (name, pid, instructions, _))| {
+    let js_next_states: Vec<_> = next_states.into_iter().enumerate().map(|(index, (name, pid, instructions, nvm))| {
         let instruction_strings: Vec<String> = instructions.iter().map(|inst| {
             if let Some(pos) = &inst.pos {
                 let line_content = source
@@ -538,11 +594,19 @@ pub fn start_interactive_session(source: &str, filepath: &str, virtual_fs: JsVal
             }
         }).collect();
 
+        let preview = if let Some(first) = instruction_strings.first() {
+            first.clone()
+        } else if name.starts_with("__deliver__") {
+            delivery_preview(&vm, &nvm).unwrap_or_else(|| "deliver <unknown>".to_string())
+        } else {
+            "No instruction".to_string()
+        };
+
         serde_json::json!({
             "index": index,
             "prog_name": name,
             "prog_id": pid,
-            "instruction_preview": instruction_strings.first().unwrap_or(&"No instruction".to_string()),
+            "instruction_preview": preview,
             "instructions": instruction_strings
         })
     }).collect();
@@ -609,7 +673,7 @@ pub fn get_next_interactive_states(source: &str, filepath: &str, virtual_fs: JsV
     }
     
     // Convert the result to a more JS-friendly format with enhanced state display
-    let js_next_states: Vec<_> = next_states.into_iter().enumerate().map(|(index, (name, pid, instructions, _))| {
+    let js_next_states: Vec<_> = next_states.into_iter().enumerate().map(|(index, (name, pid, instructions, nvm))| {
         let instruction_strings: Vec<String> = instructions.iter().map(|inst| {
             if let Some(pos) = &inst.pos {
                 let line_content = source
@@ -623,25 +687,35 @@ pub fn get_next_interactive_states(source: &str, filepath: &str, virtual_fs: JsV
         }).collect();
 
         // Add state info similar to run_interactive format
-        let state_preview = format!(
-            "{}:{}:{}",
-            name,
-            pid,
-            if instructions.get(0).and_then(|inst| inst.pos.as_ref()).is_some() {
-                source
+        let state_preview = if let Some(inst) = instructions.first() {
+            if let Some(pos) = &inst.pos {
+                let line = source
                     .lines()
-                    .nth(instructions[0].pos.as_ref().unwrap().line)
-                    .unwrap_or_default()
+                    .nth(pos.line.saturating_sub(1))
+                    .unwrap_or_default();
+                format!("{}:{}:{}", name, pid, line)
             } else {
-                "?"
+                format!("{}:{}:?", name, pid)
             }
-        );
+        } else if name.starts_with("__deliver__") {
+            format!("{}:{}:{}", name, pid, delivery_preview(&vm, &nvm).unwrap_or_else(|| "deliver <unknown>".to_string()))
+        } else {
+            format!("{}:{}:?", name, pid)
+        };
+
+        let preview = if let Some(first) = instruction_strings.first() {
+            first.clone()
+        } else if name.starts_with("__deliver__") {
+            delivery_preview(&vm, &nvm).unwrap_or_else(|| "deliver <unknown>".to_string())
+        } else {
+            "No instruction".to_string()
+        };
 
         serde_json::json!({
             "index": index,
             "prog_name": name,
             "prog_id": pid,
-            "instruction_preview": instruction_strings.first().unwrap_or(&"No instruction".to_string()),
+            "instruction_preview": preview,
             "instructions": instruction_strings,
             "state_preview": state_preview
         })
@@ -738,109 +812,142 @@ pub fn execute_interactive_step(source: &str, filepath: &str, virtual_fs: JsValu
         return Err(JsValue::from_str(&format!("Invalid selection index {}", selected_index)));
     }
 
-    // Execute the selected step
-    let (name, pid, instructions, _new_vm) = next_states.into_iter().nth(selected_index).unwrap();
-    
-    // Instead of executing again, we need to get the actions from the step that was just executed
-    // The issue is that vm.next() doesn't return actions, so we need to execute the step properly
+    // Execute the selected transition.
+    // NOTE: vm.next() contains both program steps and delivery steps.
+    let (name, pid, instructions, new_vm) = next_states.into_iter().nth(selected_index).unwrap();
+
+    let is_delivery_choice = name.starts_with("__deliver__") && instructions.is_empty();
+
+    // Store the VM state BEFORE execution for event detection
+    let vm_before_step = vm.clone();
+
+    // Apply the selected transition.
     let mut execution_vm = vm.clone();
-    
-    // Store the VM state BEFORE execution for receive event detection
-    let vm_before_step = execution_vm.clone();
-    
-    let step_info = match execution_vm.next_step_pid(pid) {
-        Ok(Some(info)) => info,
-        Ok(None) => {
-            return Ok(serde_wasm_bindgen::to_value(&serde_json::json!({
-                "finished": true,
-                "message": "Program has terminated"
-            })).unwrap());
-        },
-        Err(e) => {
-            return Err(error_to_js(e));
-        }
-    };
-    
-    // Check for invariant errors
-    if step_info.invariant_error.is_err() {
-        let error_msg = format!("Invariant error: {:?}", step_info.invariant_error.unwrap_err());
-        return Ok(serde_wasm_bindgen::to_value(&serde_json::json!({
-            "error": error_msg,
-            "invariant_violated": true
-        })).unwrap());
-    }
-    
-    // Capture debug info from the actual executed step
-    let mut step_debug = String::new();
-    for inst in step_info.instructions.iter() {
-        step_debug.push_str(&format!("#{}: {}\n", step_info.prog_id, inst));
-    }
-    
-    // Capture output from actions (no duplication now)
-    let step_output: Vec<String> = step_info.actions.iter().filter_map(|action| {
-        if let GlobalAction::Print(s_print) = action {
-            Some(s_print.clone())
-        } else {
-            None
-        }
-    }).collect();
-    
-    // web_sys::console::log_1(&JsValue::from_str(&format!("Step actions: {:?}", step_info.actions)));
-    // web_sys::console::log_1(&JsValue::from_str(&format!("Step output: {:?}", step_output)));
-    
-    // Capture message flow events
-    let get_prog_name = |prog_id: usize, vm_instance: &althread::vm::VM| -> String {
-        vm_instance
-            .running_programs
-            .iter()
-            .find(|p| p.id == prog_id)
-            .map(|p| p.name.clone())
-            .unwrap_or_else(|| format!("PID_{}", prog_id))
-    };
-    
     let mut message_flow_events: Vec<MessageFlowEvent> = Vec::new();
-    
-    // Check for receive events by examining instructions
-    for inst in step_info.instructions.iter() {
-        if let InstructionType::ChannelPop(ref s) = &inst.control {
-            // This is a receive event - check the VM state BEFORE the pop to see what message was there
-            if let Some(chan_content_vec) = vm_before_step
-                .channels
-                .get_states()
-                .get(&(step_info.prog_id, s.to_string()))
-            {
-                if let Some(Literal::Tuple(ref msg_tuple)) = chan_content_vec.get(0) {
-                    // Message was received
-                    if msg_tuple.len() >= 2 {
-                        if let Some(Literal::Tuple(ref sender_info_tuple)) = msg_tuple.get(0) {
-                            if sender_info_tuple.len() >= 2 {
-                                if let (Some(Literal::Int(senderid)), Some(Literal::Int(received_clock))) =
-                                    (sender_info_tuple.get(0), sender_info_tuple.get(1))
-                                {
-                                    if let Some(actual_message_content) = msg_tuple.get(1) {
-                                        let receiver_clock = execution_vm
-                                            .running_programs
-                                            .iter()
-                                            .find(|p| p.id == step_info.prog_id)
-                                            .map(|p| p.clock)
-                                            .unwrap_or(0);
+    let mut step_output: Vec<String> = Vec::new();
+    let mut step_debug = String::new();
 
-                                        let max_clock = std::cmp::max(
-                                            *received_clock as usize,
-                                            receiver_clock as usize,
-                                        ) + 1;
+    if is_delivery_choice {
+        // vm.next() already computed the successor VM, including wake-ups.
+        execution_vm = new_vm.clone();
 
-                                        let receiver_name = get_prog_name(step_info.prog_id, &execution_vm);
-                                        let event = MessageFlowEvent {
-                                            sender: *senderid as usize,
-                                            receiver: step_info.prog_id,
-                                            evt_type: RECV,
-                                            message: actual_message_content.to_string(),
-                                            number: max_clock,
-                                            actor_prog_name: receiver_name,
-                                            vm_state: execution_vm.clone(), // Use state after receive
-                                        };
-                                        message_flow_events.push(event);
+        // Emit a SEND-like event for the delivered message (more stable than inferring from send()).
+        if let Some((_key, msg)) = find_delivered_message(
+            vm_before_step.current_state().1,
+            execution_vm.current_state().1,
+        ) {
+            if let Some((sender_id, sender_clock, content)) = parse_message_tuple(&msg) {
+                let actor_name = execution_vm
+                    .running_programs
+                    .iter()
+                    .find(|p| p.id == sender_id)
+                    .map(|p| p.name.clone())
+                    .unwrap_or_else(|| format!("PID_{}", sender_id));
+                message_flow_events.push(MessageFlowEvent {
+                    sender: sender_id,
+                    receiver: pid,
+                    evt_type: SEND,
+                    message: content,
+                    number: sender_clock,
+                    actor_prog_name: actor_name,
+                    vm_state: execution_vm.clone(),
+                });
+            }
+        }
+    } else {
+        // Program step: re-execute deterministically to get actions/output.
+        let step_info = match execution_vm.next_step_pid(pid) {
+            Ok(Some(info)) => info,
+            Ok(None) => {
+                return Ok(serde_wasm_bindgen::to_value(&serde_json::json!({
+                    "finished": true,
+                    "message": "Program has terminated"
+                })).unwrap());
+            }
+            Err(e) => {
+                return Err(error_to_js(e));
+            }
+        };
+
+        // Check for invariant errors
+        if step_info.invariant_error.is_err() {
+            let error_msg = format!("Invariant error: {:?}", step_info.invariant_error.unwrap_err());
+            return Ok(serde_wasm_bindgen::to_value(&serde_json::json!({
+                "error": error_msg,
+                "invariant_violated": true
+            })).unwrap());
+        }
+
+        // Capture debug info from the actual executed step
+        for inst in step_info.instructions.iter() {
+            step_debug.push_str(&format!("#{}: {}\n", step_info.prog_id, inst));
+        }
+
+        // Capture output from actions
+        step_output = step_info
+            .actions
+            .iter()
+            .filter_map(|action| {
+                if let GlobalAction::Print(s_print) = action {
+                    Some(s_print.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Helper to get program name by ID
+        let get_prog_name = |prog_id: usize, vm_instance: &althread::vm::VM| -> String {
+            vm_instance
+                .running_programs
+                .iter()
+                .find(|p| p.id == prog_id)
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| format!("PID_{}", prog_id))
+        };
+
+        // Receive events (based on vm_before_step)
+        for inst in step_info.instructions.iter() {
+            if let InstructionType::ChannelPop(ref s) = &inst.control {
+                if let Some(chan_content_vec) = vm_before_step
+                    .channels
+                    .get_states()
+                    .get(&(step_info.prog_id, s.to_string()))
+                {
+                    if let Some(Literal::Tuple(ref msg_tuple)) = chan_content_vec.get(0) {
+                        if msg_tuple.len() >= 2 {
+                            if let Some(Literal::Tuple(ref sender_info_tuple)) = msg_tuple.get(0) {
+                                if sender_info_tuple.len() >= 2 {
+                                    if let (
+                                        Some(Literal::Int(senderid)),
+                                        Some(Literal::Int(received_clock)),
+                                    ) = (sender_info_tuple.get(0), sender_info_tuple.get(1))
+                                    {
+                                        if let Some(actual_message_content) = msg_tuple.get(1) {
+                                            let receiver_clock = execution_vm
+                                                .running_programs
+                                                .iter()
+                                                .find(|p| p.id == step_info.prog_id)
+                                                .map(|p| p.clock)
+                                                .unwrap_or(0);
+
+                                            let max_clock = std::cmp::max(
+                                                *received_clock as usize,
+                                                receiver_clock as usize,
+                                            ) + 1;
+
+                                            let receiver_name =
+                                                get_prog_name(step_info.prog_id, &execution_vm);
+                                            message_flow_events.push(MessageFlowEvent {
+                                                sender: *senderid as usize,
+                                                receiver: step_info.prog_id,
+                                                evt_type: RECV,
+                                                message: actual_message_content.to_string(),
+                                                number: max_clock,
+                                                actor_prog_name: receiver_name,
+                                                vm_state: execution_vm.clone(),
+                                            });
+                                        }
                                     }
                                 }
                             }
@@ -849,45 +956,55 @@ pub fn execute_interactive_step(source: &str, filepath: &str, virtual_fs: JsValu
                 }
             }
         }
-    }
-    
-    // Check for send events from actions
-    for action in step_info.actions.iter() {
-        match action {
-            GlobalAction::Send(s_chan_name, opt_receiver_info) => {
-                let sender_name = get_prog_name(step_info.prog_id, &execution_vm);
-                let receiver_id = opt_receiver_info
-                    .as_ref()
-                    .map(|ri| ri.program_id)
+
+        // Send events from executed instructions
+        for inst in step_info.instructions.iter() {
+            if let InstructionType::Send { channel_name, .. } = &inst.control {
+                let sender_id = step_info.prog_id;
+                let sender_name = get_prog_name(sender_id, &execution_vm);
+
+                let receiver_id = execution_vm
+                    .channels
+                    .get_connections()
+                    .get(&(sender_id, channel_name.clone()))
+                    .map(|(pid, _chan)| *pid)
                     .unwrap_or(0);
 
                 let clock = execution_vm
                     .running_programs
                     .iter()
-                    .find(|p| p.id == step_info.prog_id)  // Use step_info.prog_id instead of pid
+                    .find(|p| p.id == sender_id)
                     .map(|p| p.clock)
                     .unwrap_or(0);
 
-                let event = MessageFlowEvent {
-                    sender: step_info.prog_id,
+                message_flow_events.push(MessageFlowEvent {
+                    sender: sender_id,
                     receiver: receiver_id,
                     evt_type: SEND,
-                    message: s_chan_name.clone(),
+                    message: channel_name.clone(),
                     number: clock,
                     actor_prog_name: sender_name,
                     vm_state: execution_vm.clone(),
-                };
-                message_flow_events.push(event);
+                });
             }
-            _ => {}
         }
     }
+
+    // If we executed a delivery step, provide a useful executed_step string.
+    let executed_instructions = if instructions.is_empty() && name.starts_with("__deliver__") {
+        vec![delivery_preview(&vm_before_step, &execution_vm).unwrap_or_else(|| "deliver <unknown>".to_string())]
+    } else {
+        instructions
+            .iter()
+            .map(|inst| inst.to_string())
+            .collect::<Vec<String>>()
+    };
 
     let result = InteractiveStepResult {
         executed_step: ExecutedStepInfo {
             prog_name: name,
             prog_id: pid,
-            instructions: instructions.iter().map(|inst| inst.to_string()).collect::<Vec<String>>(),
+            instructions: executed_instructions,
         },
         output: step_output,
         debug: step_debug,

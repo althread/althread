@@ -36,23 +36,17 @@ const animationTimeOut = 100; //ms
 export default function App() {
   // Load file system from localStorage
   let initialFileSystem = loadFileSystem();
-  const utilsExists = initialFileSystem.some(entry => entry.name === 'utils' && entry.type === 'directory');
-
-  // If the loaded filesystem from local storage is old, reset it.
-  if (!utilsExists) {
-    localStorage.removeItem(STORAGE_KEYS.FILE_SYSTEM);
-    initialFileSystem = loadFileSystem();
-  }
 
   const [mockFileSystem, setMockFileSystem] = createSignal<FileSystemEntry[]>(initialFileSystem);
   const [selectedFiles, setSelectedFiles] = createSignal<string[]>([]);
   const [creationError, setCreationError] = createSignal<string | null>(null);
+  const [didAutoOpenDefault, setDidAutoOpenDefault] = createSignal(false);
   
   // Global file creation state - shared between FileExplorer and EmptyEditor
   const [globalFileCreation, setGlobalFileCreation] = createSignal<{ type: 'file' | 'folder', parentPath: string } | null>(null);
 
   // Sidebar view state
-  const [sidebarView, setSidebarView] = createSignal<SidebarView>('explorer');
+  const [sidebarView, setSidebarView] = createSignal<SidebarView>('help');
   const [sidebarCollapsed, setSidebarCollapsed] = createSignal(false);
 
   const toggleSidebarCollapse = () => {
@@ -98,7 +92,31 @@ export default function App() {
     loadFileContent
   );
 
-  // No automatic file opening - let user choose what to open
+  // Auto-open main.alt by default (once), so the editor isn't empty on load.
+  createEffect(() => {
+    if (didAutoOpenDefault()) return;
+    if (editorManager.activeFile()) {
+      setDidAutoOpenDefault(true);
+      return;
+    }
+
+    const fs = mockFileSystem();
+    const main = findFileByPath(fs, 'main.alt');
+
+    if (main && main.type === 'file') {
+      editorManager.handleFileSelect('main.alt', fs);
+      setDidAutoOpenDefault(true);
+      return;
+    }
+
+    // Fallback: if there's exactly one file in root, open it.
+    const singleRootFile = fs.length === 1 && fs[0].type === 'file' ? fs[0] : null;
+    if (singleRootFile) {
+      const filePath = getPathFromId(fs, singleRootFile.id) || singleRootFile.name;
+      editorManager.handleFileSelect(filePath, fs);
+    }
+    setDidAutoOpenDefault(true);
+  });
 
   // Conflict checking functions for file operations
   const checkNameConflict = (destPath: string, movingName: string): boolean => {
