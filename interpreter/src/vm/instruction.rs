@@ -216,7 +216,6 @@ impl InstructionType {
     pub fn is_local(&self) -> bool {
         match self {
               Self::GlobalAssignment {..}
-            | Self::Send {..}
             | Self::ChannelPeek(_)
             | Self::AtomicStart // starts a block that surely contains a global operation
             | Self::WaitStart {..} => false, // wait starts an atomic block to evaluate the conditions
@@ -240,6 +239,7 @@ impl InstructionType {
             | Self::RunCall {..}
             | Self::ChannelPop(_) // This is a local because it follows a peek
             | Self::Wait {..}
+            | Self::Send {..}
             | Self::Empty
             | Self::Expression(_)
             | Self::ExpressionAndCleanup {..}

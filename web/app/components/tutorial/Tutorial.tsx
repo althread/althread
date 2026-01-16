@@ -5,7 +5,8 @@ import { marked } from 'marked';
 import './Tutorial.css';
 import Resizable from '@corvu/resizable';
 
-import  { compile, run } from '../../../pkg/althread_web';
+import { workerClient } from '@utils/workerClient';
+import { formatAlthreadError } from '@utils/error';
 
 // Import all tutorials
 import { tutorial as tutorialStep1 } from '@tutorials/TutorialStep1_Variables';
@@ -19,7 +20,6 @@ import { tutorial as tutorialStep8 } from '@tutorials/TutorialStep8_Channels';
 import { tutorial as tutorialStep9 } from '@tutorials/TutorialStep9_Imports';
 import { useNavigate, useParams } from '@solidjs/router';
 import { Logo } from '@assets/images/Logo';
-import { formatAlthreadError } from '@utils/error';
 
 // Helper function to create the virtual filesystem for the tutorial
 const getTutorialVirtualFS = (code: string) => {
@@ -233,9 +233,9 @@ const Tutorial: Component = () => {
     return htmlContent;
   };
 
-  const compileFromEditor = (currentEditorCode: string) => {
+  const compileFromEditor = async (currentEditorCode: string) => {
     const virtualFS = getTutorialVirtualFS(currentEditorCode);
-    return compile(currentEditorCode, "main.alt", virtualFS);
+    return await workerClient.compile(currentEditorCode, "main.alt", virtualFS);
   };
 
   const editorInstance = createEditor({
@@ -271,13 +271,13 @@ const Tutorial: Component = () => {
     }
   };
 
-  const handleRunCode = () => {
+  const handleRunCode = async () => {
     setExecutionError(false);
     const currentEditorCode = code();
     const virtualFS = getTutorialVirtualFS(currentEditorCode);
     console.log("Running code with virtual filesystem:", virtualFS);
     try {
-      const result = run(currentEditorCode, "main.alt", virtualFS);
+      const result = await workerClient.run(currentEditorCode, "main.alt", virtualFS);
       setExecutionResult(result.stdout.join('\n'));
     } catch (e) {
       setExecutionError(true);

@@ -6,7 +6,7 @@ use std::{
     rc::Rc,
 };
 
-use channels::{Channels, ChannelsState, ReceiverInfo};
+use channels::{ChannelLinkKey, Channels, ChannelsState};
 use fastrand::Rng;
 
 use instruction::{Instruction, InstructionType, ProgramCode};
@@ -42,12 +42,41 @@ fn str_to_expr_error(pos: Option<Pos>) -> impl Fn(String) -> AlthreadError {
     return move |msg| AlthreadError::new(ErrorType::ExpressionError, pos.clone(), msg);
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
+pub struct ProcessInfo {
+    pub process_id: usize,
+    pub process_name: String,
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize)]
+pub struct ChannelInfo {
+    pub channel_name: String,
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize)]
+pub struct SendInfo {
+    pub from: ProcessInfo,
+    pub to: ChannelInfo,
+    pub message: Literal,
+    pub n_msg: usize,
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize)]
+pub struct DeliverInfo {
+    pub from: ProcessInfo,
+    pub to: ProcessInfo,
+    pub channel_name: String,
+    pub message: Literal,
+    pub sender_clock: usize,
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub enum GlobalAction {
     StartProgram(String, usize, Literal, Option<usize>, Option<Pos>),
     Print(String),
     Write(String),
-    Send(String, Option<ReceiverInfo>),
+    Send(SendInfo),
+    Deliver(DeliverInfo),
     Connect(usize, String),
     EndProgram,
     Wait,
@@ -137,41 +166,122 @@ impl<'a> VM<'a> {
     }
 
     pub fn next_random(&mut self) -> AlthreadResult<ExecutionStepInfo> {
-        let program =
-            self.rng
-                .choice(self.executable_programs.iter())
-                .ok_or(AlthreadError::new(
-                    ErrorType::RuntimeError,
-                    None,
-                    format!(
-                        "All programs are waiting, deadlock:\n{}",
-                        self.waiting_programs
-                            .iter()
-                            .map(|(id, dep)| format!(
-                                "-{}#{} at line {}: {:?}",
-                                self.running_programs.get(*id).unwrap().name,
-                                id,
-                                self.running_programs
-                                    .get(*id)
-                                    .unwrap()
-                                    .current_instruction()
-                                    .unwrap()
-                                    .pos
-                                    .as_ref()
-                                    .unwrap()
-                                    .line,
-                                dep
-                            ))
-                            .collect::<Vec<_>>()
-                            .join("\n")
-                    ),
-                ))?;
+        enum Candidate {
+            Program(usize),
+            Delivery(ChannelLinkKey),
+        }
+
+        let mut candidates: Vec<Candidate> = self
+            .executable_programs
+            .iter()
+            .copied()
+            .map(Candidate::Program)
+            .collect();
+
+        candidates.extend(
+            self.channels
+                .pending_links()
+                .into_iter()
+                .map(Candidate::Delivery),
+        );
+
+        if candidates.is_empty() {
+            return Err(AlthreadError::new(
+                ErrorType::RuntimeError,
+                None,
+                format!(
+                    "All programs are waiting, deadlock:\n{}",
+                    self.waiting_programs
+                        .iter()
+                        .map(|(id, dep)| format!(
+                            "-{}#{} at line {}: {:?}",
+                            self.running_programs.get(*id).unwrap().name,
+                            id,
+                            self.running_programs
+                                .get(*id)
+                                .unwrap()
+                                .current_instruction()
+                                .unwrap()
+                                .pos
+                                .as_ref()
+                                .unwrap()
+                                .line,
+                            dep
+                        ))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                ),
+            ));
+        }
+
+        let choice_idx = self.rng.usize(0..candidates.len());
+        let choice = candidates.swap_remove(choice_idx);
+
+        // Handle delivery steps (independent from any program execution)
+        if let Candidate::Delivery(link) = choice {
+            let delivery_info = self
+                .channels
+            .deliver_one(link)
+                .expect("pending link must have a deliverable message");
+
+            if let Some(dependency) = self.waiting_programs.get(&delivery_info.to.program_id) {
+                if dependency
+                    .channels_state
+                    .contains(&delivery_info.to.channel_name)
+                {
+                    self.waiting_programs.remove(&delivery_info.to.program_id);
+                    self.executable_programs
+                        .insert(delivery_info.to.program_id);
+                }
+            }
+
+            let from_name = self
+                .running_programs
+                .get(delivery_info.from_program_id)
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| format!("PID_{}", delivery_info.from_program_id));
+            let to_name = self
+                .running_programs
+                .get(delivery_info.to.program_id)
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| format!("PID_{}", delivery_info.to.program_id));
+
+            let (sender_id, sender_clock, _content) =
+                crate::vm::channels::parse_message_tuple(&delivery_info.message)
+                    .unwrap_or((delivery_info.from_program_id, 0, "".to_string()));
+
+            return Ok(ExecutionStepInfo {
+                prog_name: format!(
+                    "__deliver__ {}#{}",
+                    delivery_info.to.channel_name, delivery_info.to.program_id
+                ),
+                prog_id: delivery_info.to.program_id,
+                instructions: Vec::new(),
+                invariant_error: Ok(0),
+                actions: vec![GlobalAction::Deliver(crate::vm::DeliverInfo {
+                    from: crate::vm::ProcessInfo {
+                        process_id: sender_id,
+                        process_name: from_name,
+                    },
+                    to: crate::vm::ProcessInfo {
+                        process_id: delivery_info.to.program_id,
+                        process_name: to_name,
+                    },
+                    channel_name: delivery_info.to.channel_name,
+                    message: delivery_info.message,
+                    sender_clock,
+                })],
+            });
+        }
+
+        let Candidate::Program(program_id) = choice else {
+            unreachable!("delivery handled above")
+        };
 
         let program = self
             .running_programs
-            .get_mut(*program)
+            .get_mut(program_id)
             .expect("program is executable but not found in running programs");
-        let program_id = program.id;
 
         let mut exec_info = ExecutionStepInfo {
             prog_name: program.name.clone(),
@@ -220,33 +330,17 @@ impl<'a> VM<'a> {
                 GlobalAction::Wait => {
                     unreachable!("await action should not be in the list of actions");
                 }
-                GlobalAction::Send(_sender_channel, receiver_info) => {
-                    if let Some(receiver_info) = receiver_info {
-                        if let Some(dependency) =
-                            self.waiting_programs.get(&receiver_info.program_id)
-                        {
-                            if dependency
-                                .channels_state
-                                .contains(&receiver_info.channel_name)
-                            {
-                                self.waiting_programs.remove(&receiver_info.program_id);
-                                self.executable_programs.insert(receiver_info.program_id);
-                            }
-                        }
-                    } else {
-                        // the current process is waiting but this  will be catched up by the await instruction
-                    }
+                GlobalAction::Deliver(_) => {
+                    unreachable!("Deliver is VM-generated and cannot come from a program step")
                 }
                 GlobalAction::Connect(sender_id, sender_channel) => {
-                    if let Some(dependency) = self.waiting_programs.get(&sender_id) {
+                    // Connect is only relevant if the sender is currently blocked on that
+                    // specific connection. Otherwise it can be safely ignored.
+                    if let Some(dependency) = self.waiting_programs.get(sender_id) {
                         if dependency.channels_connection.contains(sender_channel) {
                             self.waiting_programs.remove(sender_id);
-                            self.executable_programs.insert(sender_id.clone());
-                        } else {
-                            unreachable!("the sender program must be waiting for a connection, otherwise the channel connection is not a global action");
+                            self.executable_programs.insert(*sender_id);
                         }
-                    } else {
-                        unreachable!("the sender program must be waiting, otherwise the channel connection is not a global action");
                     }
                 }
                 GlobalAction::Write(var_name) => {
@@ -275,6 +369,7 @@ impl<'a> VM<'a> {
                 }
                 GlobalAction::Exit => self.running_programs.clear(),
                 GlobalAction::Print(_) => {} // do nothing, this is just a print action
+                GlobalAction::Send(_) => {} // do nothing, sending is already handled
             }
         }
         if actions.end {
@@ -352,33 +447,17 @@ impl<'a> VM<'a> {
                 GlobalAction::Wait => {
                     unreachable!("await action should not be in the list of actions");
                 }
-                GlobalAction::Send(_sender_channel, receiver_info) => {
-                    if let Some(receiver_info) = receiver_info {
-                        if let Some(dependency) =
-                            self.waiting_programs.get(&receiver_info.program_id)
-                        {
-                            if dependency
-                                .channels_state
-                                .contains(&receiver_info.channel_name)
-                            {
-                                self.waiting_programs.remove(&receiver_info.program_id);
-                                self.executable_programs.insert(receiver_info.program_id);
-                            }
-                        }
-                    } else {
-                        // the current process is waiting but this  will be catched up by the await instruction
-                    }
+                GlobalAction::Deliver(_) => {
+                    unreachable!("Deliver is VM-generated and cannot come from a program step")
                 }
                 GlobalAction::Connect(sender_id, sender_channel) => {
+                    // Connect is only relevant if the sender is currently blocked on that
+                    // specific connection. Otherwise it can be safely ignored.
                     if let Some(dependency) = self.waiting_programs.get(&sender_id) {
                         if dependency.channels_connection.contains(&sender_channel) {
                             self.waiting_programs.remove(&sender_id);
                             self.executable_programs.insert(sender_id);
-                        } else {
-                            unreachable!("the sender program must be waiting for a connection, otherwise the channel connection is not a global action");
                         }
-                    } else {
-                        unreachable!("the sender program must be waiting, otherwise the channel connection is not a global action");
                     }
                 }
                 GlobalAction::Write(var_name) => {
@@ -399,6 +478,7 @@ impl<'a> VM<'a> {
                 }
                 GlobalAction::Exit => self.running_programs.clear(),
                 GlobalAction::Print(_) => {} // do nothing, this is just a print action
+                GlobalAction::Send(_) => {} // do nothing, sending is already handled
             }
         }
         if actions.end {
@@ -419,7 +499,7 @@ impl<'a> VM<'a> {
     /**
      * List all the next possible state of the VM
      */
-    pub fn next(&self) -> AlthreadResult<Vec<(String, usize, Vec<Instruction>, VM<'a>)>> {
+    pub fn next(&self) -> AlthreadResult<Vec<(String, usize, Vec<Instruction>, Vec<GlobalAction>, VM<'a>)>> {
         if self.running_programs.len() == 0 {
             return Ok(Vec::new());
         }
@@ -436,15 +516,72 @@ impl<'a> VM<'a> {
 
             let mut vm = self.clone();
             if let Some(result) = vm.next_step_pid(program.id)? {
-                next_states.push((program.name.clone(), program.id, result.instructions, vm));
+                next_states.push((program.name.clone(), program.id, result.instructions, result.actions, vm));
             }
+        }
+
+        // message deliveries are also schedulable steps
+        for link in self.channels.pending_links().into_iter() {
+            let mut vm = self.clone();
+            let delivery_info = vm
+                .channels
+                .deliver_one(link)
+                .expect("pending link must have a deliverable message");
+
+            if let Some(dependency) = vm.waiting_programs.get(&delivery_info.to.program_id) {
+                if dependency
+                    .channels_state
+                    .contains(&delivery_info.to.channel_name)
+                {
+                    vm.waiting_programs.remove(&delivery_info.to.program_id);
+                    vm.executable_programs.insert(delivery_info.to.program_id);
+                }
+            }
+
+            let from_name = vm
+                .running_programs
+                .get(delivery_info.from_program_id)
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| format!("PID_{}", delivery_info.from_program_id));
+            let to_name = vm
+                .running_programs
+                .get(delivery_info.to.program_id)
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| format!("PID_{}", delivery_info.to.program_id));
+
+            let (sender_id, sender_clock, _content) =
+                crate::vm::channels::parse_message_tuple(&delivery_info.message)
+                    .unwrap_or((delivery_info.from_program_id, 0, "".to_string()));
+
+            next_states.push((
+                format!(
+                    "__deliver__ {}#{}",
+                    delivery_info.to.channel_name, delivery_info.to.program_id
+                ),
+                delivery_info.to.program_id,
+                Vec::new(),
+                vec![GlobalAction::Deliver(crate::vm::DeliverInfo {
+                    from: crate::vm::ProcessInfo {
+                        process_id: sender_id,
+                        process_name: from_name,
+                    },
+                    to: crate::vm::ProcessInfo {
+                        process_id: delivery_info.to.program_id,
+                        process_name: to_name,
+                    },
+                    channel_name: delivery_info.to.channel_name,
+                    message: delivery_info.message,
+                    sender_clock,
+                })],
+                vm,
+            ));
         }
 
         Ok(next_states)
     }
 
     pub fn is_finished(&self) -> bool {
-        self.executable_programs.is_empty()
+        self.executable_programs.is_empty() && !self.channels.has_pending_deliveries()
     }
 
     pub fn new_memory() -> Memory {
@@ -558,7 +695,22 @@ impl<'a> fmt::Display for VM<'a> {
 impl<'a> Hash for VM<'a> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.globals.hash(state);
-        self.channels.state().hash(state);
+        self.channels.get_states().hash(state);
+
+        // Hash maps are order-dependent, convert to BTreeMap for stable hashing.
+        let mut conn = BTreeMap::new();
+        for (k, v) in self.channels.get_connections().into_iter() {
+            conn.insert(k, v);
+        }
+        conn.hash(state);
+
+        self.channels.get_pending_deliveries().hash(state);
+
+        let mut waiting = BTreeMap::new();
+        for (k, v) in self.channels.get_waiting_send().into_iter() {
+            waiting.insert(k, v);
+        }
+        waiting.hash(state);
         self.running_programs.hash(state);
     }
 
@@ -574,10 +726,22 @@ impl<'a> Hash for VM<'a> {
 
 impl std::cmp::PartialEq for VM<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.globals == other.globals
-            && self.channels.state() == other.channels.state()
-            && self.running_programs == other.running_programs
-            && self.programs_code == other.programs_code
+        if self.globals != other.globals {
+            return false;
+        }
+        if self.channels.get_states() != other.channels.get_states() {
+            return false;
+        }
+        if self.channels.get_pending_deliveries() != other.channels.get_pending_deliveries() {
+            return false;
+        }
+        if self.channels.get_connections() != other.channels.get_connections() {
+            return false;
+        }
+        if self.channels.get_waiting_send() != other.channels.get_waiting_send() {
+            return false;
+        }
+        self.running_programs == other.running_programs && self.programs_code == other.programs_code
     }
 }
 

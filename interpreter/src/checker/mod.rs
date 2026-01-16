@@ -6,12 +6,13 @@ use serde::ser::{Serialize, SerializeStruct, Serializer};
 use crate::{
     compiler::CompiledProject,
     error::{AlthreadError, AlthreadResult, ErrorType},
-    vm::{instruction::Instruction, VM},
+    vm::{GlobalAction, VM, instruction::Instruction},
 };
 
 #[derive(Debug, Clone)]
 pub struct StateLink<'a> {
     pub instructions: Vec<Instruction>,
+    pub actions: Vec<GlobalAction>,
     pub lines: Vec<usize>,
     pub pid: usize,
     pub name: String,
@@ -28,7 +29,8 @@ pub struct GraphNode<'a> {
 
 #[derive(Debug)]
 pub struct StateGraph<'a> {
-    nodes: HashMap<Rc<VM<'a>>, GraphNode<'a>>,
+    pub nodes: HashMap<Rc<VM<'a>>, GraphNode<'a>>,
+    pub exhaustive: bool,
 }
 
 impl<'a> std::fmt::Display for StateLink<'a> {
@@ -47,11 +49,12 @@ impl<'a> Serialize for StateLink<'a> {
         S: Serializer,
     {
         // 3 is the number of fields in the struct.
-        let mut state = serializer.serialize_struct("StateLink", 4)?;
+        let mut state = serializer.serialize_struct("StateLink", 5)?;
         state.serialize_field("lines", &self.lines)?;
         state.serialize_field("pid", &self.pid)?;
         state.serialize_field("name", &self.name)?;
         state.serialize_field("to", &self.to.as_ref())?;
+        state.serialize_field("actions", &self.actions)?;
         state.end()
     }
 }
@@ -79,7 +82,7 @@ impl<'a> Serialize for StateGraph<'a> {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("StateGraph", 1)?;
+        let mut state = serializer.serialize_struct("StateGraph", 2)?;
         state.serialize_field(
             "nodes",
             &self
@@ -88,6 +91,7 @@ impl<'a> Serialize for StateGraph<'a> {
                 .map(|(key, node)| (key.as_ref(), node))
                 .collect::<Vec<(&VM, &GraphNode)>>(),
         )?;
+        state.serialize_field("exhaustive", &self.exhaustive)?;
         state.end()
     }
 }
@@ -106,9 +110,11 @@ impl<'a> GraphNode<'a> {
 /// Checks a given project, returning a path from an initial state to the first state that violates an invariant. (return an empty vector if no invariant is violated)
 pub fn check_program<'a>(
     compiled_project: &'a CompiledProject,
+    max_states: Option<usize>,
 ) -> AlthreadResult<(Vec<StateLink<'a>>, StateGraph<'a>)> {
     let mut state_graph = StateGraph {
         nodes: HashMap::new(),
+        exhaustive: true,
     };
 
     //42 initialize a VM with the compiled project
@@ -127,6 +133,12 @@ pub fn check_program<'a>(
 
     //42 while the successor list isn't empty
     while !next_nodes.is_empty() {
+        if let Some(max) = max_states {
+            if state_graph.nodes.len() >= max {
+                state_graph.exhaustive = false;
+                break;
+            }
+        }
         //42 we pick on the the next nodes and remove it from the vector
         let current_node = next_nodes.pop().unwrap();
         let current_level = state_graph.nodes.get_mut(&current_node).unwrap().level;
@@ -134,7 +146,7 @@ pub fn check_program<'a>(
         let successors = current_node.next()?;
 
         //42 we go through all successors
-        for (name, pid, instructions, vm) in successors.into_iter() {
+        for (name, pid, instructions, actions, vm) in successors.into_iter() {
             let vm: Rc<VM<'_>> = Rc::new(vm);
 
             let mut lines: Vec<usize> = instructions
@@ -155,6 +167,7 @@ pub fn check_program<'a>(
                     to: vm.clone(),
                     lines,
                     instructions,
+                    actions,
                     pid,
                     name,
                 });
@@ -200,6 +213,11 @@ pub fn check_program<'a>(
         } else if check_ret.is_ok_and(|x| x == 1) {
             state_graph.nodes.get_mut(&current_node).unwrap().eventually = true;
         }
+    }
+
+    //42 if the search was not exhaustive, we cannot check eventually violations
+    if !state_graph.exhaustive {
+        return Ok((vec![], state_graph));
     }
 
     //42 now checking eventually violations

@@ -123,19 +123,56 @@ pub fn check_command(cli_args: &CheckCommand) {
             exit(1);
         });
 
-    let checked = checker::check_program(&compiled_project).unwrap_or_else(|e| {
-        e.report(&input_map);
-        exit(1);
-    });
+    let checked = checker::check_program(&compiled_project, Some(cli_args.max_states as usize))
+        .unwrap_or_else(|e| {
+            e.report(&input_map);
+            exit(1);
+        });
 
     if checked.0.is_empty() {
-        println!("No invariant violated");
-        return;
-    } else {
-        println!("Invariant violated");
-        for vm in checked.0.iter() {
-            println!("========= {}#{:?}", vm.name, vm.pid);
+        if !checked.1.exhaustive {
+            println!(
+                "{}",
+                format!(
+                    "Warning: Maximum number of states ({}) reached. The search was not exhaustive.",
+                    cli_args.max_states
+                )
+                .yellow()
+            );
+            println!(
+                "{}",
+                "Note: Liveness properties (eventually) were not checked because the state space is incomplete."
+                .italic()
+            );
         }
+        println!("✓ No invariant violated");
+    } else {
+        println!("✗ Invariant violated");
+        for link in checked.0.iter() {
+            println!(
+                "{}",
+                format!("-- {}#{} --", link.name, link.pid)
+                    .style(if link.pid == 0 {
+                        MAIN_STYLE
+                    } else {
+                        PROCESS_PALETTE[(link.pid.saturating_sub(1)) % PROCESS_PALETTE.len()]
+                    })
+            );
+            for line_num in &link.lines {
+                if let Some(line) = source.lines().nth(line_num.saturating_sub(1)) {
+                    println!("{:4} | {}", line_num, line);
+                }
+            }
+        }
+    }
+
+    println!("\nVerification Statistics:");
+    println!("  States explored: {}", checked.1.nodes.len());
+    let max_depth = checked.1.nodes.values().map(|n| n.level).max().unwrap_or(0);
+    println!("  Maximum depth:  {}", max_depth);
+    
+    if !checked.0.is_empty() {
+        println!("  Violation path: {} steps", checked.0.len());
     }
 }
 
@@ -167,21 +204,31 @@ pub fn run_interactive(
             println!("No next state");
             return;
         }
-        for (name, pid, insts, nvm) in next_states.iter() {
-            println!("======= VM next =======");
-            println!(
-                "{}:{}:{}",
-                name,
-                pid,
-                if insts[0].pos.is_some() {
+
+        for (idx, (name, pid, insts, actions, nvm)) in next_states.iter().enumerate() {
+            println!("======= VM next ({}) =======", idx);
+            let preview_line: String = if let Some(first) = insts.first() {
+                if first.pos.is_some() {
                     source
                         .lines()
-                        .nth(insts[0].pos.as_ref().unwrap().line)
+                        .nth(first.pos.as_ref().unwrap().line)
                         .unwrap_or_default()
+                        .to_string()
                 } else {
-                    "?"
+                    "?".to_string()
                 }
-            );
+            } else {
+                // Delivery steps are schedulable transitions with no executed instruction.
+                let mut preview = None;
+                for action in actions {
+                    if let althread::vm::GlobalAction::Deliver(delivery_info) = action {
+                        preview = Some(format!("deliver {} -> {}", delivery_info.channel_name, delivery_info.message));
+                        break;
+                    }
+                }
+                preview.unwrap_or_else(|| "<no instruction>".to_string())
+            };
+            println!("{}:{}:{}", name, pid, preview_line);
 
             let s = nvm.current_state();
             println!("global: {:?}", s.0);
@@ -210,10 +257,27 @@ pub fn run_interactive(
         while selected < 0 || selected >= next_states.len() as i32 {
             println!("Enter an integer between 0 and {}:", next_states.len() - 1);
             let mut input = String::new();
-            stdin().read_line(&mut input).unwrap();
-            selected = input.trim().parse().unwrap();
+            let bytes_read = stdin().read_line(&mut input).unwrap();
+            if bytes_read == 0 {
+                println!("EOF on stdin, exiting interactive mode");
+                return;
+            }
+            match input.trim().parse() {
+                Ok(v) => selected = v,
+                Err(_) => {
+                    selected = -1;
+                    continue;
+                }
+            }
         }
-        let (_, _, _, nvm) = next_states.get(selected as usize).unwrap();
+        let (_name, _pid, _insts, actions, nvm) = next_states.get(selected as usize).unwrap();
+        
+        for action in actions {
+            if let althread::vm::GlobalAction::Print(msg) = action {
+                println!("{}", msg);
+            }
+        }
+
         vm = nvm.clone();
     }
 }
@@ -267,14 +331,22 @@ pub fn run_command(cli_args: &RunCommand) {
     let mut vm = althread::vm::VM::new(&compiled_project);
 
     vm.start(cli_args.seed.unwrap_or(fastrand::u64(0..(1 << 63))));
-    for _ in 0..100000 {
+    let mut step_count = 0;
+    while step_count < cli_args.max_steps {
         if vm.is_finished() {
             break;
         }
+        step_count += 1;
         let info = vm.next_random().unwrap_or_else(|err| {
             err.report(&input_map);
             exit(1);
         });
+
+        for action in info.actions.iter() {
+            if let althread::vm::GlobalAction::Print(msg) = action {
+                println!("{}", msg);
+            }
+        }
 
         if cli_args.verbose || cli_args.debug {
             let mut prev_line = 0;
@@ -324,6 +396,18 @@ pub fn run_command(cli_args: &RunCommand) {
         }
         vm_set.insert(vm.clone());
     }
+
+    if !vm.is_finished() && step_count >= cli_args.max_steps {
+        println!(
+            "{}",
+            format!(
+                "Error: Maximum number of steps ({}) reached. The program might be in an infinite loop. Use --max-steps to increase the limit.",
+                cli_args.max_steps
+            )
+            .red()
+        );
+    }
+
     if cli_args.verbose {
         for v in vm_execution.iter() {
             println!("======= VM step =======");
@@ -391,11 +475,11 @@ pub fn random_search_command(cli_args: &RandomSearchCommand) {
             exit(1);
         });
 
-    for s in 0..10000 {
-        println!("Seed: {}/10000", s);
+    for s in 0..cli_args.max_seeds {
+        println!("Seed: {}/{}", s, cli_args.max_seeds);
         let mut vm = althread::vm::VM::new(&compiled_project);
         vm.start(s);
-        for _ in 0..100000 {
+        for _ in 0..cli_args.max_steps {
             if vm.is_finished() {
                 break;
             }
@@ -404,6 +488,13 @@ pub fn random_search_command(cli_args: &RandomSearchCommand) {
                 err.report(&input_map);
                 exit(1);
             });
+
+            for action in info.actions.iter() {
+                if let althread::vm::GlobalAction::Print(msg) = action {
+                    println!("{}", msg);
+                }
+            }
+
             if info.invariant_error.is_err() {
                 println!("Error with seed {}:", s);
                 info.invariant_error.unwrap_err().report(&input_map);

@@ -3,7 +3,7 @@
 import { createSignal, createEffect, Show } from "solid-js";
 import Resizable from '@corvu/resizable'
 
-import init, { initialize, compile, run, check, start_interactive_session, get_next_interactive_states, execute_interactive_step } from '../pkg/althread_web';
+import init, { initialize, start_interactive_session, get_next_interactive_states, execute_interactive_step } from '../pkg/althread_web';
 import createEditor from '@components/editor/Editor';
 import Graph from "@components/graph/Graph";
 import { Logo } from "@assets/images/Logo";
@@ -25,6 +25,7 @@ import { LoadExampleDialog } from '@components/dialogs/LoadExampleDialog';
 import { EmptyEditor } from '@components/editor/EmptyEditor';
 import { formatAlthreadError } from '@utils/error';
 import ErrorDisplay from '@components/error/ErrorDisplay';
+import { workerClient } from '@utils/workerClient';
 
 init().then(() => {
   console.log('loaded');
@@ -36,23 +37,17 @@ const animationTimeOut = 100; //ms
 export default function App() {
   // Load file system from localStorage
   let initialFileSystem = loadFileSystem();
-  const utilsExists = initialFileSystem.some(entry => entry.name === 'utils' && entry.type === 'directory');
-
-  // If the loaded filesystem from local storage is old, reset it.
-  if (!utilsExists) {
-    localStorage.removeItem(STORAGE_KEYS.FILE_SYSTEM);
-    initialFileSystem = loadFileSystem();
-  }
 
   const [mockFileSystem, setMockFileSystem] = createSignal<FileSystemEntry[]>(initialFileSystem);
   const [selectedFiles, setSelectedFiles] = createSignal<string[]>([]);
   const [creationError, setCreationError] = createSignal<string | null>(null);
+  const [didAutoOpenDefault, setDidAutoOpenDefault] = createSignal(false);
   
   // Global file creation state - shared between FileExplorer and EmptyEditor
   const [globalFileCreation, setGlobalFileCreation] = createSignal<{ type: 'file' | 'folder', parentPath: string } | null>(null);
 
   // Sidebar view state
-  const [sidebarView, setSidebarView] = createSignal<SidebarView>('explorer');
+  const [sidebarView, setSidebarView] = createSignal<SidebarView>('help');
   const [sidebarCollapsed, setSidebarCollapsed] = createSignal(false);
 
   const toggleSidebarCollapse = () => {
@@ -61,10 +56,12 @@ export default function App() {
 
   // Initialize editor (no default file content)
   let editor = createEditor({
-    compile: (source: string) => {
-      const filePath = getPathFromId(mockFileSystem(), editorManager.activeFile()!.id) || editorManager.activeFile()!.name;
+    compile: async (source: string) => {
+      const activeFile = editorManager.activeFile();
+      if (!activeFile) return null;
+      const filePath = getPathFromId(mockFileSystem(), activeFile.id) || activeFile.name;
       const virtualFS = buildVirtualFileSystem(mockFileSystem());
-      return compile(source, filePath, virtualFS); // Now compile expects virtual_fs parameter
+      return await workerClient.compile(source, filePath, virtualFS); 
     }, 
     defaultValue: '// Welcome to Althread\n',
     filePath: 'untitled.alt',
@@ -98,7 +95,31 @@ export default function App() {
     loadFileContent
   );
 
-  // No automatic file opening - let user choose what to open
+  // Auto-open main.alt by default (once), so the editor isn't empty on load.
+  createEffect(() => {
+    if (didAutoOpenDefault()) return;
+    if (editorManager.activeFile()) {
+      setDidAutoOpenDefault(true);
+      return;
+    }
+
+    const fs = mockFileSystem();
+    const main = findFileByPath(fs, 'main.alt');
+
+    if (main && main.type === 'file') {
+      editorManager.handleFileSelect('main.alt', fs);
+      setDidAutoOpenDefault(true);
+      return;
+    }
+
+    // Fallback: if there's exactly one file in root, open it.
+    const singleRootFile = fs.length === 1 && fs[0].type === 'file' ? fs[0] : null;
+    if (singleRootFile) {
+      const filePath = getPathFromId(fs, singleRootFile.id) || singleRootFile.name;
+      editorManager.handleFileSelect(filePath, fs);
+    }
+    setDidAutoOpenDefault(true);
+  });
 
   // Conflict checking functions for file operations
   const checkNameConflict = (destPath: string, movingName: string): boolean => {
@@ -737,7 +758,7 @@ export default function App() {
                   if (!filePath) {
                     filePath = editorManager.activeFile()!.name; // Fallback to name if ID not found
                   }
-                  let res = run(editor.editorView().state.doc.toString(), filePath, virtualFS); 
+                  let res = await workerClient.run(editor.editorView().state.doc.toString(), filePath, virtualFS); 
                   console.log(res);
                   if (res.debug.length === 0) {
                     resetSetOut();
@@ -775,7 +796,7 @@ export default function App() {
             <button
               class={`vscode-button${activeAction() === "check" ? " active" : ""}`}
               disabled={!editorManager.activeFile() || !isAltFile()}
-              onClick={() => {
+              onClick={async () => {
                 if (loadingAction() !== "check") setLoadingAction("check");
                 if (activeAction() !== "check") setActiveAction("check");
                 setActiveTab("vm_states");
@@ -793,8 +814,15 @@ export default function App() {
                     filePath = editorManager.activeFile()!.name; // Fallback to name if ID not found
                   }
 
-                  let res = check(editor.editorView().state.doc.toString(), filePath, virtualFS);
-                  setOut("No execution errors found.");
+                  let res = await workerClient.check(editor.editorView().state.doc.toString(), filePath, virtualFS);
+                  
+                  if (res[0].length > 0) {
+                      setOut("Violation found! See the highlighted path in the VM states graph.");
+                  } else if (res[1].exhaustive) {
+                    setOut("Verification complete: No execution errors found.");
+                  } else {
+                    setOut("Warning: Exploration limit reached. The state space was not fully explored. No violation found in the explored part.");
+                  }
                   
                   console.log(res);
                   let colored_path: string[] = [];

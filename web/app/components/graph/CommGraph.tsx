@@ -211,7 +211,8 @@ export const renderMessageFlowGraph = (commGraphData, vm_states) => {
 
     // extract processes name to make one line per process
     commGraphData.forEach((event: MessageFlowEvent) => {
-      if (event.message === "out") {
+      const evt_type = String.fromCharCode(event.evt_type);
+      if (evt_type === 's') {
         processes.set(event.sender, event.actor_prog_name);
       } else {
         processes.set(event.receiver, event.actor_prog_name);

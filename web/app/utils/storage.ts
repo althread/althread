@@ -26,16 +26,7 @@ export const loadFileSystem = (): FileSystemEntry[] => {
   }
   // Default file system if nothing stored
   return addIds([
-    { name: 'main.alt', type: 'file' },
-    {
-      name: 'utils',
-      type: 'directory',
-      children: [
-        { name: 'helpers.alt', type: 'file' },
-        { name: 'math.alt', type: 'file' },
-      ],
-    },
-    { name: 'README.md', type: 'file' }
+    { name: 'main.alt', type: 'file' }
   ]);
 };
 
@@ -49,18 +40,11 @@ export const loadFileContent = (fileName: string): string => {
     return content;
   }
   
-  // Default content for specific files
-  if (fileName === 'README.md') {
-    localStorage.setItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + 'README.md', '# Project README\n\nThis is your project documentation.');
-    return localStorage.getItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + 'README.md')!;
-  }
-  if (fileName === 'utils/helpers.alt') {
-    localStorage.setItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + 'utils/helpers.alt', '// Helper functions\n');
-    return localStorage.getItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + 'utils/helpers.alt')!;
-  }
-  if (fileName === 'utils/math.alt') {
-    localStorage.setItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + 'utils/math.alt', '// Math functions\n');
-    return localStorage.getItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + 'utils/math.alt')!;
+  // Default content for main entrypoint
+  if (fileName === 'main.alt') {
+    const defaultMain = `// Althread program\n\nmain {\n    // write your code here\n}\n`;
+    localStorage.setItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + 'main.alt', defaultMain);
+    return defaultMain;
   }
   
   return '// New file\n';
@@ -87,7 +71,7 @@ export const getDefaultContentForFile = (fileName: string): string => {
     case 'md':
       return '# Markdown File\n\nThis is a markdown document.';
     case 'alt':
-      return '// Althread file\n';
+      return '// Althread file\n\nmain {\n\n}\n';
     default:
       return '// New file\n';
   }
