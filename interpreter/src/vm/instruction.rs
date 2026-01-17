@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
 use crate::{
     ast::{
@@ -57,7 +57,13 @@ pub enum InstructionType {
     FnCall {
         name: String,
         unstack_len: usize,
-        variable_idx: Option<usize>,
+        arguments: Option<Vec<usize>>,
+    },
+    MethodCall {
+        name: String,
+        receiver_idx: usize,
+        unstack_len: usize,
+        drop_receiver: bool,
         arguments: Option<Vec<usize>>,
     },
     Return {
@@ -98,6 +104,9 @@ pub enum InstructionType {
     },
     AtomicStart,
     AtomicEnd,
+    Label {
+        name: String,
+    },
     EndProgram,
     Exit,
 }
@@ -151,6 +160,21 @@ impl fmt::Display for InstructionType {
             Self::FnCall {
                 name, unstack_len, ..
             } => write!(f, "{}()  (unstack {})", name, unstack_len)?,
+            Self::MethodCall {
+                name,
+                unstack_len,
+                receiver_idx,
+                drop_receiver,
+                arguments,
+            } => write!(
+                f,
+                "{}() receiver [{}] (unstack {}, drop {}, args {})",
+                name,
+                receiver_idx,
+                unstack_len,
+                drop_receiver,
+                if arguments.is_some() { "scattered" } else { "tuple" }
+            )?,
             Self::Return { has_value } => {
                 write!(f, "return {:?}", if *has_value { "value" } else { "void" })?
             }
@@ -207,6 +231,7 @@ impl fmt::Display for InstructionType {
             }
             Self::AtomicStart => write!(f, "atomic start")?,
             Self::AtomicEnd => write!(f, "atomic end")?,
+            Self::Label { name } => write!(f, "label {}", name)?,
         }
         Ok(())
     }
@@ -251,11 +276,13 @@ impl InstructionType {
             | Self::Destruct
             | Self::Unstack {..}
             | Self::FnCall {..}
+            | Self::MethodCall {..}
             | Self::Return {..}
             | Self::Declaration {..}
             | Self::CreateListFromStack {..}
             | Self::ConvertEmptyListType {..}
             | Self::AtomicEnd
+            | Self::Label {..}
             | Self::EndProgram
             | Self::Exit
             | Self::Push(_) => true,
@@ -316,6 +343,7 @@ impl fmt::Display for Instruction {
 pub struct ProgramCode {
     pub name: String,
     pub instructions: Vec<Instruction>,
+    pub labels: HashMap<String, usize>,
 }
 
 // impl display for ProcessCode

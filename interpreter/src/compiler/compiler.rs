@@ -477,6 +477,40 @@ impl Ast {
             ));
         }
 
+        let program_names: Vec<String> = state.program_arguments().keys().cloned().collect();
+        {
+            let global_table = state.global_table_mut();
+            for prog_name in program_names {
+                let gs_name = format!("GS.procs.{}", prog_name);
+                let dollar_name = format!("$.procs.{}", prog_name);
+                if !global_table.contains_key(&gs_name) {
+                    global_table.insert(
+                        gs_name.clone(),
+                        Variable {
+                            mutable: false,
+                            name: gs_name,
+                            datatype: DataType::List(Box::new(DataType::Process(prog_name.clone()))),
+                            depth: 0,
+                            declare_pos: None,
+                        },
+                    );
+                }
+                if !global_table.contains_key(&dollar_name) {
+                    global_table.insert(
+                        dollar_name.clone(),
+                        Variable {
+                            mutable: false,
+                            name: dollar_name,
+                            datatype: DataType::List(Box::new(DataType::Process(prog_name.clone()))),
+                            depth: 0,
+                            declare_pos: None,
+                        },
+                    );
+                }
+            }
+        }
+
+        state.in_condition_block = true;
         for (name, condition_block) in self.condition_blocks.iter() {
             match name {
                 ConditionKeyword::Always => {
@@ -567,6 +601,7 @@ impl Ast {
                 _ => {}
             }
         }
+        state.in_condition_block = false;
 
         // now compile the function bodies
         for (func_name, (args_list, return_datatype, func_block, is_private)) in
@@ -1081,6 +1116,7 @@ impl Ast {
         let mut process_code = ProgramCode {
             instructions: Vec::new(),
             name: name.to_string(),
+            labels: HashMap::new(),
         };
         let (args, prog, _) = self
             .process_blocks
@@ -1117,6 +1153,31 @@ impl Ast {
             control: InstructionType::EndProgram,
             pos: Some(prog.pos.clone()),
         });
+
+        let mut label_map: HashMap<String, usize> = HashMap::new();
+        for (idx, inst) in process_code.instructions.iter().enumerate() {
+            if let InstructionType::Label { name } = &inst.control {
+                if name == "end" {
+                    return Err(AlthreadError::new(
+                        ErrorType::SyntaxError,
+                        inst.pos.clone(),
+                        "Label name 'end' is reserved".to_string(),
+                    ));
+                }
+                if label_map.contains_key(name) {
+                    return Err(AlthreadError::new(
+                        ErrorType::SyntaxError,
+                        inst.pos.clone(),
+                        format!("Label '{}' is already defined", name),
+                    ));
+                }
+                label_map.insert(name.clone(), idx);
+            }
+        }
+
+        let end_index = process_code.instructions.len() - 1;
+        label_map.insert("end".to_string(), end_index);
+        process_code.labels = label_map;
         Ok(process_code)
     }
 }

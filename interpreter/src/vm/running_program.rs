@@ -65,6 +65,49 @@ impl Hash for RunningProgramState<'_> {
 }
 
 impl<'a> RunningProgramState<'a> {
+    fn call_interface_method(
+        &mut self,
+        name: &String,
+        receiver_mem_idx: usize,
+        args: Literal,
+        pos: Option<Pos>,
+    ) -> AlthreadResult<Literal> {
+        let mut lit = self
+            .memory
+            .get(receiver_mem_idx)
+            .expect("Panic: stack is empty, cannot perform method call")
+            .clone();
+
+        let interfaces = self
+            .stdlib
+            .get_interfaces(&lit.get_datatype())
+            .ok_or_else(|| {
+                let e = AlthreadError::new(
+                    ErrorType::UndefinedFunction,
+                    pos.clone(),
+                    format!("Type {:?} has no interface available", lit.get_datatype()),
+                );
+                self.build_error_stack(e)
+            })?;
+
+        let fn_idx = interfaces.iter().position(|i| i.name == *name);
+        if fn_idx.is_none() {
+            let e = AlthreadError::new(
+                ErrorType::UndefinedFunction,
+                pos.clone(),
+                format!("undefined function {}", name),
+            );
+            return Err(self.build_error_stack(e));
+        }
+        let interface = interfaces.get(fn_idx.unwrap()).unwrap();
+        let mut args = args;
+
+        let ret = interface.f.as_ref()(&mut lit, &mut args, pos)?;
+        self.memory[receiver_mem_idx] = lit;
+
+        Ok(ret)
+    }
+
     pub fn new(
         id: usize,
         name: String,
@@ -241,6 +284,7 @@ impl<'a> RunningProgramState<'a> {
             InstructionType::Empty => 1,
             InstructionType::AtomicStart => 1,
             InstructionType::AtomicEnd => 1,
+            InstructionType::Label { .. } => 1,
             InstructionType::Break {
                 unstack_len, jump, ..
             } => {
@@ -476,70 +520,11 @@ impl<'a> RunningProgramState<'a> {
                 0
             }
             InstructionType::FnCall {
-                variable_idx,
                 name,
-                arguments,
                 unstack_len,
+                ..
             } => {
-                if let Some(v_idx) = variable_idx {
-                    let v_idx = self.memory.len() - 1 - v_idx;
-                    let mut lit = self
-                        .memory
-                        .get(v_idx)
-                        .expect("Panic: stack is empty, cannot perform function call")
-                        .clone();
-
-                    let interfaces =
-                        self.stdlib
-                            .get_interfaces(&lit.get_datatype())
-                            .ok_or_else(|| {
-                                let e = AlthreadError::new(
-                                    ErrorType::UndefinedFunction,
-                                    cur_inst.pos.clone(),
-                                    format!(
-                                        "Type {:?} has no interface available",
-                                        lit.get_datatype()
-                                    ),
-                                );
-                                self.build_error_stack(e)
-                            })?;
-
-                    let fn_idx = interfaces.iter().position(|i| i.name == *name);
-                    if fn_idx.is_none() {
-                        let e = AlthreadError::new(
-                            ErrorType::UndefinedFunction,
-                            cur_inst.pos.clone(),
-                            format!("undefined function {}", name),
-                        );
-                        return Err(self.build_error_stack(e));
-                    }
-                    let fn_idx = fn_idx.unwrap();
-                    let interface = interfaces.get(fn_idx).unwrap();
-                    let mut args = match &arguments {
-                        None => self.memory.last().unwrap().clone(),
-                        Some(v) => {
-                            let mut args = Vec::new();
-                            for i in 0..v.len() {
-                                let idx = self.memory.len() - 1 - v[i];
-                                args.push(self.memory.get(idx).unwrap().clone());
-                            }
-                            Literal::Tuple(args)
-                        }
-                    };
-                    let ret = interface.f.as_ref()(&mut lit, &mut args, cur_inst.pos.clone())?;
-
-                    //update the memory with object literal
-                    self.memory[v_idx] = lit;
-
-                    for _ in 0..*unstack_len {
-                        self.memory.pop();
-                    }
-
-                    self.memory.push(ret);
-
-                    1
-                } else {
-                    match name.as_str() {
+                match name.as_str() {
                         "print" => {
                             let lit = self
                                 .memory
@@ -640,7 +625,54 @@ impl<'a> RunningProgramState<'a> {
                             }
                         }
                     }
+            }
+            InstructionType::MethodCall {
+                name,
+                receiver_idx,
+                unstack_len,
+                drop_receiver,
+                arguments,
+            } => {
+                let receiver_mem_idx = self.memory.len() - 1 - *receiver_idx;
+                let args = match &arguments {
+                    None => self
+                        .memory
+                        .last()
+                        .expect("Panic: stack is empty, cannot perform method call")
+                        .clone(),
+                    Some(v) => {
+                        let mut args = Vec::new();
+                        for i in 0..v.len() {
+                            let idx = self.memory.len() - 1 - v[i];
+                            args.push(self.memory.get(idx).unwrap().clone());
+                        }
+                        Literal::Tuple(args)
+                    }
+                };
+                let ret = self.call_interface_method(
+                    name,
+                    receiver_mem_idx,
+                    args,
+                    cur_inst.pos.clone(),
+                )?;
+
+                for _ in 0..*unstack_len {
+                    self.memory.pop();
                 }
+
+                if *drop_receiver {
+                    if self.memory.pop().is_none() {
+                        let e = AlthreadError::new(
+                            ErrorType::RuntimeError,
+                            cur_inst.pos.clone(),
+                            "Stack underflow during method call cleanup.".to_string(),
+                        );
+                        return Err(self.build_error_stack(e));
+                    }
+                }
+
+                self.memory.push(ret);
+                1
             }
             InstructionType::WaitStart { .. } => 1,
             InstructionType::Wait {

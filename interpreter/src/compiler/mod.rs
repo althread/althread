@@ -125,6 +125,7 @@ pub struct CompilerState {
     pub is_shared: bool,
     pub in_function: bool,
     pub method_call_stack_offset: usize,
+    pub in_condition_block: bool,
 
     // Reference to shared context
     pub context: Rc<RefCell<CompilationContext>>,
@@ -150,6 +151,7 @@ impl CompilerState {
             is_shared: false,
             in_function: false,
             method_call_stack_offset: 0,
+            in_condition_block: false,
             context,
             user_functions: HashMap::new(),
             global_table: HashMap::new(),

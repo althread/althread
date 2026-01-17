@@ -1,7 +1,6 @@
 
 
 shared {
-  let Done = false;
   let Leader = 0;
 }
 
@@ -28,14 +27,13 @@ program A(my_id: int) {
   if my_id == leader_id {
     print("I AM THE LEADER!!!");
     ! {
-        Done = true;
         Leader += 1;
     }
   }
 }
 
 eventually {
-    Leader == 1;
+  Leader == 1 && $.procs.A.at(0).reaches(end);
 }
 
 
@@ -55,7 +53,5 @@ main {
   let p1 = a.at(n-1);
   let p2 = a.at(0);
   channel p1.out (int)> p2.in;
-
-  print("DONE");
 }
 

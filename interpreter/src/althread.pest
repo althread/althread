@@ -46,11 +46,13 @@ statement = {
   | call_statement
   | code_block
   | break_loop_statement
+  | label_statement
   | return_statement
 }
 
 
 break_loop_statement = { (BREAK_KW | CONTINUE_KW) ~ identifier? ~ ";" }
+label_statement      = { LABEL_KW ~ identifier ~ ";" }
 assignment_statement  = _{ assignment ~ ";" }
 declaration_statement = _{ declaration ~ ";" }
 wait_statement        =  { WAIT_KW ~ (
@@ -133,9 +135,13 @@ range_expression = {
 	(expression ~ LIST_OP ~ expression)
 }
 
+postfix_expression = { primary_expression ~ postfix_segment* }
+postfix_segment = { postfix_call | postfix_reaches }
+postfix_call = { "." ~ identifier ~ tuple_expression }
+postfix_reaches = { "." ~ REACHES_KW ~ "(" ~ identifier ~ ")" }
 primary_expression = _{ fn_call | literal | object_identifier | "(" ~ expression ~ ")" }
 
-unary_expression = _{ unary_operator? ~ primary_expression }
+unary_expression = _{ unary_operator? ~ postfix_expression }
 unary_operator   =  { POS_OP | NEG_OP | NOT_OP }
 
 binary_expression   = _{ unary_expression ~ (binary_operator ~ unary_expression)* }
@@ -186,6 +192,8 @@ KEYWORDS = _{
   | IMPORT_KW
   | AS_KW
   | PRIVATE_KW
+  | LABEL_KW
+  | REACHES_KW
   | BOOL
   | INT_TYPE
   | FLOAT_TYPE
@@ -215,6 +223,8 @@ FOR_KW = _{ "for" }
 LOOP_KW = _{ "loop" }
 BREAK_KW = { "break" }
 CONTINUE_KW = { "continue" }
+LABEL_KW = { "label" }
+REACHES_KW = { "reaches" }
 
 SEND_KW = _{ "send" }
 RECEIVE_KW = _{ "receive" }
@@ -290,12 +300,13 @@ NULL    = @{ NULL_KW }
 /// ### Identifiers
 /// Identifiers are used for naming variables, functions, and other constructs.
 identifier        = { IDENT }
-object_identifier = { IDENT ~ ("." ~ IDENT)* }
+object_identifier = { (IDENT | DOLLAR) ~ ("." ~ IDENT)* }
 
 reserved_keywords = { (KEYWORDS | datatype) ~ !IDENT_CHAR }
 
 IDENT      = @{ !reserved_keywords ~ ASCII_ALPHA ~ IDENT_CHAR* }
 IDENT_CHAR = _{ ASCII_ALPHANUMERIC | "_" }
+DOLLAR     = { "$" }
 
 /// ## Whitespace and Comments
 /// Whitespace and comments are ignored by the parser.

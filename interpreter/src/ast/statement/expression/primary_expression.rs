@@ -27,10 +27,16 @@ pub enum PrimaryExpression {
     Literal(Node<Literal>),
     Identifier(Node<ObjectIdentifier>),
     Expression(Box<Node<Expression>>),
+    Reaches(Node<ObjectIdentifier>, Option<Box<Node<Expression>>>, Node<Identifier>),
 }
 
 impl PrimaryExpression {
     pub fn build(pair: Pair<Rule>, filepath: &str) -> AlthreadResult<Node<Self>> {
+        if pair.as_rule() == Rule::primary_expression {
+            let mut inner = pair.into_inner();
+            let inner_pair = inner.next().unwrap();
+            return Self::build(inner_pair, filepath);
+        }
         Ok(Node {
             pos: Pos {
                 line: pair.line_col().0,
@@ -64,6 +70,20 @@ impl PrimaryExpression {
                 );
             }
             Self::Expression(node) => node.value.add_dependencies(dependencies),
+            Self::Reaches(proc_ident, index_expr, _) => {
+                dependencies.variables.insert(
+                    proc_ident
+                        .value
+                        .parts
+                        .iter()
+                        .map(|p| p.value.value.as_str())
+                        .collect::<Vec<_>>()
+                        .join("."),
+                );
+                if let Some(expr) = index_expr {
+                    expr.value.add_dependencies(dependencies);
+                }
+            }
         }
     }
     pub fn get_vars(&self, vars: &mut HashSet<String>) {
@@ -80,6 +100,20 @@ impl PrimaryExpression {
                 );
             }
             Self::Expression(node) => node.value.get_vars(vars),
+            Self::Reaches(proc_ident, index_expr, _) => {
+                vars.insert(
+                    proc_ident
+                        .value
+                        .parts
+                        .iter()
+                        .map(|p| p.value.value.as_str())
+                        .collect::<Vec<_>>()
+                        .join("."),
+                );
+                if let Some(expr) = index_expr {
+                    expr.value.get_vars(vars);
+                }
+            }
         }
     }
 }
@@ -141,6 +175,13 @@ impl LocalPrimaryExpressionNode {
             PrimaryExpression::Expression(node) => {
                 let e = LocalExpressionNode::from_expression(&node.as_ref().value, program_stack)?;
                 LocalPrimaryExpressionNode::Expression(Box::new(e))
+            }
+            PrimaryExpression::Reaches(_, _, _) => {
+                return Err(AlthreadError::new(
+                    ErrorType::ExpressionError,
+                    None,
+                    "'reaches' cannot be used as a local primary expression".to_string(),
+                ))
             }
         })
     }
@@ -206,6 +247,28 @@ impl AstDisplay for PrimaryExpression {
                 );
             }
             PrimaryExpression::Expression(node) => node.ast_fmt(f, prefix),
+            PrimaryExpression::Reaches(proc_ident, index_expr, label_ident) => {
+                let target = proc_ident
+                    .value
+                    .parts
+                    .iter()
+                    .map(|p| p.value.value.as_str())
+                    .collect::<Vec<_>>()
+                    .join(".");
+                if index_expr.is_some() {
+                    writeln!(
+                        f,
+                        "{prefix}reaches: {}.at(...) .reaches({})",
+                        target, label_ident.value.value
+                    )
+                } else {
+                    writeln!(
+                        f,
+                        "{prefix}reaches: {}.reaches({})",
+                        target, label_ident.value.value
+                    )
+                }
+            }
         }
     }
 }

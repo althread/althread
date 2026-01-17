@@ -149,7 +149,6 @@ impl InstructionBuilder for Node<FnCall> {
                     control: InstructionType::FnCall {
                         name: basename.to_string(),
                         unstack_len,
-                        variable_idx: None,
                         arguments: None,
                     },
                     pos: Some(self.pos.clone()),
@@ -229,7 +228,6 @@ impl InstructionBuilder for Node<FnCall> {
                     control: InstructionType::FnCall {
                         name: basename.to_string(),
                         unstack_len,
-                        variable_idx: None,
                         arguments: None,
                     },
                     pos: Some(self.pos.clone()),
@@ -278,10 +276,11 @@ impl InstructionBuilder for Node<FnCall> {
             });
 
             builder.instructions.push(Instruction {
-                control: InstructionType::FnCall {
+                control: InstructionType::MethodCall {
                     name: method_name.clone(),
-                    unstack_len: unstack_len,
-                    variable_idx: Some(final_var_id),
+                    receiver_idx: final_var_id,
+                    unstack_len,
+                    drop_receiver: false,
                     arguments: None,
                 },
                 pos: Some(self.pos.clone()),

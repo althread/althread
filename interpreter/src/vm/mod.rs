@@ -16,7 +16,7 @@ use serde::{ser::SerializeStruct, Serialize, Serializer};
 use crate::{
     ast::{
         statement::{expression::LocalExpressionNode, waiting_case::WaitDependency},
-        token::literal::Literal,
+        token::{datatype::DataType, literal::Literal},
     },
     compiler::{stdlib::Stdlib, CompiledProject, FunctionDefinition},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
@@ -614,14 +614,28 @@ impl<'a> VM<'a> {
             // create a small memory stack with the value of the variables
             let mut memory = Vec::new();
             for var_name in read_vars.iter() {
-                memory.push(
-                    self.globals
-                        .get(var_name)
-                        .expect(format!("global variable '{}' not found", var_name).as_str())
-                        .clone(),
-                );
+                if let Some(proc_name) = var_name.strip_prefix("$.procs.")
+                {
+                    let values = self
+                        .running_programs
+                        .iter()
+                        .filter(|p| p.name == proc_name)
+                        .map(|p| Literal::Process(p.name.clone(), p.id))
+                        .collect::<Vec<_>>();
+                    memory.push(Literal::List(
+                        DataType::Process(proc_name.to_string()),
+                        values,
+                    ));
+                } else {
+                    memory.push(
+                        self.globals
+                            .get(var_name)
+                            .expect(format!("global variable '{}' not found", var_name).as_str())
+                            .clone(),
+                    );
+                }
             }
-            match expr.eval(&memory) {
+            match expr.eval_with_context(&memory, self) {
                 Ok(cond) => {
                     if !cond.is_true() {
                         return Err(AlthreadError::new(
@@ -650,14 +664,28 @@ impl<'a> VM<'a> {
             // create a small memory stack with the value of the variables
             let mut memory = Vec::new();
             for var_name in read_vars.iter() {
-                memory.push(
-                    self.globals
-                        .get(var_name)
-                        .expect(format!("global variable '{}' not found", var_name).as_str())
-                        .clone(),
-                );
+                if let Some(proc_name) = var_name.strip_prefix("$.procs.")
+                {
+                    let values = self
+                        .running_programs
+                        .iter()
+                        .filter(|p| p.name == proc_name)
+                        .map(|p| Literal::Process(p.name.clone(), p.id))
+                        .collect::<Vec<_>>();
+                    memory.push(Literal::List(
+                        DataType::Process(proc_name.to_string()),
+                        values,
+                    ));
+                } else {
+                    memory.push(
+                        self.globals
+                            .get(var_name)
+                            .expect(format!("global variable '{}' not found", var_name).as_str())
+                            .clone(),
+                    );
+                }
             }
-            match expr.eval(&memory) {
+            match expr.eval_with_context(&memory, self) {
                 Ok(cond) => {
                     if !cond.is_true() {
                         return Ok(0); // eventually not checking on a specific state isn't an error
