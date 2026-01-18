@@ -27,6 +27,8 @@ use crate::{
     },
 };
 
+use super::ltl;
+
 impl Ast {
     fn module_prefix(name: &str) -> &str {
         match name.rfind('.') {
@@ -192,6 +194,8 @@ impl Ast {
                 programs_code: HashMap::new(),
                 always_conditions: Vec::new(),
                 eventually_conditions: Vec::new(),
+                ltl_formulas: Vec::new(),
+                compiled_ltl_formulas: Vec::new(),
                 stdlib: Rc::new(stdlib::Stdlib::new()),
             });
         }
@@ -602,6 +606,12 @@ impl Ast {
             }
         }
         state.in_condition_block = false;
+
+        for check_block in self.check_blocks.iter() {
+            for formula in &check_block.value.formulas {
+                state.ltl_formulas_mut().push(formula.clone());
+            }
+        }
 
         // now compile the function bodies
         for (func_name, (args_list, return_datatype, func_block, is_private)) in
@@ -1103,6 +1113,8 @@ impl Ast {
             programs_code: state.programs_code().clone(),
             always_conditions: state.always_conditions().clone(),
             eventually_conditions: state.eventually_conditions().clone(),
+            ltl_formulas: state.ltl_formulas().clone(),
+            compiled_ltl_formulas: ltl::compile_ltl_formulas(state.ltl_formulas(), &state)?,
             stdlib: state.stdlib().clone(),
         })
     }

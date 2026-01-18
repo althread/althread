@@ -32,8 +32,8 @@ program A(my_id: int) {
   }
 }
 
-eventually {
-  Leader == 1 && for p in $.procs.A { p.reaches(L) };
+check {
+  for p in $.procs.A { eventually p.reaches(L) };
 }
 always {
   Leader <= 1;

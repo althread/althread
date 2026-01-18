@@ -1,6 +1,9 @@
 //42 <- used to easily remove all comments made with this id
+pub mod ltl;
+
 use std::{collections::{HashMap, VecDeque}, rc::Rc};
 
+use ltl::compiled::CompiledLtlExpression;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 use crate::{
@@ -112,6 +115,14 @@ pub fn check_program<'a>(
     compiled_project: &'a CompiledProject,
     max_states: Option<usize>,
 ) -> AlthreadResult<(Vec<StateLink<'a>>, StateGraph<'a>)> {
+    if !compiled_project.compiled_ltl_formulas.is_empty() {
+        println!("Found {} compiled LTL formulas in the project", compiled_project.compiled_ltl_formulas.len());
+        for (i, formula) in compiled_project.compiled_ltl_formulas.iter().enumerate() {
+            println!("Compiled LTL Formula #{}: {}", i + 1, formula);
+        }
+        log::warn!("LTL verification is not yet implemented. These formulas will be ignored for now.");
+    }
+
     let mut state_graph = StateGraph {
         nodes: HashMap::new(),
         exhaustive: true,

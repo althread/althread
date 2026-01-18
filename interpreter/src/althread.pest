@@ -13,16 +13,20 @@ private_directive = { "@" ~ PRIVATE_KW }
 /// - **Condition Block**: Monitors conditions at each atomic step (e.g., always, never, eventually).
 /// - **Program Block**: Encapsulates code that runs concurrently in parallel processes.
 /// - **Function Block**: User-defined functions
-blocks = _{ import_block | main_block | global_block | condition_block | program_block | function_block }
+/// - **Check Block**: Contains LTL formulas to check
+blocks = _{ import_block | main_block | global_block | condition_block | program_block | function_block | check_block }
 
 global_block    = { GLOBAL_KW ~ code_block }
 condition_block = { condition_keywords ~ expression_block }
+check_block     = { CHECK_KW ~ "{" ~ ltl_statement* ~ "}" }
 program_block   = { private_directive? ~ PROGRAM_KW ~ identifier ~ arg_list ~ code_block }
 main_block      = { private_directive? ~ MAIN_KW ~ code_block }
 
 code_block           = { "{" ~ statement* ~ "}" }
 expression_block     = { "{" ~ expression_statement* ~ "}" }
 expression_statement = { expression ~ ";" }
+ltl_statement        = { ltl_expression ~ ";" }
+ltl_for_loop         = { FOR_KW ~ identifier ~ "in" ~ list_expression ~ "{" ~ ltl_expression ~ ";"? ~ "}" }
 
 condition_keywords = _{ ALWAYS_KW | NEVER_KW | EVENTUALLY_KW }
 
@@ -128,6 +132,22 @@ receive_expression = { RECEIVE_KW ~ object_identifier? ~ pattern_list ~ ("=>" ~ 
 /// Expressions evaluate values based on arithmetic and logical operations, following standard precedence rules.
 expression = { binary_expression }
 
+/// ### LTL Expressions
+/// LTL expressions are used in the check block to define Linear Temporal Logic formulas.
+ltl_expression = { ltl_term ~ (ltl_binary_operator ~ ltl_term)* }
+ltl_binary_operator = _{ OR_OP | AND_OP | UNTIL_KW }
+
+ltl_term = { ltl_for_loop | ltl_unary_expression | ltl_if_expression | ltl_atom }
+
+ltl_if_expression = { IF_KW ~ ltl_expression ~ "{" ~ ltl_expression ~ "}" }
+
+ltl_unary_expression = { ltl_unary_operator ~ ltl_term }
+ltl_unary_operator = _{ ALWAYS_KW | EVENTUALLY_KW | NOT_OP }
+
+ltl_atom = _{ "(" ~ ltl_expression ~ ")" | ltl_predicate }
+ltl_predicate = { expression }
+
+
 tuple_expression = {
  ("(" ~ ")") | ("(" ~ expression ~ ("," ~ expression)* ~ ")")
 }
@@ -229,8 +249,11 @@ FOR_KW = _{ "for" }
 LOOP_KW = _{ "loop" }
 BREAK_KW = { "break" }
 CONTINUE_KW = { "continue" }
-LABEL_KW = { "label" }
+LABEL_KW = _{ "label" }
 REACHES_KW = { "reaches" }
+
+CHECK_KW = { "check" }
+UNTIL_KW = { "until" }
 
 SEND_KW = _{ "send" }
 RECEIVE_KW = _{ "receive" }

@@ -312,6 +312,15 @@ pub enum Expression {
     CallChain(Node<CallChainExpression>),
 }
 
+impl fmt::Display for Expression {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // We can't implement decent Display easily without more effort, 
+        // but for LTL Predicates printing we might need it.
+        // For now let's use Debug-like print or placeholder.
+        write!(f, "{:?}", self)
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct CallChainExpression {
     pub base: Box<Node<Expression>>,
@@ -1055,6 +1064,7 @@ impl LocalExpressionNode {
                     context: state.context.clone(),
                     always_conditions: state.always_conditions.clone(),
                     eventually_conditions: state.eventually_conditions.clone(),
+                    ltl_formulas: state.ltl_formulas.clone(),
                     user_functions: state.user_functions.clone(),
                     global_table: state.global_table.clone(),
                     program_arguments: state.program_arguments.clone(),
@@ -1101,6 +1111,7 @@ impl LocalExpressionNode {
                     context: state.context.clone(),
                     always_conditions: state.always_conditions.clone(),
                     eventually_conditions: state.eventually_conditions.clone(),
+                    ltl_formulas: state.ltl_formulas.clone(),
                     user_functions: state.user_functions.clone(),
                     global_table: state.global_table.clone(),
                     program_arguments: state.program_arguments.clone(),

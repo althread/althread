@@ -6,7 +6,10 @@ use std::rc::Rc;
 pub mod compiler;
 pub mod prescan;
 pub mod stdlib;
+pub mod ltl;
 
+use crate::checker::ltl::ast::LtlExpression;
+use crate::checker::ltl::compiled::CompiledLtlExpression;
 use crate::ast::statement::expression::LocalExpressionNode;
 use crate::error::Pos;
 use crate::vm::instruction::Instruction;
@@ -134,6 +137,8 @@ pub struct CompilerState {
     pub always_conditions: Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
     pub eventually_conditions: Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
 
+    pub ltl_formulas: Vec<LtlExpression>,
+
     pub user_functions: HashMap<String, FunctionDefinition>,
     pub global_table: HashMap<String, Variable>,
     pub program_arguments: HashMap<String, (Vec<DataType>, bool)>,
@@ -159,6 +164,7 @@ impl CompilerState {
             global_memory: BTreeMap::new(),
             always_conditions: Vec::new(),
             eventually_conditions: Vec::new(),
+            ltl_formulas: Vec::new(),
             programs_code: HashMap::new(),
         }
     }
@@ -240,7 +246,13 @@ impl CompilerState {
     pub fn eventually_conditions_mut(&mut self) -> &mut Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)> {
         &mut self.eventually_conditions
     }
+    pub fn ltl_formulas(&self) -> &Vec<LtlExpression> {
+        &self.ltl_formulas
+    }
 
+    pub fn ltl_formulas_mut(&mut self) -> &mut Vec<LtlExpression> {
+        &mut self.ltl_formulas
+    }
     pub fn programs_code(&self) -> &HashMap<String, ProgramCode> {
         &self.programs_code
     }
@@ -281,6 +293,9 @@ pub struct CompiledProject {
     pub always_conditions: Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
     /// conditions that must be true at least once in each possible executions
     pub eventually_conditions: Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
+
+    pub ltl_formulas: Vec<LtlExpression>,
+    pub compiled_ltl_formulas: Vec<CompiledLtlExpression>,
 
     pub stdlib: Rc<stdlib::Stdlib>,
 }
