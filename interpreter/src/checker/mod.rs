@@ -184,9 +184,32 @@ pub fn check_program<'a>(
 
         //42 check invariants
         let check_ret = current_node.check_invariants();
-        if check_ret.is_err() {
+        if let Err(e) = check_ret {
             let mut path = Vec::new();
             let mut back_node = current_node.clone();
+
+            if state_graph
+                .nodes
+                .get(&back_node)
+                .unwrap()
+                .predecessor
+                .is_none()
+            {
+                let lines = if let Some(pos) = &e.pos {
+                    vec![pos.line]
+                } else {
+                    vec![]
+                };
+                path.push(StateLink {
+                    to: back_node.clone(),
+                    lines,
+                    instructions: vec![],
+                    actions: vec![],
+                    pid: 0,
+                    name: "_init_".to_string(),
+                });
+                return Ok((path, state_graph));
+            }
 
             while let Some(pred) = state_graph
                 .nodes

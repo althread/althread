@@ -28,6 +28,21 @@ pub enum PrimaryExpression {
     Identifier(Node<ObjectIdentifier>),
     Expression(Box<Node<Expression>>),
     Reaches(Node<ObjectIdentifier>, Option<Box<Node<Expression>>>, Node<Identifier>),
+    IfExpr {
+        condition: Box<Node<Expression>>,
+        then_expr: Box<Node<Expression>>,
+        else_expr: Box<Node<Expression>>,
+    },
+    ForAllExpr {
+        var: Node<Identifier>,
+        list: Box<Node<Expression>>,
+        body: Box<Node<Expression>>,
+    },
+    ExistsExpr {
+        var: Node<Identifier>,
+        list: Box<Node<Expression>>,
+        body: Box<Node<Expression>>,
+    },
 }
 
 impl PrimaryExpression {
@@ -48,7 +63,77 @@ impl PrimaryExpression {
             value: match pair.as_rule() {
                 Rule::literal => Self::Literal(Node::build(pair, filepath)?),
                 Rule::object_identifier => Self::Identifier(Node::build(pair, filepath)?),
+                Rule::IDENT => {
+                    let pos = Pos {
+                        line: pair.line_col().0,
+                        col: pair.line_col().1,
+                        start: pair.as_span().start(),
+                        end: pair.as_span().end(),
+                        file_path: filepath.to_string(),
+                    };
+                    let ident_node = Node {
+                        pos: pos.clone(),
+                        value: Identifier {
+                            value: pair.as_str().to_string(),
+                        },
+                    };
+                    Self::Identifier(Node {
+                        pos,
+                        value: ObjectIdentifier { parts: vec![ident_node] },
+                    })
+                }
                 Rule::expression => Self::Expression(Box::new(Node::build(pair, filepath)?)),
+                Rule::if_expression => {
+                    let mut inner = pair.into_inner();
+                    let condition = Box::new(Node::build(inner.next().unwrap(), filepath)?);
+                    let then_expr = Box::new(Node::build(inner.next().unwrap(), filepath)?);
+                    let else_expr = Box::new(Node::build(inner.next().unwrap(), filepath)?);
+                    Self::IfExpr {
+                        condition,
+                        then_expr,
+                        else_expr,
+                    }
+                }
+                Rule::forall_expression => {
+                    let inner = pair.into_inner();
+                    let mut inner = inner.filter(|p| p.as_rule() != Rule::FOR_KW);
+                    let var_pair = inner.next().unwrap();
+                    let var = Node {
+                        pos: Pos {
+                            line: var_pair.line_col().0,
+                            col: var_pair.line_col().1,
+                            start: var_pair.as_span().start(),
+                            end: var_pair.as_span().end(),
+                            file_path: filepath.to_string(),
+                        },
+                        value: Identifier {
+                            value: var_pair.as_str().to_string(),
+                        },
+                    };
+                    let list = Box::new(Node::build(inner.next().unwrap(), filepath)?);
+                    let body = Box::new(Node::build(inner.next().unwrap(), filepath)?);
+                    Self::ForAllExpr { var, list, body }
+                }
+                Rule::exists_expression => {
+                    let inner = pair.into_inner();
+                    let mut inner = inner.filter(|p| p.as_rule() != Rule::EXISTS_KW);
+                    let var_pair = inner.next().unwrap();
+                    let var = Node {
+                        pos: Pos {
+                            line: var_pair.line_col().0,
+                            col: var_pair.line_col().1,
+                            start: var_pair.as_span().start(),
+                            end: var_pair.as_span().end(),
+                            file_path: filepath.to_string(),
+                        },
+                        value: Identifier {
+                            value: var_pair.as_str().to_string(),
+                        },
+                    };
+                    let list = Box::new(Node::build(inner.next().unwrap(), filepath)?);
+                    let body = Box::new(Node::build(inner.next().unwrap(), filepath)?);
+                    Self::ExistsExpr { var, list, body }
+                }
                 _ => return Err(no_rule!(pair, "PrimaryExpression", filepath)),
             },
         })
@@ -84,6 +169,25 @@ impl PrimaryExpression {
                     expr.value.add_dependencies(dependencies);
                 }
             }
+            Self::IfExpr {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
+                condition.value.add_dependencies(dependencies);
+                then_expr.value.add_dependencies(dependencies);
+                else_expr.value.add_dependencies(dependencies);
+            }
+            Self::ForAllExpr { var, list, body } => {
+                list.value.add_dependencies(dependencies);
+                body.value.add_dependencies(dependencies);
+                dependencies.variables.remove(&var.value.value);
+            }
+            Self::ExistsExpr { var, list, body } => {
+                list.value.add_dependencies(dependencies);
+                body.value.add_dependencies(dependencies);
+                dependencies.variables.remove(&var.value.value);
+            }
         }
     }
     pub fn get_vars(&self, vars: &mut HashSet<String>) {
@@ -113,6 +217,25 @@ impl PrimaryExpression {
                 if let Some(expr) = index_expr {
                     expr.value.get_vars(vars);
                 }
+            }
+            Self::IfExpr {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
+                condition.value.get_vars(vars);
+                then_expr.value.get_vars(vars);
+                else_expr.value.get_vars(vars);
+            }
+            Self::ForAllExpr { var, list, body } => {
+                list.value.get_vars(vars);
+                body.value.get_vars(vars);
+                vars.remove(&var.value.value);
+            }
+            Self::ExistsExpr { var, list, body } => {
+                list.value.get_vars(vars);
+                body.value.get_vars(vars);
+                vars.remove(&var.value.value);
             }
         }
     }
@@ -181,6 +304,15 @@ impl LocalPrimaryExpressionNode {
                     ErrorType::ExpressionError,
                     None,
                     "'reaches' cannot be used as a local primary expression".to_string(),
+                ))
+            }
+            PrimaryExpression::IfExpr { .. }
+            | PrimaryExpression::ForAllExpr { .. }
+            | PrimaryExpression::ExistsExpr { .. } => {
+                return Err(AlthreadError::new(
+                    ErrorType::ExpressionError,
+                    None,
+                    "This expression is only supported in always/eventually blocks".to_string(),
                 ))
             }
         })
@@ -268,6 +400,15 @@ impl AstDisplay for PrimaryExpression {
                         target, label_ident.value.value
                     )
                 }
+            }
+            PrimaryExpression::IfExpr { .. } => {
+                writeln!(f, "{prefix}if_expr")
+            }
+            PrimaryExpression::ForAllExpr { .. } => {
+                writeln!(f, "{prefix}forall_expr")
+            }
+            PrimaryExpression::ExistsExpr { .. } => {
+                writeln!(f, "{prefix}exists_expr")
             }
         }
     }

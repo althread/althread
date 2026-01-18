@@ -339,6 +339,9 @@ pub enum LocalExpressionNode {
     FnCall(Box<Node<FnCall>>),
     Reaches(LocalReachesNode),
     CallChain(LocalCallChainNode),
+    IfExpr(LocalIfExprNode),
+    ForAll(LocalForAllNode),
+    Exists(LocalExistsNode),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -358,6 +361,27 @@ pub struct LocalCallChainNode {
 pub enum LocalCallChainSegment {
     Call { name: String, args: Box<LocalExpressionNode> },
     Reaches { label: String },
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct LocalIfExprNode {
+    pub condition: Box<LocalExpressionNode>,
+    pub then_expr: Box<LocalExpressionNode>,
+    pub else_expr: Box<LocalExpressionNode>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct LocalForAllNode {
+    pub var_name: String,
+    pub list: Box<LocalExpressionNode>,
+    pub body: Box<LocalExpressionNode>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct LocalExistsNode {
+    pub var_name: String,
+    pub list: Box<LocalExpressionNode>,
+    pub body: Box<LocalExpressionNode>,
 }
 impl fmt::Display for LocalExpression {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -382,6 +406,9 @@ impl fmt::Display for LocalExpressionNode {
                 }
             }
             Self::CallChain(_) => write!(f, "<call_chain>"),
+            Self::IfExpr(_) => write!(f, "<if_expr>"),
+            Self::ForAll(_) => write!(f, "<forall_expr>"),
+            Self::Exists(_) => write!(f, "<exists_expr>"),
         }
     }
 }
@@ -669,6 +696,58 @@ impl LocalExpressionNode {
                         label: label_ident.value.value.clone(),
                     })
                 }
+                PrimaryExpression::IfExpr {
+                    condition,
+                    then_expr,
+                    else_expr,
+                } => {
+                    let cond = LocalExpressionNode::from_expression(&condition.value, program_stack)?;
+                    let then_e = LocalExpressionNode::from_expression(&then_expr.value, program_stack)?;
+                    let else_e = LocalExpressionNode::from_expression(&else_expr.value, program_stack)?;
+                    LocalExpressionNode::IfExpr(LocalIfExprNode {
+                        condition: Box::new(cond),
+                        then_expr: Box::new(then_e),
+                        else_expr: Box::new(else_e),
+                    })
+                }
+                PrimaryExpression::ForAllExpr { var, list, body } => {
+                    let list_local = LocalExpressionNode::from_expression(&list.value, program_stack)?;
+
+                    let mut temp_stack = program_stack.clone();
+                    temp_stack.push(Variable {
+                        mutable: false,
+                        name: var.value.value.clone(),
+                        datatype: DataType::Void,
+                        depth: 0,
+                        declare_pos: Some(var.pos.clone()),
+                    });
+                    let body_local = LocalExpressionNode::from_expression(&body.value, &temp_stack)?;
+
+                    LocalExpressionNode::ForAll(LocalForAllNode {
+                        var_name: var.value.value.clone(),
+                        list: Box::new(list_local),
+                        body: Box::new(body_local),
+                    })
+                }
+                PrimaryExpression::ExistsExpr { var, list, body } => {
+                    let list_local = LocalExpressionNode::from_expression(&list.value, program_stack)?;
+
+                    let mut temp_stack = program_stack.clone();
+                    temp_stack.push(Variable {
+                        mutable: false,
+                        name: var.value.value.clone(),
+                        datatype: DataType::Void,
+                        depth: 0,
+                        declare_pos: Some(var.pos.clone()),
+                    });
+                    let body_local = LocalExpressionNode::from_expression(&body.value, &temp_stack)?;
+
+                    LocalExpressionNode::Exists(LocalExistsNode {
+                        var_name: var.value.value.clone(),
+                        list: Box::new(list_local),
+                        body: Box::new(body_local),
+                    })
+                }
                 _ => LocalExpressionNode::Primary(
                     LocalPrimaryExpressionNode::from_primary(&node.value, program_stack)?,
                 ),
@@ -732,6 +811,17 @@ impl LocalExpressionNode {
                     }
                 }
                 has_call
+            }
+            LocalExpressionNode::IfExpr(n) => {
+                n.condition.contains_fn_call()
+                    || n.then_expr.contains_fn_call()
+                    || n.else_expr.contains_fn_call()
+            }
+            LocalExpressionNode::ForAll(n) => {
+                n.list.contains_fn_call() || n.body.contains_fn_call()
+            }
+            LocalExpressionNode::Exists(n) => {
+                n.list.contains_fn_call() || n.body.contains_fn_call()
             }
         }
     }
@@ -914,6 +1004,116 @@ impl LocalExpressionNode {
                 }
                 Ok(current_type)
             }
+            Self::IfExpr(node) => {
+                if !state.in_condition_block {
+                    return Err(
+                        "if-expressions are only supported inside always/eventually blocks"
+                            .to_string(),
+                    );
+                }
+                let cond_type = node.condition.datatype(state)?;
+                if cond_type != DataType::Boolean {
+                    return Err("if condition must be boolean".to_string());
+                }
+                let then_type = node.then_expr.datatype(state)?;
+                let else_type = node.else_expr.datatype(state)?;
+                if then_type != else_type {
+                    return Err("if branches must have the same type".to_string());
+                }
+                Ok(then_type)
+            }
+            Self::ForAll(node) => {
+                if !state.in_condition_block {
+                    return Err(
+                        "forall is only supported inside always/eventually blocks".to_string(),
+                    );
+                }
+                let list_type = node.list.datatype(state)?;
+                let elem_type = match list_type {
+                    DataType::List(t) => *t,
+                    _ => return Err("forall expects a list".to_string()),
+                };
+
+                let mut temp_stack = state.program_stack.clone();
+                temp_stack.push(Variable {
+                    name: node.var_name.clone(),
+                    depth: state.current_stack_depth,
+                    mutable: false,
+                    datatype: elem_type,
+                    declare_pos: None,
+                });
+
+                let temp_state = CompilerState {
+                    program_stack: temp_stack,
+                    current_stack_depth: state.current_stack_depth,
+                    current_program_name: state.current_program_name.clone(),
+                    is_atomic: state.is_atomic,
+                    is_shared: state.is_shared,
+                    in_function: state.in_function,
+                    method_call_stack_offset: state.method_call_stack_offset,
+                    in_condition_block: state.in_condition_block,
+                    context: state.context.clone(),
+                    always_conditions: state.always_conditions.clone(),
+                    eventually_conditions: state.eventually_conditions.clone(),
+                    user_functions: state.user_functions.clone(),
+                    global_table: state.global_table.clone(),
+                    program_arguments: state.program_arguments.clone(),
+                    programs_code: state.programs_code.clone(),
+                    global_memory: state.global_memory.clone(),
+                };
+
+                let body_type = node.body.datatype(&temp_state)?;
+                if body_type != DataType::Boolean {
+                    return Err("forall body must be boolean".to_string());
+                }
+                Ok(DataType::Boolean)
+            }
+            Self::Exists(node) => {
+                if !state.in_condition_block {
+                    return Err(
+                        "exists is only supported inside always/eventually blocks".to_string(),
+                    );
+                }
+                let list_type = node.list.datatype(state)?;
+                let elem_type = match list_type {
+                    DataType::List(t) => *t,
+                    _ => return Err("exists expects a list".to_string()),
+                };
+
+                let mut temp_stack = state.program_stack.clone();
+                temp_stack.push(Variable {
+                    name: node.var_name.clone(),
+                    depth: state.current_stack_depth,
+                    mutable: false,
+                    datatype: elem_type,
+                    declare_pos: None,
+                });
+
+                let temp_state = CompilerState {
+                    program_stack: temp_stack,
+                    current_stack_depth: state.current_stack_depth,
+                    current_program_name: state.current_program_name.clone(),
+                    is_atomic: state.is_atomic,
+                    is_shared: state.is_shared,
+                    in_function: state.in_function,
+                    method_call_stack_offset: state.method_call_stack_offset,
+                    in_condition_block: state.in_condition_block,
+                    context: state.context.clone(),
+                    always_conditions: state.always_conditions.clone(),
+                    eventually_conditions: state.eventually_conditions.clone(),
+                    user_functions: state.user_functions.clone(),
+                    global_table: state.global_table.clone(),
+                    program_arguments: state.program_arguments.clone(),
+                    programs_code: state.programs_code.clone(),
+                    global_memory: state.global_memory.clone(),
+                };
+
+                let body_type = node.body.datatype(&temp_state)?;
+                if body_type != DataType::Boolean {
+                    return Err("exists body must be boolean".to_string());
+                }
+                Ok(DataType::Boolean)
+            }
         }
     }
     pub fn eval(&self, mem: &Memory) -> Result<Literal, String> {
@@ -961,6 +1161,15 @@ impl LocalExpressionNode {
             ),
             LocalExpressionNode::CallChain(_) => Err(
                 "call chains are only supported in always/eventually blocks".to_string(),
+            ),
+            LocalExpressionNode::IfExpr(_) => Err(
+                "if-expressions are only supported in always/eventually blocks".to_string(),
+            ),
+            LocalExpressionNode::ForAll(_) => Err(
+                "forall is only supported in always/eventually blocks".to_string(),
+            ),
+            LocalExpressionNode::Exists(_) => Err(
+                "exists is only supported in always/eventually blocks".to_string(),
             ),
         }
     }
@@ -1187,6 +1396,48 @@ impl LocalExpressionNode {
                     }
                 }
                 Ok(current)
+            }
+            LocalExpressionNode::IfExpr(node) => {
+                let cond = node.condition.eval_with_context(mem, vm)?;
+                if cond.is_true() {
+                    node.then_expr.eval_with_context(mem, vm)
+                } else {
+                    node.else_expr.eval_with_context(mem, vm)
+                }
+            }
+            LocalExpressionNode::ForAll(node) => {
+                let list = node.list.eval_with_context(mem, vm)?;
+                let values = match list {
+                    Literal::List(_, values) => values,
+                    _ => return Err("forall expects a list".to_string()),
+                };
+
+                for value in values.into_iter() {
+                    let mut temp_mem = mem.clone();
+                    temp_mem.push(value);
+                    let body_value = node.body.eval_with_context(&temp_mem, vm)?;
+                    if !body_value.is_true() {
+                        return Ok(Literal::Bool(false));
+                    }
+                }
+                Ok(Literal::Bool(true))
+            }
+            LocalExpressionNode::Exists(node) => {
+                let list = node.list.eval_with_context(mem, vm)?;
+                let values = match list {
+                    Literal::List(_, values) => values,
+                    _ => return Err("exists expects a list".to_string()),
+                };
+
+                for value in values.into_iter() {
+                    let mut temp_mem = mem.clone();
+                    temp_mem.push(value);
+                    let body_value = node.body.eval_with_context(&temp_mem, vm)?;
+                    if body_value.is_true() {
+                        return Ok(Literal::Bool(true));
+                    }
+                }
+                Ok(Literal::Bool(false))
             }
         }
     }

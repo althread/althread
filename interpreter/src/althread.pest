@@ -135,11 +135,15 @@ range_expression = {
 	(expression ~ LIST_OP ~ expression)
 }
 
+if_expression = { IF_KW ~ expression ~ "{" ~ expression ~ ";"? ~ "}" ~ ELSE_KW ~ "{" ~ expression ~ ";"? ~ "}" }
+forall_expression = { FOR_KW ~ identifier ~ "in" ~ expression ~ "{" ~ expression ~ ";"? ~ "}" }
+exists_expression = { EXISTS_KW ~ identifier ~ "in" ~ expression ~ "{" ~ expression ~ ";"? ~ "}" }
+
 postfix_expression = { primary_expression ~ postfix_segment* }
 postfix_segment = { postfix_call | postfix_reaches }
 postfix_call = { "." ~ identifier ~ tuple_expression }
 postfix_reaches = { "." ~ REACHES_KW ~ "(" ~ identifier ~ ")" }
-primary_expression = _{ fn_call | literal | object_identifier | "(" ~ expression ~ ")" }
+primary_expression = _{ if_expression | forall_expression | exists_expression | fn_call | literal | object_identifier | "(" ~ expression ~ ")" }
 
 unary_expression = _{ unary_operator? ~ postfix_expression }
 unary_operator   =  { POS_OP | NEG_OP | NOT_OP }
@@ -186,6 +190,7 @@ KEYWORDS = _{
   | CONST_KW
   | IF_KW
   | ELSE_KW
+  | EXISTS_KW
   | WHILE_KW
   | FN_KW
   | RETURN_KW
@@ -218,6 +223,7 @@ CONST_KW = { "const" }
 
 IF_KW    = _{ "if" }
 ELSE_KW  = _{ "else" }
+EXISTS_KW = { "exists" }
 WHILE_KW = _{ "while" }
 FOR_KW = _{ "for" }
 LOOP_KW = _{ "loop" }
