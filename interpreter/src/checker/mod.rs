@@ -1,5 +1,5 @@
 //42 <- used to easily remove all comments made with this id
-use std::{collections::HashMap, rc::Rc};
+use std::{collections::{HashMap, VecDeque}, rc::Rc};
 
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
@@ -128,8 +128,8 @@ pub fn check_program<'a>(
         .insert(initial_vm.clone(), GraphNode::new(None, 0));
 
     //42 successors vector
-    let mut next_nodes = Vec::new();
-    next_nodes.push(initial_vm.clone());
+    let mut next_nodes = VecDeque::new();
+    next_nodes.push_back(initial_vm.clone());
 
     //42 while the successor list isn't empty
     while !next_nodes.is_empty() {
@@ -140,7 +140,7 @@ pub fn check_program<'a>(
             }
         }
         //42 we pick on the the next nodes and remove it from the vector
-        let current_node = next_nodes.pop().unwrap();
+        let current_node = next_nodes.pop_front().unwrap();
         let current_level = state_graph.nodes.get_mut(&current_node).unwrap().level;
         //42 successors vector of current node
         let successors = current_node.next()?;
@@ -155,6 +155,7 @@ pub fn check_program<'a>(
                 .filter(|l| *l > 0)
                 .collect();
             //42 remove all dupes
+            lines.sort();
             lines.dedup();
 
             //42 add all the state links allowing transition from the current node to another one to the state graph
@@ -178,7 +179,7 @@ pub fn check_program<'a>(
                     vm.clone(),
                     GraphNode::new(Some(current_node.clone()), current_level + 1),
                 );
-                next_nodes.push(vm.clone());
+                next_nodes.push_back(vm.clone());
             }
         }
 
@@ -248,6 +249,7 @@ pub fn check_program<'a>(
     // path visit is used to keep track of the successors we've already checked
     let mut path_visit: Vec<usize> = Vec::new();
     let mut path = Vec::new();
+    let mut path_set = std::collections::HashSet::new();
     // if root node check eventually condition no path can exist
     if state_graph.nodes.get(&initial_vm).unwrap().eventually {
         return Ok((vec![], state_graph));
@@ -255,6 +257,7 @@ pub fn check_program<'a>(
 
     // retrieving the state Link of the initial VM
     path.push(initial_vm.clone());
+    path_set.insert(initial_vm.clone());
     // no successors have yet been visited
     path_visit.push(0);
 
@@ -281,7 +284,7 @@ pub fn check_program<'a>(
 
         // if the current node have no successors then we found an invalid path of execution
         if succ.is_empty() && visited_succ == 0 {
-            let ret = vec_vm_to_stalin(path, &state_graph);
+            let ret = reconstruct_path(path, &state_graph);
 
             match ret {
                 Ok(vec) => {
@@ -304,8 +307,12 @@ pub fn check_program<'a>(
             visited_succ += 1;
 
             // if the successor is already in the path we found an invalid execution path
-            if path.iter().any(|x| x == &curr_succ.to) {
-                let ret = vec_vm_to_stalin(path, &state_graph);
+            if path_set.contains(&curr_succ.to) {
+                // If it is in the path, we push it temporarily just to have it for reconstruction, 
+                // OR we can reconstruct including the cycle closing edge.
+                // reconstruct_path takes a Vec of VMs.
+                path.push(curr_succ.to.clone());
+                let ret = reconstruct_path(path, &state_graph);
                 match ret {
                     Ok(vec) => return Ok((vec.into_iter().rev().collect(), state_graph)),
                     // safety purpose
@@ -324,6 +331,7 @@ pub fn check_program<'a>(
             if !graph_node.eventually {
                 explorable_path = true;
                 path.push(curr_succ.to.clone());
+                path_set.insert(curr_succ.to.clone());
                 // we update the number of visited successors of the current node
                 path_visit.push(visited_succ);
                 // we then init the number of visited successors from the new node in the path
@@ -333,13 +341,16 @@ pub fn check_program<'a>(
         // if no explorable path was found we condemn this node (it is a dead end)
         if !explorable_path {
             state_graph.nodes.get_mut(&curr_vm).unwrap().eventually = true;
-            path.pop();
+            let popped = path.pop();
+            if let Some(p) = popped {
+                path_set.remove(&p);
+            }
         }
     }
     Ok((vec![], state_graph))
 }
 
-pub fn vec_vm_to_stalin<'a>(
+pub fn reconstruct_path<'a>(
     mut vec_vm: Vec<Rc<VM>>,
     state_graph: &StateGraph<'a>,
 ) -> AlthreadResult<Vec<StateLink<'a>>> {

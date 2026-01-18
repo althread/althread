@@ -28,7 +28,6 @@ program A(my_id: int) {
     ! {
         Leader += 1;
     }
-    await Leader == 2;
   }
 }
 
