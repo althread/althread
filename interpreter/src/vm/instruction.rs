@@ -97,6 +97,10 @@ pub enum InstructionType {
         channel_name: String,
         unstack_len: usize,
     },
+    Broadcast {
+        channel_name: String,
+        unstack_len: usize,
+    },
     Connect {
         /// the index of the sender pid in the stack (none if the sender is the current process)
         sender_pid: Option<usize>,
@@ -217,6 +221,10 @@ impl fmt::Display for InstructionType {
                 channel_name,
                 unstack_len,
             } => write!(f, "send to {} (unstack {})", channel_name, unstack_len)?,
+            Self::Broadcast {
+                channel_name,
+                unstack_len,
+            } => write!(f, "broadcast to {} (unstack {})", channel_name, unstack_len)?,
             Self::ChannelPeek(s) => write!(f, "peek '{}'", s)?,
             Self::ChannelPop(s) => write!(f, "pop '{}'", s)?,
             Self::Connect {
@@ -279,6 +287,7 @@ impl InstructionType {
             | Self::ChannelPop(_) // This is a local because it follows a peek
             | Self::Wait {..}
             | Self::Send {..}
+            | Self::Broadcast {..}
             | Self::Empty
             | Self::Expression(_)
             | Self::ExpressionAndCleanup {..}

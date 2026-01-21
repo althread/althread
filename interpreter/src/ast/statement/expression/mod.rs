@@ -1360,7 +1360,12 @@ impl LocalExpressionNode {
 
                 let prog_state = match vm.running_programs.get(pid) {
                     Some(p) => p,
-                    None => return Ok(Literal::Bool(false)),
+                    None => {
+                        if node.label == "end" {
+                            return Ok(Literal::Bool(true));
+                        }
+                        return Ok(Literal::Bool(false));
+                    }
                 };
 
                 if prog_state.name != program_name {
@@ -1422,7 +1427,11 @@ impl LocalExpressionNode {
                             let prog_state = match vm.running_programs.get(pid) {
                                 Some(p) => p,
                                 None => {
-                                    current = Literal::Bool(false);
+                                    if label == "end" {
+                                        current = Literal::Bool(true);
+                                    } else {
+                                        current = Literal::Bool(false);
+                                    }
                                     continue;
                                 }
                             };

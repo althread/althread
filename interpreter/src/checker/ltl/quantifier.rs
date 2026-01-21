@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::{statement::expression::LocalExpressionNode, token::literal::Literal},
+    ast::{statement::expression::LocalExpressionNode, token::{datatype::DataType, literal::Literal}},
     checker::ltl::{
         automaton::BuchiAutomaton, compiled::CompiledLtlExpression, monitor::MonitoringState,
     },
@@ -10,11 +10,18 @@ use crate::{
 };
 
 /// Analyzes LTL formulas to detect top-level quantifiers that require dynamic monitor instantiation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QuantifierKind {
+    ForAll,
+    Exists,
+}
+
 #[derive(Debug, Clone)]
 pub struct TopLevelQuantifier {
     pub var_name: String,
     pub list_expression: LocalExpressionNode,
     pub list_read_variables: Vec<String>,
+    pub kind: QuantifierKind,
 }
 
 /// Analyzes a formula to extract top-level quantifiers (for loops at the root level)
@@ -29,6 +36,18 @@ pub fn analyze_formula(formula: &CompiledLtlExpression) -> Option<TopLevelQuanti
             var_name: loop_var_name.clone(),
             list_expression: list_expression.clone(),
             list_read_variables: list_read_variables.clone(),
+            kind: QuantifierKind::ForAll,
+        }),
+        CompiledLtlExpression::Exists {
+            list_expression,
+            list_read_variables,
+            loop_var_name,
+            ..
+        } => Some(TopLevelQuantifier {
+            var_name: loop_var_name.clone(),
+            list_expression: list_expression.clone(),
+            list_read_variables: list_read_variables.clone(),
+            kind: QuantifierKind::Exists,
         }),
         _ => None,
     }
@@ -49,7 +68,7 @@ pub fn initialize_monitoring(
             // Top-level for loop: instantiate one monitor per list element
 
             // Evaluate the list expression
-            let memory = prepare_list_memory(&quantifier.list_read_variables, &vm.globals)?;
+            let memory = prepare_list_memory(&quantifier.list_read_variables, vm)?;
             let list_value = quantifier
                 .list_expression
                 .eval_with_context(&memory, vm)
@@ -107,12 +126,23 @@ pub fn initialize_monitoring(
 /// Prepares memory for evaluating list expressions
 fn prepare_list_memory(
     read_variables: &[String],
-    globals: &crate::vm::GlobalMemory,
+    vm: &VM,
 ) -> AlthreadResult<crate::vm::Memory> {
     let mut memory = Vec::new();
 
     for var_name in read_variables {
-        if let Some(value) = globals.get(var_name) {
+        if let Some(proc_name) = var_name.strip_prefix("$.procs.") {
+            let values = vm
+                .running_programs
+                .iter()
+                .filter(|p| p.name == proc_name)
+                .map(|p| Literal::Process(p.name.clone(), p.id))
+                .collect::<Vec<_>>();
+            memory.push(Literal::List(
+                DataType::Process(proc_name.to_string()),
+                values,
+            ));
+        } else if let Some(value) = vm.globals.get(var_name) {
             memory.push(value.clone());
         } else {
             return Err(AlthreadError::new(
@@ -136,7 +166,7 @@ pub fn update_monitors_for_new_processes(
     for (idx, formula) in formulas.iter().enumerate() {
         if let Some(quantifier) = analyze_formula(formula) {
             // Check if the list has grown
-            let memory = prepare_list_memory(&quantifier.list_read_variables, &vm.globals)?;
+            let memory = prepare_list_memory(&quantifier.list_read_variables, vm)?;
             let list_value = quantifier
                 .list_expression
                 .eval_with_context(&memory, vm)

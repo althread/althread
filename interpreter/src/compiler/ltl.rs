@@ -180,7 +180,7 @@ fn compile_expression_with_context(
 
     // 2. Build temporary stack: [Globals..., LoopVars...]
     // Note: The stack order matters for index resolution.
-    // read_variables will be the list of globals to push at bottom of stack.
+    // read_variables will be the list of globals + loop vars to push at bottom of stack.
     // loop_vars are already on top of them in the recurrence.
 
     for global_name in &globals {
@@ -192,5 +192,11 @@ fn compile_expression_with_context(
 
     let compiled_expr = LocalExpressionNode::from_expression(expr, &temp_stack)?;
 
-    Ok((compiled_expr, globals))
+    // read_variables must match the stack layout: globals then loop vars
+    let mut read_variables = globals;
+    for v in loop_vars {
+        read_variables.push(v.name.clone());
+    }
+
+    Ok((compiled_expr, read_variables))
 }

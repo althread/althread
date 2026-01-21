@@ -76,6 +76,7 @@ pub enum GlobalAction {
     Print(String),
     Write(String),
     Send(SendInfo),
+    Broadcast(Vec<SendInfo>),
     Deliver(DeliverInfo),
     Connect(usize, String),
     EndProgram,
@@ -368,6 +369,7 @@ impl<'a> VM<'a> {
                 GlobalAction::Exit => self.running_programs.clear(),
                 GlobalAction::Print(_) => {} // do nothing, this is just a print action
                 GlobalAction::Send(_) => {}  // do nothing, sending is already handled
+                GlobalAction::Broadcast(_) => {} 
             }
         }
         if actions.end {
@@ -477,6 +479,7 @@ impl<'a> VM<'a> {
                 GlobalAction::Exit => self.running_programs.clear(),
                 GlobalAction::Print(_) => {} // do nothing, this is just a print action
                 GlobalAction::Send(_) => {}  // do nothing, sending is already handled
+                GlobalAction::Broadcast(_) => {} 
             }
         }
         if actions.end {
@@ -588,7 +591,9 @@ impl<'a> VM<'a> {
     }
 
     pub fn is_finished(&self) -> bool {
-        self.executable_programs.is_empty() && !self.channels.has_pending_deliveries()
+        self.executable_programs.is_empty()
+            && !self.channels.has_pending_deliveries()
+            && self.waiting_programs.is_empty()
     }
 
     pub fn new_memory() -> Memory {

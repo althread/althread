@@ -80,6 +80,10 @@ pub struct CheckCommand {
     #[clap(flatten)]
     pub common: SharedArgs,
 
+    /// debug
+    #[clap(long)]
+    pub debug: bool,
+
     /// max number of states to explore
     #[clap(long, default_value_t = 100_000)]
     pub max_states: u64,

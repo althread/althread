@@ -85,7 +85,8 @@ domain_char = _{ ASCII_ALPHANUMERIC | "_" | "." | "-" }
 
 fn_call  = { object_identifier ~ tuple_expression }
 run_call = { RUN_KW ~ object_identifier ~ tuple_expression }
-send_call = { SEND_KW ~ object_identifier ~ tuple_expression }
+send_call = { SEND_KW ~ object_identifier ~ wild_card_suffix? ~ tuple_expression }
+wild_card_suffix = { "." ~ "*" }
 channel_declaration = { 
     CHANNEL_KW ~ 
     object_identifier ~ 

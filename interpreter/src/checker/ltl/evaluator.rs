@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::token::literal::Literal,
+    ast::{token::datatype::DataType, token::literal::Literal},
     checker::ltl::compiled::CompiledLtlExpression,
     error::{AlthreadError, AlthreadResult, ErrorType},
     vm::{GlobalMemory, Memory, VM},
@@ -33,7 +33,7 @@ pub fn evaluate_ltl_predicate(
             ..
         } => {
             // Build the memory stack with global variables and bindings
-            let memory = prepare_memory(read_variables, &vm.globals, variable_bindings)?;
+            let memory = prepare_memory(read_variables, vm, variable_bindings)?;
 
             // Evaluate the expression with the VM context
             let result = local_expr.eval_with_context(&memory, vm).map_err(|msg| {
@@ -54,7 +54,7 @@ pub fn evaluate_ltl_predicate(
             body,
         } => {
             // Evaluate the list expression
-            let memory = prepare_memory(list_read_variables, &vm.globals, variable_bindings)?;
+            let memory = prepare_memory(list_read_variables, vm, variable_bindings)?;
             let list_value = list_expression
                 .eval_with_context(&memory, vm)
                 .map_err(|msg| {
@@ -101,7 +101,7 @@ pub fn evaluate_ltl_predicate(
             body,
         } => {
             // Evaluate the list expression
-            let memory = prepare_memory(list_read_variables, &vm.globals, variable_bindings)?;
+            let memory = prepare_memory(list_read_variables, vm, variable_bindings)?;
             let list_value = list_expression
                 .eval_with_context(&memory, vm)
                 .map_err(|msg| {
@@ -207,7 +207,7 @@ pub fn evaluate_ltl_predicate(
 /// and loop variable bindings.
 fn prepare_memory(
     read_variables: &[String],
-    globals: &GlobalMemory,
+    vm: &VM,
     variable_bindings: &HashMap<String, Literal>,
 ) -> AlthreadResult<Memory> {
     let mut memory = Vec::new();
@@ -216,7 +216,18 @@ fn prepare_memory(
         // First check if it's a loop variable binding
         if let Some(value) = variable_bindings.get(var_name) {
             memory.push(value.clone());
-        } else if let Some(value) = globals.get(var_name) {
+        } else if let Some(proc_name) = var_name.strip_prefix("$.procs.") {
+            let values = vm
+                .running_programs
+                .iter()
+                .filter(|p| p.name == proc_name)
+                .map(|p| Literal::Process(p.name.clone(), p.id))
+                .collect::<Vec<_>>();
+            memory.push(Literal::List(
+                DataType::Process(proc_name.to_string()),
+                values,
+            ));
+        } else if let Some(value) = vm.globals.get(var_name) {
             // Otherwise get it from global memory
             memory.push(value.clone());
         } else {

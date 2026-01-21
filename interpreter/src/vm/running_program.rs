@@ -726,6 +726,60 @@ impl<'a> RunningProgramState<'a> {
                 }));
                 1
             }
+            InstructionType::Broadcast {
+                channel_name: pattern,
+                unstack_len,
+            } => {
+                let value = self
+                    .memory
+                    .last()
+                    .expect("Panic: stack is empty, cannot broadcast")
+                    .clone();
+
+                for _ in 0..*unstack_len {
+                    self.memory.pop();
+                }
+
+                let mut targets = Vec::new();
+                let connections = channels.get_connections();
+                for (from_pid, name) in connections.keys() {
+                    if *from_pid == self.id && name.starts_with(pattern) {
+                        targets.push(name.clone());
+                    }
+                }
+                
+                let waiting = channels.get_waiting_send();
+                for (from_pid, name) in waiting.keys() {
+                    if *from_pid == self.id && name.starts_with(pattern) {
+                        if !targets.contains(name) {
+                            targets.push(name.clone());
+                        }
+                    }
+                }
+                targets.sort();
+
+                let mut send_infos = Vec::new();
+
+                for name in targets {
+                    self.clock += 1;
+                    let _receiver =
+                        channels.send(self.id, name.clone(), value.clone(), self.clock);
+                    send_infos.push(crate::vm::SendInfo {
+                        from: crate::vm::ProcessInfo {
+                            process_id: self.id,
+                            process_name: self.name.clone(),
+                        },
+                        to: crate::vm::ChannelInfo {
+                            channel_name: name,
+                        },
+                        message: value.clone(),
+                        n_msg: self.clock,
+                    });
+                }
+                
+                action = Some(GlobalAction::Broadcast(send_infos));
+                1
+            }
             InstructionType::ChannelPeek(channel_name) => {
                 let values = channels.peek(self.id, channel_name.clone());
                 match values {

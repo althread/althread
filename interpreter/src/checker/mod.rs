@@ -435,7 +435,13 @@ fn check_program_with_ltl<'a>(
     let automatons: Vec<BuchiAutomaton> = compiled_project
         .compiled_ltl_formulas
         .iter()
-        .map(|formula| BuchiAutomaton::new(formula.clone()))
+        .map(|formula| match formula {
+            CompiledLtlExpression::ForLoop { body, .. }
+            | CompiledLtlExpression::Exists { body, .. } => {
+                BuchiAutomaton::new(body.as_ref().clone())
+            }
+            _ => BuchiAutomaton::new(formula.clone()),
+        })
         .collect();
 
     for (i, aut) in automatons.iter().enumerate() {
@@ -474,6 +480,7 @@ fn check_program_with_ltl<'a>(
 
     // Step 4: Track product states (VM + Monitors)
     let mut visited_product_states: HashMap<Rc<VM<'a>>, HashSet<ProductState>> = HashMap::new();
+    let mut expanded_product_states: HashMap<Rc<VM<'a>>, HashSet<ProductState>> = HashMap::new();
     visited_product_states.insert(
         initial_vm.clone(),
         [ProductState {
@@ -496,10 +503,62 @@ fn check_program_with_ltl<'a>(
         }
 
         let (current_vm, current_monitors) = next_nodes.pop_front().unwrap();
+        expanded_product_states
+            .entry(current_vm.clone())
+            .or_insert_with(HashSet::new)
+            .insert(ProductState {
+                monitors: current_monitors.clone(),
+            });
         let current_level = state_graph.nodes.get(&current_vm).unwrap().level;
 
         // Get VM successors
         let successors = current_vm.next()?;
+
+        // If no successors, we can still evaluate LTL by stuttering on the current state.
+        if successors.is_empty() {
+            let mut base_next_monitors = current_monitors.clone();
+
+            ltl::quantifier::update_monitors_for_new_processes(
+                &compiled_project.compiled_ltl_formulas,
+                &automatons,
+                &mut base_next_monitors,
+                &current_vm,
+            )?;
+
+            let possible_next_monitoring_states =
+                base_next_monitors.get_possible_successors(&current_vm, &automatons)?;
+
+            for next_monitors in possible_next_monitoring_states {
+                if monitors_in_accepting_state_on_cycle(
+                    &next_monitors,
+                    &automatons,
+                    &compiled_project.compiled_ltl_formulas,
+                ) {
+                    println!("LTL violation detected: acceptance condition reached");
+                    let violation_path = if state_graph
+                        .nodes
+                        .get(&current_vm)
+                        .unwrap()
+                        .predecessor
+                        .is_none()
+                    {
+                        vec![StateLink {
+                            to: current_vm.clone(),
+                            lines: vec![],
+                            instructions: vec![],
+                            actions: vec![],
+                            pid: 0,
+                            name: "_init_".to_string(),
+                        }]
+                    } else {
+                        build_violation_path(&state_graph, &current_vm)?
+                    };
+                    return Ok((violation_path, state_graph));
+                }
+            }
+
+            continue;
+        }
 
         for (name, pid, instructions, actions, next_vm) in successors.into_iter() {
             let next_vm = Rc::new(next_vm);
@@ -559,7 +618,11 @@ fn check_program_with_ltl<'a>(
 
             for next_monitors in possible_next_monitoring_states {
                 // Detect accepting runs of the Büchi automaton (observed counter-examples)
-                if monitors_in_accepting_state(&next_monitors, &automatons) {
+                if monitors_in_accepting_state_step(
+                    &next_monitors,
+                    &automatons,
+                    &compiled_project.compiled_ltl_formulas,
+                ) {
                     println!("LTL violation detected: acceptance condition reached");
                     let violation_path = build_violation_path(&state_graph, &next_vm)?;
                     return Ok((violation_path, state_graph));
@@ -574,6 +637,24 @@ fn check_program_with_ltl<'a>(
                     .entry(next_vm.clone())
                     .or_insert_with(HashSet::new)
                     .contains(&product_state);
+
+                let already_expanded = expanded_product_states
+                    .get(&next_vm)
+                    .map(|set| set.contains(&product_state))
+                    .unwrap_or(false);
+
+                if already_visited
+                    && already_expanded
+                    && monitors_in_accepting_state_on_cycle(
+                        &next_monitors,
+                        &automatons,
+                        &compiled_project.compiled_ltl_formulas,
+                    )
+                {
+                    println!("LTL violation detected: acceptance condition reached");
+                    let violation_path = build_violation_path(&state_graph, &next_vm)?;
+                    return Ok((violation_path, state_graph));
+                }
 
                 if !already_visited {
                     visited_product_states
@@ -676,15 +757,59 @@ fn build_violation_path<'a>(
     Ok(path.into_iter().rev().collect())
 }
 
-fn monitors_in_accepting_state(monitors: &MonitoringState, automatons: &[BuchiAutomaton]) -> bool {
+fn monitors_in_accepting_state_step(
+    monitors: &MonitoringState,
+    automatons: &[BuchiAutomaton],
+    formulas: &[CompiledLtlExpression],
+) -> bool {
     monitors
         .monitors_per_formula
         .iter()
         .enumerate()
         .any(|(formula_idx, monitors)| {
             let automaton = &automatons[formula_idx];
-            monitors
-                .iter()
-                .any(|monitor| monitor.is_accepting(automaton))
+            if automaton.num_acceptance_sets == 0 {
+                return false;
+            }
+            match &formulas[formula_idx] {
+                CompiledLtlExpression::Exists { .. } => {
+                    // Exists: violation only if all monitors accept (or no monitor at all)
+                    if monitors.is_empty() {
+                        return true;
+                    }
+                    monitors.iter().all(|monitor| monitor.is_accepting(automaton))
+                }
+                _ => monitors
+                    .iter()
+                    .any(|monitor| monitor.is_accepting(automaton)),
+            }
+        })
+}
+
+fn monitors_in_accepting_state_on_cycle(
+    monitors: &MonitoringState,
+    automatons: &[BuchiAutomaton],
+    formulas: &[CompiledLtlExpression],
+) -> bool {
+    monitors
+        .monitors_per_formula
+        .iter()
+        .enumerate()
+        .any(|(formula_idx, monitors)| {
+            let automaton = &automatons[formula_idx];
+            if automaton.num_acceptance_sets != 0 {
+                return false;
+            }
+            match &formulas[formula_idx] {
+                CompiledLtlExpression::Exists { .. } => {
+                    if monitors.is_empty() {
+                        return true;
+                    }
+                    monitors.iter().all(|monitor| monitor.is_accepting(automaton))
+                }
+                _ => monitors
+                    .iter()
+                    .any(|monitor| monitor.is_accepting(automaton)),
+            }
         })
 }

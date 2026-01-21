@@ -111,7 +111,11 @@ impl LtlMonitor {
             .iter()
             .find(|s| s.id == self.current_state_id)
         {
-            !state.acceptance_sets.is_empty()
+            if automaton.num_acceptance_sets == 0 {
+                true
+            } else {
+                !state.acceptance_sets.is_empty()
+            }
         } else {
             false
         }

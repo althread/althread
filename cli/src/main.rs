@@ -24,8 +24,15 @@ use althread::{ast::Ast, checker, module_resolver::StandardFileSystem};
 use crate::package::{DependencySpec, Package};
 
 fn main() {
-    env_logger::init();
     let cli_args = CliArguments::parse();
+    let enable_debug = cli_args.debug > 0
+        || matches!(&cli_args.command, Command::Check(cmd) if cmd.debug)
+        || matches!(&cli_args.command, Command::Run(cmd) if cmd.debug);
+
+    if enable_debug && var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", "debug");
+    }
+    env_logger::init();
 
     match &cli_args.command {
         Command::Compile(command) => compile_command(&command.clone()),
