@@ -27,11 +27,15 @@ pub enum PrimaryExpression {
     Literal(Node<Literal>),
     Identifier(Node<ObjectIdentifier>),
     Expression(Box<Node<Expression>>),
-    Reaches(Node<ObjectIdentifier>, Option<Box<Node<Expression>>>, Node<Identifier>),
+    Reaches(
+        Node<ObjectIdentifier>,
+        Option<Box<Node<Expression>>>,
+        Node<Identifier>,
+    ),
     IfExpr {
         condition: Box<Node<Expression>>,
         then_expr: Box<Node<Expression>>,
-        else_expr: Box<Node<Expression>>,
+        else_expr: Option<Box<Node<Expression>>>,
     },
     ForAllExpr {
         var: Node<Identifier>,
@@ -79,7 +83,9 @@ impl PrimaryExpression {
                     };
                     Self::Identifier(Node {
                         pos,
-                        value: ObjectIdentifier { parts: vec![ident_node] },
+                        value: ObjectIdentifier {
+                            parts: vec![ident_node],
+                        },
                     })
                 }
                 Rule::expression => Self::Expression(Box::new(Node::build(pair, filepath)?)),
@@ -87,7 +93,11 @@ impl PrimaryExpression {
                     let mut inner = pair.into_inner();
                     let condition = Box::new(Node::build(inner.next().unwrap(), filepath)?);
                     let then_expr = Box::new(Node::build(inner.next().unwrap(), filepath)?);
-                    let else_expr = Box::new(Node::build(inner.next().unwrap(), filepath)?);
+                    let else_expr = if let Some(else_pair) = inner.next() {
+                        Some(Box::new(Node::build(else_pair, filepath)?))
+                    } else {
+                        None
+                    };
                     Self::IfExpr {
                         condition,
                         then_expr,
@@ -176,7 +186,9 @@ impl PrimaryExpression {
             } => {
                 condition.value.add_dependencies(dependencies);
                 then_expr.value.add_dependencies(dependencies);
-                else_expr.value.add_dependencies(dependencies);
+                if let Some(else_expr) = else_expr {
+                    else_expr.value.add_dependencies(dependencies);
+                }
             }
             Self::ForAllExpr { var, list, body } => {
                 list.value.add_dependencies(dependencies);
@@ -225,7 +237,9 @@ impl PrimaryExpression {
             } => {
                 condition.value.get_vars(vars);
                 then_expr.value.get_vars(vars);
-                else_expr.value.get_vars(vars);
+                if let Some(else_expr) = else_expr {
+                    else_expr.value.get_vars(vars);
+                }
             }
             Self::ForAllExpr { var, list, body } => {
                 list.value.get_vars(vars);

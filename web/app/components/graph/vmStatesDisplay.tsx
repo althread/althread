@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 import vis from "vis-network/dist/vis-network.esm";
 import { createSignal, onCleanup, onMount } from "solid-js";
 import {nodeToString} from "./Node";

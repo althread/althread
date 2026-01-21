@@ -1,9 +1,6 @@
 use std::fmt;
 
-use crate::{
-    ast::statement::expression::LocalExpressionNode,
-    ast::token::datatype::DataType,
-};
+use crate::{ast::statement::expression::LocalExpressionNode, ast::token::datatype::DataType};
 
 /// Represents a compiled LTL formula ready for verification
 #[derive(Debug, Clone, PartialEq)]
@@ -18,22 +15,22 @@ pub enum CompiledLtlExpression {
     Implies(Box<CompiledLtlExpression>, Box<CompiledLtlExpression>),
     Release(Box<CompiledLtlExpression>, Box<CompiledLtlExpression>),
     Boolean(bool),
-    
+
     /// A leaf predicate (expression returning boolean)
     Predicate {
         expression: LocalExpressionNode,
-        /// The list of global variables that must be pushed to the stack 
+        /// The list of global variables that must be pushed to the stack
         /// before evaluating this expression.
         /// These correspond to indices 0..N in the evaluation stack.
         read_variables: Vec<String>,
-        /// If this predicate uses variables from enclosing loops, 
+        /// If this predicate uses variables from enclosing loops,
         /// we map them to their expected index in the stack.
         /// (Not fully implemented yet for loops)
-        scope_mapping: Option<Vec<usize>>, 
+        scope_mapping: Option<Vec<usize>>,
     },
-    
-    /// A for loop over a list expression. 
-    /// At runtime, this expands to a conjunction (And) or disjunction 
+
+    /// A for loop over a list expression.
+    /// At runtime, this expands to a conjunction (And) or disjunction
     /// depending on semantics (usually conjunction for 'forall', disjunction for 'exists').
     /// But here syntax is just 'for', often implying 'forall'.
     ForLoop {
@@ -42,13 +39,13 @@ pub enum CompiledLtlExpression {
         loop_var_name: String,
         body: Box<CompiledLtlExpression>,
     },
-    
+
     Exists {
         list_expression: LocalExpressionNode,
         list_read_variables: Vec<String>,
         loop_var_name: String,
         body: Box<CompiledLtlExpression>,
-    }
+    },
 }
 
 impl fmt::Display for CompiledLtlExpression {
@@ -67,11 +64,25 @@ impl fmt::Display for CompiledLtlExpression {
             CompiledLtlExpression::Predicate { read_variables, .. } => {
                 write!(f, "Pred[deps={:?}]", read_variables)
             }
-            CompiledLtlExpression::ForLoop { loop_var_name, list_expression, body, .. } => {
+            CompiledLtlExpression::ForLoop {
+                loop_var_name,
+                list_expression,
+                body,
+                ..
+            } => {
                 write!(f, "For({} in {}): {}", loop_var_name, list_expression, body)
             }
-            CompiledLtlExpression::Exists { loop_var_name, list_expression, body, .. } => {
-                write!(f, "Exists({} in {}): {}", loop_var_name, list_expression, body)
+            CompiledLtlExpression::Exists {
+                loop_var_name,
+                list_expression,
+                body,
+                ..
+            } => {
+                write!(
+                    f,
+                    "Exists({} in {}): {}",
+                    loop_var_name, list_expression, body
+                )
             }
         }
     }
@@ -100,7 +111,8 @@ impl CompiledLtlExpression {
                 }
                 CompiledLtlExpression::Always(a) => CompiledLtlExpression::Eventually(Box::new(
                     CompiledLtlExpression::Not(a).simplify(),
-                )),
+                ))
+                .simplify(),
                 CompiledLtlExpression::Eventually(a) => CompiledLtlExpression::Always(Box::new(
                     CompiledLtlExpression::Not(a).simplify(),
                 )),
@@ -130,15 +142,13 @@ impl CompiledLtlExpression {
                 Box::new(CompiledLtlExpression::Boolean(true)),
                 Box::new(a.simplify()),
             ),
-            
-            CompiledLtlExpression::And(a, b) => CompiledLtlExpression::And(
-                Box::new(a.simplify()),
-                Box::new(b.simplify()),
-            ),
-            CompiledLtlExpression::Or(a, b) => CompiledLtlExpression::Or(
-                Box::new(a.simplify()),
-                Box::new(b.simplify()),
-            ),
+
+            CompiledLtlExpression::And(a, b) => {
+                CompiledLtlExpression::And(Box::new(a.simplify()), Box::new(b.simplify()))
+            }
+            CompiledLtlExpression::Or(a, b) => {
+                CompiledLtlExpression::Or(Box::new(a.simplify()), Box::new(b.simplify()))
+            }
             CompiledLtlExpression::Next(a) => CompiledLtlExpression::Next(Box::new(a.simplify())),
             CompiledLtlExpression::Until(a, b) => {
                 CompiledLtlExpression::Until(Box::new(a.simplify()), Box::new(b.simplify()))
@@ -172,4 +182,3 @@ impl CompiledLtlExpression {
         }
     }
 }
-

@@ -1,0 +1,48 @@
+shared {
+    // 0: Green, 1: Yellow, 2: Red
+    let Ns_state = 0;
+    let Ew_state = 2;
+}
+
+program TrafficController() {
+    loop {
+        // NS is Green, EW is Red
+        // Transition NS to Yellow
+        Ns_state = 1;
+        
+        // Transition NS to Red
+        Ns_state = 2;
+        
+        // Transition EW to Green
+        Ew_state = 0;
+        
+        // Transition EW to Yellow
+        Ew_state = 1;
+        
+        // Transition EW to Red
+        Ew_state = 2;
+        
+        // Transition NS to Green
+        Ns_state = 0;
+    }
+}
+
+check {
+    // Safety: Cannot have both lights passing (Green or Yellow) at the same time
+    // Passing means state < 2 (0 or 1)
+    always ( (Ns_state == 2) || (Ew_state == 2) );
+}
+
+check {
+    // Liveness: If NS is Red, it eventually becomes Green
+    always ( if (Ns_state == 2) { eventually (Ns_state == 0) } );
+}
+
+check {
+    // Liveness: If EW is Red, it eventually becomes Green
+    always ( if (Ew_state == 2) { eventually (Ew_state == 0) } );
+}
+
+main {
+    run TrafficController();
+}

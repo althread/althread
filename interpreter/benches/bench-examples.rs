@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::process::Command;
 
 fn run_test_file(file: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -34,7 +34,11 @@ fn criterion_benchmark(c: &mut Criterion) {
     create_benchmark(c, "break", "../examples/test-break.alt");
     create_benchmark(c, "if_else", "../examples/test-if-else.alt");
     create_benchmark(c, "wait", "../examples/test-wait.alt");
-    create_benchmark(c, "personal_mutual_exclusion", "../examples/peterson_mutual_exlusion.alt");
+    create_benchmark(
+        c,
+        "personal_mutual_exclusion",
+        "../examples/peterson_mutual_exlusion.alt",
+    );
     create_benchmark(c, "atomic", "../examples/test-atomic.alt");
     create_benchmark(c, "channels", "../examples/test-channels.alt");
     create_benchmark(c, "list", "../examples/test-list.alt");

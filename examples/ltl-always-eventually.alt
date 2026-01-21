@@ -1,0 +1,27 @@
+// Example 4: Always Eventually (fairness property)
+// Property: Something happens infinitely often
+
+shared {
+    let Tick: int = 0;
+}
+
+program InfiniteTicker() {
+    atomic {
+        Tick = Tick + 1;
+    }
+}
+
+// This demonstrates that Tick keeps growing
+// In a finite execution, we check that Tick eventually increases
+check {
+    always eventually (Tick > 0);
+}
+
+// Tick always stays non-negative
+check {
+    always (Tick >= 0);
+}
+
+main {
+    run InfiniteTicker();
+}

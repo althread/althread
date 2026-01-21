@@ -1,5 +1,4 @@
 // @refresh granular
-/** @jsxImportSource solid-js */
 import { createSignal, createEffect, Show } from "solid-js";
 import Resizable from '@corvu/resizable'
 

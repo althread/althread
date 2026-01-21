@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 import { Show, For } from 'solid-js';
 
 // Move Confirmation Dialog Component

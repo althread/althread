@@ -1,6 +1,6 @@
 use fastrand;
+use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
-use serde::ser::{SerializeStruct};
 use serde_wasm_bindgen;
 use std::collections::HashMap;
 use std::path::Path;
@@ -35,7 +35,8 @@ fn delivery_preview(prev_vm: &althread::vm::VM, next_vm: &althread::vm::VM) -> O
     let prev_channels = prev_vm.current_state().1;
     let next_channels = next_vm.current_state().1;
     let ((receiver_pid, channel_name), msg) = find_delivered_message(prev_channels, next_channels)?;
-    let (sender_pid, sender_clock, content) = althread::vm::channels::parse_message_tuple(&msg).unwrap_or((0, 0, msg.to_string()));
+    let (sender_pid, sender_clock, content) =
+        althread::vm::channels::parse_message_tuple(&msg).unwrap_or((0, 0, msg.to_string()));
     Some(format!(
         "deliver {},{} <- {} @{} : {}",
         receiver_pid, channel_name, sender_pid, sender_clock, content
@@ -45,7 +46,6 @@ fn delivery_preview(prev_vm: &althread::vm::VM, next_vm: &althread::vm::VM) -> O
 fn error_to_js(err: AlthreadError) -> JsValue {
     serde_wasm_bindgen::to_value(&err).unwrap()
 }
-
 
 // Helper function to create VM state JSON object
 fn create_vm_state_json(vm: &althread::vm::VM) -> serde_json::Value {
@@ -389,7 +389,12 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
 }
 
 #[wasm_bindgen]
-pub fn check(source: &str, filepath: &str, virtual_fs: JsValue, max_states: Option<usize>) -> Result<JsValue, JsValue> {
+pub fn check(
+    source: &str,
+    filepath: &str,
+    virtual_fs: JsValue,
+    max_states: Option<usize>,
+) -> Result<JsValue, JsValue> {
     // Convert the JS file system to a Rust HashMap
     let fs_map: HashMap<String, String> = serde_wasm_bindgen::from_value(virtual_fs)
         .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
@@ -520,7 +525,11 @@ pub fn validate_package_name(package_name: &str) -> bool {
 
 // Interactive mode functionality - replay-based approach
 #[wasm_bindgen]
-pub fn start_interactive_session(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue, JsValue> {
+pub fn start_interactive_session(
+    source: &str,
+    filepath: &str,
+    virtual_fs: JsValue,
+) -> Result<JsValue, JsValue> {
     // Convert the JS file system to a Rust HashMap
     let fs_map: HashMap<String, String> = serde_wasm_bindgen::from_value(virtual_fs)
         .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
@@ -545,51 +554,60 @@ pub fn start_interactive_session(source: &str, filepath: &str, virtual_fs: JsVal
 
     // Get initial next states
     let next_states = vm.next().map_err(error_to_js)?;
-    
+
     if next_states.is_empty() {
         return Ok(serde_wasm_bindgen::to_value(&serde_json::json!({
             "states": [],
             "is_finished": true,
             "current_state": create_vm_state_json(&vm),
             "output": []
-        })).unwrap());
+        }))
+        .unwrap());
     }
-    
+
     // Convert the result to a more JS-friendly format
-    let js_next_states: Vec<_> = next_states.into_iter().enumerate().map(|(index, (name, pid, instructions, actions, __nvm))| {
-        let instruction_strings: Vec<String> = instructions.iter().map(|inst| {
-            if let Some(pos) = &inst.pos {
-                let line_content = source
-                    .lines()
-                    .nth(pos.line.saturating_sub(1))
-                    .unwrap_or("?");
-                format!("{}:{}: {}", name, pid, line_content.trim())
+    let js_next_states: Vec<_> = next_states
+        .into_iter()
+        .enumerate()
+        .map(|(index, (name, pid, instructions, actions, __nvm))| {
+            let instruction_strings: Vec<String> = instructions
+                .iter()
+                .map(|inst| {
+                    if let Some(pos) = &inst.pos {
+                        let line_content = source
+                            .lines()
+                            .nth(pos.line.saturating_sub(1))
+                            .unwrap_or("?");
+                        format!("{}:{}: {}", name, pid, line_content.trim())
+                    } else {
+                        format!("{}:{}: {}", name, pid, inst)
+                    }
+                })
+                .collect();
+
+            let preview = if let Some(first) = instruction_strings.first() {
+                first.clone()
             } else {
-                format!("{}:{}: {}", name, pid, inst)
-            }
-        }).collect();
-
-        let preview = if let Some(first) = instruction_strings.first() {
-            first.clone()
-        } else {
-            let mut delivery = None;
-            for action in &actions {
-                if let althread::vm::GlobalAction::Deliver(info) = action {
-                    delivery = Some(format!("deliver {} -> {}", info.channel_name, info.message));
-                    break;
+                let mut delivery = None;
+                for action in &actions {
+                    if let althread::vm::GlobalAction::Deliver(info) = action {
+                        delivery =
+                            Some(format!("deliver {} -> {}", info.channel_name, info.message));
+                        break;
+                    }
                 }
-            }
-            delivery.unwrap_or_else(|| "No instruction".to_string())
-        };
+                delivery.unwrap_or_else(|| "No instruction".to_string())
+            };
 
-        serde_json::json!({
-            "index": index,
-            "prog_name": name,
-            "prog_id": pid,
-            "instruction_preview": preview,
-            "instructions": instruction_strings
+            serde_json::json!({
+                "index": index,
+                "prog_name": name,
+                "prog_id": pid,
+                "instruction_preview": preview,
+                "instructions": instruction_strings
+            })
         })
-    }).collect();
+        .collect();
 
     let state_info = serde_json::json!({
         "states": js_next_states,
@@ -602,7 +620,12 @@ pub fn start_interactive_session(source: &str, filepath: &str, virtual_fs: JsVal
 }
 
 #[wasm_bindgen]
-pub fn get_next_interactive_states(source: &str, filepath: &str, virtual_fs: JsValue, execution_history: JsValue) -> Result<JsValue, JsValue> {
+pub fn get_next_interactive_states(
+    source: &str,
+    filepath: &str,
+    virtual_fs: JsValue,
+    execution_history: JsValue,
+) -> Result<JsValue, JsValue> {
     // Convert the JS file system to a Rust HashMap
     let fs_map: HashMap<String, String> = serde_wasm_bindgen::from_value(virtual_fs)
         .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
@@ -633,15 +656,18 @@ pub fn get_next_interactive_states(source: &str, filepath: &str, virtual_fs: JsV
     for &selected_index in &history {
         let next_states = vm.next().map_err(error_to_js)?;
         if selected_index >= next_states.len() {
-            return Err(JsValue::from_str(&format!("Invalid selection index {} in history", selected_index)));
+            return Err(JsValue::from_str(&format!(
+                "Invalid selection index {} in history",
+                selected_index
+            )));
         }
         let (_, _, _, _, new_vm) = next_states.into_iter().nth(selected_index).unwrap();
         vm = new_vm;
     }
-    
+
     // Get next possible states - web-safe error handling
     let next_states = vm.next().map_err(error_to_js)?;
-    
+
     if next_states.is_empty() {
         return Ok(serde_wasm_bindgen::to_value(&serde_json::json!({
             "states": [],
@@ -649,65 +675,76 @@ pub fn get_next_interactive_states(source: &str, filepath: &str, virtual_fs: JsV
             "message": "No next state",
             "current_state": create_vm_state_json(&vm),
             "output": []
-        })).unwrap());
+        }))
+        .unwrap());
     }
-    
+
     // Convert the result to a more JS-friendly format with enhanced state display
-    let js_next_states: Vec<_> = next_states.into_iter().enumerate().map(|(index, (name, pid, instructions, actions, nvm))| {
-        let instruction_strings: Vec<String> = instructions.iter().map(|inst| {
-            if let Some(pos) = &inst.pos {
-                let line_content = source
-                    .lines()
-                    .nth(pos.line.saturating_sub(1))
-                    .unwrap_or("?");
-                format!("{}:{}: {}", name, pid, line_content.trim())
-            } else {
-                format!("{}:{}: {}", name, pid, inst)
-            }
-        }).collect();
+    let js_next_states: Vec<_> = next_states
+        .into_iter()
+        .enumerate()
+        .map(|(index, (name, pid, instructions, actions, nvm))| {
+            let instruction_strings: Vec<String> = instructions
+                .iter()
+                .map(|inst| {
+                    if let Some(pos) = &inst.pos {
+                        let line_content = source
+                            .lines()
+                            .nth(pos.line.saturating_sub(1))
+                            .unwrap_or("?");
+                        format!("{}:{}: {}", name, pid, line_content.trim())
+                    } else {
+                        format!("{}:{}: {}", name, pid, inst)
+                    }
+                })
+                .collect();
 
-        // Add state info similar to run_interactive format
-        let state_preview = if let Some(inst) = instructions.first() {
-            if let Some(pos) = &inst.pos {
-                let line = source
-                    .lines()
-                    .nth(pos.line.saturating_sub(1))
-                    .unwrap_or_default();
-                format!("{}:{}:{}", name, pid, line)
-            } else {
-                format!("{}:{}:?", name, pid)
-            }
-        } else {
-            let mut delivery = None;
-            for action in &actions {
-                if let althread::vm::GlobalAction::Deliver(info) = action {
-                    delivery = Some(format!("{}:{}:deliver {} -> {}", name, pid, info.channel_name, info.message));
-                    break;
+            // Add state info similar to run_interactive format
+            let state_preview = if let Some(inst) = instructions.first() {
+                if let Some(pos) = &inst.pos {
+                    let line = source
+                        .lines()
+                        .nth(pos.line.saturating_sub(1))
+                        .unwrap_or_default();
+                    format!("{}:{}:{}", name, pid, line)
+                } else {
+                    format!("{}:{}:?", name, pid)
                 }
-            }
-            delivery.unwrap_or_else(|| format!("{}:{}:?", name, pid))
-        };
+            } else {
+                let mut delivery = None;
+                for action in &actions {
+                    if let althread::vm::GlobalAction::Deliver(info) = action {
+                        delivery = Some(format!(
+                            "{}:{}:deliver {} -> {}",
+                            name, pid, info.channel_name, info.message
+                        ));
+                        break;
+                    }
+                }
+                delivery.unwrap_or_else(|| format!("{}:{}:?", name, pid))
+            };
 
-        let preview = if let Some(first) = instruction_strings.first() {
-            first.clone()
-        } else if name.starts_with("__deliver__") {
-            delivery_preview(&vm, &nvm).unwrap_or_else(|| "deliver <unknown>".to_string())
-        } else {
-            "No instruction".to_string()
-        };
+            let preview = if let Some(first) = instruction_strings.first() {
+                first.clone()
+            } else if name.starts_with("__deliver__") {
+                delivery_preview(&vm, &nvm).unwrap_or_else(|| "deliver <unknown>".to_string())
+            } else {
+                "No instruction".to_string()
+            };
 
-        serde_json::json!({
-            "index": index,
-            "prog_name": name,
-            "prog_id": pid,
-            "instruction_preview": preview,
-            "instructions": instruction_strings,
-            "state_preview": state_preview
+            serde_json::json!({
+                "index": index,
+                "prog_name": name,
+                "prog_id": pid,
+                "instruction_preview": preview,
+                "instructions": instruction_strings,
+                "state_preview": state_preview
+            })
         })
-    }).collect();
+        .collect();
 
     let current_state = vm.current_state();
-    
+
     // Generate state display information similar to run_interactive
     let mut state_display_info = Vec::new();
     state_display_info.push(format!("global: {:?}", current_state.0));
@@ -730,7 +767,7 @@ pub fn get_next_interactive_states(source: &str, filepath: &str, virtual_fs: JsV
                 .join(", ")
         ));
     }
-    
+
     let state_info = serde_json::json!({
         "states": js_next_states,
         "is_finished": false,
@@ -743,7 +780,13 @@ pub fn get_next_interactive_states(source: &str, filepath: &str, virtual_fs: JsV
 }
 
 #[wasm_bindgen]
-pub fn execute_interactive_step(source: &str, filepath: &str, virtual_fs: JsValue, execution_history: JsValue, selected_index: usize) -> Result<JsValue, JsValue> {
+pub fn execute_interactive_step(
+    source: &str,
+    filepath: &str,
+    virtual_fs: JsValue,
+    execution_history: JsValue,
+    selected_index: usize,
+) -> Result<JsValue, JsValue> {
     // Convert the JS file system to a Rust HashMap
     let fs_map: HashMap<String, String> = serde_wasm_bindgen::from_value(virtual_fs)
         .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
@@ -777,7 +820,10 @@ pub fn execute_interactive_step(source: &str, filepath: &str, virtual_fs: JsValu
             return Err(JsValue::from_str("No next state during replay"));
         }
         if step_index >= next_states.len() {
-            return Err(JsValue::from_str(&format!("Invalid selection index {} in history", step_index)));
+            return Err(JsValue::from_str(&format!(
+                "Invalid selection index {} in history",
+                step_index
+            )));
         }
         let (_, _, _, _, new_vm) = next_states.into_iter().nth(step_index).unwrap();
         vm = new_vm;
@@ -785,21 +831,26 @@ pub fn execute_interactive_step(source: &str, filepath: &str, virtual_fs: JsValu
 
     // Get next possible states for this step - web-safe error handling
     let next_states = vm.next().map_err(error_to_js)?;
-    
+
     if next_states.is_empty() {
         return Ok(serde_wasm_bindgen::to_value(&serde_json::json!({
             "finished": true,
             "message": "No next state"
-        })).unwrap());
+        }))
+        .unwrap());
     }
-    
+
     if selected_index >= next_states.len() {
-        return Err(JsValue::from_str(&format!("Invalid selection index {}", selected_index)));
+        return Err(JsValue::from_str(&format!(
+            "Invalid selection index {}",
+            selected_index
+        )));
     }
 
     // Execute the selected transition.
     // NOTE: vm.next() contains both program steps and delivery steps.
-    let (name, pid, instructions, actions, new_vm) = next_states.into_iter().nth(selected_index).unwrap();
+    let (name, pid, instructions, actions, new_vm) =
+        next_states.into_iter().nth(selected_index).unwrap();
 
     let execution_vm = new_vm.clone();
     let mut message_flow_events: Vec<MessageFlowEvent> = Vec::new();
@@ -852,8 +903,11 @@ pub fn execute_interactive_step(source: &str, filepath: &str, virtual_fs: JsValu
         let mut delivery = None;
         for action in &message_flow_events {
             if action.evt_type == RECV {
-                 delivery = Some(format!("deliver {} <- {} : {}", action.receiver, action.sender, action.message));
-                 break;
+                delivery = Some(format!(
+                    "deliver {} <- {} : {}",
+                    action.receiver, action.sender, action.message
+                ));
+                break;
             }
         }
         vec![delivery.unwrap_or_else(|| "deliver <unknown>".to_string())]
@@ -878,5 +932,6 @@ pub fn execute_interactive_step(source: &str, filepath: &str, virtual_fs: JsValu
         state_display: create_vm_state_json(&execution_vm),
     };
 
-    Ok(serde_wasm_bindgen::to_value(&result).map_err(|e| JsValue::from_str(&format!("Serialization error: {}", e)))?)
+    Ok(serde_wasm_bindgen::to_value(&result)
+        .map_err(|e| JsValue::from_str(&format!("Serialization error: {}", e)))?)
 }

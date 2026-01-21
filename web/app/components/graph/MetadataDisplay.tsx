@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 import { VisNode } from "./Node";
 import "./MetadataDisplay.css";
 

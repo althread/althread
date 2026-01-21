@@ -3,7 +3,10 @@ use std::{collections::HashMap, fmt};
 use crate::{
     ast::{
         statement::{expression::LocalExpressionNode, waiting_case::WaitDependency},
-        token::{binary_assignment_operator::BinaryAssignmentOperator, literal::Literal, datatype::DataType},
+        token::{
+            binary_assignment_operator::BinaryAssignmentOperator, datatype::DataType,
+            literal::Literal,
+        },
     },
     error::Pos,
 };
@@ -173,7 +176,11 @@ impl fmt::Display for InstructionType {
                 receiver_idx,
                 unstack_len,
                 drop_receiver,
-                if arguments.is_some() { "scattered" } else { "tuple" }
+                if arguments.is_some() {
+                    "scattered"
+                } else {
+                    "tuple"
+                }
             )?,
             Self::Return { has_value } => {
                 write!(f, "return {:?}", if *has_value { "value" } else { "void" })?
@@ -182,8 +189,15 @@ impl fmt::Display for InstructionType {
             Self::Declaration { unstack_len } => {
                 write!(f, "declare var with value (unstack {})", unstack_len)?
             }
-            Self::CreateListFromStack { element_count, element_type } => {
-                write!(f, "create list from stack ({} elements of type {:?})", element_count, element_type)?;
+            Self::CreateListFromStack {
+                element_count,
+                element_type,
+            } => {
+                write!(
+                    f,
+                    "create list from stack ({} elements of type {:?})",
+                    element_count, element_type
+                )?;
             }
             Self::ConvertEmptyListType { to_element_type } => {
                 write!(f, "convert empty list to type {:?}", to_element_type)?;

@@ -142,7 +142,7 @@ impl<F: FileSystem + Clone> ModuleResolver<F> {
 
     fn resolve_import_item(&self, item: &ImportItem) -> AlthreadResult<ResolvedPath> {
         let (module_path, module_type) = self.resolve_path(&item.path)?;
-        
+
         // Determine the name based on the resolved path
         let name = if module_path.file_name().and_then(|n| n.to_str()) == Some("mod.alt") {
             // If we resolved to a mod.alt file, use the parent directory name as the module name
@@ -155,7 +155,7 @@ impl<F: FileSystem + Clone> ModuleResolver<F> {
         } else {
             item.path.last_segment().to_string()
         };
-        
+
         let alias = item.alias.as_ref().map(|alias| alias.value.value.clone());
 
         Ok(ResolvedPath {
@@ -212,7 +212,10 @@ impl<F: FileSystem + Clone> ModuleResolver<F> {
                          file_path.display(), dir_path.display(), mod_file_path.display());
                 let canonical_path = self.filesystem.canonicalize(&mod_file_path)?;
                 let sub_modules = self.discover_sub_modules(&dir_path)?;
-                Ok(Some((canonical_path, ModuleType::Directory { sub_modules })))
+                Ok(Some((
+                    canonical_path,
+                    ModuleType::Directory { sub_modules },
+                )))
             }
             (true, true, false) => {
                 // File and directory exist, no mod.alt: use file and warn
@@ -230,7 +233,10 @@ impl<F: FileSystem + Clone> ModuleResolver<F> {
                 // Directory with mod.alt exists
                 let canonical_path = self.filesystem.canonicalize(&mod_file_path)?;
                 let sub_modules = self.discover_sub_modules(&dir_path)?;
-                Ok(Some((canonical_path, ModuleType::Directory { sub_modules })))
+                Ok(Some((
+                    canonical_path,
+                    ModuleType::Directory { sub_modules },
+                )))
             }
             // Neither directory nor file exists
             (false, false, _) => Ok(None),
@@ -333,7 +339,10 @@ impl<F: FileSystem + Clone> ModuleResolver<F> {
 
         // Try to resolve from cache
         if let Some((cached_path, module_type)) = self.find_cached_dependency(&import_str) {
-            println!("Found cached dependency for '{}': {:?}", import_str, cached_path);
+            println!(
+                "Found cached dependency for '{}': {:?}",
+                import_str, cached_path
+            );
             return Ok((cached_path, module_type));
         }
 
@@ -416,7 +425,7 @@ impl<F: FileSystem + Clone> ModuleResolver<F> {
                         // Try to resolve the hierarchical import within the cached dependency
                         if let Some(resolved) =
                             self.resolve_cached_import(&version_path, import_str)
-                        {   
+                        {
                             available_version = Some(resolved);
                             break;
                         }
@@ -569,7 +578,7 @@ impl<F: FileSystem + Clone> ModuleResolver<F> {
             if root_mod_file.exists() {
                 return Some((root_mod_file, ModuleType::File));
             }
-            
+
             if let Ok(sub_modules) = self.discover_sub_modules(cached_package_path) {
                 return Some((
                     cached_package_path.clone(),

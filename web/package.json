@@ -1,10 +1,10 @@
 {
   "name": "solid-parcel-template",
-  "source": "app/index.html",
   "scripts": {
-    "dev": "parcel",
-    "start": "parcel --no-hmr",
-    "build": "parcel build",
+    "dev": "vite",
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "build-lezer": "lezer-generator lezer/althread.grammar -o lezer/parser.js",
     "build-wasm": "wasm-pack build --target web",
     "install-deps": "cargo install wasm-pack",
@@ -25,20 +25,17 @@
     "@lezer/generator": "^1.8.0",
     "@lezer/highlight": "^1.2.1",
     "@lezer/lr": "^1.4.2",
+    "vite": "^5.0.0",
+    "vite-plugin-solid": "^2.8.0",
     "babel-preset-solid": "^1.9.6",
     "buffer": "^6.0.3",
     "keycharm": "^0.4.0",
-    "parcel": "^2.15.4",
     "process": "^0.11.10",
     "solid-codemirror": "^2.3.1",
     "solid-js": "^1.9.7",
-    "solid-refresh": "0.7.5",
     "vis-data": "^7.1.10",
     "vis-network": "^9.1.13",
     "vis-util": "^5.0.7"
-  },
-  "@parcel/resolver-default": {
-    "packageExports": true
   },
   "dependencies": {
     "@codemirror/lang-cpp": "^6.0.3",

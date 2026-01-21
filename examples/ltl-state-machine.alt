@@ -1,0 +1,40 @@
+// Example 8: State machine property
+// System progresses through well-defined states
+
+shared {
+    let State: int = 0;  // 0=INIT, 1=READY, 2=RUNNING, 3=DONE
+}
+
+program StateMachine() {
+    // INIT -> READY
+    State = 1;
+    
+    // READY -> RUNNING
+    State = 2;
+    
+    // RUNNING -> DONE
+    State = 3;
+}
+
+// These formulas PASS: State progresses correctly
+check {
+    eventually (State == 1);  // Eventually reaches READY
+}
+
+check {
+    eventually (State == 3);  // Eventually reaches DONE
+}
+
+// State never goes backwards (monotonic)
+check {
+    always (State >= 0 && State <= 3);
+}
+
+// This would FAIL if we had: State = 1; State = 0;
+// check {
+//     always (!(State == 1) || eventually (State == 2))
+// }
+
+main {
+    run StateMachine();
+}

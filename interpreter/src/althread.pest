@@ -10,7 +10,7 @@ private_directive = { "@" ~ PRIVATE_KW }
 /// The main building blocks of an Althread program are:
 /// - **Main Block**: The entry point of the program.
 /// - **Shared Block**: Declares global variables accessible across different parts of the program.
-/// - **Condition Block**: Monitors conditions at each atomic step (e.g., always, never, eventually).
+/// - **Always Block**: Monitors conditions at each atomic step.
 /// - **Program Block**: Encapsulates code that runs concurrently in parallel processes.
 /// - **Function Block**: User-defined functions
 /// - **Check Block**: Contains LTL formulas to check
@@ -28,7 +28,7 @@ expression_statement = { expression ~ ";" }
 ltl_statement        = { ltl_expression ~ ";" }
 ltl_for_loop         = { FOR_KW ~ identifier ~ "in" ~ list_expression ~ "{" ~ ltl_expression ~ ";"? ~ "}" }
 
-condition_keywords = _{ ALWAYS_KW | NEVER_KW | EVENTUALLY_KW }
+condition_keywords = _{ ALWAYS_KW | NEVER_KW }
 
 /// ## Statements
 /// Statements are the executable instructions in the language.
@@ -139,7 +139,7 @@ ltl_binary_operator = _{ OR_OP | AND_OP | UNTIL_KW }
 
 ltl_term = { ltl_for_loop | ltl_unary_expression | ltl_if_expression | ltl_atom }
 
-ltl_if_expression = { IF_KW ~ ltl_expression ~ "{" ~ ltl_expression ~ "}" }
+ltl_if_expression = { IF_KW ~ ltl_expression ~ "{" ~ ltl_expression ~ "}" ~ (ELSE_KW ~ "{" ~ ltl_expression ~ "}")? }
 
 ltl_unary_expression = { ltl_unary_operator ~ ltl_term }
 ltl_unary_operator = _{ ALWAYS_KW | EVENTUALLY_KW | NOT_OP }
@@ -155,7 +155,7 @@ range_expression = {
 	(expression ~ LIST_OP ~ expression)
 }
 
-if_expression = { IF_KW ~ expression ~ "{" ~ expression ~ ";"? ~ "}" ~ ELSE_KW ~ "{" ~ expression ~ ";"? ~ "}" }
+if_expression = { IF_KW ~ expression ~ "{" ~ expression ~ ";"? ~ "}" ~ (ELSE_KW ~ "{" ~ expression ~ ";"? ~ "}")? }
 forall_expression = { FOR_KW ~ identifier ~ "in" ~ expression ~ "{" ~ expression ~ ";"? ~ "}" }
 exists_expression = { EXISTS_KW ~ identifier ~ "in" ~ expression ~ "{" ~ expression ~ ";"? ~ "}" }
 

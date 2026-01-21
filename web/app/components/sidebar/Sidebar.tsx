@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 import { createSignal, Show, createEffect, onCleanup } from 'solid-js';
 import FileExplorer from '@components/fileexplorer/FileExplorer';
 import type { FileSystemEntry } from '@components/fileexplorer/FileExplorer';

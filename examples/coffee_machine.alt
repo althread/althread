@@ -1,0 +1,59 @@
+shared {
+    let Coin_inserted = false;
+    let Coffee_ready = false;
+    let State = 0; // 0: Idle, 1: Brewing, 2: Done
+}
+
+program Machine() {
+    loop {
+         // Wait for coin
+         await Coin_inserted;
+         
+         // Consume coin
+         Coin_inserted = false;
+         
+         // Start brewing
+         State = 1; 
+         
+         // Finish brewing
+         State = 2; 
+         Coffee_ready = true;
+         
+         // Wait for user to take coffee
+         await !Coffee_ready;
+         
+         // Return to idle
+         State = 0; 
+    }
+}
+
+program User() {
+    loop {
+        // Action: Insert coin
+        // We can only insert if machine is ready (optional constraint, but good for flow)
+        // await state == 0; 
+        Coin_inserted = true;
+        
+        // Action: Wait for coffee
+        await Coffee_ready;
+        
+        // Action: Take coffee
+        Coffee_ready = false;
+    }
+}
+
+check {
+    // Response property: If I put a coin, I eventually get coffee
+    // Note: This relies on fairness (Machine must be scheduled)
+    always ( if Coin_inserted { eventually Coffee_ready } );
+}
+
+check {
+    // Safety: Coffee is never ready in Idle state
+    always ( if (State == 0) { !Coffee_ready } );
+}
+
+main {
+    run Machine();
+    run User();
+}

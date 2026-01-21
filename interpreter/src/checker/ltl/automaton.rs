@@ -1,3 +1,4 @@
+use log::debug;
 use std::collections::VecDeque;
 
 use super::compiled::CompiledLtlExpression;
@@ -17,18 +18,26 @@ impl AutomatonState {
     pub fn is_accepting(&self, set_index: usize) -> bool {
         self.acceptance_sets.contains(&set_index)
     }
-    
+
     /// Returns true if the state requires specific atomic propositions that match the description.
     /// This is used for debugging.
     pub fn description(&self) -> String {
-        let props: Vec<String> = self.formulas.iter().filter_map(|f| match f {
-            CompiledLtlExpression::Predicate { read_variables, .. } => Some(format!("Pred{:?}", read_variables)),
-            CompiledLtlExpression::Not(b) => match **b {
-                 CompiledLtlExpression::Predicate { ref read_variables, .. } => Some(format!("!Pred{:?}", read_variables)),
-                 _ => None
-            },
-           _ => None
-        }).collect();
+        let props: Vec<String> = self
+            .formulas
+            .iter()
+            .filter_map(|f| match f {
+                CompiledLtlExpression::Predicate { read_variables, .. } => {
+                    Some(format!("Pred{:?}", read_variables))
+                }
+                CompiledLtlExpression::Not(b) => match **b {
+                    CompiledLtlExpression::Predicate {
+                        ref read_variables, ..
+                    } => Some(format!("!Pred{:?}", read_variables)),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect();
         format!("State {}: [{}]", self.id, props.join(", "))
     }
 }
@@ -46,16 +55,16 @@ impl BuchiAutomaton {
     pub fn new(expression: CompiledLtlExpression) -> Self {
         // 1. Negate the expression to find counter-examples
         let neg_expr = expression.negate();
-        
+
         // 2. Identify all Until subformulas to define acceptance sets
         let mut until_constraints = Vec::new();
         collect_untils(&neg_expr, &mut until_constraints);
-        
+
         // 3. GBA Construction
         let mut states: Vec<AutomatonState> = Vec::new();
         // Determine initial states by expanding the start formula
-        let init_nodes = expand(vec![neg_expr]);
-        
+        let init_nodes = expand(vec![neg_expr.clone()]);
+
         // We need to explore reachable states
         let mut known_nodes: Vec<Vec<CompiledLtlExpression>> = Vec::new();
         let mut queue: VecDeque<usize> = VecDeque::new();
@@ -64,13 +73,15 @@ impl BuchiAutomaton {
         // Register initial nodes
         for node in init_nodes {
             if let Some(id) = find_node_id(&known_nodes, &node) {
-                if !initial_ids.contains(&id) { initial_ids.push(id); }
+                if !initial_ids.contains(&id) {
+                    initial_ids.push(id);
+                }
             } else {
                 let id = known_nodes.len();
                 known_nodes.push(node.clone());
                 initial_ids.push(id);
                 queue.push_back(id);
-                
+
                 // Create skeleton state
                 states.push(AutomatonState {
                     id,
@@ -80,25 +91,27 @@ impl BuchiAutomaton {
                 });
             }
         }
-        
+        debug!("Initial Büchi states: {:?}", initial_ids);
+
         // Explore
         while let Some(current_id) = queue.pop_front() {
             let current_formulas = states[current_id].formulas.clone();
-            
+
             // Compute acceptance sets for this state
             let mut acc_sets = Vec::new();
             for (i, until_expr) in until_constraints.iter().enumerate() {
-                if let CompiledLtlExpression::Until(_, right) = until_expr {
-                    let has_until = contains_formula(&current_formulas, until_expr);
-                    let has_rhs = contains_formula(&current_formulas, right);
-                    
-                    if !has_until || has_rhs {
-                        acc_sets.push(i);
-                    }
+                let has_rhs = match until_expr {
+                    CompiledLtlExpression::Until(_, right) => check_satisfaction(right, &current_formulas),
+                    CompiledLtlExpression::Eventually(inner) => check_satisfaction(inner, &current_formulas),
+                    _ => false,
+                };
+                
+                if has_rhs {
+                    acc_sets.push(i);
                 }
             }
             states[current_id].acceptance_sets = acc_sets;
-            
+
             // Compute Transitions
             // Get all 'Next' obligations
             let mut next_obligations = Vec::new();
@@ -107,9 +120,14 @@ impl BuchiAutomaton {
                     next_obligations.push(*inner.clone());
                 }
             }
-            
+
             let target_nodes = expand(next_obligations);
-            
+
+            debug!(
+                "Automaton {:?} state {} has formulas {:?} and transitions to {:?}",
+                neg_expr, current_id, states[current_id].formulas, target_nodes
+            );
+
             for target in target_nodes {
                 let target_id;
                 if let Some(id) = find_node_id(&known_nodes, &target) {
@@ -130,7 +148,7 @@ impl BuchiAutomaton {
                 }
             }
         }
-        
+
         Self {
             states,
             initial_states: initial_ids,
@@ -143,26 +161,70 @@ impl BuchiAutomaton {
 // Helpers
 
 fn collect_untils(expr: &CompiledLtlExpression, acc: &mut Vec<CompiledLtlExpression>) {
-    // If expr is Until, add it. Then recurse children.
-    if let CompiledLtlExpression::Until(l, r) = expr {
-        if !acc.contains(expr) {
-            acc.push(expr.clone());
-        }
-        collect_untils(l, acc);
-        collect_untils(r, acc);
-        return;
-    }
-    
-    // Recurse
+    // If expr is Until or Eventually, add it. Then recurse children.
     match expr {
+        CompiledLtlExpression::Until(l, r) => {
+           if !acc.contains(expr) {
+                acc.push(expr.clone());
+            }
+            collect_untils(l, acc);
+            collect_untils(r, acc);
+        }
+        CompiledLtlExpression::Eventually(e) => {
+            if !acc.contains(expr) {
+                acc.push(expr.clone());
+            }
+            collect_untils(e, acc);
+        }
         CompiledLtlExpression::Not(e) => collect_untils(e, acc),
-        CompiledLtlExpression::Next(e) | CompiledLtlExpression::Always(e) | CompiledLtlExpression::Eventually(e) => collect_untils(e, acc),
-        CompiledLtlExpression::And(a, b) | CompiledLtlExpression::Or(a, b) | CompiledLtlExpression::Implies(a, b) | CompiledLtlExpression::Release(a, b) => {
+        CompiledLtlExpression::Next(e)
+        | CompiledLtlExpression::Always(e) => collect_untils(e, acc),
+        CompiledLtlExpression::And(a, b)
+        | CompiledLtlExpression::Or(a, b)
+        | CompiledLtlExpression::Implies(a, b)
+        | CompiledLtlExpression::Release(a, b) => {
             collect_untils(a, acc);
             collect_untils(b, acc);
         }
-        CompiledLtlExpression::ForLoop { body, .. } | CompiledLtlExpression::Exists { body, .. } => collect_untils(body, acc),
+        CompiledLtlExpression::ForLoop { body, .. }
+        | CompiledLtlExpression::Exists { body, .. } => collect_untils(body, acc),
         _ => {}
+    }
+}
+
+/// Checks if a formula is satisfied by a set of formulas (which represents a state).
+/// This handles the case where the formula 'f' is composite (e.g., And(A, B))
+/// and the state contains decomposed literals (A, B).
+fn check_satisfaction(f: &CompiledLtlExpression, formulas: &[CompiledLtlExpression]) -> bool {
+    // 1. If f is in the set, it's satisfied.
+    if contains_formula(formulas, f) {
+        return true;
+    }
+
+    // 2. If f is a literal (atomic from POV of state), and not in set (step 1), then it's false.
+    if is_literal(f) {
+        return false;
+    }
+
+    // 3. Structural recursion
+    match f {
+        CompiledLtlExpression::And(a, b) => check_satisfaction(a, formulas) && check_satisfaction(b, formulas),
+        CompiledLtlExpression::Or(a, b) => check_satisfaction(a, formulas) || check_satisfaction(b, formulas),
+        CompiledLtlExpression::Implies(a, b) => !check_satisfaction(a, formulas) || check_satisfaction(b, formulas),
+        CompiledLtlExpression::Not(_) => {
+             // For Not, apply negation and check that.
+             check_satisfaction(&f.clone().negate(), formulas)
+        }
+        CompiledLtlExpression::Eventually(_) |
+        CompiledLtlExpression::Always(_) |
+        CompiledLtlExpression::Next(_) |
+        CompiledLtlExpression::Until(_, _) |
+        CompiledLtlExpression::Release(_, _) => {
+             // These should be in the set if they are true
+             contains_formula(formulas, f)
+        }
+        
+        _ => false 
     }
 }
 
@@ -170,9 +232,15 @@ fn contains_formula(list: &[CompiledLtlExpression], f: &CompiledLtlExpression) -
     list.iter().any(|item| item == f)
 }
 
-fn find_node_id(known: &[Vec<CompiledLtlExpression>], target: &[CompiledLtlExpression]) -> Option<usize> {
+fn find_node_id(
+    known: &[Vec<CompiledLtlExpression>],
+    target: &[CompiledLtlExpression],
+) -> Option<usize> {
     for (i, k) in known.iter().enumerate() {
-        if k.len() == target.len() && k.iter().all(|x| contains_formula(target, x)) && target.iter().all(|x| contains_formula(k, x)) {
+        if k.len() == target.len()
+            && k.iter().all(|x| contains_formula(target, x))
+            && target.iter().all(|x| contains_formula(k, x))
+        {
             return Some(i);
         }
     }
@@ -186,10 +254,13 @@ fn expand(formulas: Vec<CompiledLtlExpression>) -> Vec<Vec<CompiledLtlExpression
     results
 }
 
-fn expand_recursive(current: Vec<CompiledLtlExpression>, results: &mut Vec<Vec<CompiledLtlExpression>>) {
+fn expand_recursive(
+    current: Vec<CompiledLtlExpression>,
+    results: &mut Vec<Vec<CompiledLtlExpression>>,
+) {
     // Find the first non-literal formula
     let idx = current.iter().position(|f| !is_literal(f));
-    
+
     match idx {
         None => {
             // All literals (or Next). Check consistency.
@@ -202,11 +273,11 @@ fn expand_recursive(current: Vec<CompiledLtlExpression>, results: &mut Vec<Vec<C
             // Remove f from list
             let mut remainder = current;
             remainder.remove(i);
-            
+
             // Apply rules
             // Returns list of (new_formulas_to_add)
             let branches = apply_tableau_rule(&f);
-            
+
             for branch in branches {
                 let mut new_node = remainder.clone();
                 // Add all formulas from branch
@@ -226,15 +297,16 @@ fn is_literal(f: &CompiledLtlExpression) -> bool {
         CompiledLtlExpression::Predicate { .. } => true,
         CompiledLtlExpression::Boolean(_) => true,
         // Loops are treated as literals if they appear during expansion (meaning they are nested booleans)
-        CompiledLtlExpression::ForLoop { .. } => true, 
+        CompiledLtlExpression::ForLoop { .. } => true,
         CompiledLtlExpression::Exists { .. } => true,
         CompiledLtlExpression::Next(_) => true, // Next is treated as literal during state expansion
-        CompiledLtlExpression::Not(inner) => matches!(**inner, 
-            CompiledLtlExpression::Predicate { .. } | 
-            CompiledLtlExpression::Boolean(_) | 
-            CompiledLtlExpression::Next(_) |
-            CompiledLtlExpression::ForLoop { .. } |
-            CompiledLtlExpression::Exists { .. }
+        CompiledLtlExpression::Not(inner) => matches!(
+            **inner,
+            CompiledLtlExpression::Predicate { .. }
+                | CompiledLtlExpression::Boolean(_)
+                | CompiledLtlExpression::Next(_)
+                | CompiledLtlExpression::ForLoop { .. }
+                | CompiledLtlExpression::Exists { .. }
         ),
         _ => false,
     }
@@ -242,10 +314,16 @@ fn is_literal(f: &CompiledLtlExpression) -> bool {
 
 fn is_consistent(formulas: &[CompiledLtlExpression]) -> bool {
     for f in formulas {
-        if matches!(f, CompiledLtlExpression::Boolean(false)) { return false; }
+        if matches!(f, CompiledLtlExpression::Boolean(false)) {
+            return false;
+        }
         if let CompiledLtlExpression::Not(inner) = f {
-             if contains_formula(formulas, inner) { return false; }
-             if matches!(**inner, CompiledLtlExpression::Boolean(true)) { return false; }
+            if contains_formula(formulas, inner) {
+                return false;
+            }
+            if matches!(**inner, CompiledLtlExpression::Boolean(true)) {
+                return false;
+            }
         }
     }
     true
@@ -265,7 +343,7 @@ fn apply_tableau_rule(f: &CompiledLtlExpression) -> Vec<Vec<CompiledLtlExpressio
             // Branch 2: a, X(a U b)
             vec![
                 vec![*b.clone()],
-                vec![*a.clone(), CompiledLtlExpression::Next(Box::new(f.clone()))]
+                vec![*a.clone(), CompiledLtlExpression::Next(Box::new(f.clone()))],
             ]
         }
         CompiledLtlExpression::Release(a, b) => {
@@ -275,22 +353,23 @@ fn apply_tableau_rule(f: &CompiledLtlExpression) -> Vec<Vec<CompiledLtlExpressio
             // Branch 2: b, X(a R b)
             vec![
                 vec![*b.clone(), *a.clone()],
-                vec![*b.clone(), CompiledLtlExpression::Next(Box::new(f.clone()))]
+                vec![*b.clone(), CompiledLtlExpression::Next(Box::new(f.clone()))],
             ]
         }
         CompiledLtlExpression::Eventually(a) => {
             // <> a <=> a \/ X <> a
             vec![
                 vec![*a.clone()],
-                vec![CompiledLtlExpression::Next(Box::new(f.clone()))]
+                vec![CompiledLtlExpression::Next(Box::new(f.clone()))],
             ]
         }
         CompiledLtlExpression::Always(a) => {
             // [] a <=> a /\ X [] a
-            vec![
-                vec![*a.clone(), CompiledLtlExpression::Next(Box::new(f.clone()))]
-            ]
+            vec![vec![
+                *a.clone(),
+                CompiledLtlExpression::Next(Box::new(f.clone())),
+            ]]
         }
-        _ => vec![vec![f.clone()]] // Should not happen if expandable
+        _ => vec![vec![f.clone()]], // Should not happen if expandable
     }
 }

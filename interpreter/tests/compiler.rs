@@ -230,9 +230,12 @@ main {
                         &*if_node.condition,
                         LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(_))
                     ));
-                    assert!(matches!(&*if_node.then_expr, LocalExpressionNode::Exists(_)));
                     assert!(matches!(
-                        &*if_node.else_expr,
+                        &*if_node.then_expr,
+                        LocalExpressionNode::Exists(_)
+                    ));
+                    assert!(matches!(
+                        if_node.else_expr.as_ref().unwrap().as_ref(),
                         LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Literal(_))
                     ));
                 }

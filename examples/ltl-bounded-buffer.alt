@@ -1,0 +1,40 @@
+// Example 7: Bounded buffer property
+// Buffer should never overflow or underflow
+
+shared {
+    let BufferSize: int = 0;
+    let MAX_SIZE: int = 10;
+}
+
+program Producer() {
+    if (BufferSize < MAX_SIZE) {
+        BufferSize = BufferSize + 1;
+    }
+}
+
+program Consumer() {
+    if (BufferSize > 0) {
+        BufferSize = BufferSize - 1;
+    }
+}
+
+// These formulas PASS: buffer stays within bounds
+check {
+    always (BufferSize >= 0);
+}
+
+check {
+    always (BufferSize <= MAX_SIZE);
+}
+
+// Combined: buffer is always in valid range
+check {
+    always (BufferSize >= 0 && BufferSize <= MAX_SIZE);
+}
+
+main {
+    run Producer();
+    run Producer();
+    run Consumer();
+    run Producer();
+}

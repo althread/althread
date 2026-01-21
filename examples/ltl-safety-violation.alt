@@ -1,0 +1,24 @@
+// Example 2: Safety violation
+// Demonstrates a counter that can become negative
+
+shared {
+    let Counter: int = 5;
+}
+
+program BadDecrement() {
+    Counter = Counter - 10;
+}
+
+// This formula FAILS: Counter becomes -5 after BadDecrement
+check {
+    always (Counter >= 0);
+}
+
+// This formula PASSES: Counter stays above -10
+// check {
+//     always (Counter >= -10)
+// }
+
+main {
+    run BadDecrement();
+}

@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 import { createSignal, Show } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import ExampleSearch from './ExampleSearch';

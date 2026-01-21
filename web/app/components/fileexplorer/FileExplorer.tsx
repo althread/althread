@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 import { For, Show, createSignal, createEffect } from 'solid-js';
 import './FileExplorer.css';
 

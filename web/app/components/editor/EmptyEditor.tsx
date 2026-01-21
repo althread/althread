@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 
 export interface EmptyEditorProps {
   onNewFile: () => void;

@@ -1,15 +1,22 @@
 //42 <- used to easily remove all comments made with this id
 pub mod ltl;
 
-use std::{collections::{HashMap, VecDeque}, rc::Rc};
+#[cfg(test)]
+mod ltl_integration_tests;
 
-use ltl::compiled::CompiledLtlExpression;
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    hash::{Hash, Hasher},
+    rc::Rc,
+};
+
+use ltl::{automaton::BuchiAutomaton, compiled::CompiledLtlExpression, monitor::MonitoringState};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 use crate::{
     compiler::CompiledProject,
     error::{AlthreadError, AlthreadResult, ErrorType},
-    vm::{GlobalAction, VM, instruction::Instruction},
+    vm::{instruction::Instruction, GlobalAction, VM},
 };
 
 #[derive(Debug, Clone)]
@@ -109,18 +116,51 @@ impl<'a> GraphNode<'a> {
         }
     }
 }
+/// Extended state for LTL verification combining VM state and monitor states
+#[derive(Debug, Clone)]
+struct ProductState {
+    pub monitors: MonitoringState,
+}
 
+impl PartialEq for ProductState {
+    fn eq(&self, other: &Self) -> bool {
+        self.monitors == other.monitors
+    }
+}
+
+impl Eq for ProductState {}
+
+impl Hash for ProductState {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // Hash monitor states
+        for monitors in &self.monitors.monitors_per_formula {
+            for monitor in monitors {
+                monitor.current_state_id.hash(state);
+                // Hash bindings keys (values are too complex to hash reliably)
+                let mut keys: Vec<_> = monitor.bindings.keys().collect();
+                keys.sort();
+                for key in keys {
+                    key.hash(state);
+                }
+            }
+        }
+    }
+}
 /// Checks a given project, returning a path from an initial state to the first state that violates an invariant. (return an empty vector if no invariant is violated)
 pub fn check_program<'a>(
     compiled_project: &'a CompiledProject,
     max_states: Option<usize>,
 ) -> AlthreadResult<(Vec<StateLink<'a>>, StateGraph<'a>)> {
     if !compiled_project.compiled_ltl_formulas.is_empty() {
-        println!("Found {} compiled LTL formulas in the project", compiled_project.compiled_ltl_formulas.len());
+        println!(
+            "Found {} compiled LTL formulas in the project",
+            compiled_project.compiled_ltl_formulas.len()
+        );
         for (i, formula) in compiled_project.compiled_ltl_formulas.iter().enumerate() {
             println!("Compiled LTL Formula #{}: {}", i + 1, formula);
         }
-        log::warn!("LTL verification is not yet implemented. These formulas will be ignored for now.");
+        println!("Starting LTL verification...");
+        return check_program_with_ltl(compiled_project, max_states);
     }
 
     let mut state_graph = StateGraph {
@@ -319,7 +359,7 @@ pub fn check_program<'a>(
 
             // if the successor is already in the path we found an invalid execution path
             if path_set.contains(&curr_succ.to) {
-                // If it is in the path, we push it temporarily just to have it for reconstruction, 
+                // If it is in the path, we push it temporarily just to have it for reconstruction,
                 // OR we can reconstruct including the cycle closing edge.
                 // reconstruct_path takes a Vec of VMs.
                 path.push(curr_succ.to.clone());
@@ -384,4 +424,267 @@ pub fn reconstruct_path<'a>(
         back_node = pred;
     }
     Ok(ret_path)
+}
+
+/// Checks a program with LTL formulas using product automaton approach
+fn check_program_with_ltl<'a>(
+    compiled_project: &'a CompiledProject,
+    max_states: Option<usize>,
+) -> AlthreadResult<(Vec<StateLink<'a>>, StateGraph<'a>)> {
+    // Step 1: Build Büchi automatons from compiled LTL formulas
+    let automatons: Vec<BuchiAutomaton> = compiled_project
+        .compiled_ltl_formulas
+        .iter()
+        .map(|formula| BuchiAutomaton::new(formula.clone()))
+        .collect();
+
+    for (i, aut) in automatons.iter().enumerate() {
+        log::debug!("Automaton #{}:", i + 1);
+        for state in &aut.states {
+             log::debug!("  State {}: accept={:?}", state.id, state.acceptance_sets);
+             log::debug!("    Formulas: {:?}", state.formulas);
+             log::debug!("    Transitions: {:?}", state.transitions);
+        }
+    }
+
+    println!("Built {} Büchi automatons", automatons.len());
+
+    // Step 2: Initialize VM
+    let mut init_vm = VM::new(compiled_project);
+    init_vm.start(0);
+
+    // Step 3: Initialize monitoring state with proper quantifier handling
+    let initial_monitoring = ltl::quantifier::initialize_monitoring(
+        &compiled_project.compiled_ltl_formulas,
+        &automatons,
+        &init_vm,
+    )?;
+
+    let initial_vm = Rc::new(init_vm);
+
+    // Step 4: Initialize state graph
+    let mut state_graph = StateGraph {
+        nodes: HashMap::new(),
+        exhaustive: true,
+    };
+
+    state_graph
+        .nodes
+        .insert(initial_vm.clone(), GraphNode::new(None, 0));
+
+    // Step 4: Track product states (VM + Monitors)
+    let mut visited_product_states: HashMap<Rc<VM<'a>>, HashSet<ProductState>> = HashMap::new();
+    visited_product_states.insert(
+        initial_vm.clone(),
+        [ProductState {
+            monitors: initial_monitoring.clone(),
+        }]
+        .into_iter()
+        .collect(),
+    );
+
+    let mut next_nodes = VecDeque::new();
+    next_nodes.push_back((initial_vm.clone(), initial_monitoring));
+
+    // Step 5: Explore state space with LTL checking
+    while !next_nodes.is_empty() {
+        if let Some(max) = max_states {
+            if state_graph.nodes.len() >= max {
+                state_graph.exhaustive = false;
+                break;
+            }
+        }
+
+        let (current_vm, current_monitors) = next_nodes.pop_front().unwrap();
+        let current_level = state_graph.nodes.get(&current_vm).unwrap().level;
+
+        // Get VM successors
+        let successors = current_vm.next()?;
+
+        for (name, pid, instructions, actions, next_vm) in successors.into_iter() {
+            let next_vm = Rc::new(next_vm);
+
+            let mut lines: Vec<usize> = instructions
+                .iter()
+                .map(|x| x.pos.clone().unwrap_or_default().line)
+                .filter(|l| *l > 0)
+                .collect();
+            lines.sort();
+            lines.dedup();
+
+            // Add state link
+            state_graph
+                .nodes
+                .get_mut(&current_vm)
+                .unwrap()
+                .successors
+                .push(StateLink {
+                    to: next_vm.clone(),
+                    lines,
+                    instructions,
+                    actions,
+                    pid,
+                    name,
+                });
+
+            // Create new graph node if needed
+            if !state_graph.nodes.contains_key(&next_vm) {
+                state_graph.nodes.insert(
+                    next_vm.clone(),
+                    GraphNode::new(Some(current_vm.clone()), current_level + 1),
+                );
+            }
+
+            // Monitor update and evolution
+            // Debug print global state
+            if let Some(req) = next_vm.globals.get("Request") {
+                if let Some(grant) = next_vm.globals.get("Granted") {
+                   log::debug!("State: Request={:?}, Granted={:?}", req, grant);
+                }
+            }
+
+            let mut base_next_monitors = current_monitors.clone();
+
+            // Check for new processes and update monitors
+            ltl::quantifier::update_monitors_for_new_processes(
+                &compiled_project.compiled_ltl_formulas,
+                &automatons,
+                &mut base_next_monitors,
+                &next_vm,
+            )?;
+
+            // Get all possible next states for monitors (branching on non-determinism)
+            let possible_next_monitoring_states =
+                base_next_monitors.get_possible_successors(&next_vm, &automatons)?;
+
+            for next_monitors in possible_next_monitoring_states {
+                // Detect accepting runs of the Büchi automaton (observed counter-examples)
+                if monitors_in_accepting_state(&next_monitors, &automatons) {
+                    println!("LTL violation detected: acceptance condition reached");
+                    let violation_path = build_violation_path(&state_graph, &next_vm)?;
+                    return Ok((violation_path, state_graph));
+                }
+
+                // Check if this product state was already visited
+                let product_state = ProductState {
+                    monitors: next_monitors.clone(),
+                };
+
+                let already_visited = visited_product_states
+                    .entry(next_vm.clone())
+                    .or_insert_with(HashSet::new)
+                    .contains(&product_state);
+
+                if !already_visited {
+                    visited_product_states
+                        .get_mut(&next_vm)
+                        .unwrap()
+                        .insert(product_state);
+                    next_nodes.push_back((next_vm.clone(), next_monitors));
+                }
+            }
+        }
+
+        // Check invariants (traditional safety properties)
+        let check_ret = current_vm.check_invariants();
+        if let Err(e) = check_ret {
+            let mut path = Vec::new();
+            let mut back_node = current_vm.clone();
+
+            if state_graph
+                .nodes
+                .get(&back_node)
+                .unwrap()
+                .predecessor
+                .is_none()
+            {
+                let lines = if let Some(pos) = &e.pos {
+                    vec![pos.line]
+                } else {
+                    vec![]
+                };
+                path.push(StateLink {
+                    to: back_node.clone(),
+                    lines,
+                    instructions: vec![],
+                    actions: vec![],
+                    pid: 0,
+                    name: "_init_".to_string(),
+                });
+                return Ok((path, state_graph));
+            }
+
+            while let Some(pred) = state_graph
+                .nodes
+                .get(&back_node)
+                .unwrap()
+                .predecessor
+                .clone()
+            {
+                path.push(
+                    state_graph
+                        .nodes
+                        .get(&pred)
+                        .unwrap()
+                        .successors
+                        .iter()
+                        .find(|x| x.to == back_node)
+                        .unwrap()
+                        .clone(),
+                );
+                back_node = pred;
+            }
+
+            return Ok((path.into_iter().rev().collect(), state_graph));
+        } else if check_ret.is_ok_and(|x| x == 1) {
+            state_graph.nodes.get_mut(&current_vm).unwrap().eventually = true;
+        }
+    }
+
+    // No violations found
+    println!("LTL verification completed: no violations found");
+    Ok((vec![], state_graph))
+}
+
+fn build_violation_path<'a>(
+    state_graph: &StateGraph<'a>,
+    target: &Rc<VM<'a>>,
+) -> AlthreadResult<Vec<StateLink<'a>>> {
+    let mut path = Vec::new();
+    let mut back_node = target.clone();
+
+    while let Some(pred) = state_graph
+        .nodes
+        .get(&back_node)
+        .unwrap()
+        .predecessor
+        .clone()
+    {
+        let link = state_graph
+            .nodes
+            .get(&pred)
+            .unwrap()
+            .successors
+            .iter()
+            .find(|x| x.to == back_node)
+            .unwrap()
+            .clone();
+        path.push(link);
+        back_node = pred;
+    }
+
+    Ok(path.into_iter().rev().collect())
+}
+
+fn monitors_in_accepting_state(monitors: &MonitoringState, automatons: &[BuchiAutomaton]) -> bool {
+    monitors
+        .monitors_per_formula
+        .iter()
+        .enumerate()
+        .any(|(formula_idx, monitors)| {
+            let automaton = &automatons[formula_idx];
+            monitors
+                .iter()
+                .any(|monitor| monitor.is_accepting(automaton))
+        })
 }

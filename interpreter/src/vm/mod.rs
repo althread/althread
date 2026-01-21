@@ -99,7 +99,6 @@ pub struct VM<'a> {
     pub user_funcs: &'a HashMap<String, FunctionDefinition>,
     pub executable_programs: BTreeSet<usize>, // needs to be sorted to have a deterministic behavior
     pub always_conditions: &'a Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
-    pub eventually_conditions: &'a Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>, // adding a eventually conditions structure
 
     /// The programs that are waiting for a condition to be true
     /// The condition depends on the global variables that are in the HashSet
@@ -120,7 +119,6 @@ impl<'a> VM<'a> {
             programs_code: &compiled_project.programs_code,
             user_funcs: &compiled_project.user_functions,
             always_conditions: &compiled_project.always_conditions,
-            eventually_conditions: &compiled_project.eventually_conditions,
             next_program_id: 0,
             waiting_programs: HashMap::new(),
             rng: Rng::new(),
@@ -221,7 +219,7 @@ impl<'a> VM<'a> {
         if let Candidate::Delivery(link) = choice {
             let delivery_info = self
                 .channels
-            .deliver_one(link)
+                .deliver_one(link)
                 .expect("pending link must have a deliverable message");
 
             if let Some(dependency) = self.waiting_programs.get(&delivery_info.to.program_id) {
@@ -230,8 +228,7 @@ impl<'a> VM<'a> {
                     .contains(&delivery_info.to.channel_name)
                 {
                     self.waiting_programs.remove(&delivery_info.to.program_id);
-                    self.executable_programs
-                        .insert(delivery_info.to.program_id);
+                    self.executable_programs.insert(delivery_info.to.program_id);
                 }
             }
 
@@ -246,9 +243,10 @@ impl<'a> VM<'a> {
                 .map(|p| p.name.clone())
                 .unwrap_or_else(|| format!("PID_{}", delivery_info.to.program_id));
 
-            let (sender_id, sender_clock, _content) =
-                crate::vm::channels::parse_message_tuple(&delivery_info.message)
-                    .unwrap_or((delivery_info.from_program_id, 0, "".to_string()));
+            let (sender_id, sender_clock, _content) = crate::vm::channels::parse_message_tuple(
+                &delivery_info.message,
+            )
+            .unwrap_or((delivery_info.from_program_id, 0, "".to_string()));
 
             return Ok(ExecutionStepInfo {
                 prog_name: format!(
@@ -369,7 +367,7 @@ impl<'a> VM<'a> {
                 }
                 GlobalAction::Exit => self.running_programs.clear(),
                 GlobalAction::Print(_) => {} // do nothing, this is just a print action
-                GlobalAction::Send(_) => {} // do nothing, sending is already handled
+                GlobalAction::Send(_) => {}  // do nothing, sending is already handled
             }
         }
         if actions.end {
@@ -441,7 +439,7 @@ impl<'a> VM<'a> {
 
         // Store actions before processing them
         exec_info.actions = actions.actions.clone();
-        
+
         for action in actions.actions {
             match action {
                 GlobalAction::Wait => {
@@ -478,7 +476,7 @@ impl<'a> VM<'a> {
                 }
                 GlobalAction::Exit => self.running_programs.clear(),
                 GlobalAction::Print(_) => {} // do nothing, this is just a print action
-                GlobalAction::Send(_) => {} // do nothing, sending is already handled
+                GlobalAction::Send(_) => {}  // do nothing, sending is already handled
             }
         }
         if actions.end {
@@ -499,7 +497,9 @@ impl<'a> VM<'a> {
     /**
      * List all the next possible state of the VM
      */
-    pub fn next(&self) -> AlthreadResult<Vec<(String, usize, Vec<Instruction>, Vec<GlobalAction>, VM<'a>)>> {
+    pub fn next(
+        &self,
+    ) -> AlthreadResult<Vec<(String, usize, Vec<Instruction>, Vec<GlobalAction>, VM<'a>)>> {
         if self.running_programs.len() == 0 {
             return Ok(Vec::new());
         }
@@ -516,7 +516,13 @@ impl<'a> VM<'a> {
 
             let mut vm = self.clone();
             if let Some(result) = vm.next_step_pid(program.id)? {
-                next_states.push((program.name.clone(), program.id, result.instructions, result.actions, vm));
+                next_states.push((
+                    program.name.clone(),
+                    program.id,
+                    result.instructions,
+                    result.actions,
+                    vm,
+                ));
             }
         }
 
@@ -549,9 +555,10 @@ impl<'a> VM<'a> {
                 .map(|p| p.name.clone())
                 .unwrap_or_else(|| format!("PID_{}", delivery_info.to.program_id));
 
-            let (sender_id, sender_clock, _content) =
-                crate::vm::channels::parse_message_tuple(&delivery_info.message)
-                    .unwrap_or((delivery_info.from_program_id, 0, "".to_string()));
+            let (sender_id, sender_clock, _content) = crate::vm::channels::parse_message_tuple(
+                &delivery_info.message,
+            )
+            .unwrap_or((delivery_info.from_program_id, 0, "".to_string()));
 
             next_states.push((
                 format!(
@@ -604,9 +611,8 @@ impl<'a> VM<'a> {
         (&self.globals, self.channels.state(), local_states)
     }
 
-    //42 this check invariants, actually it only check always digging in to either expand it to take in account eventually or do a special one for eventually
-    // return OK(0) if only always is verified
-    // return OK(1) if eventually is also true
+    //42 this checks invariants (the always block conditions)
+    // return OK(1) if all invariants hold
     pub fn check_invariants(&self) -> AlthreadResult<i32> {
         for (_deps, read_vars, expr, pos) in self.always_conditions.iter() {
             //if _deps.contains(&var_name) { //TODO improve by checking if the variable is in the dependencies
@@ -614,8 +620,7 @@ impl<'a> VM<'a> {
             // create a small memory stack with the value of the variables
             let mut memory = Vec::new();
             for var_name in read_vars.iter() {
-                if let Some(proc_name) = var_name.strip_prefix("$.procs.")
-                {
+                if let Some(proc_name) = var_name.strip_prefix("$.procs.") {
                     let values = self
                         .running_programs
                         .iter()
@@ -657,52 +662,7 @@ impl<'a> VM<'a> {
             //}
         }
 
-        // now checking eventually
-        for (_deps, read_vars, expr, pos) in self.eventually_conditions.iter() {
-            //if _deps.contains(&var_name) { //TODO improve by checking if the variable is in the dependencies
-            // Check if the eventually condition is true
-            // create a small memory stack with the value of the variables
-            let mut memory = Vec::new();
-            for var_name in read_vars.iter() {
-                if let Some(proc_name) = var_name.strip_prefix("$.procs.")
-                {
-                    let values = self
-                        .running_programs
-                        .iter()
-                        .filter(|p| p.name == proc_name)
-                        .map(|p| Literal::Process(p.name.clone(), p.id))
-                        .collect::<Vec<_>>();
-                    memory.push(Literal::List(
-                        DataType::Process(proc_name.to_string()),
-                        values,
-                    ));
-                } else {
-                    memory.push(
-                        self.globals
-                            .get(var_name)
-                            .expect(format!("global variable '{}' not found", var_name).as_str())
-                            .clone(),
-                    );
-                }
-            }
-            match expr.eval_with_context(&memory, self) {
-                Ok(cond) => {
-                    if !cond.is_true() {
-                        return Ok(0); // eventually not checking on a specific state isn't an error
-                    }
-                }
-                Err(e) => {
-                    return Err(AlthreadError::new(
-                        ErrorType::ExpressionError,
-                        Some(pos.clone()),
-                        e,
-                    ));
-                }
-            }
-
-            //}
-        }
-        Ok(1) // if the eventually is valid we say it in the return
+        Ok(1)
     }
 }
 

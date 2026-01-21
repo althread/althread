@@ -1,0 +1,28 @@
+// Example 3: Liveness property with eventually
+// Property: Something good eventually happens
+
+shared {
+    let Flag: bool = false;
+    let Counter: int = 0;
+}
+
+program EventuallySetsFlag() {
+    Counter = Counter + 1;
+    Counter = Counter + 1;
+    Flag = true;
+}
+
+// This formula PASSES: Flag eventually becomes true
+
+check {
+    eventually (Flag == true);
+}
+
+// This formula also PASSES: Counter eventually exceeds 1
+check {
+    eventually (Counter > 1);
+}
+
+main {
+    run EventuallySetsFlag();
+}

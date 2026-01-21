@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 import { createEffect, createSignal, Show } from "solid-js";
 import Resizable from '@corvu/resizable'
 import { renderMessageFlowGraph } from "@components/graph/CommGraph";

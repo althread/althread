@@ -193,7 +193,6 @@ impl Ast {
                 user_functions: HashMap::new(),
                 programs_code: HashMap::new(),
                 always_conditions: Vec::new(),
-                eventually_conditions: Vec::new(),
                 ltl_formulas: Vec::new(),
                 compiled_ltl_formulas: Vec::new(),
                 stdlib: Rc::new(stdlib::Stdlib::new()),
@@ -266,19 +265,11 @@ impl Ast {
                     module_prefix,
                     compiled_module.always_conditions
                 );
-                log::debug!(
-                    "[{}] Imported eventually conditions: {:?}",
-                    module_prefix,
-                    compiled_module.eventually_conditions
-                );
                 log::debug!("----------------------------------------------------");
 
                 state
                     .always_conditions_mut()
                     .extend(compiled_module.always_conditions);
-                state
-                    .eventually_conditions_mut()
-                    .extend(compiled_module.eventually_conditions);
                 state
                     .global_memory_mut()
                     .extend(compiled_module.global_memory);
@@ -339,10 +330,9 @@ impl Ast {
                         let var_name = &decl.value.identifier.value.parts[0].value.value;
                         // Use context instead of local global_table
                         let last_program_stack = state.program_stack.last().unwrap().clone();
-                        state.global_table_mut().insert(
-                            var_name.clone(),
-                            last_program_stack,
-                        );
+                        state
+                            .global_table_mut()
+                            .insert(var_name.clone(), last_program_stack);
                         state
                             .global_memory_mut()
                             .insert(var_name.clone(), memory.last().unwrap().clone());
@@ -493,7 +483,9 @@ impl Ast {
                         Variable {
                             mutable: false,
                             name: gs_name,
-                            datatype: DataType::List(Box::new(DataType::Process(prog_name.clone()))),
+                            datatype: DataType::List(Box::new(DataType::Process(
+                                prog_name.clone(),
+                            ))),
                             depth: 0,
                             declare_pos: None,
                         },
@@ -505,7 +497,9 @@ impl Ast {
                         Variable {
                             mutable: false,
                             name: dollar_name,
-                            datatype: DataType::List(Box::new(DataType::Process(prog_name.clone()))),
+                            datatype: DataType::List(Box::new(DataType::Process(
+                                prog_name.clone(),
+                            ))),
                             depth: 0,
                             declare_pos: None,
                         },
@@ -559,50 +553,9 @@ impl Ast {
                         }
                     }
                 }
-                // TODO  since the content is sensitively similar to always block find a way to combine both to avoid code duplication
-                ConditionKeyword::Eventually => {
-                    for condition in condition_block.value.children.iter() {
-                        let compiled = condition.compile(&mut state)?.instructions;
-                        if compiled.len() == 1 {
-                            return Err(AlthreadError::new(
-                                ErrorType::InstructionNotAllowed,
-                                Some(condition.pos.clone()),
-                                "The condition must depend on shared variable(s)".to_string(),
-                            ));
-                        }
-                        if compiled.len() != 2 {
-                            return Err(AlthreadError::new(
-                                ErrorType::InstructionNotAllowed,
-                                Some(condition.pos.clone()),
-                                "The condition must be a single expression".to_string(),
-                            ));
-                        }
-                        if let InstructionType::GlobalReads { variables, .. } = &compiled[0].control
-                        {
-                            if let InstructionType::Expression(exp) = &compiled[1].control {
-                                state.eventually_conditions_mut().push((
-                                    variables.iter().map(|s| s.clone()).collect(),
-                                    variables.clone(),
-                                    exp.clone(),
-                                    condition.pos.clone(),
-                                ));
-                            } else {
-                                return Err(AlthreadError::new(
-                                    ErrorType::InstructionNotAllowed,
-                                    Some(condition.pos.clone()),
-                                    "The condition must be a single expression".to_string(),
-                                ));
-                            }
-                        } else {
-                            return Err(AlthreadError::new(
-                                ErrorType::InstructionNotAllowed,
-                                Some(condition.pos.clone()),
-                                "The condition must depend on shared variable(s)".to_string(),
-                            ));
-                        }
-                    }
+                ConditionKeyword::Never => {
+                    // 'never' blocks are not yet implemented, but reserved for future use.
                 }
-                _ => {}
             }
         }
         state.in_condition_block = false;
@@ -627,7 +580,6 @@ impl Ast {
                 .iter()
                 .zip(args_list.value.datatypes.iter())
                 .map(|(id, dt)| {
-                    // add the arguments to the stack
                     state.program_stack.push(Variable {
                         name: id.value.value.clone(),
                         depth: state.current_stack_depth,
@@ -908,49 +860,11 @@ impl Ast {
         }
         *state.always_conditions_mut() = new_always_conditions;
 
-        log::debug!("[{}] Qualifying eventually conditions", module_prefix);
-        // Do the same for eventually_conditions
-        let eventually_conditions: Vec<_> = state.eventually_conditions().clone();
-        let mut new_eventually_conditions = Vec::new();
-        for condition in eventually_conditions.iter() {
-            // skip if any dependency starts with any same-level module name
-            if same_level_module_names.iter().any(|mod_name| {
-                condition
-                    .0
-                    .iter()
-                    .any(|dep| dep.starts_with(&format!("{}.", mod_name)))
-            }) {
-                continue;
-            }
-            let (deps, read_vars, expr, pos) = condition;
-
-            let updated_deps: HashSet<String> = deps
-                .iter()
-                .map(|dep| self.build_qualified_name(dep, module_prefix))
-                .collect();
-            let updated_read_vars: Vec<String> = read_vars
-                .iter()
-                .map(|var| self.build_qualified_name(var, module_prefix))
-                .collect();
-
-            new_eventually_conditions.push((
-                updated_deps,
-                updated_read_vars,
-                expr.clone(),
-                pos.clone(),
-            ));
-        }
-        *state.eventually_conditions_mut() = new_eventually_conditions;
-
         // remove conditions that are not qualified
         if !module_prefix.is_empty() {
             log::debug!("[{}] Removing unqualified conditions", module_prefix);
             state
                 .always_conditions_mut()
-                .retain(|(deps, _read_vars, _expr, _pos)| deps.iter().any(|dep| dep.contains('.')));
-
-            state
-                .eventually_conditions_mut()
                 .retain(|(deps, _read_vars, _expr, _pos)| deps.iter().any(|dep| dep.contains('.')));
         }
 
@@ -1067,13 +981,12 @@ impl Ast {
                 .insert(qualified_prog_name, prog_code.clone());
         }
 
-        log::debug!("[{}] Compiled module with {} programs, {} functions, {} shared variables, {} always conditions, {} eventually conditions", 
+        log::debug!("[{}] Compiled module with {} programs, {} functions, {} shared variables, {} always conditions", 
             module_prefix,
             state.programs_code().len(),
             state.user_functions().len(),
             state.global_memory().len(),
-            state.always_conditions().len(),
-            state.eventually_conditions().len()
+            state.always_conditions().len()
         );
 
         if module_prefix.is_empty() {
@@ -1095,10 +1008,6 @@ impl Ast {
                 "[Main module] Always conditions: {:?}",
                 state.always_conditions()
             );
-            log::debug!(
-                "[Main module] Eventually conditions: {:?}",
-                state.eventually_conditions()
-            );
             log::debug!("-----------------------------------------------------");
         }
 
@@ -1112,7 +1021,6 @@ impl Ast {
             global_table: state.global_table().clone(),
             programs_code: state.programs_code().clone(),
             always_conditions: state.always_conditions().clone(),
-            eventually_conditions: state.eventually_conditions().clone(),
             ltl_formulas: state.ltl_formulas().clone(),
             compiled_ltl_formulas: ltl::compile_ltl_formulas(state.ltl_formulas(), &state)?,
             stdlib: state.stdlib().clone(),

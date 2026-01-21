@@ -1,0 +1,19 @@
+
+shared {
+    let Request: bool = false;
+    let Granted: bool = false;
+    let Completed: bool = false;
+}
+
+program RequestGrantComplete() {
+        Request = true;
+        Granted = true;
+        Completed = true;
+}
+check {
+    always (if Request { Granted });
+}
+
+main {
+    run RequestGrantComplete();
+}

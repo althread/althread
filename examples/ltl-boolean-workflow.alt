@@ -1,0 +1,37 @@
+// Example 5: Boolean conditions
+// Testing various boolean combinations
+
+shared {
+    let Ready: bool = false;
+    let Started: bool = false;
+    let Finished: bool = false;
+}
+
+program Workflow() {
+    Ready = true;
+    Started = true;
+    Finished = true;
+}
+
+// All these formulas PASS with the workflow
+check {
+    eventually (Ready == true);
+}
+
+check {
+    always (!(Ready == true) || eventually (Started == true));
+}
+
+check {
+    eventually (Finished == true);
+}
+
+// This demonstrates ordering: Ready before Started before Finished
+// In actual execution, they happen in sequence
+// check {
+//     always (!(Started == true) || (Ready == true))
+// }
+
+main {
+    run Workflow();
+}

@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 import vis from "vis-network/dist/vis-network.esm";
 import { createEffect, onCleanup, createSignal } from "solid-js";
 import GraphToolbar from "./GraphToolbar";

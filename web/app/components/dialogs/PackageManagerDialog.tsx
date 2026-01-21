@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 import { createSignal, Show, For, onMount } from 'solid-js';
 import { WebPackageManager, type PackageInfo, type AltTomlConfig } from '@utils/packageManager';
 import type { FileSystemEntry } from '@components/fileexplorer/FileExplorer';

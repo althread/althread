@@ -126,7 +126,7 @@ impl InstructionBuilder for BracketExpression {
                     value: Expression::Range(range_node.clone()),
                 };
                 range_expr.compile(state)
-            },
+            }
             BracketContent::ListLiteral(expressions) => {
                 let mut instructions = Vec::new();
 
@@ -134,7 +134,10 @@ impl InstructionBuilder for BracketExpression {
                 let element_type = if let Some(first_expr) = expressions.first() {
                     match &first_expr.value {
                         SideEffectExpression::Expression(node) => {
-                            let local_expr = LocalExpressionNode::from_expression(&node.value, &state.program_stack)?;
+                            let local_expr = LocalExpressionNode::from_expression(
+                                &node.value,
+                                &state.program_stack,
+                            )?;
                             local_expr.datatype(state).map_err(|err| {
                                 AlthreadError::new(
                                     ErrorType::ExpressionError,
@@ -142,24 +145,27 @@ impl InstructionBuilder for BracketExpression {
                                     format!("Cannot infer type of list element: {}", err),
                                 )
                             })?
-                        },
+                        }
                         SideEffectExpression::FnCall(node) => {
                             let local_expr = LocalExpressionNode::FnCall(Box::new(node.clone()));
                             local_expr.datatype(state).map_err(|err| {
                                 AlthreadError::new(
                                     ErrorType::ExpressionError,
                                     Some(node.pos.clone()),
-                                    format!("Cannot infer list element type from function call: {}", err),
+                                    format!(
+                                        "Cannot infer list element type from function call: {}",
+                                        err
+                                    ),
                                 )
                             })?
-                        },
+                        }
                         SideEffectExpression::RunCall(_) => {
                             return Err(AlthreadError::new(
                                 ErrorType::ExpressionError,
                                 Some(first_expr.pos.clone()),
                                 "Run calls cannot be used in list literals".to_string(),
                             ));
-                        },
+                        }
                         SideEffectExpression::Bracket(node) => {
                             // Compile the nested bracket to get its type
                             let _nested_builder = node.compile(state)?;
@@ -191,22 +197,29 @@ impl InstructionBuilder for BracketExpression {
                     // Compile the expression
                     let builder = expr.compile(state)?;
                     instructions.extend(builder.instructions);
-                    
+
                     // Type check if we have a determined element type
                     if element_type != DataType::Void {
                         let expr_type = match &expr.value {
                             SideEffectExpression::Expression(node) => {
-                                let local_expr = LocalExpressionNode::from_expression(&node.value, &state.program_stack)?;
+                                let local_expr = LocalExpressionNode::from_expression(
+                                    &node.value,
+                                    &state.program_stack,
+                                )?;
                                 local_expr.datatype(state).map_err(|err| {
                                     AlthreadError::new(
                                         ErrorType::ExpressionError,
                                         Some(expr.pos.clone()),
-                                        format!("Cannot determine type of list element {}: {}", i, err),
+                                        format!(
+                                            "Cannot determine type of list element {}: {}",
+                                            i, err
+                                        ),
                                     )
                                 })?
-                            },
+                            }
                             SideEffectExpression::FnCall(node) => {
-                                let local_expr = LocalExpressionNode::FnCall(Box::new(node.clone()));
+                                let local_expr =
+                                    LocalExpressionNode::FnCall(Box::new(node.clone()));
                                 local_expr.datatype(state).map_err(|err| {
                                     AlthreadError::new(
                                         ErrorType::ExpressionError,
@@ -214,7 +227,7 @@ impl InstructionBuilder for BracketExpression {
                                         format!("Cannot determine type of function call in list element {}: {}", i, err),
                                     )
                                 })?
-                            },
+                            }
                             SideEffectExpression::Bracket(_) => {
                                 // Get type from the variable that was just pushed to stack
                                 if let Some(last_var) = state.program_stack.last() {
@@ -226,17 +239,20 @@ impl InstructionBuilder for BracketExpression {
                                         "Cannot determine type of bracket expression".to_string(),
                                     ));
                                 }
-                            },
+                            }
                             SideEffectExpression::RunCall(_) => {
                                 unreachable!("Run calls already filtered out above");
                             }
                         };
-                        
+
                         if expr_type != element_type {
                             return Err(AlthreadError::new(
                                 ErrorType::ExpressionError,
                                 Some(expr.pos.clone()),
-                                format!("List element {} has type {:?}, expected {:?}", i, expr_type, element_type),
+                                format!(
+                                    "List element {} has type {:?}, expected {:?}",
+                                    i, expr_type, element_type
+                                ),
                             ));
                         }
                     }
@@ -314,7 +330,7 @@ pub enum Expression {
 
 impl fmt::Display for Expression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // We can't implement decent Display easily without more effort, 
+        // We can't implement decent Display easily without more effort,
         // but for LTL Predicates printing we might need it.
         // For now let's use Debug-like print or placeholder.
         write!(f, "{:?}", self)
@@ -329,8 +345,13 @@ pub struct CallChainExpression {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum CallChainSegment {
-    Call { name: Node<Identifier>, args: Node<Expression> },
-    Reaches { label: Node<Identifier> },
+    Call {
+        name: Node<Identifier>,
+        args: Node<Expression>,
+    },
+    Reaches {
+        label: Node<Identifier>,
+    },
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -368,15 +389,20 @@ pub struct LocalCallChainNode {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum LocalCallChainSegment {
-    Call { name: String, args: Box<LocalExpressionNode> },
-    Reaches { label: String },
+    Call {
+        name: String,
+        args: Box<LocalExpressionNode>,
+    },
+    Reaches {
+        label: String,
+    },
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct LocalIfExprNode {
     pub condition: Box<LocalExpressionNode>,
     pub then_expr: Box<LocalExpressionNode>,
-    pub else_expr: Box<LocalExpressionNode>,
+    pub else_expr: Option<Box<LocalExpressionNode>>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -710,17 +736,27 @@ impl LocalExpressionNode {
                     then_expr,
                     else_expr,
                 } => {
-                    let cond = LocalExpressionNode::from_expression(&condition.value, program_stack)?;
-                    let then_e = LocalExpressionNode::from_expression(&then_expr.value, program_stack)?;
-                    let else_e = LocalExpressionNode::from_expression(&else_expr.value, program_stack)?;
+                    let cond =
+                        LocalExpressionNode::from_expression(&condition.value, program_stack)?;
+                    let then_e =
+                        LocalExpressionNode::from_expression(&then_expr.value, program_stack)?;
+                    let else_e = if let Some(else_expr) = else_expr {
+                        Some(Box::new(LocalExpressionNode::from_expression(
+                            &else_expr.value,
+                            program_stack,
+                        )?))
+                    } else {
+                        None
+                    };
                     LocalExpressionNode::IfExpr(LocalIfExprNode {
                         condition: Box::new(cond),
                         then_expr: Box::new(then_e),
-                        else_expr: Box::new(else_e),
+                        else_expr: else_e,
                     })
                 }
                 PrimaryExpression::ForAllExpr { var, list, body } => {
-                    let list_local = LocalExpressionNode::from_expression(&list.value, program_stack)?;
+                    let list_local =
+                        LocalExpressionNode::from_expression(&list.value, program_stack)?;
 
                     let mut temp_stack = program_stack.clone();
                     temp_stack.push(Variable {
@@ -730,7 +766,8 @@ impl LocalExpressionNode {
                         depth: 0,
                         declare_pos: Some(var.pos.clone()),
                     });
-                    let body_local = LocalExpressionNode::from_expression(&body.value, &temp_stack)?;
+                    let body_local =
+                        LocalExpressionNode::from_expression(&body.value, &temp_stack)?;
 
                     LocalExpressionNode::ForAll(LocalForAllNode {
                         var_name: var.value.value.clone(),
@@ -739,7 +776,8 @@ impl LocalExpressionNode {
                     })
                 }
                 PrimaryExpression::ExistsExpr { var, list, body } => {
-                    let list_local = LocalExpressionNode::from_expression(&list.value, program_stack)?;
+                    let list_local =
+                        LocalExpressionNode::from_expression(&list.value, program_stack)?;
 
                     let mut temp_stack = program_stack.clone();
                     temp_stack.push(Variable {
@@ -749,7 +787,8 @@ impl LocalExpressionNode {
                         depth: 0,
                         declare_pos: Some(var.pos.clone()),
                     });
-                    let body_local = LocalExpressionNode::from_expression(&body.value, &temp_stack)?;
+                    let body_local =
+                        LocalExpressionNode::from_expression(&body.value, &temp_stack)?;
 
                     LocalExpressionNode::Exists(LocalExistsNode {
                         var_name: var.value.value.clone(),
@@ -757,9 +796,10 @@ impl LocalExpressionNode {
                         body: Box::new(body_local),
                     })
                 }
-                _ => LocalExpressionNode::Primary(
-                    LocalPrimaryExpressionNode::from_primary(&node.value, program_stack)?,
-                ),
+                _ => LocalExpressionNode::Primary(LocalPrimaryExpressionNode::from_primary(
+                    &node.value,
+                    program_stack,
+                )?),
             },
             Expression::FnCall(node) => LocalExpressionNode::FnCall(Box::new(node.clone())),
             Expression::Tuple(node) => LocalExpressionNode::Tuple(
@@ -769,12 +809,14 @@ impl LocalExpressionNode {
                 LocalRangeListExpressionNode::from_range(&node.value, program_stack)?,
             ),
             Expression::CallChain(node) => {
-                let base = LocalExpressionNode::from_expression(&node.value.base.value, program_stack)?;
+                let base =
+                    LocalExpressionNode::from_expression(&node.value.base.value, program_stack)?;
                 let mut segments = Vec::new();
                 for segment in node.value.segments.iter() {
                     match segment {
                         CallChainSegment::Call { name, args } => {
-                            let local_args = LocalExpressionNode::from_expression(&args.value, program_stack)?;
+                            let local_args =
+                                LocalExpressionNode::from_expression(&args.value, program_stack)?;
                             segments.push(LocalCallChainSegment::Call {
                                 name: name.value.value.clone(),
                                 args: Box::new(local_args),
@@ -824,7 +866,10 @@ impl LocalExpressionNode {
             LocalExpressionNode::IfExpr(n) => {
                 n.condition.contains_fn_call()
                     || n.then_expr.contains_fn_call()
-                    || n.else_expr.contains_fn_call()
+                    || n.else_expr
+                        .as_ref()
+                        .map(|e| e.contains_fn_call())
+                        .unwrap_or(false)
             }
             LocalExpressionNode::ForAll(n) => {
                 n.list.contains_fn_call() || n.body.contains_fn_call()
@@ -888,7 +933,9 @@ impl LocalExpressionNode {
             }
             Self::Reaches(node) => {
                 if !state.in_condition_block {
-                    return Err("'reaches' is only available inside always/eventually blocks".to_string());
+                    return Err(
+                        "'reaches' is only available inside always/check blocks".to_string(),
+                    );
                 }
                 let mem_len = state.program_stack.len();
                 let var = state
@@ -950,9 +997,8 @@ impl LocalExpressionNode {
                         LocalCallChainSegment::Call { name, args } => {
                             let interfaces = state.stdlib().interfaces(&current_type);
                             let method = interfaces.iter().find(|m| m.name == *name);
-                            let method = method.ok_or_else(|| {
-                                format!("undefined function {}", name)
-                            })?;
+                            let method =
+                                method.ok_or_else(|| format!("undefined function {}", name))?;
 
                             let args_type = args.datatype(state)?;
                             if let DataType::Tuple(arg_types) = args_type {
@@ -964,8 +1010,7 @@ impl LocalExpressionNode {
                                         arg_types.len()
                                     ));
                                 }
-                                for (expected, provided) in
-                                    method.args.iter().zip(arg_types.iter())
+                                for (expected, provided) in method.args.iter().zip(arg_types.iter())
                                 {
                                     if expected != provided {
                                         return Err(format!(
@@ -1016,7 +1061,7 @@ impl LocalExpressionNode {
             Self::IfExpr(node) => {
                 if !state.in_condition_block {
                     return Err(
-                        "if-expressions are only supported inside always/eventually blocks"
+                        "if-expressions are only supported inside always/check blocks"
                             .to_string(),
                     );
                 }
@@ -1025,16 +1070,24 @@ impl LocalExpressionNode {
                     return Err("if condition must be boolean".to_string());
                 }
                 let then_type = node.then_expr.datatype(state)?;
-                let else_type = node.else_expr.datatype(state)?;
-                if then_type != else_type {
-                    return Err("if branches must have the same type".to_string());
+                
+                if let Some(else_expr) = &node.else_expr {
+                    let else_type = else_expr.datatype(state)?;
+                    if then_type != else_type {
+                        return Err("if branches must have the same type".to_string());
+                    }
+                    Ok(then_type)
+                } else {
+                    if then_type != DataType::Boolean {
+                         return Err("if A { B } (without else) is an implication, so B must be boolean".to_string());
+                    }
+                    Ok(DataType::Boolean)
                 }
-                Ok(then_type)
             }
             Self::ForAll(node) => {
                 if !state.in_condition_block {
                     return Err(
-                        "forall is only supported inside always/eventually blocks".to_string(),
+                        "forall is only supported inside always/check blocks".to_string()
                     );
                 }
                 let list_type = node.list.datatype(state)?;
@@ -1063,7 +1116,6 @@ impl LocalExpressionNode {
                     in_condition_block: state.in_condition_block,
                     context: state.context.clone(),
                     always_conditions: state.always_conditions.clone(),
-                    eventually_conditions: state.eventually_conditions.clone(),
                     ltl_formulas: state.ltl_formulas.clone(),
                     user_functions: state.user_functions.clone(),
                     global_table: state.global_table.clone(),
@@ -1081,7 +1133,7 @@ impl LocalExpressionNode {
             Self::Exists(node) => {
                 if !state.in_condition_block {
                     return Err(
-                        "exists is only supported inside always/eventually blocks".to_string(),
+                        "exists is only supported inside always/check blocks".to_string()
                     );
                 }
                 let list_type = node.list.datatype(state)?;
@@ -1110,7 +1162,6 @@ impl LocalExpressionNode {
                     in_condition_block: state.in_condition_block,
                     context: state.context.clone(),
                     always_conditions: state.always_conditions.clone(),
-                    eventually_conditions: state.eventually_conditions.clone(),
                     ltl_formulas: state.ltl_formulas.clone(),
                     user_functions: state.user_functions.clone(),
                     global_table: state.global_table.clone(),
@@ -1129,27 +1180,25 @@ impl LocalExpressionNode {
     }
     pub fn eval(&self, mem: &Memory) -> Result<Literal, String> {
         match self {
-            LocalExpressionNode::Binary(binary_exp) => {
-                match binary_exp.operator {
-                    crate::ast::token::binary_operator::BinaryOperator::And => {
-                        let left = binary_exp.left.eval(mem)?;
-                        if !left.is_true() {
-                            return Ok(Literal::Bool(false));
-                        }
-                        let right = binary_exp.right.eval(mem)?;
-                        left.and(&right)
+            LocalExpressionNode::Binary(binary_exp) => match binary_exp.operator {
+                crate::ast::token::binary_operator::BinaryOperator::And => {
+                    let left = binary_exp.left.eval(mem)?;
+                    if !left.is_true() {
+                        return Ok(Literal::Bool(false));
                     }
-                    crate::ast::token::binary_operator::BinaryOperator::Or => {
-                        let left = binary_exp.left.eval(mem)?;
-                        if left.is_true() {
-                            return Ok(Literal::Bool(true));
-                        }
-                        let right = binary_exp.right.eval(mem)?;
-                        left.or(&right)
-                    }
-                    _ => binary_exp.eval(mem),
+                    let right = binary_exp.right.eval(mem)?;
+                    left.and(&right)
                 }
-            }
+                crate::ast::token::binary_operator::BinaryOperator::Or => {
+                    let left = binary_exp.left.eval(mem)?;
+                    if left.is_true() {
+                        return Ok(Literal::Bool(true));
+                    }
+                    let right = binary_exp.right.eval(mem)?;
+                    left.or(&right)
+                }
+                _ => binary_exp.eval(mem),
+            },
             LocalExpressionNode::Unary(unary_exp) => unary_exp.eval(mem),
             LocalExpressionNode::Primary(primary_exp) => match primary_exp {
                 LocalPrimaryExpressionNode::Literal(literal) => Ok(literal.value.clone()),
@@ -1167,95 +1216,91 @@ impl LocalExpressionNode {
                 "Cannot evaluate function call in this context: {:?}",
                 &node.value.fn_name
             )),
-            LocalExpressionNode::Reaches(_) => Err(
-                "'reaches' is only supported in always/eventually blocks".to_string(),
-            ),
-            LocalExpressionNode::CallChain(_) => Err(
-                "call chains are only supported in always/eventually blocks".to_string(),
-            ),
-            LocalExpressionNode::IfExpr(_) => Err(
-                "if-expressions are only supported in always/eventually blocks".to_string(),
-            ),
-            LocalExpressionNode::ForAll(_) => Err(
-                "forall is only supported in always/eventually blocks".to_string(),
-            ),
-            LocalExpressionNode::Exists(_) => Err(
-                "exists is only supported in always/eventually blocks".to_string(),
-            ),
+            LocalExpressionNode::Reaches(_) => {
+                Err("'reaches' is only supported in always/check blocks".to_string())
+            }
+            LocalExpressionNode::CallChain(_) => {
+                Err("call chains are only supported in always/check blocks".to_string())
+            }
+            LocalExpressionNode::IfExpr(_) => {
+                Err("if-expressions are only supported in always/check blocks".to_string())
+            }
+            LocalExpressionNode::ForAll(_) => {
+                Err("forall is only supported in always/check blocks".to_string())
+            }
+            LocalExpressionNode::Exists(_) => {
+                Err("exists is only supported in always/check blocks".to_string())
+            }
         }
     }
 
-    pub fn eval_with_context(
-        &self,
-        mem: &Memory,
-        vm: &crate::vm::VM,
-    ) -> Result<Literal, String> {
+    pub fn eval_with_context(&self, mem: &Memory, vm: &crate::vm::VM) -> Result<Literal, String> {
         match self {
-            LocalExpressionNode::Binary(binary_exp) => {
-                match binary_exp.operator {
-                    crate::ast::token::binary_operator::BinaryOperator::And => {
-                        let left = binary_exp.left.eval_with_context(mem, vm)?;
-                        if !left.is_true() {
-                            return Ok(Literal::Bool(false));
-                        }
-                        let right = binary_exp.right.eval_with_context(mem, vm)?;
-                        left.and(&right)
+            LocalExpressionNode::Binary(binary_exp) => match binary_exp.operator {
+                crate::ast::token::binary_operator::BinaryOperator::And => {
+                    let left = binary_exp.left.eval_with_context(mem, vm)?;
+                    if !left.is_true() {
+                        return Ok(Literal::Bool(false));
                     }
-                    crate::ast::token::binary_operator::BinaryOperator::Or => {
-                        let left = binary_exp.left.eval_with_context(mem, vm)?;
-                        if left.is_true() {
-                            return Ok(Literal::Bool(true));
-                        }
-                        let right = binary_exp.right.eval_with_context(mem, vm)?;
-                        left.or(&right)
+                    let right = binary_exp.right.eval_with_context(mem, vm)?;
+                    left.and(&right)
+                }
+                crate::ast::token::binary_operator::BinaryOperator::Or => {
+                    let left = binary_exp.left.eval_with_context(mem, vm)?;
+                    if left.is_true() {
+                        return Ok(Literal::Bool(true));
                     }
-                    _ => {
-                        let left = binary_exp.left.eval_with_context(mem, vm)?;
-                        let right = binary_exp.right.eval_with_context(mem, vm)?;
-                        match binary_exp.operator {
-                            crate::ast::token::binary_operator::BinaryOperator::Add => {
-                                left.add(&right)
-                            }
-                            crate::ast::token::binary_operator::BinaryOperator::Subtract => {
-                                left.subtract(&right)
-                            }
-                            crate::ast::token::binary_operator::BinaryOperator::Multiply => {
-                                left.multiply(&right)
-                            }
-                            crate::ast::token::binary_operator::BinaryOperator::Divide => {
-                                left.divide(&right)
-                            }
-                            crate::ast::token::binary_operator::BinaryOperator::Modulo => {
-                                left.modulo(&right)
-                            }
-                            crate::ast::token::binary_operator::BinaryOperator::Equals => {
-                                left.equals(&right)
-                            }
-                            crate::ast::token::binary_operator::BinaryOperator::NotEquals => {
-                                left.not_equals(&right)
-                            }
-                            crate::ast::token::binary_operator::BinaryOperator::LessThan => {
-                                left.less_than(&right)
-                            }
-                            crate::ast::token::binary_operator::BinaryOperator::LessThanOrEqual => {
-                                left.less_than_or_equal(&right)
-                            }
-                            crate::ast::token::binary_operator::BinaryOperator::GreaterThan => {
-                                left.greater_than(&right)
-                            }
-                            crate::ast::token::binary_operator::BinaryOperator::GreaterThanOrEqual => {
-                                left.greater_than_or_equal(&right)
-                            }
-                            _ => unreachable!("short-circuit handled above"),
+                    let right = binary_exp.right.eval_with_context(mem, vm)?;
+                    left.or(&right)
+                }
+                _ => {
+                    let left = binary_exp.left.eval_with_context(mem, vm)?;
+                    let right = binary_exp.right.eval_with_context(mem, vm)?;
+                    match binary_exp.operator {
+                        crate::ast::token::binary_operator::BinaryOperator::Add => left.add(&right),
+                        crate::ast::token::binary_operator::BinaryOperator::Subtract => {
+                            left.subtract(&right)
                         }
+                        crate::ast::token::binary_operator::BinaryOperator::Multiply => {
+                            left.multiply(&right)
+                        }
+                        crate::ast::token::binary_operator::BinaryOperator::Divide => {
+                            left.divide(&right)
+                        }
+                        crate::ast::token::binary_operator::BinaryOperator::Modulo => {
+                            left.modulo(&right)
+                        }
+                        crate::ast::token::binary_operator::BinaryOperator::Equals => {
+                            left.equals(&right)
+                        }
+                        crate::ast::token::binary_operator::BinaryOperator::NotEquals => {
+                            left.not_equals(&right)
+                        }
+                        crate::ast::token::binary_operator::BinaryOperator::LessThan => {
+                            left.less_than(&right)
+                        }
+                        crate::ast::token::binary_operator::BinaryOperator::LessThanOrEqual => {
+                            left.less_than_or_equal(&right)
+                        }
+                        crate::ast::token::binary_operator::BinaryOperator::GreaterThan => {
+                            left.greater_than(&right)
+                        }
+                        crate::ast::token::binary_operator::BinaryOperator::GreaterThanOrEqual => {
+                            left.greater_than_or_equal(&right)
+                        }
+                        _ => unreachable!("short-circuit handled above"),
                     }
                 }
-            }
+            },
             LocalExpressionNode::Unary(unary_exp) => {
                 let operand = unary_exp.operand.eval_with_context(mem, vm)?;
                 match unary_exp.operator {
-                    crate::ast::token::unary_operator::UnaryOperator::Positive => operand.positive(),
-                    crate::ast::token::unary_operator::UnaryOperator::Negative => operand.negative(),
+                    crate::ast::token::unary_operator::UnaryOperator::Positive => {
+                        operand.positive()
+                    }
+                    crate::ast::token::unary_operator::UnaryOperator::Negative => {
+                        operand.negative()
+                    }
                     crate::ast::token::unary_operator::UnaryOperator::Not => operand.not(),
                 }
             }
@@ -1267,7 +1312,9 @@ impl LocalExpressionNode {
                         .ok_or("local variable index does not exist in memory".to_string())?;
                     Ok(lit.clone())
                 }
-                LocalPrimaryExpressionNode::Expression(expr) => expr.as_ref().eval_with_context(mem, vm),
+                LocalPrimaryExpressionNode::Expression(expr) => {
+                    expr.as_ref().eval_with_context(mem, vm)
+                }
             },
             LocalExpressionNode::Tuple(tuple_exp) => Ok(Literal::Tuple(
                 tuple_exp
@@ -1325,10 +1372,10 @@ impl LocalExpressionNode {
                     .get(&program_name)
                     .ok_or("program code not found".to_string())?;
 
-                let label_pc = program_code
-                    .labels
-                    .get(&node.label)
-                    .ok_or(format!("Label '{}' not found in program '{}'", node.label, program_name))?;
+                let label_pc = program_code.labels.get(&node.label).ok_or(format!(
+                    "Label '{}' not found in program '{}'",
+                    node.label, program_name
+                ))?;
 
                 let (_, ip, _) = prog_state.current_state();
                 let reached = ip == *label_pc;
@@ -1413,7 +1460,12 @@ impl LocalExpressionNode {
                 if cond.is_true() {
                     node.then_expr.eval_with_context(mem, vm)
                 } else {
-                    node.else_expr.eval_with_context(mem, vm)
+                    if let Some(else_expr) = &node.else_expr {
+                        else_expr.eval_with_context(mem, vm)
+                    } else {
+                        // if A { B } means A -> B. If A is false, result is true.
+                        Ok(Literal::Bool(true))
+                    }
                 }
             }
             LocalExpressionNode::ForAll(node) => {
@@ -1455,7 +1507,11 @@ impl LocalExpressionNode {
 }
 
 impl CallChainExpression {
-    fn compile_chain(&self, state: &mut CompilerState, pos: &Pos) -> AlthreadResult<InstructionBuilderOk> {
+    fn compile_chain(
+        &self,
+        state: &mut CompilerState,
+        pos: &Pos,
+    ) -> AlthreadResult<InstructionBuilderOk> {
         let mut builder = InstructionBuilderOk::new();
 
         let base_builder = self.base.compile(state)?;
@@ -1475,7 +1531,10 @@ impl CallChainExpression {
                         ));
                     }
 
-                    let receiver_var = state.program_stack.get(state.program_stack.len() - 2).unwrap();
+                    let receiver_var = state
+                        .program_stack
+                        .get(state.program_stack.len() - 2)
+                        .unwrap();
                     let interfaces = state.stdlib().interfaces(&receiver_var.datatype);
                     let method = interfaces.iter().find(|m| m.name == name.value.value);
                     let method = method.ok_or(AlthreadError::new(
@@ -1544,7 +1603,7 @@ impl CallChainExpression {
                     return Err(AlthreadError::new(
                         ErrorType::InstructionNotAllowed,
                         Some(pos.clone()),
-                        "'reaches' is only allowed inside always/eventually blocks".to_string(),
+                        "'reaches' is only allowed inside always/check blocks".to_string(),
                     ));
                 }
             }
@@ -1575,7 +1634,7 @@ impl InstructionBuilder for Node<Expression> {
             return Err(AlthreadError::new(
                 ErrorType::InstructionNotAllowed,
                 Some(self.pos.clone()),
-                "GS.procs.* or $.procs.* is only available inside always/eventually blocks"
+                "$.procs.* is only available inside always/check blocks"
                     .to_string(),
             ));
         }

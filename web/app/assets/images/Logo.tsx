@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 import { JSX } from "solid-js/jsx-runtime";
 
 interface IProps extends JSX.SvgSVGAttributes<SVGSVGElement> {}

@@ -95,7 +95,6 @@ impl Ast {
                     let condition_keyword = match keyword_pair.as_rule() {
                         Rule::ALWAYS_KW => ConditionKeyword::Always,
                         Rule::NEVER_KW => ConditionKeyword::Never,
-                        Rule::EVENTUALLY_KW => ConditionKeyword::Eventually,
                         _ => return Err(no_rule!(keyword_pair, "condition keyword", filepath)),
                     };
                     let condition_block = Node::build(pairs.next().unwrap(), filepath)?;
@@ -190,13 +189,14 @@ impl AstDisplay for Ast {
         for (condition_name, condition_node) in &self.condition_blocks {
             writeln!(f, "{}{}", prefix, condition_name)?;
             condition_node.ast_fmt(f, &prefix.add_branch())?;
-            writeln!(f, "")?;        
-        for check_block in &self.check_blocks {
-            writeln!(f, "{}check", prefix)?;
-             for form in &check_block.value.formulas {
-                writeln!(f, "{}{}", prefix.add_branch(), form)?;
+            writeln!(f, "")?;
+            for check_block in &self.check_blocks {
+                writeln!(f, "{}check", prefix)?;
+                for form in &check_block.value.formulas {
+                    writeln!(f, "{}{}", prefix.add_branch(), form)?;
+                }
             }
-        }        }
+        }
 
         for (process_name, (_args, process_node, is_private)) in &self.process_blocks {
             let process_name = if *is_private {

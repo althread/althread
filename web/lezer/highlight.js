@@ -3,22 +3,26 @@ import { ProgName } from "./parser.terms";
 
 export const althreadHighlight = styleTags({
   // Control and keywords
-  "atomic": t.modifier,
-  "while await if else receive send run for loop in return break continue": t.controlKeyword,
-  "instanceof as": t.operatorKeyword,
-  "let const channel": t.definitionKeyword,
-  "program always eventually main shared fn import": t.moduleKeyword,
+  "AtomicStatement/atomic": t.modifier,
+  "WhileStatement/while WaitStatement/await IfStatement/if IfStatement/else ReceiveExpression/receive SendExpression/send RunExpression/run ForStatement/for LoopStatement/loop ForStatement/in ReturnStatement/return BreakLoopStatement/break BreakLoopStatement/continue": t.controlKeyword,
+  "ImportItem/as": t.operatorKeyword,
+  "VariableDeclaration/let VariableDeclaration/const SharedDeclaration/let SharedDeclaration/const ChannelDeclarationStatement/channel": t.definitionKeyword,
+
+  // LTL / Formula keywords (different color)
+  "LtlUnaryExpression/eventually LtlUnaryExpression/always LtlBinaryExpression/until": t.special(t.keyword),
+  "LtlIfExpression/if LtlIfExpression/else LtlForExpression/for LtlForExpression/in": t.special(t.keyword),
+
+  // Block declaration keywords (Bolder/Distinct)
+  "MainBlock/main ProgramBlock/program GlobalBlock/shared ImportBlock/import FunctionBlock/fn ConditionBlock/Condition/always ConditionBlock/Condition/check ConditionBlock/Condition/never": t.moduleKeyword,
 
   "PrivateDirective": t.special(t.keyword),
   "PrivateDirective/private": t.keyword,
   
   // Function highlighting
-  "FunctionBlock/fn": t.keyword,
   "FunctionBlock/FnName": t.function(t.definition(t.variableName)),
   "CallExpression/FnName": t.function(t.variableName),
   "FnName": t.function(t.variableName),
 
-  "RunExprression/run": t.function(t.keyword),
   "RunExpression/ProgName": t.function(t.variableName),
   "ProgName": t.function(t.variableName),
 
@@ -32,7 +36,6 @@ export const althreadHighlight = styleTags({
   "MemberExpression/property": t.propertyName,
 
   // Import highlighting
-  "ImportBlock/import": t.moduleKeyword,
   "ImportBlock/as": t.operatorKeyword,
   "ImportBlock/ImportList/ImportItem/ImportPath": t.namespace,
   "ImportBlock/ImportList/ImportItem/ImportAlias": t.namespace,

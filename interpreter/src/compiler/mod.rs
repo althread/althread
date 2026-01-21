@@ -4,13 +4,13 @@ use std::fmt;
 use std::rc::Rc;
 
 pub mod compiler;
+pub mod ltl;
 pub mod prescan;
 pub mod stdlib;
-pub mod ltl;
 
+use crate::ast::statement::expression::LocalExpressionNode;
 use crate::checker::ltl::ast::LtlExpression;
 use crate::checker::ltl::compiled::CompiledLtlExpression;
-use crate::ast::statement::expression::LocalExpressionNode;
 use crate::error::Pos;
 use crate::vm::instruction::Instruction;
 use crate::{
@@ -132,10 +132,9 @@ pub struct CompilerState {
 
     // Reference to shared context
     pub context: Rc<RefCell<CompilationContext>>,
-    
+
     // add always and eventually conditions
     pub always_conditions: Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
-    pub eventually_conditions: Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
 
     pub ltl_formulas: Vec<LtlExpression>,
 
@@ -163,7 +162,6 @@ impl CompilerState {
             program_arguments: HashMap::new(),
             global_memory: BTreeMap::new(),
             always_conditions: Vec::new(),
-            eventually_conditions: Vec::new(),
             ltl_formulas: Vec::new(),
             programs_code: HashMap::new(),
         }
@@ -231,21 +229,18 @@ impl CompilerState {
         &mut self.program_arguments
     }
 
-    pub fn always_conditions(&self) -> &Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)> {
+    pub fn always_conditions(
+        &self,
+    ) -> &Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)> {
         &self.always_conditions
     }
 
-    pub fn always_conditions_mut(&mut self) -> &mut Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)> {
+    pub fn always_conditions_mut(
+        &mut self,
+    ) -> &mut Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)> {
         &mut self.always_conditions
     }
 
-    pub fn eventually_conditions(&self) -> &Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)> {
-        &self.eventually_conditions
-    }
-
-    pub fn eventually_conditions_mut(&mut self) -> &mut Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)> {
-        &mut self.eventually_conditions
-    }
     pub fn ltl_formulas(&self) -> &Vec<LtlExpression> {
         &self.ltl_formulas
     }
@@ -260,7 +255,6 @@ impl CompilerState {
     pub fn programs_code_mut(&mut self) -> &mut HashMap<String, ProgramCode> {
         &mut self.programs_code
     }
-
 
     /// Pop all variables from the program stack that have the same depth as the current stack depth
     /// and decrease the current stack depth by one.
@@ -291,9 +285,6 @@ pub struct CompiledProject {
     /// The second element is the two instructions that are used to check the condition
     /// (the first in struction is the read operation and the second is the expression)
     pub always_conditions: Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
-    /// conditions that must be true at least once in each possible executions
-    pub eventually_conditions: Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
-
     pub ltl_formulas: Vec<LtlExpression>,
     pub compiled_ltl_formulas: Vec<CompiledLtlExpression>,
 
@@ -313,5 +304,38 @@ impl fmt::Display for CompiledProject {
             writeln!(f, "{}", v)?;
         }
         Ok(())
+    }
+}
+
+impl CompiledProject {
+    /// Creates a default compiled project for testing purposes
+    #[cfg(test)]
+    pub fn default_for_testing() -> Self {
+        use crate::vm::instruction::ProgramCode;
+
+        let mut programs_code = HashMap::new();
+        programs_code.insert(
+            "main".to_string(),
+            ProgramCode {
+                name: "main".to_string(),
+                instructions: Vec::new(),
+                labels: HashMap::new(),
+            },
+        );
+
+        let mut program_arguments = HashMap::new();
+        program_arguments.insert("main".to_string(), (Vec::new(), false));
+
+        Self {
+            programs_code,
+            program_arguments,
+            user_functions: HashMap::new(),
+            global_memory: BTreeMap::new(),
+            global_table: HashMap::new(),
+            always_conditions: Vec::new(),
+            ltl_formulas: Vec::new(),
+            compiled_ltl_formulas: Vec::new(),
+            stdlib: Rc::new(stdlib::Stdlib::new()),
+        }
     }
 }

@@ -4,7 +4,6 @@ use std::{cmp, fmt};
 pub enum ConditionKeyword {
     Always,
     Never,
-    Eventually,
 }
 
 impl fmt::Display for ConditionKeyword {
@@ -12,7 +11,6 @@ impl fmt::Display for ConditionKeyword {
         match self {
             ConditionKeyword::Always => write!(f, "always"),
             ConditionKeyword::Never => write!(f, "never"),
-            ConditionKeyword::Eventually => write!(f, "eventually"),
         }
     }
 }

@@ -151,12 +151,11 @@ pub fn check_command(cli_args: &CheckCommand) {
         for link in checked.0.iter() {
             println!(
                 "{}",
-                format!("-- {}#{} --", link.name, link.pid)
-                    .style(if link.pid == 0 {
-                        MAIN_STYLE
-                    } else {
-                        PROCESS_PALETTE[(link.pid.saturating_sub(1)) % PROCESS_PALETTE.len()]
-                    })
+                format!("-- {}#{} --", link.name, link.pid).style(if link.pid == 0 {
+                    MAIN_STYLE
+                } else {
+                    PROCESS_PALETTE[(link.pid.saturating_sub(1)) % PROCESS_PALETTE.len()]
+                })
             );
             for line_num in &link.lines {
                 if let Some(line) = source.lines().nth(line_num.saturating_sub(1)) {
@@ -170,9 +169,10 @@ pub fn check_command(cli_args: &CheckCommand) {
     println!("  States explored: {}", checked.1.nodes.len());
     let max_depth = checked.1.nodes.values().map(|n| n.level).max().unwrap_or(0);
     println!("  Maximum depth:  {}", max_depth);
-    
+
     if !checked.0.is_empty() {
         println!("  Violation path: {} steps", checked.0.len());
+        exit(1);
     }
 }
 
@@ -222,7 +222,10 @@ pub fn run_interactive(
                 let mut preview = None;
                 for action in actions {
                     if let althread::vm::GlobalAction::Deliver(delivery_info) = action {
-                        preview = Some(format!("deliver {} -> {}", delivery_info.channel_name, delivery_info.message));
+                        preview = Some(format!(
+                            "deliver {} -> {}",
+                            delivery_info.channel_name, delivery_info.message
+                        ));
                         break;
                     }
                 }
@@ -271,7 +274,7 @@ pub fn run_interactive(
             }
         }
         let (_name, _pid, _insts, actions, nvm) = next_states.get(selected as usize).unwrap();
-        
+
         for action in actions {
             if let althread::vm::GlobalAction::Print(msg) = action {
                 println!("{}", msg);

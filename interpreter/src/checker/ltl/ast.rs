@@ -6,7 +6,7 @@ use pest::pratt_parser::PrattParser;
 use crate::{
     ast::{
         node::{Node, NodeBuilder},
-        statement::expression::{Expression, list_expression::RangeListExpression},
+        statement::expression::{list_expression::RangeListExpression, Expression},
     },
     error::AlthreadResult,
     no_rule,
@@ -146,33 +146,46 @@ fn build_ltl_term(pair: Pair<Rule>, filepath: &str) -> AlthreadResult<LtlExpress
             let op = inner.next().unwrap();
             let expr = inner.next().unwrap();
             let built_expr = build_ltl_term(expr, filepath)?;
-            
+
             match op.as_rule() {
                 Rule::ALWAYS_KW => Ok(LtlExpression::Always(Box::new(built_expr))),
                 Rule::EVENTUALLY_KW => Ok(LtlExpression::Eventually(Box::new(built_expr))),
                 Rule::NOT_OP => Ok(LtlExpression::Not(Box::new(built_expr))),
                 _ => unreachable!("Invalid unary operator"),
             }
-        },
+        }
         Rule::ltl_if_expression => {
             let mut inner = pair.into_inner();
-            let lhs = build_ltl_expression(inner.next().unwrap(), filepath)?;
-            let rhs = build_ltl_expression(inner.next().unwrap(), filepath)?;
-            Ok(LtlExpression::Implies(Box::new(lhs), Box::new(rhs)))
-        },
+            let cond = build_ltl_expression(inner.next().unwrap(), filepath)?;
+            let then_branch = build_ltl_expression(inner.next().unwrap(), filepath)?;
+
+            if let Some(else_pair) = inner.next() {
+                let else_branch = build_ltl_expression(else_pair, filepath)?;
+                let cond_box = Box::new(cond);
+                // (cond -> then_branch) && (!cond -> else_branch)
+                let implies_then = LtlExpression::Implies(cond_box.clone(), Box::new(then_branch));
+                let not_cond = LtlExpression::Not(cond_box);
+                let implies_else = LtlExpression::Implies(Box::new(not_cond), Box::new(else_branch));
+                Ok(LtlExpression::And(
+                    Box::new(implies_then),
+                    Box::new(implies_else),
+                ))
+            } else {
+                Ok(LtlExpression::Implies(Box::new(cond), Box::new(then_branch)))
+            }
+        }
         Rule::ltl_predicate => {
             let expr_pair = pair.into_inner().next().unwrap(); // expression
             let expr_node = Node::<Expression>::build(expr_pair, filepath)?;
             Ok(LtlExpression::Predicate(expr_node))
-        },
+        }
         Rule::ltl_expression => {
             // Parenthesized expression
-             build_ltl_expression(pair, filepath)
+            build_ltl_expression(pair, filepath)
         }
         _ => Err(no_rule!(pair, "LtlTerm", filepath)),
     }
 }
-
 
 impl fmt::Display for LtlExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -186,7 +199,11 @@ impl fmt::Display for LtlExpression {
             LtlExpression::Or(l, r) => write!(f, "({}) || ({})", l, r),
             LtlExpression::Implies(l, r) => write!(f, "({}) -> ({})", l, r),
             LtlExpression::Predicate(e) => write!(f, "{}", e),
-            LtlExpression::ForLoop { var_name, list, body } => {
+            LtlExpression::ForLoop {
+                var_name,
+                list,
+                body,
+            } => {
                 write!(f, "for {} in {} {{ {}; }}", var_name, list.value, body)
             }
         }

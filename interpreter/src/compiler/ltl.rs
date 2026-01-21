@@ -2,11 +2,11 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 use crate::ast::statement::expression::{Expression, LocalExpressionNode};
+use crate::ast::token::datatype::DataType;
 use crate::checker::ltl::ast::LtlExpression;
 use crate::checker::ltl::compiled::CompiledLtlExpression;
 use crate::compiler::{CompilationContext, CompilerState, Variable};
-use crate::ast::token::datatype::DataType;
-use crate::error::{AlthreadResult, AlthreadError, ErrorType};
+use crate::error::{AlthreadError, AlthreadResult, ErrorType};
 
 pub fn compile_ltl_formulas(
     formulas: &Vec<LtlExpression>,
@@ -25,10 +25,18 @@ fn compile_ltl_node(
     loop_vars: &mut Vec<Variable>,
 ) -> AlthreadResult<CompiledLtlExpression> {
     match node {
-        LtlExpression::Eventually(inner) => Ok(CompiledLtlExpression::Eventually(Box::new(compile_ltl_node(inner, state, loop_vars)?))),
-        LtlExpression::Always(inner) => Ok(CompiledLtlExpression::Always(Box::new(compile_ltl_node(inner, state, loop_vars)?))),
-        LtlExpression::Next(inner) => Ok(CompiledLtlExpression::Next(Box::new(compile_ltl_node(inner, state, loop_vars)?))),
-        LtlExpression::Not(inner) => Ok(CompiledLtlExpression::Not(Box::new(compile_ltl_node(inner, state, loop_vars)?))),
+        LtlExpression::Eventually(inner) => Ok(CompiledLtlExpression::Eventually(Box::new(
+            compile_ltl_node(inner, state, loop_vars)?,
+        ))),
+        LtlExpression::Always(inner) => Ok(CompiledLtlExpression::Always(Box::new(
+            compile_ltl_node(inner, state, loop_vars)?,
+        ))),
+        LtlExpression::Next(inner) => Ok(CompiledLtlExpression::Next(Box::new(compile_ltl_node(
+            inner, state, loop_vars,
+        )?))),
+        LtlExpression::Not(inner) => Ok(CompiledLtlExpression::Not(Box::new(compile_ltl_node(
+            inner, state, loop_vars,
+        )?))),
         LtlExpression::Until(lhs, rhs) => Ok(CompiledLtlExpression::Until(
             Box::new(compile_ltl_node(lhs, state, loop_vars)?),
             Box::new(compile_ltl_node(rhs, state, loop_vars)?),
@@ -48,16 +56,21 @@ fn compile_ltl_node(
         LtlExpression::Predicate(expr_node) => {
             compile_predicate(&expr_node.value, state, loop_vars)
         }
-        LtlExpression::ForLoop { var_name, list, body } => {
+        LtlExpression::ForLoop {
+            var_name,
+            list,
+            body,
+        } => {
             // Compile list expression
             // The list expression itself acts like a predicate/expression: it can depend on variables
-            let (compiled_list, list_globals) = compile_expression_with_context(&list.value, state, loop_vars)?;
+            let (compiled_list, list_globals) =
+                compile_expression_with_context(&list.value, state, loop_vars)?;
 
             // Determine type of the list to push the correct variable to loop_vars
             // We need a temporary state to evaluate datatype
             let mut temp_program_stack = Vec::new();
             for global_name in &list_globals {
-                 let global_var = state.global_table().get(global_name).ok_or_else(|| {
+                let global_var = state.global_table().get(global_name).ok_or_else(|| {
                     AlthreadError::new(
                         ErrorType::VariableError,
                         Some(list.pos.clone()),
@@ -71,7 +84,7 @@ fn compile_ltl_node(
             let mut temp_state = CompilerState::new_with_context(state.context.clone());
             temp_state.program_stack = temp_program_stack;
             temp_state.global_table = state.global_table.clone();
-            
+
             let list_type = compiled_list.datatype(&temp_state).map_err(|e| {
                 AlthreadError::new(
                     ErrorType::ExpressionError,
@@ -82,11 +95,13 @@ fn compile_ltl_node(
 
             let element_type = match list_type {
                 DataType::List(inner) => *inner,
-                _ => return Err(AlthreadError::new(
-                    ErrorType::ExpressionError,
-                    Some(list.pos.clone()),
-                    format!("For loop expects a list, got {:?}", list_type),
-                )),
+                _ => {
+                    return Err(AlthreadError::new(
+                        ErrorType::ExpressionError,
+                        Some(list.pos.clone()),
+                        format!("For loop expects a list, got {:?}", list_type),
+                    ))
+                }
             };
 
             // Push loop variable
@@ -95,7 +110,7 @@ fn compile_ltl_node(
                 mutable: false,
                 datatype: element_type,
                 depth: 0,
-                declare_pos: None, 
+                declare_pos: None,
             });
 
             // Compile body
@@ -120,7 +135,7 @@ fn compile_predicate(
     loop_vars: &Vec<Variable>,
 ) -> AlthreadResult<CompiledLtlExpression> {
     let (expression, read_variables) = compile_expression_with_context(expr, state, loop_vars)?;
-    
+
     Ok(CompiledLtlExpression::Predicate {
         expression,
         read_variables,
@@ -149,10 +164,10 @@ fn compile_expression_with_context(
         if state.global_table().contains_key(&var_name) {
             globals.push(var_name);
         } else {
-            // Cannot find variable. 
-            // Note: Expression compilation will fail later with precise error, 
+            // Cannot find variable.
+            // Note: Expression compilation will fail later with precise error,
             // but we can error here too.
-             return Err(AlthreadError::new(
+            return Err(AlthreadError::new(
                 ErrorType::VariableError,
                 None, // We don't have pos here easily without passing Node
                 format!("Variable '{}' not found", var_name),
@@ -167,7 +182,7 @@ fn compile_expression_with_context(
     // Note: The stack order matters for index resolution.
     // read_variables will be the list of globals to push at bottom of stack.
     // loop_vars are already on top of them in the recurrence.
-    
+
     for global_name in &globals {
         let global_var = state.global_table().get(global_name).unwrap();
         temp_stack.push(global_var.clone());

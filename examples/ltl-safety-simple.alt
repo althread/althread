@@ -1,0 +1,27 @@
+// Example 1: Simple safety property
+// Property: x should always be non-negative
+
+shared {
+    let X: int = 0;
+}
+
+program Incrementer() {
+    X = X + 1;
+}
+
+program Decrementer() {
+    X = X - 1;
+}
+
+// This formula PASSES: X starts at 0 and is only incremented
+check {
+    always (X >= 0);
+}
+
+main {
+    run Incrementer();
+    run Incrementer();
+    run Incrementer();
+    // If we uncomment this line, the check above would FAIL (X becomes negative)
+    // run Decrementer();
+}

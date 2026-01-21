@@ -520,111 +520,106 @@ impl<'a> RunningProgramState<'a> {
                 0
             }
             InstructionType::FnCall {
-                name,
-                unstack_len,
-                ..
+                name, unstack_len, ..
             } => {
                 match name.as_str() {
-                        "print" => {
-                            let lit = self
-                                .memory
-                                .last()
-                                .expect("Panic: stack is empty, cannot perform function call")
-                                .clone();
+                    "print" => {
+                        let lit = self
+                            .memory
+                            .last()
+                            .expect("Panic: stack is empty, cannot perform function call")
+                            .clone();
 
-                            for _ in 0..*unstack_len {
-                                self.memory.pop();
-                            }
-
-                            let str_val = lit
-                                .into_tuple()
-                                .unwrap_or_default()
-                                .iter()
-                                .map(|lit| lit.to_string())
-                                .collect::<Vec<_>>()
-                                .join(" ");
-                            action = Some(GlobalAction::Print(str_val));
-                            self.memory.push(Literal::Null);
-
-                            1
+                        for _ in 0..*unstack_len {
+                            self.memory.pop();
                         }
-                        "assert" => {
-                            let lit = self
-                                .memory
-                                .last()
-                                .expect("Panic: stack is empty, cannot perform function call.")
-                                .clone();
 
-                            for _ in 0..*unstack_len {
-                                self.memory.pop();
-                            }
+                        let str_val = lit
+                            .into_tuple()
+                            .unwrap_or_default()
+                            .iter()
+                            .map(|lit| lit.to_string())
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        action = Some(GlobalAction::Print(str_val));
+                        self.memory.push(Literal::Null);
 
-                            let args = lit
-                                .into_tuple()
-                                .expect("assert expects a tuple as argument");
-                            let condition = &args[0];
-                            let message = &args[1];
+                        1
+                    }
+                    "assert" => {
+                        let lit = self
+                            .memory
+                            .last()
+                            .expect("Panic: stack is empty, cannot perform function call.")
+                            .clone();
 
-                            if !condition.is_true() {
-                                let e = AlthreadError::new(
-                                    ErrorType::AssertionFailed,
-                                    cur_inst.pos.clone(),
-                                    format!("Assertion failed: {}", message),
-                                );
-                                return Err(self.build_error_stack(e));
-                            }
-                            self.memory.push(Literal::Null);
-                            1
+                        for _ in 0..*unstack_len {
+                            self.memory.pop();
                         }
-                        _ => {
-                            if let Some(func_def) = self.user_functions.get(name) {
-                                let args_tuple_lit = self.memory.pop().unwrap();
 
-                                let arg_values = match args_tuple_lit {
-                                    Literal::Tuple(v) => v,
-                                    _ => {
-                                        // should never happen
-                                        return Err(AlthreadError::new(
-                                            ErrorType::RuntimeError,
-                                            cur_inst.pos,
-                                            format!(
-                                                "function {} expects a tuple as argument",
-                                                name
-                                            ),
-                                        ));
-                                    }
-                                };
+                        let args = lit
+                            .into_tuple()
+                            .expect("assert expects a tuple as argument");
+                        let condition = &args[0];
+                        let message = &args[1];
 
-                                // store the current state in the call stack
-                                self.call_stack.push(StackFrame {
-                                    return_ip: self.instruction_pointer + 1,
-                                    caller_fp: self.frame_pointer,
-                                    caller_code: self.current_code,
-                                    expected_return_type: func_def.return_type.clone(),
-                                    pos: cur_inst.pos.clone(),
-                                });
+                        if !condition.is_true() {
+                            let e = AlthreadError::new(
+                                ErrorType::AssertionFailed,
+                                cur_inst.pos.clone(),
+                                format!("Assertion failed: {}", message),
+                            );
+                            return Err(self.build_error_stack(e));
+                        }
+                        self.memory.push(Literal::Null);
+                        1
+                    }
+                    _ => {
+                        if let Some(func_def) = self.user_functions.get(name) {
+                            let args_tuple_lit = self.memory.pop().unwrap();
 
-                                self.frame_pointer = self.memory.len();
-
-                                for arg in arg_values {
-                                    self.memory.push(arg);
+                            let arg_values = match args_tuple_lit {
+                                Literal::Tuple(v) => v,
+                                _ => {
+                                    // should never happen
+                                    return Err(AlthreadError::new(
+                                        ErrorType::RuntimeError,
+                                        cur_inst.pos,
+                                        format!("function {} expects a tuple as argument", name),
+                                    ));
                                 }
+                            };
 
-                                self.current_code = &func_def.body;
-                                self.instruction_pointer = 0;
+                            // store the current state in the call stack
+                            self.call_stack.push(StackFrame {
+                                return_ip: self.instruction_pointer + 1,
+                                caller_fp: self.frame_pointer,
+                                caller_code: self.current_code,
+                                expected_return_type: func_def.return_type.clone(),
+                                pos: cur_inst.pos.clone(),
+                            });
 
-                                0
-                            } else {
-                                let e = AlthreadError::new(
-                                    ErrorType::UndefinedFunction,
-                                    cur_inst.pos.clone(),
-                                    format!("undefined function {}", name),
-                                );
+                            self.frame_pointer = self.memory.len();
 
-                                return Err(self.build_error_stack(e));
+                            for arg in arg_values {
+                                self.memory.push(arg);
                             }
+
+                            self.current_code = &func_def.body;
+                            self.instruction_pointer = 0;
+
+                            0
+                        } else {
+                            let e = AlthreadError::new(
+                                ErrorType::UndefinedFunction,
+                                cur_inst.pos.clone(),
+                                format!("undefined function {}", name),
+                            );
+
+                            return Err(self.build_error_stack(e));
                         }
                     }
+                }
             }
             InstructionType::MethodCall {
                 name,
@@ -649,12 +644,8 @@ impl<'a> RunningProgramState<'a> {
                         Literal::Tuple(args)
                     }
                 };
-                let ret = self.call_interface_method(
-                    name,
-                    receiver_mem_idx,
-                    args,
-                    cur_inst.pos.clone(),
-                )?;
+                let ret =
+                    self.call_interface_method(name, receiver_mem_idx, args, cur_inst.pos.clone())?;
 
                 for _ in 0..*unstack_len {
                     self.memory.pop();
@@ -799,7 +790,10 @@ impl<'a> RunningProgramState<'a> {
                 action = Some(GlobalAction::Connect(sender_pid, sender_channel.clone()));
                 1
             }
-            InstructionType::CreateListFromStack { element_count, element_type } => {
+            InstructionType::CreateListFromStack {
+                element_count,
+                element_type,
+            } => {
                 // Pop elements from the stack and create a list
                 let mut elements = Vec::new();
                 for _ in 0..*element_count {
@@ -810,7 +804,7 @@ impl<'a> RunningProgramState<'a> {
 
                     elements.insert(0, element); // Insert at beginning to maintain order
                 }
-                
+
                 // Use the provided element type
                 let list = Literal::List(element_type.clone(), elements);
                 self.memory.push(list);
@@ -823,7 +817,6 @@ impl<'a> RunningProgramState<'a> {
                     .pop()
                     .expect("Panic: stack is empty, cannot convert list type");
 
-                
                 if let Literal::List(current_type, elements) = list {
                     if elements.is_empty() {
                         // Only convert empty lists
@@ -835,7 +828,10 @@ impl<'a> RunningProgramState<'a> {
                         self.memory.push(old_list);
                     }
                 } else {
-                    panic!("Expected list on stack for type conversion, but found: {:?}", list);
+                    panic!(
+                        "Expected list on stack for type conversion, but found: {:?}",
+                        list
+                    );
                 }
                 1
             }

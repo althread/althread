@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 import { Show } from 'solid-js';
 
 export interface LoadExampleDialogProps {

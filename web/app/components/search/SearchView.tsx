@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 import { createSignal, createMemo, For, Show } from 'solid-js';
 import './SearchView.css';
 
