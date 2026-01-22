@@ -313,7 +313,6 @@ mod tests {
         
         for state in &automaton.states {
             // Check that formulas don't contain contradictions
-            let has_true = state.formulas.iter().any(|f| matches!(f, CompiledLtlExpression::Boolean(true)));
             let has_false = state.formulas.iter().any(|f| matches!(f, CompiledLtlExpression::Boolean(false)));
             
             // A state shouldn't have both true and false as literals

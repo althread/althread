@@ -6,7 +6,7 @@ mod ltl_integration_tests;
 
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    hash::{Hash, Hasher},
+    hash::Hash,
     rc::Rc,
 };
 
@@ -698,7 +698,7 @@ fn check_program_with_ltl<'a>(
 
     // Traditional invariant checking (separate pass for safety properties)
     // This is done on the state graph we built
-    for (vm, node) in state_graph.nodes.iter() {
+    for (vm, _node) in state_graph.nodes.iter() {
         let check_ret = vm.check_invariants();
         if let Err(e) = check_ret {
             let violation_path = build_violation_path(&state_graph, vm)?;

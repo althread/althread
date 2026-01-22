@@ -8,7 +8,6 @@ mod usage_examples {
         checker::ltl::{
             automaton::BuchiAutomaton,
             compiled::CompiledLtlExpression,
-            evaluator::evaluate_ltl_predicate,
             monitor::{LtlMonitor, MonitoringState},
         },
     };
@@ -94,8 +93,6 @@ mod usage_examples {
     fn example_evaluate_boolean_predicate() {
         // Test evaluating a simple boolean
         let expr = CompiledLtlExpression::Boolean(true);
-        let bindings: HashMap<String, Literal> = HashMap::new();
-
         // Note: We can't easily create a VM in unit tests,
         // but the API would be:
         // let result = evaluate_ltl_predicate(&expr, &vm, &bindings).unwrap();
