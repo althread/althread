@@ -1361,6 +1361,10 @@ impl LocalExpressionNode {
                 let prog_state = match vm.running_programs.get(pid) {
                     Some(p) => p,
                     None => {
+                        log::debug!(
+                            "reaches({}) for pid {}: process not in running_programs (terminated)",
+                            node.label, pid
+                        );
                         if node.label == "end" {
                             return Ok(Literal::Bool(true));
                         }
@@ -1384,6 +1388,13 @@ impl LocalExpressionNode {
 
                 let (_, ip, _) = prog_state.current_state();
                 let reached = ip == *label_pc;
+                
+                // Debug logging to understand the issue
+                log::debug!(
+                    "reaches({}) for process {} (pid={}): ip={}, label_pc={}, reached={}",
+                    node.label, program_name, pid, ip, label_pc, reached
+                );
+                
                 Ok(Literal::Bool(reached))
             }
             LocalExpressionNode::CallChain(node) => {
@@ -1416,17 +1427,26 @@ impl LocalExpressionNode {
                                 .map_err(|e| e.message)?;
                         }
                         LocalCallChainSegment::Reaches { label } => {
+                            log::debug!("CallChain Reaches evaluation started for label '{}'", label);
                             let (program_name, pid) = match &current {
-                                Literal::Process(name, pid) => (name.clone(), *pid),
+                                Literal::Process(name, pid) => {
+                                    log::debug!("  Current is Process({}, {})", name, pid);
+                                    (name.clone(), *pid)
+                                }
                                 _ => {
+                                    log::debug!("  Current is not a Process: {:?}", current);
                                     current = Literal::Bool(false);
                                     continue;
                                 }
                             };
 
                             let prog_state = match vm.running_programs.get(pid) {
-                                Some(p) => p,
+                                Some(p) => {
+                                    log::debug!("  Process {} (pid={}) found in running_programs", program_name, pid);
+                                    p
+                                }
                                 None => {
+                                    log::debug!("  Process {} (pid={}) NOT in running_programs (terminated)", program_name, pid);
                                     if label == "end" {
                                         current = Literal::Bool(true);
                                     } else {
@@ -1437,6 +1457,7 @@ impl LocalExpressionNode {
                             };
 
                             if prog_state.name != program_name {
+                                log::debug!("  Program name mismatch: expected {}, got {}", program_name, prog_state.name);
                                 current = Literal::Bool(false);
                                 continue;
                             }
@@ -1444,21 +1465,28 @@ impl LocalExpressionNode {
                             let program_code = match vm.programs_code.get(&program_name) {
                                 Some(code) => code,
                                 None => {
+                                    log::debug!("  Program code for {} not found", program_name);
                                     current = Literal::Bool(false);
                                     continue;
                                 }
                             };
 
                             let label_pc = match program_code.labels.get(label) {
-                                Some(pc) => pc,
+                                Some(pc) => {
+                                    log::debug!("  Label '{}' found at pc={}", label, pc);
+                                    pc
+                                }
                                 None => {
+                                    log::debug!("  Label '{}' not found in program {}", label, program_name);
                                     current = Literal::Bool(false);
                                     continue;
                                 }
                             };
 
-                            let (_, ip, _) = prog_state.current_state();
-                            current = Literal::Bool(ip == *label_pc);
+                            let (_, pc, _) = prog_state.current_state();
+                            let reached = pc == *label_pc;
+                            log::debug!("  pc={}, label_pc={}, reached={}", pc, label_pc, reached);
+                            current = Literal::Bool(reached);
                         }
                     }
                 }

@@ -92,6 +92,8 @@ pub fn compile_command(cli_args: &CompileCommand) {
 }
 
 pub fn check_command(cli_args: &CheckCommand) {
+    use althread::checker::ltl::{automaton::BuchiAutomaton, compiled::CompiledLtlExpression, debug};
+
     // Read file
     let (source, path) = match cli_args.common.input.clone() {
         args::Input::Stdin => {
@@ -130,11 +132,58 @@ pub fn check_command(cli_args: &CheckCommand) {
             exit(1);
         });
 
+    // LTL Debug output
+    let show_all = cli_args.show_all;
+    
+    if !compiled_project.compiled_ltl_formulas.is_empty() {
+        // Show negated formulas if requested
+        if show_all || cli_args.show_negated {
+            println!("{}", debug::generate_negated_formulas_report(&compiled_project.compiled_ltl_formulas));
+        }
+
+        // Build and show automatons if requested
+        if show_all || cli_args.show_automaton || cli_args.show_automaton_text {
+            let automatons: Vec<BuchiAutomaton> = compiled_project
+                .compiled_ltl_formulas
+                .iter()
+                .map(|formula| match formula {
+                    CompiledLtlExpression::ForLoop { body, .. }
+                    | CompiledLtlExpression::Exists { body, .. } => {
+                        BuchiAutomaton::new(body.as_ref().clone())
+                    }
+                    _ => BuchiAutomaton::new(formula.clone()),
+                })
+                .collect();
+
+            if show_all || cli_args.show_automaton_text {
+                println!("{}", debug::generate_automaton_report(
+                    &compiled_project.compiled_ltl_formulas,
+                    &automatons,
+                ));
+            }
+
+            if show_all || cli_args.show_automaton {
+                for (i, automaton) in automatons.iter().enumerate() {
+                    println!("--- DOT for Automaton #{} ---", i + 1);
+                    println!("{}", debug::automaton_to_dot(automaton, i));
+                }
+            }
+        }
+    }
+
     let checked = checker::check_program(&compiled_project, Some(cli_args.max_states as usize))
         .unwrap_or_else(|e| {
             e.report(&input_map);
             exit(1);
         });
+
+    // Show state graph if requested
+    if show_all || cli_args.show_state_graph {
+        println!("=== State Graph Summary ===");
+        println!("Total states: {}", checked.1.nodes.len());
+        println!("Exhaustive: {}", checked.1.exhaustive);
+        // More detailed state graph could be output as DOT here
+    }
 
     if checked.0.is_empty() {
         if !checked.1.exhaustive {

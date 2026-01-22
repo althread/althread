@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::{ast::statement::expression::LocalExpressionNode, ast::token::datatype::DataType};
+use crate::ast::statement::expression::LocalExpressionNode;
 
 /// Represents a compiled LTL formula ready for verification
 #[derive(Debug, Clone, PartialEq)]
@@ -179,6 +179,34 @@ impl CompiledLtlExpression {
                 body: Box::new(body.simplify()),
             },
             e => e,
+        }
+    }
+
+    /// Returns true if this formula contains no temporal operators
+    /// (Always, Eventually, Next, Until, Release).
+    /// A propositional formula can be evaluated in a single state.
+    pub fn is_propositional(&self) -> bool {
+        match self {
+            // Temporal operators = not propositional
+            CompiledLtlExpression::Always(_)
+            | CompiledLtlExpression::Eventually(_)
+            | CompiledLtlExpression::Next(_)
+            | CompiledLtlExpression::Until(_, _)
+            | CompiledLtlExpression::Release(_, _) => false,
+            
+            // Boolean operators - check recursively
+            CompiledLtlExpression::Not(e) => e.is_propositional(),
+            CompiledLtlExpression::And(a, b) | CompiledLtlExpression::Or(a, b) | CompiledLtlExpression::Implies(a, b) => {
+                a.is_propositional() && b.is_propositional()
+            }
+            
+            // Atomic formulas are propositional
+            CompiledLtlExpression::Boolean(_) | CompiledLtlExpression::Predicate { .. } => true,
+            
+            // Quantified formulas: check if the body is propositional
+            CompiledLtlExpression::ForLoop { body, .. } | CompiledLtlExpression::Exists { body, .. } => {
+                body.is_propositional()
+            }
         }
     }
 }

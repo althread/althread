@@ -1,11 +1,10 @@
 use std::collections::HashSet;
-use std::rc::Rc;
 
 use crate::ast::statement::expression::{Expression, LocalExpressionNode};
 use crate::ast::token::datatype::DataType;
 use crate::checker::ltl::ast::LtlExpression;
 use crate::checker::ltl::compiled::CompiledLtlExpression;
-use crate::compiler::{CompilationContext, CompilerState, Variable};
+use crate::compiler::{CompilerState, Variable};
 use crate::error::{AlthreadError, AlthreadResult, ErrorType};
 
 pub fn compile_ltl_formulas(
@@ -134,7 +133,42 @@ fn compile_predicate(
     state: &CompilerState,
     loop_vars: &Vec<Variable>,
 ) -> AlthreadResult<CompiledLtlExpression> {
+    // Compile the expression first, which includes validation
     let (expression, read_variables) = compile_expression_with_context(expr, state, loop_vars)?;
+    
+    // Type-check: ensure the expression returns a boolean
+    let mut temp_stack = Vec::new();
+    
+    // Build temp_stack with globals + loop_vars (same order as compile_expression_with_context)
+    for var_name in &read_variables {
+        if let Some(loop_var) = loop_vars.iter().find(|v| &v.name == var_name) {
+            temp_stack.push(loop_var.clone());
+        } else if let Some(global_var) = state.global_table().get(var_name) {
+            temp_stack.push(global_var.clone());
+        }
+    }
+    
+    let mut temp_state = CompilerState::new_with_context(state.context.clone());
+    temp_state.program_stack = temp_stack;
+    temp_state.global_table = state.global_table.clone();
+    temp_state.in_condition_block = true;
+    temp_state.programs_code = state.programs_code.clone();
+    
+    let expr_type = expression.datatype(&temp_state).map_err(|e| {
+        AlthreadError::new(
+            ErrorType::TypeError,
+            None,
+            format!("Invalid LTL predicate: {}", e),
+        )
+    })?;
+    
+    if expr_type != DataType::Boolean {
+        return Err(AlthreadError::new(
+            ErrorType::TypeError,
+            None,
+            format!("LTL predicate must be boolean, got {:?}", expr_type),
+        ));
+    }
 
     Ok(CompiledLtlExpression::Predicate {
         expression,

@@ -4,7 +4,7 @@ use crate::{
     ast::{token::datatype::DataType, token::literal::Literal},
     checker::ltl::compiled::CompiledLtlExpression,
     error::{AlthreadError, AlthreadResult, ErrorType},
-    vm::{GlobalMemory, Memory, VM},
+    vm::{Memory, VM},
 };
 
 /// Evaluates a compiled LTL expression as a boolean predicate on a given VM state.

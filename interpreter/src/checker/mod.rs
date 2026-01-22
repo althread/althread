@@ -116,36 +116,6 @@ impl<'a> GraphNode<'a> {
         }
     }
 }
-/// Extended state for LTL verification combining VM state and monitor states
-#[derive(Debug, Clone)]
-struct ProductState {
-    pub monitors: MonitoringState,
-}
-
-impl PartialEq for ProductState {
-    fn eq(&self, other: &Self) -> bool {
-        self.monitors == other.monitors
-    }
-}
-
-impl Eq for ProductState {}
-
-impl Hash for ProductState {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        // Hash monitor states
-        for monitors in &self.monitors.monitors_per_formula {
-            for monitor in monitors {
-                monitor.current_state_id.hash(state);
-                // Hash bindings keys (values are too complex to hash reliably)
-                let mut keys: Vec<_> = monitor.bindings.keys().collect();
-                keys.sort();
-                for key in keys {
-                    key.hash(state);
-                }
-            }
-        }
-    }
-}
 /// Checks a given project, returning a path from an initial state to the first state that violates an invariant. (return an empty vector if no invariant is violated)
 pub fn check_program<'a>(
     compiled_project: &'a CompiledProject,
@@ -426,7 +396,20 @@ pub fn reconstruct_path<'a>(
     Ok(ret_path)
 }
 
-/// Checks a program with LTL formulas using product automaton approach
+/// Combined state for product automaton (VM state + monitor states)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct CombinedProductState<'a> {
+    vm: Rc<VM<'a>>,
+    monitors: MonitoringState,
+}
+
+/// Checks a program with LTL formulas using Nested DFS algorithm for cycle detection
+/// 
+/// The Nested DFS algorithm works as follows:
+/// 1. First DFS explores the product automaton (VM states × monitor states)
+/// 2. When backtracking from an accepting state (post-order), launch a second DFS
+/// 3. If the second DFS can reach the accepting state again, we found an accepting cycle
+/// 4. An accepting cycle means the negated LTL formula is satisfiable → original formula violated
 fn check_program_with_ltl<'a>(
     compiled_project: &'a CompiledProject,
     max_states: Option<usize>,
@@ -468,7 +451,7 @@ fn check_program_with_ltl<'a>(
 
     let initial_vm = Rc::new(init_vm);
 
-    // Step 4: Initialize state graph
+    // Step 4: Initialize state graph (for visualization/debugging)
     let mut state_graph = StateGraph {
         nodes: HashMap::new(),
         exhaustive: true,
@@ -478,247 +461,264 @@ fn check_program_with_ltl<'a>(
         .nodes
         .insert(initial_vm.clone(), GraphNode::new(None, 0));
 
-    // Step 4: Track product states (VM + Monitors)
-    let mut visited_product_states: HashMap<Rc<VM<'a>>, HashSet<ProductState>> = HashMap::new();
-    let mut expanded_product_states: HashMap<Rc<VM<'a>>, HashSet<ProductState>> = HashMap::new();
-    visited_product_states.insert(
-        initial_vm.clone(),
-        [ProductState {
-            monitors: initial_monitoring.clone(),
-        }]
-        .into_iter()
-        .collect(),
-    );
-
-    let mut next_nodes = VecDeque::new();
-    next_nodes.push_back((initial_vm.clone(), initial_monitoring));
-
-    // Step 5: Explore state space with LTL checking
-    while !next_nodes.is_empty() {
-        if let Some(max) = max_states {
-            if state_graph.nodes.len() >= max {
-                state_graph.exhaustive = false;
-                break;
+    // ============================================================
+    // NESTED DFS ALGORITHM FOR ACCEPTING CYCLE DETECTION
+    // ============================================================
+    
+    // Track visited states for the outer DFS
+    let mut visited_outer: HashSet<CombinedProductState<'a>> = HashSet::new();
+    // Track states on the current DFS stack (for cycle detection in inner DFS)
+    let mut on_stack: HashSet<CombinedProductState<'a>> = HashSet::new();
+    // Track visited states for the inner DFS (reset for each accepting state)
+    let mut visited_inner: HashSet<CombinedProductState<'a>> = HashSet::new();
+    
+    // Store the graph edges for path reconstruction
+    let mut product_edges: HashMap<CombinedProductState<'a>, Vec<CombinedProductState<'a>>> = HashMap::new();
+    
+    // Initial product state
+    let initial_product_state = CombinedProductState {
+        vm: initial_vm.clone(),
+        monitors: initial_monitoring.clone(),
+    };
+    
+    // Stack for iterative DFS: (state, phase)
+    // phase 0 = first visit, phase 1 = post-order (after children explored)
+    let mut dfs_stack: Vec<(CombinedProductState<'a>, usize)> = vec![(initial_product_state.clone(), 0)];
+    
+    // State counter for limiting exploration
+    let mut state_count = 0;
+    
+    while let Some((current_state, phase)) = dfs_stack.pop() {
+        if phase == 0 {
+            // First visit to this state
+            if visited_outer.contains(&current_state) {
+                continue;
             }
-        }
-
-        let (current_vm, current_monitors) = next_nodes.pop_front().unwrap();
-        expanded_product_states
-            .entry(current_vm.clone())
-            .or_insert_with(HashSet::new)
-            .insert(ProductState {
-                monitors: current_monitors.clone(),
-            });
-        let current_level = state_graph.nodes.get(&current_vm).unwrap().level;
-
-        // Get VM successors
-        let successors = current_vm.next()?;
-
-        // If no successors, we can still evaluate LTL by stuttering on the current state.
-        if successors.is_empty() {
-            let mut base_next_monitors = current_monitors.clone();
-
-            ltl::quantifier::update_monitors_for_new_processes(
-                &compiled_project.compiled_ltl_formulas,
-                &automatons,
-                &mut base_next_monitors,
-                &current_vm,
-            )?;
-
-            let possible_next_monitoring_states =
-                base_next_monitors.get_possible_successors(&current_vm, &automatons)?;
-
-            for next_monitors in possible_next_monitoring_states {
-                if monitors_in_accepting_state_on_cycle(
-                    &next_monitors,
-                    &automatons,
+            
+            state_count += 1;
+            if let Some(max) = max_states {
+                if state_count >= max {
+                    state_graph.exhaustive = false;
+                    break;
+                }
+            }
+            
+            visited_outer.insert(current_state.clone());
+            on_stack.insert(current_state.clone());
+            
+            // Push post-order visit
+            dfs_stack.push((current_state.clone(), 1));
+            
+            let current_vm = &current_state.vm;
+            let current_monitors = &current_state.monitors;
+            let current_level = state_graph.nodes.get(current_vm).map(|n| n.level).unwrap_or(0);
+            
+            // Get VM successors
+            let successors = current_vm.next()?;
+            
+            // Handle terminal states (stuttering)
+            // This includes both proper termination (is_finished=true) and deadlock states
+            // (no successors but processes still waiting). In both cases, the execution
+            // can only "stutter" in place forever.
+            if successors.is_empty() {
+                let is_finished = current_vm.is_finished();
+                log::debug!("DEBUG: Terminal state - is_finished={}", is_finished);
+                
+                // For both termination and deadlock, we need to check if the monitor
+                // can accept on a stuttering loop (staying in the same state forever).
+                // This is required for "eventually P" properties - if P never becomes true
+                // and we reach a state with no further progress, it's a violation.
+                
+                let mut base_next_monitors = current_monitors.clone();
+                ltl::quantifier::update_monitors_for_new_processes(
                     &compiled_project.compiled_ltl_formulas,
-                ) {
-                    println!("LTL violation detected: acceptance condition reached");
-                    let violation_path = if state_graph
-                        .nodes
-                        .get(&current_vm)
-                        .unwrap()
-                        .predecessor
-                        .is_none()
-                    {
-                        vec![StateLink {
-                            to: current_vm.clone(),
-                            lines: vec![],
-                            instructions: vec![],
-                            actions: vec![],
-                            pid: 0,
-                            name: "_init_".to_string(),
-                        }]
-                    } else {
-                        build_violation_path(&state_graph, &current_vm)?
-                    };
-                    return Ok((violation_path, state_graph));
-                }
-            }
-
-            continue;
-        }
-
-        for (name, pid, instructions, actions, next_vm) in successors.into_iter() {
-            let next_vm = Rc::new(next_vm);
-
-            let mut lines: Vec<usize> = instructions
-                .iter()
-                .map(|x| x.pos.clone().unwrap_or_default().line)
-                .filter(|l| *l > 0)
-                .collect();
-            lines.sort();
-            lines.dedup();
-
-            // Add state link
-            state_graph
-                .nodes
-                .get_mut(&current_vm)
-                .unwrap()
-                .successors
-                .push(StateLink {
-                    to: next_vm.clone(),
-                    lines,
-                    instructions,
-                    actions,
-                    pid,
-                    name,
-                });
-
-            // Create new graph node if needed
-            if !state_graph.nodes.contains_key(&next_vm) {
-                state_graph.nodes.insert(
-                    next_vm.clone(),
-                    GraphNode::new(Some(current_vm.clone()), current_level + 1),
-                );
-            }
-
-            // Monitor update and evolution
-            // Debug print global state
-            if let Some(req) = next_vm.globals.get("Request") {
-                if let Some(grant) = next_vm.globals.get("Granted") {
-                   log::debug!("State: Request={:?}, Granted={:?}", req, grant);
-                }
-            }
-
-            let mut base_next_monitors = current_monitors.clone();
-
-            // Check for new processes and update monitors
-            ltl::quantifier::update_monitors_for_new_processes(
-                &compiled_project.compiled_ltl_formulas,
-                &automatons,
-                &mut base_next_monitors,
-                &next_vm,
-            )?;
-
-            // Get all possible next states for monitors (branching on non-determinism)
-            let possible_next_monitoring_states =
-                base_next_monitors.get_possible_successors(&next_vm, &automatons)?;
-
-            for next_monitors in possible_next_monitoring_states {
-                // Detect accepting runs of the Büchi automaton (observed counter-examples)
-                if monitors_in_accepting_state_step(
-                    &next_monitors,
                     &automatons,
-                    &compiled_project.compiled_ltl_formulas,
-                ) {
-                    println!("LTL violation detected: acceptance condition reached");
-                    let violation_path = build_violation_path(&state_graph, &next_vm)?;
-                    return Ok((violation_path, state_graph));
-                }
-
-                // Check if this product state was already visited
-                let product_state = ProductState {
-                    monitors: next_monitors.clone(),
-                };
-
-                let already_visited = visited_product_states
-                    .entry(next_vm.clone())
-                    .or_insert_with(HashSet::new)
-                    .contains(&product_state);
-
-                let already_expanded = expanded_product_states
-                    .get(&next_vm)
-                    .map(|set| set.contains(&product_state))
-                    .unwrap_or(false);
-
-                if already_visited
-                    && already_expanded
-                    && monitors_in_accepting_state_on_cycle(
+                    &mut base_next_monitors,
+                    current_vm,
+                    current_vm,
+                )?;
+                
+                let possible_next_monitoring_states =
+                    base_next_monitors.get_possible_successors(current_vm, &automatons)?;
+                
+                for next_monitors in possible_next_monitoring_states {
+                    let is_accepting = monitors_in_accepting_state(
                         &next_monitors,
                         &automatons,
                         &compiled_project.compiled_ltl_formulas,
-                    )
-                {
-                    println!("LTL violation detected: acceptance condition reached");
-                    let violation_path = build_violation_path(&state_graph, &next_vm)?;
-                    return Ok((violation_path, state_graph));
+                    );
+                    
+                    // Terminal/deadlock state with accepting monitor = infinite accepting run via stuttering
+                    if is_accepting {
+                        let state_type = if is_finished { "terminal" } else { "deadlock" };
+                        log::debug!("LTL violation: {} state with accepting monitor (stuttering loop)", state_type);
+                        println!("LTL violation detected: accepting {} state (stuttering)", state_type);
+                        let violation_path = build_violation_path(&state_graph, current_vm)?;
+                        return Ok((violation_path, state_graph));
+                    }
                 }
-
-                if !already_visited {
-                    visited_product_states
-                        .get_mut(&next_vm)
-                        .unwrap()
-                        .insert(product_state);
-                    next_nodes.push_back((next_vm.clone(), next_monitors));
+                continue;
+            }
+            
+            // Process successors
+            for (name, pid, instructions, actions, next_vm) in successors.into_iter() {
+                let next_vm = Rc::new(next_vm);
+                
+                let mut lines: Vec<usize> = instructions
+                    .iter()
+                    .map(|x| x.pos.clone().unwrap_or_default().line)
+                    .filter(|l| *l > 0)
+                    .collect();
+                lines.sort();
+                lines.dedup();
+                
+                // Add to state graph for visualization
+                state_graph
+                    .nodes
+                    .entry(current_vm.clone())
+                    .or_insert_with(|| GraphNode::new(None, current_level))
+                    .successors
+                    .push(StateLink {
+                        to: next_vm.clone(),
+                        lines,
+                        instructions,
+                        actions,
+                        pid,
+                        name,
+                    });
+                
+                if !state_graph.nodes.contains_key(&next_vm) {
+                    state_graph.nodes.insert(
+                        next_vm.clone(),
+                        GraphNode::new(Some(current_vm.clone()), current_level + 1),
+                    );
+                }
+                
+                // Update monitors for this transition
+                let mut base_next_monitors = current_monitors.clone();
+                ltl::quantifier::update_monitors_for_new_processes(
+                    &compiled_project.compiled_ltl_formulas,
+                    &automatons,
+                    &mut base_next_monitors,
+                    current_vm,
+                    &next_vm,
+                )?;
+                
+                let possible_next_monitoring_states =
+                    base_next_monitors.get_possible_successors(&next_vm, &automatons)?;
+                
+                for next_monitors in possible_next_monitoring_states {
+                    // Check if we've reached an accepting state with only propositional formulas.
+                    // In that case, the "eventually" is immediately satisfied - no cycle needed.
+                    let is_immediate_violation = monitors_in_immediate_accepting_state(
+                        &next_monitors,
+                        &automatons,
+                        &compiled_project.compiled_ltl_formulas,
+                    );
+                    
+                    if is_immediate_violation {
+                        log::debug!("LTL violation: reached accepting state with propositional formulas only");
+                        println!("LTL violation detected: immediate acceptance (propositional formula satisfied)");
+                        let violation_path = build_violation_path(&state_graph, &next_vm)?;
+                        return Ok((violation_path, state_graph));
+                    }
+                    
+                    let next_product_state = CombinedProductState {
+                        vm: next_vm.clone(),
+                        monitors: next_monitors,
+                    };
+                    
+                    // Record edge for path reconstruction
+                    product_edges
+                        .entry(current_state.clone())
+                        .or_insert_with(Vec::new)
+                        .push(next_product_state.clone());
+                    
+                    // Add to DFS stack if not visited
+                    if !visited_outer.contains(&next_product_state) {
+                        dfs_stack.push((next_product_state, 0));
+                    }
+                }
+            }
+        } else {
+            // Post-order visit (phase 1): all children have been explored
+            on_stack.remove(&current_state);
+            
+            // Check if this is an accepting state
+            let is_accepting = monitors_in_accepting_state(
+                &current_state.monitors,
+                &automatons,
+                &compiled_project.compiled_ltl_formulas,
+            );
+            
+            if is_accepting {
+                log::debug!("DEBUG: Post-order visit of accepting state, launching inner DFS");
+                
+                // Launch inner DFS to find a cycle back to this accepting state
+                visited_inner.clear();
+                let mut inner_stack: Vec<CombinedProductState<'a>> = vec![current_state.clone()];
+                
+                while let Some(inner_current) = inner_stack.pop() {
+                    if visited_inner.contains(&inner_current) {
+                        continue;
+                    }
+                    visited_inner.insert(inner_current.clone());
+                    
+                    // Get successors of inner_current
+                    if let Some(successors) = product_edges.get(&inner_current) {
+                        for successor in successors {
+                            // Check if we found a cycle back to the accepting state
+                            if *successor == current_state {
+                                log::debug!("DEBUG: Found accepting cycle!");
+                                println!("LTL violation detected: accepting cycle found");
+                                let violation_path = build_violation_path(&state_graph, &current_state.vm)?;
+                                return Ok((violation_path, state_graph));
+                            }
+                            
+                            // Also check if successor is on the current DFS stack
+                            // (this means there's a path from accepting state through successor back to stack)
+                            if on_stack.contains(successor) {
+                                // There's a cycle, and we're starting from an accepting state
+                                // Check if any state in the cycle is accepting
+                                log::debug!("DEBUG: Found cycle through stack from accepting state");
+                                println!("LTL violation detected: accepting cycle found (via stack)");
+                                let violation_path = build_violation_path(&state_graph, &current_state.vm)?;
+                                return Ok((violation_path, state_graph));
+                            }
+                            
+                            if !visited_inner.contains(successor) {
+                                inner_stack.push(successor.clone());
+                            }
+                        }
+                    }
                 }
             }
         }
+    }
 
-        // Check invariants (traditional safety properties)
-        let check_ret = current_vm.check_invariants();
+    // Traditional invariant checking (separate pass for safety properties)
+    // This is done on the state graph we built
+    for (vm, node) in state_graph.nodes.iter() {
+        let check_ret = vm.check_invariants();
         if let Err(e) = check_ret {
-            let mut path = Vec::new();
-            let mut back_node = current_vm.clone();
-
-            if state_graph
-                .nodes
-                .get(&back_node)
-                .unwrap()
-                .predecessor
-                .is_none()
-            {
+            let violation_path = build_violation_path(&state_graph, vm)?;
+            if violation_path.is_empty() {
+                // Initial state violation
                 let lines = if let Some(pos) = &e.pos {
                     vec![pos.line]
                 } else {
                     vec![]
                 };
-                path.push(StateLink {
-                    to: back_node.clone(),
+                return Ok((vec![StateLink {
+                    to: vm.clone(),
                     lines,
                     instructions: vec![],
                     actions: vec![],
                     pid: 0,
                     name: "_init_".to_string(),
-                });
-                return Ok((path, state_graph));
+                }], state_graph));
             }
-
-            while let Some(pred) = state_graph
-                .nodes
-                .get(&back_node)
-                .unwrap()
-                .predecessor
-                .clone()
-            {
-                path.push(
-                    state_graph
-                        .nodes
-                        .get(&pred)
-                        .unwrap()
-                        .successors
-                        .iter()
-                        .find(|x| x.to == back_node)
-                        .unwrap()
-                        .clone(),
-                );
-                back_node = pred;
-            }
-
-            return Ok((path.into_iter().rev().collect(), state_graph));
-        } else if check_ret.is_ok_and(|x| x == 1) {
-            state_graph.nodes.get_mut(&current_vm).unwrap().eventually = true;
+            return Ok((violation_path, state_graph));
         }
     }
 
@@ -757,7 +757,10 @@ fn build_violation_path<'a>(
     Ok(path.into_iter().rev().collect())
 }
 
-fn monitors_in_accepting_state_step(
+/// Check if any monitor is in an accepting state on a cycle (or terminal state).
+/// Check if any monitor is currently in an accepting state.
+/// Used by the Nested DFS algorithm to identify accepting states.
+fn monitors_in_accepting_state(
     monitors: &MonitoringState,
     automatons: &[BuchiAutomaton],
     formulas: &[CompiledLtlExpression],
@@ -768,9 +771,11 @@ fn monitors_in_accepting_state_step(
         .enumerate()
         .any(|(formula_idx, monitors)| {
             let automaton = &automatons[formula_idx];
-            if automaton.num_acceptance_sets == 0 {
-                return false;
-            }
+            
+            // For Büchi automatons (with acceptance sets), we check if any monitor
+            // is in an accepting state. The cycle will ensure we visit it infinitely often.
+            // For degenerate automatons (without acceptance sets), all states are accepting.
+            
             match &formulas[formula_idx] {
                 CompiledLtlExpression::Exists { .. } => {
                     // Exists: violation only if all monitors accept (or no monitor at all)
@@ -786,7 +791,12 @@ fn monitors_in_accepting_state_step(
         })
 }
 
-fn monitors_in_accepting_state_on_cycle(
+/// Check if any monitor is in an accepting state that leads to a sink state.
+/// A sink state is a state with only self-loops or transitions to other sink states.
+/// This handles the case of "eventually P" where reaching the accepting state once
+/// is sufficient (no cycle through accepting state needed).
+#[allow(dead_code)]
+fn monitors_in_accepting_sink(
     monitors: &MonitoringState,
     automatons: &[BuchiAutomaton],
     formulas: &[CompiledLtlExpression],
@@ -797,19 +807,124 @@ fn monitors_in_accepting_state_on_cycle(
         .enumerate()
         .any(|(formula_idx, monitors)| {
             let automaton = &automatons[formula_idx];
-            if automaton.num_acceptance_sets != 0 {
-                return false;
-            }
+            
             match &formulas[formula_idx] {
                 CompiledLtlExpression::Exists { .. } => {
                     if monitors.is_empty() {
                         return true;
                     }
-                    monitors.iter().all(|monitor| monitor.is_accepting(automaton))
+                    monitors.iter().all(|monitor| {
+                        monitor.is_accepting(automaton) && 
+                        is_in_sink_region(monitor.current_state_id, automaton)
+                    })
                 }
-                _ => monitors
-                    .iter()
-                    .any(|monitor| monitor.is_accepting(automaton)),
+                _ => monitors.iter().any(|monitor| {
+                    monitor.is_accepting(automaton) && 
+                    is_in_sink_region(monitor.current_state_id, automaton)
+                }),
             }
         })
+}
+
+/// Check if any monitor is in an accepting state where all formulas are propositional.
+/// This means the "eventually P" has been satisfied immediately - no cycle needed.
+/// 
+/// For example:
+/// - `eventually (Request ∧ ¬Granted)` - when Request=true and Granted=false, 
+///   the formula is immediately satisfied (propositional)
+/// - `eventually (Request ∧ always ¬Granted)` - even when Request=true,
+///   we still need to verify `always ¬Granted` holds infinitely (temporal)
+fn monitors_in_immediate_accepting_state(
+    monitors: &MonitoringState,
+    automatons: &[BuchiAutomaton],
+    formulas: &[CompiledLtlExpression],
+) -> bool {
+    monitors
+        .monitors_per_formula
+        .iter()
+        .enumerate()
+        .any(|(formula_idx, monitors_for_formula)| {
+            let automaton = &automatons[formula_idx];
+            
+            match &formulas[formula_idx] {
+                CompiledLtlExpression::Exists { .. } => {
+                    if monitors_for_formula.is_empty() {
+                        return true;
+                    }
+                    monitors_for_formula.iter().all(|monitor| {
+                        monitor.is_accepting(automaton) && 
+                        state_has_only_propositional_formulas(monitor.current_state_id, automaton)
+                    })
+                }
+                _ => monitors_for_formula.iter().any(|monitor| {
+                    monitor.is_accepting(automaton) && 
+                    state_has_only_propositional_formulas(monitor.current_state_id, automaton)
+                }),
+            }
+        })
+}
+
+/// Check if all formulas in an automaton state are propositional (no temporal operators).
+/// If true, reaching this accepting state is an immediate violation.
+fn state_has_only_propositional_formulas(state_id: usize, automaton: &BuchiAutomaton) -> bool {
+    let state = &automaton.states[state_id];
+    state.formulas.iter().all(|f| f.is_propositional())
+}
+
+/// Check if a state is in a "sink region" - a region of the automaton 
+/// from which no accepting state can be reached (other than possibly itself).
+/// This includes:
+/// 1. Accepting states that only transition to sink states
+/// 2. Non-accepting states with only self-loops or transitions to other sinks
+fn is_in_sink_region(state_id: usize, automaton: &BuchiAutomaton) -> bool {
+    // Get the state
+    let state = &automaton.states[state_id];
+    
+    // If the state has transitions to other accepting states, it's not a pure sink
+    // Check if all transitions go to non-accepting states or to itself
+    for &next_id in &state.transitions {
+        if next_id == state_id {
+            // Self-loop is fine
+            continue;
+        }
+        let next_state = &automaton.states[next_id];
+        // If we can reach another accepting state, not a sink
+        if !next_state.acceptance_sets.is_empty() {
+            return false;
+        }
+        // Check if the next state can eventually reach an accepting state
+        // (do a simple reachability check)
+        if can_reach_accepting_state(next_id, automaton, &mut vec![state_id]) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Check if from a given state we can reach any accepting state
+fn can_reach_accepting_state(
+    start_id: usize,
+    automaton: &BuchiAutomaton,
+    visited: &mut Vec<usize>,
+) -> bool {
+    if visited.contains(&start_id) {
+        return false;
+    }
+    visited.push(start_id);
+    
+    let state = &automaton.states[start_id];
+    
+    // If this state is accepting, we found one
+    if !state.acceptance_sets.is_empty() {
+        return true;
+    }
+    
+    // Check successors
+    for &next_id in &state.transitions {
+        if can_reach_accepting_state(next_id, automaton, visited) {
+            return true;
+        }
+    }
+    
+    false
 }

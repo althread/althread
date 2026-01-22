@@ -161,15 +161,16 @@ pub fn update_monitors_for_new_processes(
     formulas: &[CompiledLtlExpression],
     automatons: &[BuchiAutomaton],
     monitoring: &mut MonitoringState,
-    vm: &VM,
+    current_vm: &VM,
+    next_vm: &VM,
 ) -> AlthreadResult<()> {
     for (idx, formula) in formulas.iter().enumerate() {
         if let Some(quantifier) = analyze_formula(formula) {
-            // Check if the list has grown
-            let memory = prepare_list_memory(&quantifier.list_read_variables, vm)?;
+            // Get the list from the new VM state
+            let memory = prepare_list_memory(&quantifier.list_read_variables, next_vm)?;
             let list_value = quantifier
                 .list_expression
-                .eval_with_context(&memory, vm)
+                .eval_with_context(&memory, next_vm)
                 .map_err(|msg| {
                     AlthreadError::new(
                         ErrorType::ExpressionError,
@@ -178,32 +179,58 @@ pub fn update_monitors_for_new_processes(
                     )
                 })?;
 
-            let elements = match list_value {
+            let next_elements = match list_value {
                 Literal::List(_, elems) => elems,
                 _ => continue,
             };
 
-            let current_monitor_count = monitoring.monitors_per_formula[idx].len();
+            // Get the list from the current VM state
+            let memory_current = prepare_list_memory(&quantifier.list_read_variables, current_vm)?;
+            let list_value_current = quantifier
+                .list_expression
+                .eval_with_context(&memory_current, current_vm)
+                .map_err(|msg| {
+                    AlthreadError::new(
+                        ErrorType::ExpressionError,
+                        None,
+                        format!("Error evaluating list for monitor update: {}", msg),
+                    )
+                })?;
 
-            // Create monitors for new elements
-            if elements.len() > current_monitor_count {
-                for element in elements.into_iter().skip(current_monitor_count) {
+            let current_elements = match list_value_current {
+                Literal::List(_, elems) => elems,
+                _ => vec![],
+            };
+
+            // Find new processes (in next_vm but not in current_vm)
+            let mut new_count = 0;
+            for element in next_elements {
+                if !current_elements.contains(&element) {
                     let mut bindings = HashMap::new();
                     bindings.insert(quantifier.var_name.clone(), element);
                     monitoring.add_monitors_for_enabled_initial_states(
                         idx,
                         &automatons[idx],
                         bindings,
-                        vm,
+                        next_vm,
                     )?;
+                    new_count += 1;
                 }
+            }
 
-                let new_count = monitoring.monitors_per_formula[idx].len();
+            if new_count > 0 {
+                log::debug!(
+                    "DEBUG: Added {} new monitors for formula #{} (now {} total). next_vm has {} running programs",
+                    new_count,
+                    idx + 1,
+                    monitoring.monitors_per_formula[idx].len(),
+                    next_vm.running_programs.len()
+                );
                 println!(
                     "Added {} new monitors for formula #{} (now {} total)",
-                    new_count - current_monitor_count,
+                    new_count,
                     idx + 1,
-                    new_count
+                    monitoring.monitors_per_formula[idx].len()
                 );
             }
         }

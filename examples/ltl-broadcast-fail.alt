@@ -1,5 +1,5 @@
 program sender() {
-    send out.*(42);
+    send out.a.*(42);
 }
 
 program receiver() {

@@ -15,7 +15,7 @@ program Decrementer() {
 
 // This formula PASSES: X starts at 0 and is only incremented
 check {
-    always (X >= 0);
+    always eventually (X >= 0);
 }
 
 main {

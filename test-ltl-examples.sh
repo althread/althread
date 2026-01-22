@@ -24,6 +24,9 @@ NC='\033[0m' # No Color
 # Map file names to expected outcomes
 get_expected_result() {
     case "$1" in
+        ltl-always-eventually-fail.alt) echo fail ;;
+        ltl-broadcast-fail.alt) echo fail ;;
+        ltl-broadcast-pass.alt) echo pass ;;
         ltl-implication-fail.alt) echo fail ;;
         ltl-safety-simple.alt) echo pass ;;
         ltl-safety-violation.alt) echo fail ;;

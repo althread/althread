@@ -59,6 +59,11 @@ impl BuchiAutomaton {
         // 2. Identify all Until subformulas to define acceptance sets
         let mut until_constraints = Vec::new();
         collect_untils(&neg_expr, &mut until_constraints);
+        
+        log::debug!("Until constraints for automaton:");
+        for (i, uc) in until_constraints.iter().enumerate() {
+            log::debug!("  [{}]: {:?}", i, uc);
+        }
 
         // 3. GBA Construction
         let mut states: Vec<AutomatonState> = Vec::new();
@@ -98,15 +103,37 @@ impl BuchiAutomaton {
             let current_formulas = states[current_id].formulas.clone();
 
             // Compute acceptance sets for this state
+            // 
+            // For GBA acceptance, a state is accepting for an Until(A, B) constraint if:
+            // 1. The right side B is satisfied in this state, OR
+            // 2. The state is a "continuation" state that maintains a temporal property from B
+            //    (e.g., if B = Request ∧ □¬Granted, and we're in a state maintaining □¬Granted)
+            //
+            // For case 2: if the state contains Next(Release(...)) from the Until's right side,
+            // and the atomic part of the Until's right side was satisfied when entering this region,
+            // then this state should be accepting.
             let mut acc_sets = Vec::new();
             for (i, until_expr) in until_constraints.iter().enumerate() {
-                let has_rhs = match until_expr {
-                    CompiledLtlExpression::Until(_, right) => check_satisfaction(right, &current_formulas),
+                let is_accepting = match until_expr {
+                    CompiledLtlExpression::Until(_, right) => {
+                        // Standard check: right side is satisfied
+                        if check_satisfaction(right, &current_formulas) {
+                            true
+                        } else {
+                            // Additional check: if we're maintaining a Release obligation
+                            // that comes from the right side of this Until, we're in an
+                            // accepting region (the Until has been "satisfied" and we're
+                            // in the continuation).
+                            check_release_continuation(right, &current_formulas)
+                        }
+                    },
                     CompiledLtlExpression::Eventually(inner) => check_satisfaction(inner, &current_formulas),
+                    // Note: Release is not collected as an until_constraint anymore,
+                    // so this branch should never be reached
                     _ => false,
                 };
                 
-                if has_rhs {
+                if is_accepting {
                     acc_sets.push(i);
                 }
             }
@@ -176,18 +203,82 @@ fn collect_untils(expr: &CompiledLtlExpression, acc: &mut Vec<CompiledLtlExpress
             }
             collect_untils(e, acc);
         }
+        CompiledLtlExpression::Release(l, r) => {
+            // Release does NOT generate an acceptance set in GBA.
+            // Only Until/Eventually generate acceptance conditions.
+            // Release(A, B) = ¬(¬A U ¬B) is a safety property when A=false.
+            // We still need to recurse into the subformulas.
+            collect_untils(l, acc);
+            collect_untils(r, acc);
+        }
         CompiledLtlExpression::Not(e) => collect_untils(e, acc),
         CompiledLtlExpression::Next(e)
         | CompiledLtlExpression::Always(e) => collect_untils(e, acc),
         CompiledLtlExpression::And(a, b)
         | CompiledLtlExpression::Or(a, b)
-        | CompiledLtlExpression::Implies(a, b)
-        | CompiledLtlExpression::Release(a, b) => {
+        | CompiledLtlExpression::Implies(a, b) => {
             collect_untils(a, acc);
             collect_untils(b, acc);
         }
         CompiledLtlExpression::ForLoop { body, .. }
         | CompiledLtlExpression::Exists { body, .. } => collect_untils(body, acc),
+        _ => {}
+    }
+}
+
+/// Check if the current state is a "continuation" of a Release obligation from the Until's right side.
+/// This is used for acceptance: if the Until's right side contains a Release (like □¬Granted),
+/// and we're in a state that maintains that Release (has Next(Release(...)) in its formulas),
+/// then we're in an accepting region.
+/// 
+/// For example, for Until(true, Request ∧ Release(false, ¬Granted)):
+/// - State 0: [Request, ¬Granted, Next(Release(false, ¬Granted))] is accepting (full satisfaction)
+/// - State 2: [¬Granted, Next(Release(false, ¬Granted))] is also accepting (continuation)
+fn check_release_continuation(right: &CompiledLtlExpression, formulas: &[CompiledLtlExpression]) -> bool {
+    // Extract Release subformulas from the right side of the Until
+    let releases = extract_releases(right);
+    
+    for release in releases {
+        // Check if this Release is being maintained in the current state
+        // A Release(A, B) is maintained if:
+        // 1. B is satisfied in the current state
+        // 2. Next(Release(A, B)) is in the formulas
+        if let CompiledLtlExpression::Release(_, b) = &release {
+            let next_release = CompiledLtlExpression::Next(Box::new(release.clone()));
+            if check_satisfaction(b, formulas) && contains_formula(formulas, &next_release) {
+                return true;
+            }
+        }
+    }
+    
+    false
+}
+
+/// Extract all Release subformulas from an expression
+fn extract_releases(expr: &CompiledLtlExpression) -> Vec<CompiledLtlExpression> {
+    let mut releases = Vec::new();
+    extract_releases_recursive(expr, &mut releases);
+    releases
+}
+
+fn extract_releases_recursive(expr: &CompiledLtlExpression, releases: &mut Vec<CompiledLtlExpression>) {
+    match expr {
+        CompiledLtlExpression::Release(_, _) => {
+            releases.push(expr.clone());
+        }
+        CompiledLtlExpression::And(a, b)
+        | CompiledLtlExpression::Or(a, b)
+        | CompiledLtlExpression::Until(a, b)
+        | CompiledLtlExpression::Implies(a, b) => {
+            extract_releases_recursive(a, releases);
+            extract_releases_recursive(b, releases);
+        }
+        CompiledLtlExpression::Not(inner)
+        | CompiledLtlExpression::Next(inner)
+        | CompiledLtlExpression::Eventually(inner)
+        | CompiledLtlExpression::Always(inner) => {
+            extract_releases_recursive(inner, releases);
+        }
         _ => {}
     }
 }
@@ -215,11 +306,30 @@ fn check_satisfaction(f: &CompiledLtlExpression, formulas: &[CompiledLtlExpressi
              // For Not, apply negation and check that.
              check_satisfaction(&f.clone().negate(), formulas)
         }
+        // Release(A, B) is satisfied if:
+        // - B is satisfied AND (A is satisfied OR Next(Release(A, B)) is in the state)
+        // For Release(false, B) = □B: B must be satisfied and ○(□B) must be in the state
+        CompiledLtlExpression::Release(a, b) => {
+            if !check_satisfaction(b, formulas) {
+                return false;
+            }
+            // Either A is true (releasing) or we continue with Next(Release(A, B))
+            let next_release = CompiledLtlExpression::Next(Box::new(f.clone()));
+            check_satisfaction(a, formulas) || contains_formula(formulas, &next_release)
+        }
+        // Until(A, B) is satisfied if:
+        // - B is satisfied, OR
+        // - A is satisfied AND Next(Until(A, B)) is in the state
+        CompiledLtlExpression::Until(a, b) => {
+            if check_satisfaction(b, formulas) {
+                return true;
+            }
+            let next_until = CompiledLtlExpression::Next(Box::new(f.clone()));
+            check_satisfaction(a, formulas) && contains_formula(formulas, &next_until)
+        }
         CompiledLtlExpression::Eventually(_) |
         CompiledLtlExpression::Always(_) |
-        CompiledLtlExpression::Next(_) |
-        CompiledLtlExpression::Until(_, _) |
-        CompiledLtlExpression::Release(_, _) => {
+        CompiledLtlExpression::Next(_) => {
              // These should be in the set if they are true
              contains_formula(formulas, f)
         }

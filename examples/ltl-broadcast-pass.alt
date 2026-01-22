@@ -1,0 +1,24 @@
+ 
+program sender() {
+    send out.*(42);
+}
+
+program receiver() {
+    label L;
+    await receive in(x) => {
+        print("receive", x);
+    };
+}
+
+main {
+    let s = run sender();
+    let r1 = run receiver();
+    let r2 = run receiver();
+    
+    channel s.out.a.a (int)> r1.in;
+    channel s.out.b.b (int)> r2.in;
+}
+
+check {
+    for p in $.procs.receiver { eventually p.reaches(end) };
+}

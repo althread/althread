@@ -1,9 +1,10 @@
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 use crate::{
     ast::token::literal::Literal,
     checker::ltl::{
-        automaton::{AutomatonState, BuchiAutomaton}, compiled::CompiledLtlExpression,
+        automaton::{BuchiAutomaton}, compiled::CompiledLtlExpression,
         evaluator::evaluate_ltl_predicate,
     },
     error::{AlthreadError, AlthreadResult, ErrorType},
@@ -22,6 +23,23 @@ pub struct LtlMonitor {
     /// For example, if the formula is "check { for p in $.procs: [] (p.x > 0) }",
     /// then this map will contain {"p": ProcessLiteral(42)} for one monitor instance.
     pub bindings: HashMap<String, Literal>,
+}
+
+impl Eq for LtlMonitor {}
+
+impl Hash for LtlMonitor {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.current_state_id.hash(state);
+        // Hash the bindings in a deterministic order
+        let mut keys: Vec<_> = self.bindings.keys().collect();
+        keys.sort();
+        for key in keys {
+            key.hash(state);
+            // Hash a simplified representation of the value
+            // We use Debug format as a proxy since Literal may not implement Hash
+            format!("{:?}", self.bindings.get(key)).hash(state);
+        }
+    }
 }
 
 impl LtlMonitor {
@@ -124,11 +142,22 @@ impl LtlMonitor {
 
 /// Represents the complete monitoring state for all LTL formulas.
 /// This includes all monitor instances across all formulas and all process bindings.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MonitoringState {
     /// For each LTL formula (by index), a list of monitor instances.
     /// Multiple instances exist when formulas use "for p in list" - one monitor per element.
     pub monitors_per_formula: Vec<Vec<LtlMonitor>>,
+}
+
+impl Hash for MonitoringState {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for monitors in &self.monitors_per_formula {
+            monitors.len().hash(state);
+            for monitor in monitors {
+                monitor.hash(state);
+            }
+        }
+    }
 }
 
 impl MonitoringState {
