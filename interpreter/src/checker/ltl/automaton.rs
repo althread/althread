@@ -1,8 +1,23 @@
+//! Büchi automaton construction from LTL formulas.
+//!
+//! This module implements the tableau-based construction of Generalized Büchi Automatons (GBA)
+//! from LTL formulas. The automaton accepts exactly the infinite words that satisfy the
+//! negation of the input formula, which is used for counter-example detection.
+//!
+//! # Algorithm Overview
+//!
+//! 1. Negate the input formula (to search for violating traces)
+//! 2. Identify Until subformulas to create acceptance sets
+//! 3. Use tableau expansion to construct states (saturated formula sets)
+//! 4. Build transitions based on Next-step obligations
+//! 5. Mark accepting states based on Until progress requirements
+
 use log::debug;
 use std::collections::VecDeque;
 
 use super::compiled::CompiledLtlExpression;
 
+/// A state in the Büchi automaton.
 #[derive(Debug, Clone)]
 pub struct AutomatonState {
     pub id: usize,

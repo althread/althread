@@ -1,4 +1,18 @@
-//42 <- used to easily remove all comments made with this id
+//! Model checking module for Althread programs.
+//!
+//! This module provides state-space exploration and verification capabilities:
+//! - Basic invariant checking via `check_program`
+//! - LTL model checking via `check_program_with_ltl` using Büchi automatons
+//!
+//! # LTL Verification Algorithm
+//!
+//! The LTL checker uses the automata-theoretic approach:
+//! 1. Negate the LTL formula (to find counter-examples)
+//! 2. Build a Büchi automaton from the negated formula
+//! 3. Explore the product automaton (program × Büchi automaton)
+//! 4. Use Nested DFS to detect accepting cycles
+//! 5. An accepting cycle means the negated formula is satisfiable → original violated
+
 pub mod ltl;
 
 #[cfg(test)]
@@ -112,7 +126,7 @@ impl<'a> GraphNode<'a> {
             level,
             predecessor,
             eventually: false,
-            successors: Vec::new(), //42 that’s what makes the state appear green even though it might be false.
+            successors: Vec::new(),
         }
     }
 }
@@ -138,21 +152,21 @@ pub fn check_program<'a>(
         exhaustive: true,
     };
 
-    //42 initialize a VM with the compiled project
+    // Initialize a VM with the compiled project
     let mut init_vm = VM::new(compiled_project);
     init_vm.start(0);
     let initial_vm = Rc::new(init_vm);
 
-    //42 initialize the state graph with the initial state of the state graph
+    // Initialize the state graph with the initial state
     state_graph
         .nodes
         .insert(initial_vm.clone(), GraphNode::new(None, 0));
 
-    //42 successors vector
+    // BFS queue for state exploration
     let mut next_nodes = VecDeque::new();
     next_nodes.push_back(initial_vm.clone());
 
-    //42 while the successor list isn't empty
+    // Explore states until queue is empty
     while !next_nodes.is_empty() {
         if let Some(max) = max_states {
             if state_graph.nodes.len() >= max {
@@ -160,26 +174,27 @@ pub fn check_program<'a>(
                 break;
             }
         }
-        //42 we pick on the the next nodes and remove it from the vector
+        // Pop next state from the queue
         let current_node = next_nodes.pop_front().unwrap();
         let current_level = state_graph.nodes.get_mut(&current_node).unwrap().level;
-        //42 successors vector of current node
+        
+        // Get all successor states
         let successors = current_node.next()?;
 
-        //42 we go through all successors
+        // Process each successor state
         for (name, pid, instructions, actions, vm) in successors.into_iter() {
             let vm: Rc<VM<'_>> = Rc::new(vm);
 
+            // Extract source line numbers from instructions
             let mut lines: Vec<usize> = instructions
                 .iter()
                 .map(|x| x.pos.clone().unwrap_or_default().line)
                 .filter(|l| *l > 0)
                 .collect();
-            //42 remove all dupes
             lines.sort();
             lines.dedup();
 
-            //42 add all the state links allowing transition from the current node to another one to the state graph
+            // Add state link to the graph
             state_graph
                 .nodes
                 .get_mut(&current_node)
@@ -194,7 +209,7 @@ pub fn check_program<'a>(
                     name,
                 });
 
-            //42 if the graphnode resulting from a statelink transition don't yet exist, create it
+            // If successor state is new, add it to the graph and queue
             if !state_graph.nodes.contains_key(&vm.clone()) {
                 state_graph.nodes.insert(
                     vm.clone(),
@@ -204,7 +219,7 @@ pub fn check_program<'a>(
             }
         }
 
-        //42 check invariants
+        // Check invariants at this state
         let check_ret = current_node.check_invariants();
         if let Err(e) = check_ret {
             let mut path = Vec::new();
@@ -260,12 +275,12 @@ pub fn check_program<'a>(
         }
     }
 
-    //42 if the search was not exhaustive, we cannot check eventually violations
+    // If the search was not exhaustive, we cannot check eventually violations
     if !state_graph.exhaustive {
         return Ok((vec![], state_graph));
     }
 
-    //42 now checking eventually violations
+    // Now check for eventually violations using path exploration
 
     // path visit is used to keep track of the successors we've already checked
     let mut path_visit: Vec<usize> = Vec::new();
@@ -791,41 +806,6 @@ fn monitors_in_accepting_state(
         })
 }
 
-/// Check if any monitor is in an accepting state that leads to a sink state.
-/// A sink state is a state with only self-loops or transitions to other sink states.
-/// This handles the case of "eventually P" where reaching the accepting state once
-/// is sufficient (no cycle through accepting state needed).
-#[allow(dead_code)]
-fn monitors_in_accepting_sink(
-    monitors: &MonitoringState,
-    automatons: &[BuchiAutomaton],
-    formulas: &[CompiledLtlExpression],
-) -> bool {
-    monitors
-        .monitors_per_formula
-        .iter()
-        .enumerate()
-        .any(|(formula_idx, monitors)| {
-            let automaton = &automatons[formula_idx];
-            
-            match &formulas[formula_idx] {
-                CompiledLtlExpression::Exists { .. } => {
-                    if monitors.is_empty() {
-                        return true;
-                    }
-                    monitors.iter().all(|monitor| {
-                        monitor.is_accepting(automaton) && 
-                        is_in_sink_region(monitor.current_state_id, automaton)
-                    })
-                }
-                _ => monitors.iter().any(|monitor| {
-                    monitor.is_accepting(automaton) && 
-                    is_in_sink_region(monitor.current_state_id, automaton)
-                }),
-            }
-        })
-}
-
 /// Check if any monitor is in an accepting state where all formulas are propositional.
 /// This means the "eventually P" has been satisfied immediately - no cycle needed.
 /// 
@@ -869,62 +849,4 @@ fn monitors_in_immediate_accepting_state(
 fn state_has_only_propositional_formulas(state_id: usize, automaton: &BuchiAutomaton) -> bool {
     let state = &automaton.states[state_id];
     state.formulas.iter().all(|f| f.is_propositional())
-}
-
-/// Check if a state is in a "sink region" - a region of the automaton 
-/// from which no accepting state can be reached (other than possibly itself).
-/// This includes:
-/// 1. Accepting states that only transition to sink states
-/// 2. Non-accepting states with only self-loops or transitions to other sinks
-fn is_in_sink_region(state_id: usize, automaton: &BuchiAutomaton) -> bool {
-    // Get the state
-    let state = &automaton.states[state_id];
-    
-    // If the state has transitions to other accepting states, it's not a pure sink
-    // Check if all transitions go to non-accepting states or to itself
-    for &next_id in &state.transitions {
-        if next_id == state_id {
-            // Self-loop is fine
-            continue;
-        }
-        let next_state = &automaton.states[next_id];
-        // If we can reach another accepting state, not a sink
-        if !next_state.acceptance_sets.is_empty() {
-            return false;
-        }
-        // Check if the next state can eventually reach an accepting state
-        // (do a simple reachability check)
-        if can_reach_accepting_state(next_id, automaton, &mut vec![state_id]) {
-            return false;
-        }
-    }
-    true
-}
-
-/// Check if from a given state we can reach any accepting state
-fn can_reach_accepting_state(
-    start_id: usize,
-    automaton: &BuchiAutomaton,
-    visited: &mut Vec<usize>,
-) -> bool {
-    if visited.contains(&start_id) {
-        return false;
-    }
-    visited.push(start_id);
-    
-    let state = &automaton.states[start_id];
-    
-    // If this state is accepting, we found one
-    if !state.acceptance_sets.is_empty() {
-        return true;
-    }
-    
-    // Check successors
-    for &next_id in &state.transitions {
-        if can_reach_accepting_state(next_id, automaton, visited) {
-            return true;
-        }
-    }
-    
-    false
 }

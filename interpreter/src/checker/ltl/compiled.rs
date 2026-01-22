@@ -1,8 +1,20 @@
+//! Compiled LTL expression representation.
+//!
+//! This module defines the `CompiledLtlExpression` enum which represents LTL formulas
+//! in a form ready for verification. The compilation process resolves variable references
+//! and converts the AST into this normalized form.
+//!
+//! # Supported Operators
+//!
+//! - **Temporal**: Always (□), Eventually (◇), Next (○), Until (U), Release (R)
+//! - **Boolean**: And (∧), Or (∨), Not (¬), Implies (→)
+//! - **Quantifiers**: ForLoop (∀), Exists (∃) - expanded at runtime per process
+
 use std::fmt;
 
 use crate::ast::statement::expression::LocalExpressionNode;
 
-/// Represents a compiled LTL formula ready for verification
+/// Represents a compiled LTL formula ready for verification.
 #[derive(Debug, Clone, PartialEq)]
 pub enum CompiledLtlExpression {
     Always(Box<CompiledLtlExpression>),

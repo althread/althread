@@ -1,10 +1,23 @@
+//! LTL monitoring during state-space exploration.
+//!
+//! This module provides runtime tracking of Büchi automaton states during program execution.
+//! Each monitor instance tracks its position in the automaton and any variable bindings
+//! (for quantified formulas like `for p in $.procs { always P(p) }`).
+//!
+//! # Key Concepts
+//!
+//! - **LtlMonitor**: Tracks a single automaton state with variable bindings
+//! - **MonitoringState**: Manages all monitors for all LTL formulas
+//! - Monitors advance based on predicate evaluations at each VM state
+//! - Multiple successor states represent non-determinism in the automaton
+
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
 use crate::{
     ast::token::literal::Literal,
     checker::ltl::{
-        automaton::{BuchiAutomaton}, compiled::CompiledLtlExpression,
+        automaton::BuchiAutomaton, compiled::CompiledLtlExpression,
         evaluator::evaluate_ltl_predicate,
     },
     error::{AlthreadError, AlthreadResult, ErrorType},

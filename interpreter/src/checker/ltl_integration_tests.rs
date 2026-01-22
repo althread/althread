@@ -1,4 +1,8 @@
-// Integration tests for LTL checker
+//! Integration tests for the LTL model checker.
+//!
+//! These tests verify end-to-end behavior of LTL verification,
+//! including safety and liveness properties, quantified formulas,
+//! and various edge cases.
 
 #[cfg(test)]
 mod tests {
