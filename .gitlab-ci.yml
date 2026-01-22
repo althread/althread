@@ -40,7 +40,7 @@ pages:
   script:
     - cd web
     - pnpm install # install dependencies
-    - pnpm build --public-url ./
+    - pnpm build --base ./
     - mv dist ../public
   cache:
     key:
