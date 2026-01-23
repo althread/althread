@@ -197,6 +197,9 @@ body {
   color: #b7b7b7;
   white-space: pre-wrap;
   word-wrap: break-word;
+  overflow: auto;
+  flex: 1 1 0%;
+  min-height: 0;
 }
 
 .console::-webkit-scrollbar {
@@ -634,4 +637,14 @@ body {
   background-color: #2a1a1a;
   border: 1px solid #ec9999;
   color: #ec9999;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.execution-error-box pre {
+  overflow: auto;
+  flex: 1 1 0%;
+  min-height: 0;
 }

@@ -1,5 +1,5 @@
 // @refresh granular
-import { createSignal, createEffect, Show, Switch, Match } from "solid-js";
+import { createSignal, createEffect, Show, Switch, Match, onCleanup } from "solid-js";
 import Resizable from '@corvu/resizable'
 
 import init, { initialize, start_interactive_session, get_next_interactive_states, execute_interactive_step } from '../pkg/althread_web';
@@ -369,6 +369,13 @@ export default function App() {
     return [];
   };
 
+  const selectRunVmByIndex = (index: number) => {
+    const vms = vm_states();
+    if (!vms || vms.length === 0) return;
+    const clamped = Math.max(0, Math.min(index, vms.length - 1));
+    setSelectedVM({ state: vms[clamped], stepIndex: clamped });
+  };
+
   // Highlight lines in editor when an VM state is selected
   createEffect(() => {
     const vm = selectedVM();
@@ -410,6 +417,29 @@ export default function App() {
     } else if (editor) {
       editor.clearHighlights?.();
     }
+  });
+
+  createEffect(() => {
+    if (!isRun() || activeTab() !== "vm_states") return;
+
+    const handler = (event: KeyboardEvent) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+
+      const vms = vm_states();
+      if (!vms || vms.length === 0) return;
+
+      const vm = selectedVM();
+      const baseVm = resolveVmState(vm);
+      let currentIndex = vm?.stepIndex ?? vms.findIndex((s) => s === baseVm);
+      if (currentIndex < 0) currentIndex = 0;
+
+      const nextIndex = event.key === "ArrowRight" ? currentIndex + 1 : currentIndex - 1;
+      selectRunVmByIndex(nextIndex);
+      event.preventDefault();
+    };
+
+    window.addEventListener("keydown", handler);
+    onCleanup(() => window.removeEventListener("keydown", handler));
   });
 
   // Build a compact execution graph from vm_states (Run -> VM states tab)
