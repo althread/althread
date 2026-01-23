@@ -20,7 +20,7 @@ main {
 
     // get an element from a global list
     let a:int;
-    ! {
+    @ {
         let l = L;
         a = l.at(2);
     }

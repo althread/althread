@@ -62,7 +62,7 @@ declaration_statement = _{ declaration ~ ";" }
 wait_statement        =  { WAIT_KW ~ (
       waiting_block 
     | waiting_block_case) }
-atomic_statement        =  { (ATOMIC_KW | "!") ~ statement }
+atomic_statement        =  { (ATOMIC_KW | "@") ~ statement }
 call_statement        = _{ fn_call ~ ";" }
 run_statement         = _{ run_call ~ ";" }
 send_statement         = _{ send_call ~ ";" }
@@ -309,7 +309,7 @@ OR_ASSIGN_OP  = { "|=" }
 
 /// ### Datatypes
 /// Datatypes supported in Althread include boolean, integer, float, string, and void.
-datatype   = { BOOL_TYPE | INT_TYPE | FLOAT_TYPE | STR_TYPE | VOID_TYPE | LIST_TYPE | PROCESS_TYPE }
+datatype   = { BOOL_TYPE | INT_TYPE | FLOAT_TYPE | STR_TYPE | VOID_TYPE | LIST_TYPE | PROCESS_TYPE | TUPLE_TYPE }
 BOOL_TYPE  = { "bool" }
 INT_TYPE   = { "int" }
 FLOAT_TYPE = { "float" }
@@ -317,6 +317,7 @@ STR_TYPE   = { "string" }
 VOID_TYPE  = { "void" }
 PROCESS_TYPE = { "proc" ~ "(" ~ object_identifier ~ ")" }
 LIST_TYPE  = { "list" ~ "(" ~ datatype ~ ")" }
+TUPLE_TYPE = { "tuple" ~ "(" ~ datatype ~ ("," ~ datatype)* ~ ")" }
 
 /// ### Literals
 /// Include literals such as booleans, integers, floats, strings, and null.

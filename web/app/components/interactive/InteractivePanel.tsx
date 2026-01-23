@@ -2,6 +2,7 @@ import { createEffect, createSignal, Show } from "solid-js";
 import Resizable from '@corvu/resizable'
 import { renderMessageFlowGraph } from "@components/graph/CommGraph";
 import { rendervmStates } from "@components/graph/vmStatesDisplay";
+import VMStateInspector from "@components/graph/VMStateInspector";
 import './InteractivePanel.css';
 
 interface InteractivePanelProps {
@@ -22,6 +23,8 @@ interface InteractivePanelProps {
   // Interactive-specific data
   interactiveMessageFlow?: any[];
   interactiveVmStates?: any[];
+  interactiveStepLines?: number[][];
+  editor?: any;
 }
 
 export default function InteractivePanel(props: InteractivePanelProps) {
@@ -107,133 +110,12 @@ export default function InteractivePanel(props: InteractivePanelProps) {
     }
 
     const state = props.currentVMState;
-    // console.log("Current VM State:", state);
-    // console.log("Current VM State keys:", Array.from(state.keys()));
-    // console.log("Channel connections:", state.get('channel_connections'));
     
     return (
-      <div class="vm-state-container">
-        <div class="state-section">
-          <h5><i class="codicon codicon-symbol-variable"></i> Global Variables</h5>
-          <div class="state-content">
-            {state.get('globals') && Array.from(state.get('globals')).length > 0 ? (
-              <div class="globals-list">
-                {Array.from(state.get('globals')).map((entry: any) => (
-                  <div class="global-item">
-                    <span class="global-name">{entry[0]}:</span>
-                    <span class="global-value">{entry[1]}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <pre>No global variables.</pre>
-            )}
-          </div>
-        </div>
-        
-        <div class="state-section">
-          <h5><i class="codicon codicon-arrow-swap"></i> Channels</h5>
-          <div class="state-content">
-            <div class="channel-subsection">
-              <h6>Channel States:</h6>
-              {state.get('channels') && Array.from(state.get('channels')).length > 0 ? (
-                <div class="channels-list">
-                  {Array.from(state.get('channels')).map((channel: any) => (
-                    <div class="channel-item">
-                      <div class="channel-header">
-                        <strong>Channel: {channel.get('name')} (PID: {channel.get('pid')})</strong>
-                      </div>
-                      <div class="channel-values">
-                        <div class="channel-values-label">Messages:</div>
-                        {channel.get('values') && channel.get('values').length > 0 ? (
-                          <div class="channel-messages">
-                            {channel.get('values').map((message: string) => {
-                              // Parse the message format: "Tuple([Tuple([Int(0), Int(1)]), Tuple([Int(125), Bool(true)])])"
-                              // First tuple: [sender_pid, receiver_pid], Second tuple: message content
-                              const match = message.match(/Tuple\(\[Tuple\(\[Int\((\d+)\), Int\((\d+)\)\]\), (.+)\]\)/);
-                              if (match) {
-                                const senderPID = match[1];
-                                const messageContent = match[3];
-                                return (
-                                  <div class="message-item">
-                                    <div class="message-header">
-                                      <span class="message-sender">From PID {senderPID}</span>
-                                    </div>
-                                    <div class="message-content">{messageContent}</div>
-                                  </div>
-                                );
-                              }
-                              return (
-                                <div class="message-item">
-                                  <div class="message-content">{message}</div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div class="no-messages">No messages</div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <pre>No messages sent/received.</pre>
-              )}
-            </div>
-            <Show when={state.get('channel_connections') && Array.from(state.get('channel_connections')).length > 0}>
-              <div class="channel-subsection">
-                <h6>Channel Connections:</h6>
-                <div class="connections-list">
-                  {Array.from(state.get('channel_connections')).map((connection: any) => (
-                    <div class="connection-item">
-                      <div class="connection-line">
-                        <span class="connection-source">
-                          PID {connection.get('from').get('pid')} ({connection.get('from').get('channel')})
-                        </span>
-                        <span class="connection-arrow">→</span>
-                        <span class="connection-target">
-                          PID {connection.get('to').get('pid')} ({connection.get('to').get('channel')})
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </Show>
-          </div>
-        </div>
-        
-        <div class="state-section">
-          <h5><i class="codicon codicon-gear"></i> Programs</h5>
-          <div class="state-content">
-            {state.get('programs').map((prog: any) => (
-              <div class="program-info">
-                <div class="program-header">
-                  <strong class="text-with-icon"><i class="codicon codicon-symbol-function"></i> {prog.get('name')}</strong>
-                  <span class="program-pid">PID: {prog.get('pid')}</span>
-                </div>
-                <div class="program-details">
-                  <div class="text-with-icon"><i class="codicon codicon-debug-step-over"></i> IP: {prog.get('instruction_pointer')}</div>
-                  <div class="memory-section">
-                    <div class="memory-label"><i class="codicon codicon-symbol-array"></i> Memory:</div>
-                    {prog.get('memory') && prog.get('memory').length > 0 ? (
-                      <div class="memory-list">
-                        {prog.get('memory').map((item: string, index: number) => (
-                          <div class="memory-item">
-                            <span class="memory-index">[{index}]</span>
-                            <span class="memory-value">{item}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div class="memory-empty">Empty stack</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+      <div class="vm-state-container" style="height: 100%; display: flex; flex-direction: column;">
+        <VMStateInspector node={state} onClose={() => {}} />
+        <div class="interactive-empty-state" style="flex: 1; justify-content: flex-start; padding-top: 20px;">
+           <p style="font-size: 11px; opacity: 0.7;">Interactive state view. Use the choices tab to progress.</p>
         </div>
       </div>
     );
@@ -262,13 +144,13 @@ export default function InteractivePanel(props: InteractivePanelProps) {
       } else if (rightPanelTab() === "msg_flow") {
         return (
           <div class="console">
-            {renderMessageFlowGraph(props.interactiveMessageFlow || [], props.interactiveVmStates || [])}
+            {renderMessageFlowGraph(props.interactiveMessageFlow || [], props.interactiveVmStates || [], props.editor)}
           </div>
         );
       } else if (rightPanelTab() === "vm_states") {
         return (
           <div class="console">
-            {rendervmStates(props.interactiveVmStates || [])}
+            {rendervmStates(props.interactiveVmStates || [], props.editor, props.interactiveStepLines)}
           </div>
         );
       }

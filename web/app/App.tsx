@@ -1,5 +1,5 @@
 // @refresh granular
-import { createSignal, createEffect, Show } from "solid-js";
+import { createSignal, createEffect, Show, Switch, Match } from "solid-js";
 import Resizable from '@corvu/resizable'
 
 import init, { initialize, start_interactive_session, get_next_interactive_states, execute_interactive_step } from '../pkg/althread_web';
@@ -13,6 +13,7 @@ import '@components/fileexplorer/FileExplorer.css';
 import FileTabs from "@components/fileexplorer/FileTabs";
 import Sidebar, { type SidebarView } from '@components/sidebar/Sidebar';
 import InteractivePanel from '@components/interactive/InteractivePanel';
+import VMStateInspector from "@components/graph/VMStateInspector";
 
 // Import our new modules
 import { STORAGE_KEYS, loadFileSystem, saveFileSystem, loadFileContent, saveFileContent } from '@utils/storage';
@@ -339,12 +340,77 @@ export default function App() {
   let [out, setOut] = createSignal("The execution output will appear here.");
   let [commgraphout, setCommGraphOut] = createSignal([]); //messageflow graph
   let [vm_states, setVmStates] = createSignal<any[]>([]); //to display vm states information
+  let [stepLines, setStepLines] = createSignal<number[][]>([]); //to store lines for each step
   let [activeAction, setActiveAction] = createSignal<string | null>(null);
   const [loadingAction, setLoadingAction] = createSignal<string | null>(null);
   const [executionError, setExecutionError] = createSignal(false);
   const [structuredError, setStructuredError] = createSignal<any>(null);
   const [graphKey, setGraphKey] = createSignal(0);
   const [runGraphKey, setRunGraphKey] = createSignal(0);
+  const [selectedVM, setSelectedVM] = createSignal<any | null>(null);
+
+  const resolveVmState = (vm: any) => {
+    if (!vm) return null;
+    return vm.state ?? vm.vm_state ?? vm.current_state ?? vm.rawState ?? vm;
+  };
+
+  const getField = (obj: any, field: string) => {
+    if (!obj) return undefined;
+    if (typeof obj.get === 'function') return obj.get(field);
+    return obj[field];
+  };
+
+  const normalizePrograms = (value: any) => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    if (value instanceof Map) return Array.from(value.values());
+    if (typeof value.values === 'function') return Array.from(value.values());
+    if (typeof value === 'object') return Object.values(value);
+    return [];
+  };
+
+  // Highlight lines in editor when an VM state is selected
+  createEffect(() => {
+    const vm = selectedVM();
+    const baseVm = resolveVmState(vm);
+    if (baseVm && editor && editor.highlightLines) {
+      // Collect lines/labels from all programs in the current VM state
+      const programs = normalizePrograms(getField(baseVm, 'locals') || getField(baseVm, 'programs'));
+      const specs = programs
+        .map((p: any) => {
+           let line, name, pid;
+           if (typeof p.get === 'function') {
+             line = p.get('line');
+             name = p.get('name');
+             pid = p.get('pid');
+           } else {
+             line = p.line;
+             name = p.name;
+             pid = p.pid;
+           }
+           return { line, label: `${name}#${pid}` };
+        })
+        .filter((s: any) => typeof s.line === 'number' && s.line > 0);
+        
+      if (specs.length > 0) {
+        editor.highlightLines(specs);
+        return;
+      }
+
+      // If we have stepIndex (from Run mode), use stepLines
+      if (vm && vm.stepIndex !== undefined) {
+        const lines = stepLines()[vm.stepIndex];
+        if (lines && lines.length > 0) {
+          editor.highlightLines(lines);
+          return;
+        }
+      } else {
+        editor.clearHighlights?.();
+      }
+    } else if (editor) {
+      editor.clearHighlights?.();
+    }
+  });
 
   // Build a compact execution graph from vm_states (Run -> VM states tab)
   const runGraphNodes = () => {
@@ -356,6 +422,7 @@ export default function App() {
         level: i,
         label: `${i}`,
         fullLabel,
+        rawState: { state: vm, stepIndex: i },
         borderWidth: 1,
         font: {
           size: 10,
@@ -379,6 +446,7 @@ export default function App() {
 
   const runGraphEdges = () => {
     const vms = vm_states();
+    const lines = stepLines();
     const edges: any[] = [];
     for (let i = 0; i < vms.length - 1; i++) {
       edges.push({
@@ -386,6 +454,7 @@ export default function App() {
         from: i,
         to: i + 1,
         label: `step ${i + 1}`,
+        lines: lines[i] || [],
         font: { size: 0 }
       });
     }
@@ -398,6 +467,7 @@ export default function App() {
   const [executionHistory, setExecutionHistory] = createSignal<number[]>([]);
   const [currentVMState, setCurrentVMState] = createSignal<any>(null);
   const [interactiveFinished, setInteractiveFinished] = createSignal(false);
+  const [interactiveStepLines, setInteractiveStepLines] = createSignal<number[][]>([]);
   const [accumulatedOutput, setAccumulatedOutput] = createSignal<string>("");
   const [accumulatedExecutionOutput, setAccumulatedExecutionOutput] = createSignal<string>("");
   const [interactiveMessageFlow, setInteractiveMessageFlow] = createSignal<any[]>([]);
@@ -454,6 +524,11 @@ export default function App() {
       if (newVmState) {
         setInteractiveVmStates([...currentVmStates, newVmState]);
       }
+
+      // Update interactive step lines
+      const currentInteractiveStepLines = interactiveStepLines();
+      const newStepLines = stepResult.lines || [];
+      setInteractiveStepLines([...currentInteractiveStepLines, newStepLines]);
 
       // Update execution output to show step details (debug info) - accumulate all steps
       const executedStep = stepResult.executed_step;
@@ -547,6 +622,7 @@ export default function App() {
       setAccumulatedExecutionOutput("");
       setInteractiveMessageFlow([]);
       setInteractiveVmStates([]);
+      setInteractiveStepLines([]);
       
       const virtualFS = buildVirtualFileSystem(mockFileSystem());
       let filePath = getPathFromId(mockFileSystem(), editorManager.activeFile()!.id, '');
@@ -590,6 +666,7 @@ export default function App() {
     setEdges([]);
     setVmStates([]);
     setActiveAction(null);
+    setSelectedVM(null);
     // Reset interactive mode state
     setInteractiveStates([]);
     setExecutionHistory([]);
@@ -601,81 +678,94 @@ export default function App() {
     setInteractiveVmStates([]);
   }
 
-  const renderExecContent = () => {
-    // Don't render inline interactive content anymore - it's handled by the popup panel
-    if (activeTab() === "execution") {
-        return (
-          <div class="console">
-            {executionError() && structuredError() ? (
-              <div class="execution-error-box">
-                <ErrorDisplay 
-                  error={structuredError()} 
-                  onFileClick={handleErrorFileClick} 
-                />
-              </div>
-            ) : executionError() ? (
-              <div class="execution-error-box">
-                <pre>{out()}</pre>
-              </div>
-            ) : (
-              <pre>{out()}</pre>
-            )}
-          </div>
-        );
-      } else
-    if (isRun()) {
-      if (activeTab() === "console") {
-        return (
-          <div class="console">
-            <pre>{stdout()}</pre>
-          </div>
-        );
-      } if (activeTab() === "msg_flow") {
-        return (
-          <div class="console">
-            {renderMessageFlowGraph(commgraphout(), vm_states())}
-          </div>
-        );
-      } else if (activeTab() === "vm_states") {
-        return (
-          <div class="console">
-            <Graph
-              key={runGraphKey()}
-              nodes={runGraphNodes()}
-              edges={runGraphEdges()}
-              vm_states={vm_states()}
-              setLoadingAction={setLoadingAction}
-              theme="dark"
-              onEdgeClick={(_edgeId: string, edgeData: any) => {
-                if (edgeData && edgeData.lines && editor.highlightLines) {
-                  editor.highlightLines(edgeData.lines);
-                }
-              }}
-            />
-          </div>
-        );
-      }
-    } else {
-      return (
+  const renderExecContent = () => (
+    <Switch>
+      <Match when={activeTab() === "execution"}>
         <div class="console">
-          <Graph 
-            key={graphKey()} 
-            nodes={nodes()} 
-            edges={edges()} 
-            vm_states={vm_states()} 
-            setLoadingAction={setLoadingAction} 
-            theme="dark" 
-            onEdgeClick={(_edgeId: string, edgeData: any) => {
-                if (edgeData && edgeData.lines && editor.highlightLines) {
-                    editor.highlightLines(edgeData.lines);
-                }
-            }}
-          />
+          {executionError() && structuredError() ? (
+            <div class="execution-error-box">
+              <ErrorDisplay 
+                error={structuredError()} 
+                onFileClick={handleErrorFileClick} 
+              />
+            </div>
+          ) : executionError() ? (
+            <div class="execution-error-box">
+              <pre>{out()}</pre>
+            </div>
+          ) : (
+            <pre>{out()}</pre>
+          )}
         </div>
-      );
-    }
-    return null; // fallback return
-  };
+      </Match>
+
+      <Match when={isRun() && activeTab() === "console"}>
+        <div class="console">
+          <pre>{stdout()}</pre>
+        </div>
+      </Match>
+
+      <Match when={isRun() && activeTab() === "msg_flow"}>
+        <div class="console">
+          {renderMessageFlowGraph(commgraphout(), vm_states(), editor)}
+        </div>
+      </Match>
+
+      <Match when={isRun() && activeTab() === "vm_states"}>
+        <div class="console">
+          <Resizable id="vm-states-layout" orientation="vertical" style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column" }}>
+            <Resizable.Panel initialSize={0.4} minSize={0.2} style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              <VMStateInspector node={selectedVM()} onClose={() => setSelectedVM(null)} />
+            </Resizable.Panel>
+            <Resizable.Handle class="Resizable-handle" />
+            <Resizable.Panel initialSize={0.6} minSize={0.2} style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              <Graph
+                key={runGraphKey()}
+                nodes={runGraphNodes()}
+                edges={runGraphEdges()}
+                vm_states={vm_states()}
+                setLoadingAction={setLoadingAction}
+                theme="dark"
+                onEdgeClick={(_edgeId: string, edgeData: any) => {
+                  if (edgeData && edgeData.lines && editor.highlightLines) {
+                    editor.highlightLines(edgeData.lines);
+                  }
+                }}
+                onNodeSelect={setSelectedVM}
+              />
+            </Resizable.Panel>
+          </Resizable>
+        </div>
+      </Match>
+
+      <Match when={!isRun()}>
+        <div class="console">
+          <Resizable id="checker-states-layout" orientation="vertical" style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column" }}>
+            <Resizable.Panel initialSize={0.4} minSize={0.2} style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              <VMStateInspector node={selectedVM()} onClose={() => setSelectedVM(null)} />
+            </Resizable.Panel>
+            <Resizable.Handle class="Resizable-handle" />
+            <Resizable.Panel initialSize={0.6} minSize={0.2} style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              <Graph 
+                key={graphKey()} 
+                nodes={nodes()} 
+                edges={edges()} 
+                vm_states={vm_states()} 
+                setLoadingAction={setLoadingAction} 
+                theme="dark" 
+                onEdgeClick={(_edgeId: string, edgeData: any) => {
+                    if (edgeData && edgeData.lines && editor.highlightLines) {
+                        editor.highlightLines(edgeData.lines);
+                    }
+                }}
+                onNodeSelect={setSelectedVM}
+              />
+            </Resizable.Panel>
+          </Resizable>
+        </div>
+      </Match>
+    </Switch>
+  );
 
   return (
     <>
@@ -750,6 +840,7 @@ export default function App() {
                 resetSetOut();
                 if (activeAction() !== "run") setActiveAction("run");
                 if (loadingAction() !== "run") setLoadingAction("run");
+                setSelectedVM(null);
                 try {
                   
                   const virtualFS = buildVirtualFileSystem(mockFileSystem());
@@ -767,6 +858,7 @@ export default function App() {
                   console.log(res.message_flow_graph);
                   setCommGraphOut(res.message_flow_graph);
                   setVmStates(res.vm_states);
+                  setStepLines(res.step_lines || []);
                   setRunGraphKey(k => k + 1);
                   setStdout(res.stdout.join('\n'));
                   setActiveTab("console");
@@ -798,6 +890,7 @@ export default function App() {
               onClick={async () => {
                 if (loadingAction() !== "check") setLoadingAction("check");
                 if (activeAction() !== "check") setActiveAction("check");
+                setSelectedVM(null);
                 setActiveTab("vm_states");
                 if (executionError()) setExecutionError(false);
                 if (!editorManager.activeFile()) return;
@@ -844,6 +937,7 @@ export default function App() {
                       level,
                       label: `${i}`,
                       fullLabel: label,
+                      rawState: n[0],
                       isViolationNode,
                       borderWidth: 1,
                       font: {
@@ -1015,7 +1109,7 @@ export default function App() {
             <Resizable.Panel 
               class="right-panel"
               initialSize={0.30}
-              minSize={0.2}
+              minSize={0.1}
             >
               <div class="execution-content">
                 <div class="tab">
@@ -1079,7 +1173,7 @@ export default function App() {
             <Resizable.Panel 
               class="right-panel"
               initialSize={0.30}
-              minSize={0.2}
+              minSize={0.1}
             >
               <div class="execution-content">
                 <div class="tab">
@@ -1163,6 +1257,8 @@ export default function App() {
         isRun={isRun()}
         interactiveMessageFlow={interactiveMessageFlow()}
         interactiveVmStates={interactiveVmStates()}
+        interactiveStepLines={interactiveStepLines()}
+        editor={editor}
       />
     </>
   );

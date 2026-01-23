@@ -26,7 +26,7 @@ program A(my_id: int) {
   label L;
   if my_id == leader_id {
     print("I AM THE LEADER!!!");
-    ! {
+    @ {
         Leader += 1;
     }
   }

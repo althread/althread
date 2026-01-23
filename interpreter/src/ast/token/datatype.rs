@@ -124,6 +124,15 @@ impl NodeBuilder for DataType {
             Rule::PROCESS_TYPE => Ok(Self::Process(
                 pair.into_inner().next().unwrap().as_str().to_string(),
             )),
+            Rule::TUPLE_TYPE => {
+                let inner_pairs = pair.into_inner();
+                let mut types = Vec::new();
+                for datatype_pair in inner_pairs {
+                    let datatype = DataType::build(datatype_pair.into_inner(), filepath)?;
+                    types.push(datatype);
+                }
+                Ok(Self::Tuple(types))
+            },
             Rule::LIST_TYPE => {
                 let mut pairs = pair.into_inner();
                 let datatype = DataType::build(pairs.next().unwrap().into_inner(), filepath)?;

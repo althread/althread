@@ -6,7 +6,7 @@ import {HighlightStyle} from "@codemirror/language"
 import { Tag } from "@lezer/highlight";
 import {keymap, highlightSpecialChars, drawSelection, highlightActiveLine, dropCursor,
     rectangularSelection, crosshairCursor,
-    lineNumbers, highlightActiveLineGutter, EditorView, Decoration, DecorationSet} from "@codemirror/view"
+    lineNumbers, highlightActiveLineGutter, EditorView, Decoration, DecorationSet, WidgetType} from "@codemirror/view"
 import {Extension, EditorState, Compartment, StateField, StateEffect} from "@codemirror/state"
 import {defaultHighlightStyle, syntaxHighlighting, indentOnInput, bracketMatching,
     foldGutter, foldKeymap} from "@codemirror/language"
@@ -68,8 +68,18 @@ const getLanguageExtension = (filePath: string): Extension => {
 };
 
 // Define effect for highlighting lines
-const addHighlightEffect = StateEffect.define<number[]>();
+const addHighlightEffect = StateEffect.define<{line: number, label?: string}[]>();
 const clearHighlightEffect = StateEffect.define();
+
+class ProcessBadgeWidget extends WidgetType {
+  constructor(readonly label: string) { super() }
+  toDOM() {
+    let span = document.createElement("span")
+    span.className = "cm-process-badge"
+    span.textContent = this.label
+    return span
+  }
+}
 
 // Define state field for line highlights
 const highlightField = StateField.define<DecorationSet>({
@@ -80,15 +90,24 @@ const highlightField = StateField.define<DecorationSet>({
     highlights = highlights.map(tr.changes);
     for (let effect of tr.effects) {
       if (effect.is(addHighlightEffect)) {
-        const lineNumbers = effect.value;
+        const specs = effect.value;
         const decorations: any[] = [];
         
-        // Sort line numbers to ensure decorations are added in order
-        const sortedLineNumbers = [...lineNumbers].sort((a, b) => a - b);
+        // Group labels by line
+        const lineLabels = new Map<number, string[]>();
+        for (const spec of specs) {
+          if (!lineLabels.has(spec.line)) lineLabels.set(spec.line, []);
+          if (spec.label) lineLabels.get(spec.line)!.push(spec.label);
+        }
+
+        // Sort lines
+        const sortedLines = Array.from(lineLabels.keys()).sort((a, b) => a - b);
         
-        for (const lineNum of sortedLineNumbers) {
+        for (const lineNum of sortedLines) {
           if (lineNum > 0 && lineNum <= tr.state.doc.lines) {
             const line = tr.state.doc.line(lineNum);
+            
+            // Background Highlight
             decorations.push(
               Decoration.line({
                 attributes: { 
@@ -96,9 +115,20 @@ const highlightField = StateField.define<DecorationSet>({
                 }
               }).range(line.from)
             );
+
+            // Badge Widget (at the end of the line)
+            const labels = lineLabels.get(lineNum)!;
+            if (labels.length > 0) {
+              decorations.push(
+                Decoration.widget({
+                  widget: new ProcessBadgeWidget(labels.join(", ")),
+                  side: 1 // After content
+                }).range(line.to)
+              );
+            }
           }
         }
-        highlights = Decoration.set(decorations);
+        highlights = Decoration.set(decorations.sort((a, b) => a.from - b.from));
       } else if (effect.is(clearHighlightEffect)) {
         highlights = Decoration.none;
       }
@@ -228,6 +258,17 @@ const createEditor = ({
         fontFamily: "'Menlo', 'Monaco', 'Courier New', monospace",
         fontSize: '13px',
         lineHeight: '1.5'
+    },
+    '.cm-process-badge': {
+      backgroundColor: 'orange',
+      color: 'black',
+      borderRadius: '4px',
+      padding: '0 4px',
+      fontSize: '10px',
+      fontWeight: 'bold',
+      marginLeft: '10px',
+      verticalAlign: 'middle',
+      display: 'inline-block'
     }
   }, {dark: true});
 
@@ -370,12 +411,13 @@ const createEditor = ({
   };
 
   // Function to highlight specific lines
-  const highlightLines = (lineNumbers: number[]) => {
+  const highlightLines = (specs: number[] | {line: number, label?: string}[]) => {
     const view = safeEditorView();
     if (view) {
       try {
+        const formattedSpecs = specs.map(s => typeof s === 'number' ? {line: s} : s);
         view.dispatch({
-          effects: addHighlightEffect.of(lineNumbers)
+          effects: addHighlightEffect.of(formattedSpecs)
         });
         return true;
       } catch (e) {

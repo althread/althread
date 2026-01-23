@@ -38,9 +38,9 @@ project_block {
 
 GlobalBlock  { kw<"shared"> "{" SharedDeclaration* "}" }
 MainBlock    { PrivateDirective? kw<"main"> CodeBlock }
-ProgramBlock { PrivateDirective?kw<"program"> ProgName ArgList CodeBlock }
+ProgramBlock { PrivateDirective?kw<"program"> ProgName "(" commaSep<Type> ")" CodeBlock }
 ConditionBlock { Condition FormulaBlock }
-FunctionBlock { PrivateDirective? kw<"fn"> FnName ArgList ReturnType CodeBlock }
+FunctionBlock { PrivateDirective? kw<"fn"> FnName "(" commaSep<Type> ")" ReturnType CodeBlock }
 ImportBlock { kw<"import"> "[" ImportList "]" }
 
 ImportList { ImportItem ("," ImportItem)* ","? }
@@ -171,7 +171,7 @@ LoopStatement {
 //!AtomicStatement
 
 AtomicStatement {
-  (kw<"atomic"> | LogicOp<"!">) statement
+  (kw<"atomic"> | LogicOp<"@">) statement
 }
 
 
@@ -309,6 +309,8 @@ identifier { non_global_identifer | global_identifer }
 LocalVariableName { non_global_identifer }
 SharedVariableName { global_identifer }
 
+Type { TypeToken ("(" commaSep<Type> ")")? }
+
 @tokens {
 
   ImportSlash { "/" }
@@ -335,7 +337,7 @@ SharedVariableName { global_identifer }
 
   @precedence { Number "." }
 
-  Type { "bool" | "int" | "float" | "string" }
+  TypeToken { "bool" | "int" | "float" | "string" | "proc" | "list" | "tuple" }
 
 //!operatorTokens
 

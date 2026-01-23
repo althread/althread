@@ -3,8 +3,8 @@ import { ProgName } from "./parser.terms";
 
 export const althreadHighlight = styleTags({
   // Control and keywords
-  "AtomicStatement/atomic": t.modifier,
-  "WhileStatement/while WaitStatement/await IfStatement/if IfStatement/else ReceiveExpression/receive SendExpression/send RunExpression/run ForStatement/for LoopStatement/loop ForStatement/in ReturnStatement/return BreakLoopStatement/break BreakLoopStatement/continue": t.controlKeyword,
+  "AtomicStatement/atomic AtomicStatement/@": t.modifier,
+  "WhileStatement/while WaitStatement/await IfStatement/if IfStatement/else ReceiveExpression/receive SendExpression/send RunExpression/run ForStatement/for LoopStatement/loop ForStatement/in ReturnStatement/return BreakLoopStatement/break BreakLoopStatement/continue UnaryExpression/void": t.controlKeyword,
   "ImportItem/as": t.operatorKeyword,
   "VariableDeclaration/let VariableDeclaration/const SharedDeclaration/let SharedDeclaration/const ChannelDeclarationStatement/channel": t.definitionKeyword,
 
@@ -15,8 +15,8 @@ export const althreadHighlight = styleTags({
   // Block declaration keywords (Bolder/Distinct)
   "MainBlock/main ProgramBlock/program GlobalBlock/shared ImportBlock/import FunctionBlock/fn ConditionBlock/Condition/always ConditionBlock/Condition/check ConditionBlock/Condition/never": t.moduleKeyword,
 
-  "PrivateDirective": t.special(t.keyword),
-  "PrivateDirective/private": t.keyword,
+  "PrivateDirective": t.moduleKeyword,
+  "PrivateDirective/private": t.moduleKeyword,
   
   // Function highlighting
   "FunctionBlock/FnName": t.function(t.definition(t.variableName)),
@@ -49,7 +49,7 @@ export const althreadHighlight = styleTags({
   this: t.self,
   null: t.null,
   Star: t.modifier,
-  Type: t.typeName,
+  "TypeToken": t.typeName,
   
   "Variable/self": t.self,
   LocalVariableName: t.variableName,

@@ -1034,7 +1034,7 @@ impl LocalExpressionNode {
                                 DataType::Process(name) => name.clone(),
                                 _ => {
                                     return Err(
-                                        "'reaches' requires a value of type proc(<Program>)"
+                                        "'reaches' must be called on a variable of type proc(<Program>)"
                                             .to_string(),
                                     )
                                 }

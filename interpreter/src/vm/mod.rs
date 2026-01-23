@@ -747,6 +747,7 @@ struct SerializableRunningProgramStateForJs<'b> {
     memory: &'b Vec<Literal>,   // The program's stack
     instruction_pointer: usize, // The program's PC
     clock: usize,               // Program's logical clock (if you have one)
+    line: usize,                // Current line number
                                 // Add any other per-program fields you want to expose
 }
 
@@ -757,8 +758,8 @@ impl<'a> Serialize for VM<'a> {
     {
         let (globals, channels, _locals) = self.current_state();
 
-        // Number of fields in the serialized VM struct (globals, channels)
-        let mut s = serializer.serialize_struct("VM_JS", 3)?; // Using "VM_JS" for clarity
+        // Number of fields in the serialized VM struct
+        let mut s = serializer.serialize_struct("VM_JS", 6)?; // Using "VM_JS" for clarity
 
         s.serialize_field("globals", globals)?;
         s.serialize_field("channels", channels)?;
@@ -768,17 +769,29 @@ impl<'a> Serialize for VM<'a> {
             .iter()
             .map(|prog_state| {
                 let (memory, instruction_pointer, clock) = prog_state.current_state();
+                let line = self
+                    .programs_code
+                    .get(&prog_state.name)
+                    .and_then(|code| code.instructions.get(instruction_pointer))
+                    .and_then(|inst| inst.pos.as_ref())
+                    .map(|pos| pos.line)
+                    .unwrap_or(0);
+
                 SerializableRunningProgramStateForJs {
                     pid: prog_state.id,
                     name: &prog_state.name,
                     memory,
                     instruction_pointer,
                     clock,
+                    line,
                 }
             })
             .collect();
 
         s.serialize_field("locals", &serializable_program_states)?;
+        s.serialize_field("pending_deliveries", &self.channels.get_pending_deliveries())?;
+        s.serialize_field("waiting_send", &self.channels.get_waiting_send())?;
+        s.serialize_field("channel_connections", &self.channels.get_connections())?;
 
         s.end()
     }
