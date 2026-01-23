@@ -1,9 +1,12 @@
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
 use crate::{
     ast::{
         statement::{expression::LocalExpressionNode, waiting_case::WaitDependency},
-        token::{binary_assignment_operator::BinaryAssignmentOperator, literal::Literal, datatype::DataType},
+        token::{
+            binary_assignment_operator::BinaryAssignmentOperator, datatype::DataType,
+            literal::Literal,
+        },
     },
     error::Pos,
 };
@@ -57,7 +60,13 @@ pub enum InstructionType {
     FnCall {
         name: String,
         unstack_len: usize,
-        variable_idx: Option<usize>,
+        arguments: Option<Vec<usize>>,
+    },
+    MethodCall {
+        name: String,
+        receiver_idx: usize,
+        unstack_len: usize,
+        drop_receiver: bool,
         arguments: Option<Vec<usize>>,
     },
     Return {
@@ -88,6 +97,10 @@ pub enum InstructionType {
         channel_name: String,
         unstack_len: usize,
     },
+    Broadcast {
+        channel_name: String,
+        unstack_len: usize,
+    },
     Connect {
         /// the index of the sender pid in the stack (none if the sender is the current process)
         sender_pid: Option<usize>,
@@ -98,6 +111,9 @@ pub enum InstructionType {
     },
     AtomicStart,
     AtomicEnd,
+    Label {
+        name: String,
+    },
     EndProgram,
     Exit,
 }
@@ -151,6 +167,25 @@ impl fmt::Display for InstructionType {
             Self::FnCall {
                 name, unstack_len, ..
             } => write!(f, "{}()  (unstack {})", name, unstack_len)?,
+            Self::MethodCall {
+                name,
+                unstack_len,
+                receiver_idx,
+                drop_receiver,
+                arguments,
+            } => write!(
+                f,
+                "{}() receiver [{}] (unstack {}, drop {}, args {})",
+                name,
+                receiver_idx,
+                unstack_len,
+                drop_receiver,
+                if arguments.is_some() {
+                    "scattered"
+                } else {
+                    "tuple"
+                }
+            )?,
             Self::Return { has_value } => {
                 write!(f, "return {:?}", if *has_value { "value" } else { "void" })?
             }
@@ -158,8 +193,15 @@ impl fmt::Display for InstructionType {
             Self::Declaration { unstack_len } => {
                 write!(f, "declare var with value (unstack {})", unstack_len)?
             }
-            Self::CreateListFromStack { element_count, element_type } => {
-                write!(f, "create list from stack ({} elements of type {:?})", element_count, element_type)?;
+            Self::CreateListFromStack {
+                element_count,
+                element_type,
+            } => {
+                write!(
+                    f,
+                    "create list from stack ({} elements of type {:?})",
+                    element_count, element_type
+                )?;
             }
             Self::ConvertEmptyListType { to_element_type } => {
                 write!(f, "convert empty list to type {:?}", to_element_type)?;
@@ -179,6 +221,10 @@ impl fmt::Display for InstructionType {
                 channel_name,
                 unstack_len,
             } => write!(f, "send to {} (unstack {})", channel_name, unstack_len)?,
+            Self::Broadcast {
+                channel_name,
+                unstack_len,
+            } => write!(f, "broadcast to {} (unstack {})", channel_name, unstack_len)?,
             Self::ChannelPeek(s) => write!(f, "peek '{}'", s)?,
             Self::ChannelPop(s) => write!(f, "pop '{}'", s)?,
             Self::Connect {
@@ -207,6 +253,7 @@ impl fmt::Display for InstructionType {
             }
             Self::AtomicStart => write!(f, "atomic start")?,
             Self::AtomicEnd => write!(f, "atomic end")?,
+            Self::Label { name } => write!(f, "label {}", name)?,
         }
         Ok(())
     }
@@ -217,7 +264,11 @@ impl InstructionType {
         match self {
               Self::GlobalAssignment {..}
             | Self::ChannelPeek(_)
-            | Self::AtomicStart // starts a block that surely contains a global operation
+            | Self::AtomicStart // starts a block that surely contains a global operation           
+            
+             // Labels are NOT local - they create a state in the state graph
+            // This allows checking if a process is at a specific label using reaches()
+            | Self::Label {..}
             | Self::WaitStart {..} => false, // wait starts an atomic block to evaluate the conditions
 
             Self::GlobalReads {only_const, ..} => *only_const, // a global read is local only if it reads constant variables
@@ -240,6 +291,7 @@ impl InstructionType {
             | Self::ChannelPop(_) // This is a local because it follows a peek
             | Self::Wait {..}
             | Self::Send {..}
+            | Self::Broadcast {..}
             | Self::Empty
             | Self::Expression(_)
             | Self::ExpressionAndCleanup {..}
@@ -251,6 +303,7 @@ impl InstructionType {
             | Self::Destruct
             | Self::Unstack {..}
             | Self::FnCall {..}
+            | Self::MethodCall {..}
             | Self::Return {..}
             | Self::Declaration {..}
             | Self::CreateListFromStack {..}
@@ -259,7 +312,6 @@ impl InstructionType {
             | Self::EndProgram
             | Self::Exit
             | Self::Push(_) => true,
-
         }
     }
 
@@ -316,6 +368,7 @@ impl fmt::Display for Instruction {
 pub struct ProgramCode {
     pub name: String,
     pub instructions: Vec<Instruction>,
+    pub labels: HashMap<String, usize>,
 }
 
 // impl display for ProcessCode

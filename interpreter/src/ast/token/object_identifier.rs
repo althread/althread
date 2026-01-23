@@ -38,3 +38,10 @@ impl NodeBuilder for ObjectIdentifier {
         Ok(Self { parts })
     }
 }
+
+impl std::fmt::Display for ObjectIdentifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+         let s = self.parts.iter().map(|p| p.value.value.as_str()).collect::<Vec<_>>().join(".");
+         write!(f, "{}", s)
+    }
+}

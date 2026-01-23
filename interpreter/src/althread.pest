@@ -10,21 +10,25 @@ private_directive = { "@" ~ PRIVATE_KW }
 /// The main building blocks of an Althread program are:
 /// - **Main Block**: The entry point of the program.
 /// - **Shared Block**: Declares global variables accessible across different parts of the program.
-/// - **Condition Block**: Monitors conditions at each atomic step (e.g., always, never, eventually).
+/// - **Always Block**: Monitors conditions at each atomic step.
 /// - **Program Block**: Encapsulates code that runs concurrently in parallel processes.
 /// - **Function Block**: User-defined functions
-blocks = _{ import_block | main_block | global_block | condition_block | program_block | function_block }
+/// - **Check Block**: Contains LTL formulas to check
+blocks = _{ import_block | main_block | global_block | condition_block | program_block | function_block | check_block }
 
 global_block    = { GLOBAL_KW ~ code_block }
 condition_block = { condition_keywords ~ expression_block }
+check_block     = { CHECK_KW ~ "{" ~ ltl_statement* ~ "}" }
 program_block   = { private_directive? ~ PROGRAM_KW ~ identifier ~ arg_list ~ code_block }
 main_block      = { private_directive? ~ MAIN_KW ~ code_block }
 
 code_block           = { "{" ~ statement* ~ "}" }
 expression_block     = { "{" ~ expression_statement* ~ "}" }
 expression_statement = { expression ~ ";" }
+ltl_statement        = { ltl_expression ~ ";" }
+ltl_for_loop         = { FOR_KW ~ identifier ~ "in" ~ list_expression ~ "{" ~ ltl_expression ~ ";"? ~ "}" }
 
-condition_keywords = _{ ALWAYS_KW | NEVER_KW | EVENTUALLY_KW }
+condition_keywords = _{ ALWAYS_KW | NEVER_KW }
 
 /// ## Statements
 /// Statements are the executable instructions in the language.
@@ -46,17 +50,19 @@ statement = {
   | call_statement
   | code_block
   | break_loop_statement
+  | label_statement
   | return_statement
 }
 
 
 break_loop_statement = { (BREAK_KW | CONTINUE_KW) ~ identifier? ~ ";" }
+label_statement      = { LABEL_KW ~ identifier ~ ";" }
 assignment_statement  = _{ assignment ~ ";" }
 declaration_statement = _{ declaration ~ ";" }
 wait_statement        =  { WAIT_KW ~ (
       waiting_block 
     | waiting_block_case) }
-atomic_statement        =  { (ATOMIC_KW | "!") ~ statement }
+atomic_statement        =  { (ATOMIC_KW | "@") ~ statement }
 call_statement        = _{ fn_call ~ ";" }
 run_statement         = _{ run_call ~ ";" }
 send_statement         = _{ send_call ~ ";" }
@@ -79,7 +85,8 @@ domain_char = _{ ASCII_ALPHANUMERIC | "_" | "." | "-" }
 
 fn_call  = { object_identifier ~ tuple_expression }
 run_call = { RUN_KW ~ object_identifier ~ tuple_expression }
-send_call = { SEND_KW ~ object_identifier ~ tuple_expression }
+send_call = { SEND_KW ~ object_identifier ~ wild_card_suffix? ~ tuple_expression }
+wild_card_suffix = { "." ~ "*" }
 channel_declaration = { 
     CHANNEL_KW ~ 
     object_identifier ~ 
@@ -126,6 +133,22 @@ receive_expression = { RECEIVE_KW ~ object_identifier? ~ pattern_list ~ ("=>" ~ 
 /// Expressions evaluate values based on arithmetic and logical operations, following standard precedence rules.
 expression = { binary_expression }
 
+/// ### LTL Expressions
+/// LTL expressions are used in the check block to define Linear Temporal Logic formulas.
+ltl_expression = { ltl_term ~ (ltl_binary_operator ~ ltl_term)* }
+ltl_binary_operator = _{ OR_OP | AND_OP | UNTIL_KW }
+
+ltl_term = { ltl_for_loop | ltl_unary_expression | ltl_if_expression | ltl_atom }
+
+ltl_if_expression = { IF_KW ~ ltl_expression ~ "{" ~ ltl_expression ~ "}" ~ (ELSE_KW ~ "{" ~ ltl_expression ~ "}")? }
+
+ltl_unary_expression = { ltl_unary_operator ~ ltl_term }
+ltl_unary_operator = _{ ALWAYS_KW | EVENTUALLY_KW | NOT_OP }
+
+ltl_atom = _{ "(" ~ ltl_expression ~ ")" | ltl_predicate }
+ltl_predicate = { expression }
+
+
 tuple_expression = {
  ("(" ~ ")") | ("(" ~ expression ~ ("," ~ expression)* ~ ")")
 }
@@ -133,9 +156,17 @@ range_expression = {
 	(expression ~ LIST_OP ~ expression)
 }
 
-primary_expression = _{ fn_call | literal | object_identifier | "(" ~ expression ~ ")" }
+if_expression = { IF_KW ~ expression ~ "{" ~ expression ~ ";"? ~ "}" ~ (ELSE_KW ~ "{" ~ expression ~ ";"? ~ "}")? }
+forall_expression = { FOR_KW ~ identifier ~ "in" ~ expression ~ "{" ~ expression ~ ";"? ~ "}" }
+exists_expression = { EXISTS_KW ~ identifier ~ "in" ~ expression ~ "{" ~ expression ~ ";"? ~ "}" }
 
-unary_expression = _{ unary_operator? ~ primary_expression }
+postfix_expression = { primary_expression ~ postfix_segment* }
+postfix_segment = { postfix_call | postfix_reaches }
+postfix_call = { "." ~ identifier ~ tuple_expression }
+postfix_reaches = { "." ~ REACHES_KW ~ "(" ~ identifier ~ ")" }
+primary_expression = _{ if_expression | forall_expression | exists_expression | fn_call | literal | object_identifier | "(" ~ expression ~ ")" }
+
+unary_expression = _{ unary_operator? ~ postfix_expression }
 unary_operator   =  { POS_OP | NEG_OP | NOT_OP }
 
 binary_expression   = _{ unary_expression ~ (binary_operator ~ unary_expression)* }
@@ -180,12 +211,15 @@ KEYWORDS = _{
   | CONST_KW
   | IF_KW
   | ELSE_KW
+  | EXISTS_KW
   | WHILE_KW
   | FN_KW
   | RETURN_KW
   | IMPORT_KW
   | AS_KW
   | PRIVATE_KW
+  | LABEL_KW
+  | REACHES_KW
   | BOOL
   | INT_TYPE
   | FLOAT_TYPE
@@ -210,11 +244,17 @@ CONST_KW = { "const" }
 
 IF_KW    = _{ "if" }
 ELSE_KW  = _{ "else" }
+EXISTS_KW = { "exists" }
 WHILE_KW = _{ "while" }
 FOR_KW = _{ "for" }
 LOOP_KW = _{ "loop" }
 BREAK_KW = { "break" }
 CONTINUE_KW = { "continue" }
+LABEL_KW = _{ "label" }
+REACHES_KW = { "reaches" }
+
+CHECK_KW = { "check" }
+UNTIL_KW = { "until" }
 
 SEND_KW = _{ "send" }
 RECEIVE_KW = _{ "receive" }
@@ -269,7 +309,7 @@ OR_ASSIGN_OP  = { "|=" }
 
 /// ### Datatypes
 /// Datatypes supported in Althread include boolean, integer, float, string, and void.
-datatype   = { BOOL_TYPE | INT_TYPE | FLOAT_TYPE | STR_TYPE | VOID_TYPE | LIST_TYPE | PROCESS_TYPE }
+datatype   = { BOOL_TYPE | INT_TYPE | FLOAT_TYPE | STR_TYPE | VOID_TYPE | LIST_TYPE | PROCESS_TYPE | TUPLE_TYPE }
 BOOL_TYPE  = { "bool" }
 INT_TYPE   = { "int" }
 FLOAT_TYPE = { "float" }
@@ -277,6 +317,7 @@ STR_TYPE   = { "string" }
 VOID_TYPE  = { "void" }
 PROCESS_TYPE = { "proc" ~ "(" ~ object_identifier ~ ")" }
 LIST_TYPE  = { "list" ~ "(" ~ datatype ~ ")" }
+TUPLE_TYPE = { "tuple" ~ "(" ~ datatype ~ ("," ~ datatype)* ~ ")" }
 
 /// ### Literals
 /// Include literals such as booleans, integers, floats, strings, and null.
@@ -290,12 +331,13 @@ NULL    = @{ NULL_KW }
 /// ### Identifiers
 /// Identifiers are used for naming variables, functions, and other constructs.
 identifier        = { IDENT }
-object_identifier = { IDENT ~ ("." ~ IDENT)* }
+object_identifier = { (IDENT | DOLLAR) ~ ("." ~ IDENT)* }
 
 reserved_keywords = { (KEYWORDS | datatype) ~ !IDENT_CHAR }
 
 IDENT      = @{ !reserved_keywords ~ ASCII_ALPHA ~ IDENT_CHAR* }
 IDENT_CHAR = _{ ASCII_ALPHANUMERIC | "_" }
+DOLLAR     = { "$" }
 
 /// ## Whitespace and Comments
 /// Whitespace and comments are ignored by the parser.

@@ -1,0 +1,52 @@
+// Example 12: Multiple properties on same system
+// Demonstrates checking several properties at once
+
+shared {
+    let Value: int = 0;
+    let PositiveCount: int = 0;
+    let NegativeCount: int = 0;
+}
+
+program Modifier() {
+    Value = Value + 5;
+    PositiveCount = PositiveCount + 1;
+    
+    Value = Value - 3;
+    
+    Value = Value + 2;
+    PositiveCount = PositiveCount + 1;
+}
+
+// Property 1: Value eventually positive
+check {
+    eventually (Value > 0);
+}
+
+// Property 2: Positive operations counted
+check {
+    eventually (PositiveCount > 0);
+}
+
+// Property 3: Final value is sum of operations
+check {
+    eventually (Value == 4);  // 5 - 3 + 2 = 4
+}
+
+// Property 4: Counters are non-negative
+check {
+    always (PositiveCount >= 0);
+}
+
+check {
+    always (NegativeCount >= 0);
+}
+
+// Property 5: Value changes monotonically upward overall
+// (This depends on specific execution)
+// check {
+//     always (Value >= 0)  // Would FAIL: value becomes -3 then 2
+// }
+
+main {
+    run Modifier();
+}

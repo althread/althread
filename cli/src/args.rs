@@ -80,6 +80,34 @@ pub struct CheckCommand {
     #[clap(flatten)]
     pub common: SharedArgs,
 
+    /// debug
+    #[clap(long)]
+    pub debug: bool,
+
+    /// Output negated LTL formulas
+    #[clap(long)]
+    pub show_negated: bool,
+
+    /// Output Büchi automatons (DOT format)
+    #[clap(long)]
+    pub show_automaton: bool,
+
+    /// Output Büchi automatons in text format
+    #[clap(long)]
+    pub show_automaton_text: bool,
+
+    /// Output state graph (DOT format)
+    #[clap(long)]
+    pub show_state_graph: bool,
+
+    /// Output search trace
+    #[clap(long)]
+    pub show_trace: bool,
+
+    /// Output all debug information
+    #[clap(long)]
+    pub show_all: bool,
+
     /// max number of states to explore
     #[clap(long, default_value_t = 100_000)]
     pub max_states: u64,

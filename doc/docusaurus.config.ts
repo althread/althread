@@ -108,7 +108,7 @@ const config: Config = {
       title: "Althread",
       logo: {
         alt: "Althread Logo",
-        src: "img/logo.svg",
+        src: "img/logo.png",
       },
       items: [
         {

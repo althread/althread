@@ -1,0 +1,17 @@
+shared {
+    let Tick: int = 0;
+}
+
+program TickOnce() {
+    atomic {
+        Tick = Tick + 1;
+    }
+}
+
+check {
+    always eventually (Tick > 1);
+}
+
+main {
+    run TickOnce();
+}

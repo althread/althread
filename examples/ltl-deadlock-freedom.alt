@@ -1,0 +1,49 @@
+// Example 10: Deadlock freedom
+// System should eventually make progress
+
+shared {
+    let Lock1: bool = false;
+    let Lock2: bool = false;
+    let Progress: int = 0;
+}
+
+program UseResources() {
+    // Acquire locks in consistent order (prevents deadlock)
+    Lock1 = true;
+    Lock2 = true;
+    
+    // Do work
+    Progress = Progress + 1;
+    
+    // Release locks
+    Lock2 = false;
+    Lock1 = false;
+}
+
+// These formulas PASS: system makes progress
+check {
+    eventually (Progress > 0);
+}
+
+check {
+    always (Progress >= 0);
+}
+
+// Locks are eventually released
+check {
+    always eventually (Lock1 == false && Lock2 == false);
+}
+
+// This would demonstrate deadlock if we had two processes
+// with inconsistent lock ordering
+// program DeadlockProne() {
+//     Lock2 = true;
+//     Lock1 = true;  // Opposite order!
+//     progress = progress + 1;
+//     lock1 = false;
+//     lock2 = false;
+// }
+
+main {
+    run UseResources();
+}

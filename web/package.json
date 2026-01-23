@@ -1,15 +1,15 @@
 {
-  "name": "solid-parcel-template",
-  "source": "app/index.html",
+  "name": "althread-web",
   "scripts": {
-    "dev": "parcel",
-    "start": "parcel --no-hmr",
-    "build": "parcel build",
+    "dev": "vite",
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "build-lezer": "lezer-generator lezer/althread.grammar -o lezer/parser.js",
     "build-wasm": "wasm-pack build --target web",
     "install-deps": "cargo install wasm-pack",
     "generate-examples": "node app/scripts/generate-examples.js",
-    "clean": "rm -rf dist && rm -rf .cache && rm -rf .parcel-cache"
+    "clean": "rm -rf dist"
   },
   "devDependencies": {
     "@babel/core": "^7.28.0",
@@ -28,17 +28,14 @@
     "babel-preset-solid": "^1.9.6",
     "buffer": "^6.0.3",
     "keycharm": "^0.4.0",
-    "parcel": "^2.15.4",
     "process": "^0.11.10",
     "solid-codemirror": "^2.3.1",
     "solid-js": "^1.9.7",
-    "solid-refresh": "0.7.5",
     "vis-data": "^7.1.10",
     "vis-network": "^9.1.13",
-    "vis-util": "^5.0.7"
-  },
-  "@parcel/resolver-default": {
-    "packageExports": true
+    "vis-util": "^5.0.7",
+    "vite": "^5.0.0",
+    "vite-plugin-solid": "^2.8.0"
   },
   "dependencies": {
     "@codemirror/lang-cpp": "^6.0.3",
@@ -53,5 +50,5 @@
     "jszip": "^3.10.1",
     "marked": "^15.0.12"
   },
-  "packageManager": "pnpm@9.15.4+sha512.b2dc20e2fc72b3e18848459b37359a32064663e5627a51e4c74b2c29dd8e8e0491483c3abb40789cfd578bf362fb6ba8261b05f0387d76792ed6e23ea3b1b6a0"
+  "packageManager": "pnpm@10.28.1"
 }

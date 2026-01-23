@@ -27,10 +27,35 @@ pub enum PrimaryExpression {
     Literal(Node<Literal>),
     Identifier(Node<ObjectIdentifier>),
     Expression(Box<Node<Expression>>),
+    Reaches(
+        Node<ObjectIdentifier>,
+        Option<Box<Node<Expression>>>,
+        Node<Identifier>,
+    ),
+    IfExpr {
+        condition: Box<Node<Expression>>,
+        then_expr: Box<Node<Expression>>,
+        else_expr: Option<Box<Node<Expression>>>,
+    },
+    ForAllExpr {
+        var: Node<Identifier>,
+        list: Box<Node<Expression>>,
+        body: Box<Node<Expression>>,
+    },
+    ExistsExpr {
+        var: Node<Identifier>,
+        list: Box<Node<Expression>>,
+        body: Box<Node<Expression>>,
+    },
 }
 
 impl PrimaryExpression {
     pub fn build(pair: Pair<Rule>, filepath: &str) -> AlthreadResult<Node<Self>> {
+        if pair.as_rule() == Rule::primary_expression {
+            let mut inner = pair.into_inner();
+            let inner_pair = inner.next().unwrap();
+            return Self::build(inner_pair, filepath);
+        }
         Ok(Node {
             pos: Pos {
                 line: pair.line_col().0,
@@ -42,7 +67,83 @@ impl PrimaryExpression {
             value: match pair.as_rule() {
                 Rule::literal => Self::Literal(Node::build(pair, filepath)?),
                 Rule::object_identifier => Self::Identifier(Node::build(pair, filepath)?),
+                Rule::IDENT => {
+                    let pos = Pos {
+                        line: pair.line_col().0,
+                        col: pair.line_col().1,
+                        start: pair.as_span().start(),
+                        end: pair.as_span().end(),
+                        file_path: filepath.to_string(),
+                    };
+                    let ident_node = Node {
+                        pos: pos.clone(),
+                        value: Identifier {
+                            value: pair.as_str().to_string(),
+                        },
+                    };
+                    Self::Identifier(Node {
+                        pos,
+                        value: ObjectIdentifier {
+                            parts: vec![ident_node],
+                        },
+                    })
+                }
                 Rule::expression => Self::Expression(Box::new(Node::build(pair, filepath)?)),
+                Rule::if_expression => {
+                    let mut inner = pair.into_inner();
+                    let condition = Box::new(Node::build(inner.next().unwrap(), filepath)?);
+                    let then_expr = Box::new(Node::build(inner.next().unwrap(), filepath)?);
+                    let else_expr = if let Some(else_pair) = inner.next() {
+                        Some(Box::new(Node::build(else_pair, filepath)?))
+                    } else {
+                        None
+                    };
+                    Self::IfExpr {
+                        condition,
+                        then_expr,
+                        else_expr,
+                    }
+                }
+                Rule::forall_expression => {
+                    let inner = pair.into_inner();
+                    let mut inner = inner.filter(|p| p.as_rule() != Rule::FOR_KW);
+                    let var_pair = inner.next().unwrap();
+                    let var = Node {
+                        pos: Pos {
+                            line: var_pair.line_col().0,
+                            col: var_pair.line_col().1,
+                            start: var_pair.as_span().start(),
+                            end: var_pair.as_span().end(),
+                            file_path: filepath.to_string(),
+                        },
+                        value: Identifier {
+                            value: var_pair.as_str().to_string(),
+                        },
+                    };
+                    let list = Box::new(Node::build(inner.next().unwrap(), filepath)?);
+                    let body = Box::new(Node::build(inner.next().unwrap(), filepath)?);
+                    Self::ForAllExpr { var, list, body }
+                }
+                Rule::exists_expression => {
+                    let inner = pair.into_inner();
+                    let mut inner = inner.filter(|p| p.as_rule() != Rule::EXISTS_KW);
+                    let var_pair = inner.next().unwrap();
+                    let var = Node {
+                        pos: Pos {
+                            line: var_pair.line_col().0,
+                            col: var_pair.line_col().1,
+                            start: var_pair.as_span().start(),
+                            end: var_pair.as_span().end(),
+                            file_path: filepath.to_string(),
+                        },
+                        value: Identifier {
+                            value: var_pair.as_str().to_string(),
+                        },
+                    };
+                    let list = Box::new(Node::build(inner.next().unwrap(), filepath)?);
+                    let body = Box::new(Node::build(inner.next().unwrap(), filepath)?);
+                    Self::ExistsExpr { var, list, body }
+                }
                 _ => return Err(no_rule!(pair, "PrimaryExpression", filepath)),
             },
         })
@@ -64,6 +165,41 @@ impl PrimaryExpression {
                 );
             }
             Self::Expression(node) => node.value.add_dependencies(dependencies),
+            Self::Reaches(proc_ident, index_expr, _) => {
+                dependencies.variables.insert(
+                    proc_ident
+                        .value
+                        .parts
+                        .iter()
+                        .map(|p| p.value.value.as_str())
+                        .collect::<Vec<_>>()
+                        .join("."),
+                );
+                if let Some(expr) = index_expr {
+                    expr.value.add_dependencies(dependencies);
+                }
+            }
+            Self::IfExpr {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
+                condition.value.add_dependencies(dependencies);
+                then_expr.value.add_dependencies(dependencies);
+                if let Some(else_expr) = else_expr {
+                    else_expr.value.add_dependencies(dependencies);
+                }
+            }
+            Self::ForAllExpr { var, list, body } => {
+                list.value.add_dependencies(dependencies);
+                body.value.add_dependencies(dependencies);
+                dependencies.variables.remove(&var.value.value);
+            }
+            Self::ExistsExpr { var, list, body } => {
+                list.value.add_dependencies(dependencies);
+                body.value.add_dependencies(dependencies);
+                dependencies.variables.remove(&var.value.value);
+            }
         }
     }
     pub fn get_vars(&self, vars: &mut HashSet<String>) {
@@ -80,6 +216,41 @@ impl PrimaryExpression {
                 );
             }
             Self::Expression(node) => node.value.get_vars(vars),
+            Self::Reaches(proc_ident, index_expr, _) => {
+                vars.insert(
+                    proc_ident
+                        .value
+                        .parts
+                        .iter()
+                        .map(|p| p.value.value.as_str())
+                        .collect::<Vec<_>>()
+                        .join("."),
+                );
+                if let Some(expr) = index_expr {
+                    expr.value.get_vars(vars);
+                }
+            }
+            Self::IfExpr {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
+                condition.value.get_vars(vars);
+                then_expr.value.get_vars(vars);
+                if let Some(else_expr) = else_expr {
+                    else_expr.value.get_vars(vars);
+                }
+            }
+            Self::ForAllExpr { var, list, body } => {
+                list.value.get_vars(vars);
+                body.value.get_vars(vars);
+                vars.remove(&var.value.value);
+            }
+            Self::ExistsExpr { var, list, body } => {
+                list.value.get_vars(vars);
+                body.value.get_vars(vars);
+                vars.remove(&var.value.value);
+            }
         }
     }
 }
@@ -141,6 +312,22 @@ impl LocalPrimaryExpressionNode {
             PrimaryExpression::Expression(node) => {
                 let e = LocalExpressionNode::from_expression(&node.as_ref().value, program_stack)?;
                 LocalPrimaryExpressionNode::Expression(Box::new(e))
+            }
+            PrimaryExpression::Reaches(_, _, _) => {
+                return Err(AlthreadError::new(
+                    ErrorType::ExpressionError,
+                    None,
+                    "'reaches' cannot be used as a local primary expression".to_string(),
+                ))
+            }
+            PrimaryExpression::IfExpr { .. }
+            | PrimaryExpression::ForAllExpr { .. }
+            | PrimaryExpression::ExistsExpr { .. } => {
+                return Err(AlthreadError::new(
+                    ErrorType::ExpressionError,
+                    None,
+                    "This expression is only supported in always/eventually blocks".to_string(),
+                ))
             }
         })
     }
@@ -206,6 +393,37 @@ impl AstDisplay for PrimaryExpression {
                 );
             }
             PrimaryExpression::Expression(node) => node.ast_fmt(f, prefix),
+            PrimaryExpression::Reaches(proc_ident, index_expr, label_ident) => {
+                let target = proc_ident
+                    .value
+                    .parts
+                    .iter()
+                    .map(|p| p.value.value.as_str())
+                    .collect::<Vec<_>>()
+                    .join(".");
+                if index_expr.is_some() {
+                    writeln!(
+                        f,
+                        "{prefix}reaches: {}.at(...) .reaches({})",
+                        target, label_ident.value.value
+                    )
+                } else {
+                    writeln!(
+                        f,
+                        "{prefix}reaches: {}.reaches({})",
+                        target, label_ident.value.value
+                    )
+                }
+            }
+            PrimaryExpression::IfExpr { .. } => {
+                writeln!(f, "{prefix}if_expr")
+            }
+            PrimaryExpression::ForAllExpr { .. } => {
+                writeln!(f, "{prefix}forall_expr")
+            }
+            PrimaryExpression::ExistsExpr { .. } => {
+                writeln!(f, "{prefix}exists_expr")
+            }
         }
     }
 }

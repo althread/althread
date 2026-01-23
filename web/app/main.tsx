@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 import { render } from 'solid-js/web';
 import './main.css';
 import { HashRouter, Route, useNavigate } from "@solidjs/router";

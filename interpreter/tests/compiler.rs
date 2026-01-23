@@ -179,6 +179,74 @@ main {
 }
 
 #[test]
+fn test_condition_quantifiers_and_if_expr() {
+    let input = r#"
+shared {
+    let Xs = [1..4];
+    let Flag = true;
+}
+
+always {
+    for x in Xs { x > 0 } && if Flag { exists y in Xs { y == 2 } } else { false };
+}
+
+main {
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    assert_eq!(compiled_project.always_conditions.len(), 1);
+
+    let (vars, _, expr, _) = &compiled_project.always_conditions[0];
+
+    assert!(vars.contains("Xs"));
+    assert!(vars.contains("Flag"));
+    assert!(!vars.contains("x"));
+    assert!(!vars.contains("y"));
+
+    let expr = match expr {
+        LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Expression(inner)) => {
+            inner.as_ref()
+        }
+        _ => expr,
+    };
+
+    match expr {
+        LocalExpressionNode::Binary(bin) => {
+            assert_eq!(bin.operator, BinaryOperator::And);
+            assert!(matches!(&*bin.left, LocalExpressionNode::ForAll(_)));
+            match &*bin.right {
+                LocalExpressionNode::IfExpr(if_node) => {
+                    assert!(matches!(
+                        &*if_node.condition,
+                        LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(_))
+                    ));
+                    assert!(matches!(
+                        &*if_node.then_expr,
+                        LocalExpressionNode::Exists(_)
+                    ));
+                    assert!(matches!(
+                        if_node.else_expr.as_ref().unwrap().as_ref(),
+                        LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Literal(_))
+                    ));
+                }
+                _ => panic!("Expected if-expression on right side of '&&'"),
+            }
+        }
+        _ => panic!("Expected binary '&&' expression"),
+    }
+}
+
+#[test]
 fn test_compiler_while() {
     let input = r#"
 main {
@@ -223,7 +291,7 @@ main {
                 line: 4,
                 col: 11,
                 start: 33,
-                end: 38,
+                end: 39,
                 file_path: "".to_string(),
             }),
             control: InstructionType::Expression(LocalExpressionNode::Binary(
@@ -245,7 +313,7 @@ main {
                 line: 4,
                 col: 11,
                 start: 33,
-                end: 38,
+                end: 39,
                 file_path: "".to_string(),
             }),
             control: InstructionType::JumpIf {
@@ -294,7 +362,7 @@ main {
                 line: 6,
                 col: 12,
                 start: 71,
-                end: 77,
+                end: 78,
                 file_path: "".to_string(),
             }),
             control: InstructionType::Expression(LocalExpressionNode::Binary(
@@ -316,7 +384,7 @@ main {
                 line: 6,
                 col: 12,
                 start: 71,
-                end: 77,
+                end: 78,
                 file_path: "".to_string(),
             }),
             control: InstructionType::JumpIf {
@@ -381,7 +449,6 @@ main {
             control: InstructionType::FnCall {
                 name: "print".to_string(),
                 unstack_len: 1,
-                variable_idx: None,
                 arguments: None,
             },
         },

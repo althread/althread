@@ -4,6 +4,8 @@
   member,
   newArgs,
   call,
+  ltl_unary,
+  unary,
   times @left,
   plus @left,
   rel @left,
@@ -12,7 +14,9 @@
   wait_block,
   forIn,
   else,
-  range @left
+  range @left,
+  ltl_binary @left,
+  ltl_base,
   statement @cut
 }
 
@@ -32,11 +36,11 @@ project_block {
   ImportBlock
 }
 
-GlobalBlock  { kw<"shared"> "{" shared_declaration* "}" }
-MainBlock    { PrivateDirective? kw<"main"> code_block }
-ProgramBlock { PrivateDirective?kw<"program"> ProgName ArgList code_block }
-ConditionBlock { Condition expression_block }
-FunctionBlock { PrivateDirective? kw<"fn"> FnName ArgList ReturnType code_block }
+GlobalBlock  { kw<"shared"> "{" SharedDeclaration* "}" }
+MainBlock    { PrivateDirective? kw<"main"> CodeBlock }
+ProgramBlock { PrivateDirective?kw<"program"> ProgName "(" commaSep<Type> ")" CodeBlock }
+ConditionBlock { Condition FormulaBlock }
+FunctionBlock { PrivateDirective? kw<"fn"> FnName "(" commaSep<Type> ")" ReturnType CodeBlock }
 ImportBlock { kw<"import"> "[" ImportList "]" }
 
 ImportList { ImportItem ("," ImportItem)* ","? }
@@ -48,17 +52,45 @@ ReturnType {"->" Type}
 
 Condition {
   kw<"always"> |
-  kw<"eventually">
+  kw<"check"> |
+  kw<"never">
 }
 
-code_block {
+CodeBlock {
   "{" statement* "}"
 }
-expression_block {
-  "{" (expression ";")* "}"
+FormulaBlock {
+  "{" (LtlExpression semi)* "}"
 }
 
-shared_declaration { 
+LtlExpression {
+  LtlBinaryExpression |
+  LtlUnaryExpression |
+  LtlIfExpression |
+  LtlForExpression |
+  ParenthesizedLtlExpression |
+  !ltl_base expression
+}
+
+LtlBinaryExpression {
+  LtlExpression !ltl_binary (LogicOp<"&&" | "||"> | kw<"until">) LtlExpression
+}
+
+LtlUnaryExpression {
+  !ltl_unary (kw<"always"> | kw<"eventually"> | LogicOp<"!">) LtlExpression
+}
+
+LtlIfExpression {
+  kw<"if"> LtlExpression "{" LtlExpression "}" (!else kw<"else"> "{" LtlExpression "}")?
+}
+
+LtlForExpression {
+  kw<"for"> LocalVariableName kw<"in"> ListExpression "{" LtlExpression "}"
+}
+
+ParenthesizedLtlExpression { "(" LtlExpression ")" }
+
+SharedDeclaration { 
   (kw<"let"> | kw<"const">)
   SharedVariableName (":" Type)? ("=" expression)? semi }
 
@@ -68,20 +100,20 @@ statement {
   WhileStatement |
   ForStatement |
   IfStatement |
-  run_statement |
+  RunStatement |
   LoopStatement |
   AtomicStatement |
-  send_statement |
-  wait_statement |
-  code_block |
-  call_statement | 
-  assignment_statement |
-  return_statement |
-  break_loop_statement
+  SendStatement |
+  WaitStatement |
+  CodeBlock |
+  CallStatement | 
+  AssignmentStatement |
+  ReturnStatement |
+  BreakLoopStatement
 }
 
 
-assignment_statement {
+AssignmentStatement {
   AssignmentExpression semi
 }
 AssignmentExpression {
@@ -90,13 +122,13 @@ AssignmentExpression {
 Variable { LocalVariableName | SharedVariableName | kw<"self"> }
 
 
-//!return_statement
+//!ReturnStatement
 
-return_statement { kw<"return"> expression? semi}
+ReturnStatement { kw<"return"> expression? semi}
 
 
-//!break_loop_statement
-break_loop_statement { (kw<"break"> | kw<"continue">) identifier? semi}
+//!BreakLoopStatement
+BreakLoopStatement { (kw<"break"> | kw<"continue">) identifier? semi}
 
 //!assign
 
@@ -116,12 +148,12 @@ ChannelDeclarationStatement {
 //!whilestatement
 
 WhileStatement {
-  kw<"while"> expression code_block
+  kw<"while"> expression CodeBlock
 }
 //!ForStatement
 
 ForStatement {
-  kw<"for"> LocalVariableName kw<"in"> ListExpression code_block
+  kw<"for"> LocalVariableName kw<"in"> ListExpression CodeBlock
 }
 
 ListExpression  { RangeExpression }
@@ -139,32 +171,32 @@ LoopStatement {
 //!AtomicStatement
 
 AtomicStatement {
-  (kw<"atomic"> | LogicOp<"!">) statement
+  (kw<"atomic"> | LogicOp<"@">) statement
 }
 
 
 //!ifstatement
 
 IfStatement {
-  kw<"if"> expression code_block (!else kw<"else"> code_block)?
+  kw<"if"> expression CodeBlock (!else kw<"else"> CodeBlock)?
 }
 
-//!run_statement
+//!RunStatement
 
-run_statement {
+RunStatement {
    RunExpression ";"
 }
 RunExpression { kw<"run"> (ProgName | MemberExpression) ArgList }
 
-//!send_statement
+//!SendStatement
 
-send_statement {
+SendStatement {
    SendExpression ";"
 }
 SendExpression { kw<"send"> object_identifier ArgList }
 
-//!wait_statement
-wait_statement  { kw<"await"> (
+//!WaitStatement
+WaitStatement  { kw<"await"> (
       WaitingBlock 
     | WaitingBlockCase) }
 
@@ -184,9 +216,9 @@ pattern_list { "(" pattern ("," pattern)* ")" }
 
 pattern { LocalVariableName | Literal }
 
-//!call_statement
+//!CallStatement
 
-call_statement {
+CallStatement {
    CallExpression ";"
 }
 CallExpression {
@@ -228,7 +260,7 @@ ArgList { "(" commaSep<"..."? expression> ")" }
 //!operators
 
 UnaryExpression {
-  (kw<"void"> | kw<"typeof"> | kw<"delete"> | LogicOp<"!"> | ArithOp<"+" | "-">)
+  !unary (kw<"void"> | kw<"typeof"> | kw<"delete"> | LogicOp<"!"> | ArithOp<"+" | "-">)
   expression
 }
 
@@ -277,6 +309,8 @@ identifier { non_global_identifer | global_identifer }
 LocalVariableName { non_global_identifer }
 SharedVariableName { global_identifer }
 
+Type { TypeToken ("(" commaSep<Type> ")")? }
+
 @tokens {
 
   ImportSlash { "/" }
@@ -303,7 +337,7 @@ SharedVariableName { global_identifer }
 
   @precedence { Number "." }
 
-  Type { "bool" | "int" | "float" | "string" }
+  TypeToken { "bool" | "int" | "float" | "string" | "proc" | "list" | "tuple" }
 
 //!operatorTokens
 

@@ -121,11 +121,12 @@ impl InstructionBuilder for Node<ForControl> {
         // add the instruction to check if the index is greater than the length of the list
         builder.instructions.push(Instruction {
             pos: Some(self.value.identifier.pos.clone()),
-            control: InstructionType::FnCall {
+            control: InstructionType::MethodCall {
                 name: "len".to_string(),
+                receiver_idx: 2,
                 unstack_len: 0,
-                variable_idx: Some(2),
-                arguments: Some(vec![0]), // if the arguments are scattered in the stack
+                drop_receiver: false,
+                arguments: Some(vec![]), // no args for len()
             },
         });
         builder.instructions.push(Instruction {
@@ -155,10 +156,11 @@ impl InstructionBuilder for Node<ForControl> {
         // add the instruction that the variable takes the value of the element in the list at the position of the index
         builder.instructions.push(Instruction {
             pos: Some(self.value.identifier.pos.clone()),
-            control: InstructionType::FnCall {
+            control: InstructionType::MethodCall {
                 name: "at".to_string(),
+                receiver_idx: 2,
                 unstack_len: 0,
-                variable_idx: Some(2),
+                drop_receiver: false,
                 arguments: Some(vec![0]), // if the arguments are scattered in the stack
             },
         });

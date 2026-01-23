@@ -8,7 +8,7 @@ export function setupNodeClickZoom(network: Network, onNodeClick?: (nodeId: stri
         onNodeClick(nodeId);
       }
       if (network) {
-        network.selectNodes([nodeId]);
+        network.setSelection({ nodes: [nodeId], edges: [] });
         network.focus(nodeId, {
           scale: 0.75,
           animation: {
@@ -17,10 +17,16 @@ export function setupNodeClickZoom(network: Network, onNodeClick?: (nodeId: stri
           }
         });
       }
+    } else if (params.edges && params.edges.length > 0) {
+        // If clicking on an edge, don't deselect the node
+        return;
     } else {
       // Deselect if clicking on empty space
       if (onNodeClick) {
         onNodeClick(null as any);
+      }
+      if (network) {
+        network.setSelection({ nodes: [], edges: [] });
       }
     }
   });

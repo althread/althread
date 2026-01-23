@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 import vis from "vis-network/dist/vis-network.esm";
 import { createSignal, onCleanup, onMount } from "solid-js";
 import {nodeToString} from "./Node";
@@ -9,7 +8,7 @@ import { useGraphMaximizeHotkeys } from "@hooks/useGraphMaximizeHotkeys";
 import MetadataDisplay from "./MetadataDisplay";
 import { exportStatesToCSV } from "./exportToCSV";
 
-export const rendervmStates = (vm_states, editor?: any) => {
+export const rendervmStates = (vm_states, editor?: any, stepLines?: number[][]) => {
     console.log(vm_states);
     let container: HTMLDivElement | undefined;
     let network: vis.Network | null = null;
@@ -46,7 +45,12 @@ export const rendervmStates = (vm_states, editor?: any) => {
                 const edgeId = `edge_${i}_to_${i+1}`;
                 const label = `Step ${i + 1}`;
                 // Check if vm has transition info (instruction, lines, etc.)
-                const lines = vm.last_instruction?.lines || vm.lines;
+                let lines = vm.last_instruction?.lines || vm.lines;
+                
+                // If we have separate stepLines, use them (i corresponds to the step producing i+1)
+                if (!lines && stepLines && stepLines[i]) {
+                    lines = stepLines[i];
+                }
                 
                 edges.push({
                     id: edgeId,

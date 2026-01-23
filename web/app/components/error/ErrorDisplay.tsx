@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 import type { FormattedError } from "@utils/error";
 import './ErrorDisplay.css';
 

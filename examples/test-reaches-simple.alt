@@ -1,0 +1,14 @@
+program A() {
+    label START;
+    let x = 1;
+    label MIDDLE;
+    let y = 2;
+}
+
+main {
+    run A();
+}
+
+check {
+    always (if $.procs.A.at(0).reaches(MIDDLE) { eventually $.procs.A.at(0).reaches(START) });
+}

@@ -24,8 +24,15 @@ use althread::{ast::Ast, checker, module_resolver::StandardFileSystem};
 use crate::package::{DependencySpec, Package};
 
 fn main() {
-    env_logger::init();
     let cli_args = CliArguments::parse();
+    let enable_debug = cli_args.debug > 0
+        || matches!(&cli_args.command, Command::Check(cmd) if cmd.debug)
+        || matches!(&cli_args.command, Command::Run(cmd) if cmd.debug);
+
+    if enable_debug && var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", "debug");
+    }
+    env_logger::init();
 
     match &cli_args.command {
         Command::Compile(command) => compile_command(&command.clone()),
@@ -85,6 +92,8 @@ pub fn compile_command(cli_args: &CompileCommand) {
 }
 
 pub fn check_command(cli_args: &CheckCommand) {
+    use althread::checker::ltl::{automaton::BuchiAutomaton, compiled::CompiledLtlExpression, debug};
+
     // Read file
     let (source, path) = match cli_args.common.input.clone() {
         args::Input::Stdin => {
@@ -123,11 +132,58 @@ pub fn check_command(cli_args: &CheckCommand) {
             exit(1);
         });
 
+    // LTL Debug output
+    let show_all = cli_args.show_all;
+    
+    if !compiled_project.compiled_ltl_formulas.is_empty() {
+        // Show negated formulas if requested
+        if show_all || cli_args.show_negated {
+            println!("{}", debug::generate_negated_formulas_report(&compiled_project.compiled_ltl_formulas));
+        }
+
+        // Build and show automatons if requested
+        if show_all || cli_args.show_automaton || cli_args.show_automaton_text {
+            let automatons: Vec<BuchiAutomaton> = compiled_project
+                .compiled_ltl_formulas
+                .iter()
+                .map(|formula| match formula {
+                    CompiledLtlExpression::ForLoop { body, .. }
+                    | CompiledLtlExpression::Exists { body, .. } => {
+                        BuchiAutomaton::new(body.as_ref().clone())
+                    }
+                    _ => BuchiAutomaton::new(formula.clone()),
+                })
+                .collect();
+
+            if show_all || cli_args.show_automaton_text {
+                println!("{}", debug::generate_automaton_report(
+                    &compiled_project.compiled_ltl_formulas,
+                    &automatons,
+                ));
+            }
+
+            if show_all || cli_args.show_automaton {
+                for (i, automaton) in automatons.iter().enumerate() {
+                    println!("--- DOT for Automaton #{} ---", i + 1);
+                    println!("{}", debug::automaton_to_dot(automaton, i));
+                }
+            }
+        }
+    }
+
     let checked = checker::check_program(&compiled_project, Some(cli_args.max_states as usize))
         .unwrap_or_else(|e| {
             e.report(&input_map);
             exit(1);
         });
+
+    // Show state graph if requested
+    if show_all || cli_args.show_state_graph {
+        println!("=== State Graph Summary ===");
+        println!("Total states: {}", checked.1.nodes.len());
+        println!("Exhaustive: {}", checked.1.exhaustive);
+        // More detailed state graph could be output as DOT here
+    }
 
     if checked.0.is_empty() {
         if !checked.1.exhaustive {
@@ -151,12 +207,11 @@ pub fn check_command(cli_args: &CheckCommand) {
         for link in checked.0.iter() {
             println!(
                 "{}",
-                format!("-- {}#{} --", link.name, link.pid)
-                    .style(if link.pid == 0 {
-                        MAIN_STYLE
-                    } else {
-                        PROCESS_PALETTE[(link.pid.saturating_sub(1)) % PROCESS_PALETTE.len()]
-                    })
+                format!("-- {}#{} --", link.name, link.pid).style(if link.pid == 0 {
+                    MAIN_STYLE
+                } else {
+                    PROCESS_PALETTE[(link.pid.saturating_sub(1)) % PROCESS_PALETTE.len()]
+                })
             );
             for line_num in &link.lines {
                 if let Some(line) = source.lines().nth(line_num.saturating_sub(1)) {
@@ -170,9 +225,10 @@ pub fn check_command(cli_args: &CheckCommand) {
     println!("  States explored: {}", checked.1.nodes.len());
     let max_depth = checked.1.nodes.values().map(|n| n.level).max().unwrap_or(0);
     println!("  Maximum depth:  {}", max_depth);
-    
+
     if !checked.0.is_empty() {
         println!("  Violation path: {} steps", checked.0.len());
+        exit(1);
     }
 }
 
@@ -222,7 +278,10 @@ pub fn run_interactive(
                 let mut preview = None;
                 for action in actions {
                     if let althread::vm::GlobalAction::Deliver(delivery_info) = action {
-                        preview = Some(format!("deliver {} -> {}", delivery_info.channel_name, delivery_info.message));
+                        preview = Some(format!(
+                            "deliver {} -> {}",
+                            delivery_info.channel_name, delivery_info.message
+                        ));
                         break;
                     }
                 }
@@ -271,7 +330,7 @@ pub fn run_interactive(
             }
         }
         let (_name, _pid, _insts, actions, nvm) = next_states.get(selected as usize).unwrap();
-        
+
         for action in actions {
             if let althread::vm::GlobalAction::Print(msg) = action {
                 println!("{}", msg);

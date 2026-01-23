@@ -7,7 +7,9 @@ export const uiHighlightStyle = HighlightStyle.define([
     { tag: t.content, color: '#abb2bf' },
 
     // Keywords
-    { tag: [t.keyword, t.controlKeyword, t.definitionKeyword, t.moduleKeyword, t.operatorKeyword], color: '#c678dd' },
+    { tag: [t.keyword, t.controlKeyword, t.definitionKeyword, t.operatorKeyword, t.modifier], color: '#c678dd' },
+    { tag: [t.moduleKeyword], color: '#c678dd', fontWeight: 'bold' },
+    { tag: [t.special(t.keyword)], color: '#c678dd', fontStyle: 'italic' },
     
     // Literals: strings, numbers, booleans
     { tag: [t.string, t.special(t.string)], color: '#98c379' },

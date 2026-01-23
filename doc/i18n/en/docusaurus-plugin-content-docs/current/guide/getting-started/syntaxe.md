@@ -29,7 +29,7 @@ main {
 
 A project is structured in several blocks, which can correspond to 3 types of elements:
 - **Global variable declaration**: `shared { ... }`
-- **Condition verification**: `always { ... }`, `never { ... }` or `eventually { ... }`
+- **Condition verification**: `always { ... }` or `check { ... }`
 - **Program definition**: `program A() { ... }` or `main { ... }`
 
 :::note

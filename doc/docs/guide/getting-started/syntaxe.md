@@ -29,7 +29,7 @@ main {
 
 Un projet est structuré en plusieurs blocs, qui peuvent correspondre à 3 types d'éléments :
 - **Déclaration de variables globales** : `shared { ... }`
-- **Vérification de conditions** : `always { ... }`, `never { ... }` ou `eventually { ... }`
+- **Vérification de conditions** : `always { ... }` ou `check { ... }`
 - **Définition de programme** : `program A() { ... }` ou `main { ... }`
 
 :::note

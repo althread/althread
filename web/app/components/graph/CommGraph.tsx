@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 import vis from "vis-network/dist/vis-network.esm";
 import { createSignal, onCleanup, createEffect, Show } from "solid-js"
 import { literal, Node} from "./Node";
@@ -145,22 +144,20 @@ export const printCommGrapEventList = (eventl: any) => {
   }
 }
 
-const matchedSendNodeIds = new Set<string>();
-
-const searchSenderNode = (size, graphNodes, receivingEvent, msgNum, broadcast) => {
+const searchSenderNode = (size, graphNodes, receivingEvent, msgNum, broadcast, matchedIds: Set<string>) => {
   //searches for the sending event corresponding to the receiving event
   let suite = "";
   (broadcast) ? suite = "B" : suite = receivingEvent.receiver;
   let str = "p" + receivingEvent.sender + "_send" + "_to" + suite + "_" + msgNum;
   let sender_node = graphNodes.get(str);
 
-  let number = size;
+  let number = Infinity;
   graphNodes.forEach((node) => {
     if (node.event && node.event.evt_type === 115
         && node.event.sender === receivingEvent.sender
         && node.event.receiver === receivingEvent.receiver
 
-        && !matchedSendNodeIds.has(node.id) // Check if the sender node has already been matched
+        && !matchedIds.has(node.id) // Check if the sender node has already been matched
     ) {
       if (number > node.event.number) {
         number = node.event.number; // Find the smallest number for the sender node
@@ -170,7 +167,7 @@ const searchSenderNode = (size, graphNodes, receivingEvent, msgNum, broadcast) =
   });
 
   if (sender_node){
-    matchedSendNodeIds.add(sender_node.id); // Mark this sender node as matched
+    matchedIds.add(sender_node.id); // Mark this sender node as matched
   }
   return sender_node;
   
@@ -178,7 +175,7 @@ const searchSenderNode = (size, graphNodes, receivingEvent, msgNum, broadcast) =
 
 
 
-export const renderMessageFlowGraph = (commGraphData, vm_states) => {
+export const renderMessageFlowGraph = (commGraphData, vm_states, editor?: any) => {
   //returns div element to display the message flow graph and the vm states popup on click
   //prog_list = array of program names (strings)
   //commGraphData = array of communication events
@@ -202,7 +199,8 @@ export const renderMessageFlowGraph = (commGraphData, vm_states) => {
   createEffect(() => {
 
     // Clear matchedSendNodeIds for each new graph
-    matchedSendNodeIds.clear();
+    // matchedSendNodeIds.clear();
+    const matchedSendNodeIds = new Set<string>();
 
     const nodes= new vis.DataSet();
     const edges = new vis.DataSet();
@@ -212,10 +210,25 @@ export const renderMessageFlowGraph = (commGraphData, vm_states) => {
     // extract processes name to make one line per process
     commGraphData.forEach((event: MessageFlowEvent) => {
       const evt_type = String.fromCharCode(event.evt_type);
+      
+      const getProcessName = (pid: number) => {
+        if (!event.vm_state || !event.vm_state.locals) return `P${pid}`;
+        const prog = event.vm_state.locals.find((p: any) => p.pid === pid);
+        return prog ? prog.name : `P${pid}`;
+      };
+
       if (evt_type === 's') {
         processes.set(event.sender, event.actor_prog_name);
+        // Ensure receiver is also created if it's a unicast send
+        if (event.receiver !== undefined && !processes.has(event.receiver)) {
+            processes.set(event.receiver, getProcessName(event.receiver));
+        }
       } else {
         processes.set(event.receiver, event.actor_prog_name);
+        // Ensure sender is also created
+        if (event.sender !== undefined && !processes.has(event.sender)) {
+            processes.set(event.sender, getProcessName(event.sender));
+        }
       }
     });
 
@@ -299,12 +312,13 @@ export const renderMessageFlowGraph = (commGraphData, vm_states) => {
       let evt_type = node.event?.evt_type !== undefined ? String.fromCharCode(node.event.evt_type) : "";
       
       if ((evt_type) === 'r'){
-        let sender = searchSenderNode(commGraphData.length, nodes, node.event, node.event.number, node.broadcast);
+        let sender = searchSenderNode(commGraphData.length, nodes, node.event, node.event.number, node.broadcast, matchedSendNodeIds);
         if (sender){
           edges.add({
             from: sender.id,
             to: node.id,
             label: node.event?.message,
+            lines: node.event?.lines,
             font:{
               size: 20,
               color: "white",
@@ -363,6 +377,16 @@ export const renderMessageFlowGraph = (commGraphData, vm_states) => {
           previous_node_colour = node.color;
           nodes.update({id: node_id, color: "#0080ff"});
           
+          // Also highlight lines if available
+          if (node.event && node.event.lines && editor && editor.highlightLines) {
+            editor.highlightLines(node.event.lines);
+          }
+        }
+      } else if (event.edges.length > 0) {
+        const edgeId = event.edges[0];
+        const edge: any = edges.get(edgeId);
+        if (edge && edge.lines && editor && editor.highlightLines) {
+          editor.highlightLines(edge.lines);
         }
       } else {
           setPopupVisible(false);

@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 import vis from "vis-network/dist/vis-network.esm";
 import { createEffect, onCleanup, createSignal } from "solid-js";
 import GraphToolbar from "./GraphToolbar";
@@ -8,13 +7,33 @@ import { useGraphMaximizeHotkeys } from "@hooks/useGraphMaximizeHotkeys";
 import MetadataDisplay from "./MetadataDisplay";
 import { exportStatesToCSV } from "./exportToCSV";
 
-export default (props /*: GraphProps & { theme?: 'light' | 'dark' } */) => {
+interface GraphProps {
+    nodes: any[];
+    edges: any[];
+    vm_states?: any[];
+    setLoadingAction: (action: string | null) => void;
+    theme?: 'light' | 'dark';
+    onEdgeClick?: (edgeId: string, edgeData: any) => void;
+    onNodeSelect?: (node: any | null) => void;
+}
+
+export default (props: GraphProps) => {
     let container: HTMLDivElement | undefined;
     let network: vis.Network | null = null;
     const [maximized, setMaximized] = createSignal(false);
     const [showDetails, setDetails] = createSignal(false);
     const [selectedNodeContent, setSelectedNodeContent] = createSignal<string | null>(null);
-    const [selectedEdge, setSelectedEdge] = createSignal<string | null>(null);
+    const resolveNodeState = (node: any, originalNode: any) => {
+        return (
+            node?.rawState ??
+            originalNode?.rawState ??
+            node?.state ??
+            node?.vm_state ??
+            originalNode?.state ??
+            originalNode?.vm_state ??
+            null
+        );
+    };
 
     createEffect(() => {
         if (!container) {
@@ -37,13 +56,25 @@ export default (props /*: GraphProps & { theme?: 'light' | 'dark' } */) => {
         setupNodeClickZoom(network, (nodeId) => {
             if (nodeId === null) {
                 setSelectedNodeContent(null);
+                if (props.onNodeSelect) props.onNodeSelect(null);
                 return;
             }
             const node = nodes.get(nodeId);
-            if (node && node.fullLabel) {
-                setSelectedNodeContent(node.fullLabel);
-            } else {
+            const originalNode = (props.nodes || []).find((n: any) => String(n.id) === String(nodeId));
+            if (!node && !originalNode) {
                 setSelectedNodeContent(null);
+                if (props.onNodeSelect) props.onNodeSelect(null);
+                return;
+            }
+
+            const fullLabel = node?.fullLabel ?? originalNode?.fullLabel;
+            const rawState = resolveNodeState(node, originalNode);
+
+            if (fullLabel) {
+                setSelectedNodeContent(fullLabel);
+            }
+            if (props.onNodeSelect) {
+                props.onNodeSelect(rawState || null);
             }
         });
         
@@ -65,8 +96,6 @@ export default (props /*: GraphProps & { theme?: 'light' | 'dark' } */) => {
                             strokeColor: '#000'
                         } 
                     });
-                    setSelectedEdge(edgeId);
-                    
                     // Call the onEdgeClick callback if provided
                     if (props.onEdgeClick) {
                         props.onEdgeClick(edgeId, edge);
@@ -83,7 +112,6 @@ export default (props /*: GraphProps & { theme?: 'light' | 'dark' } */) => {
                     id: edgeId, 
                     font: { size: 0 } 
                 });
-                setSelectedEdge(null);
             }
         });
 
@@ -120,7 +148,7 @@ export default (props /*: GraphProps & { theme?: 'light' | 'dark' } */) => {
           style="width: 100%; height: 100%;"
         />
 
-        {selectedNodeContent() && (
+        {!props.onNodeSelect && selectedNodeContent() && (
             <div class="node-details-overlay" style="position: absolute; top: 10px; right: 10px; background: #1e1e1e; color: #ffffff; padding: 10px; border: 1px solid #454545; border-radius: 5px; max-width: 400px; max-height: 80%; overflow: auto; white-space: pre-wrap; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                     <h3 style="margin: 0;">Node State</h3>

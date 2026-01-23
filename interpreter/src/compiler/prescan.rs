@@ -6,7 +6,7 @@ use crate::{
         block::Block,
         node::Node,
         statement::{
-            assignment::{Assignment},
+            assignment::Assignment,
             channel_declaration::ChannelDeclaration,
             expression::{primary_expression::PrimaryExpression, Expression, SideEffectExpression},
             Statement,
@@ -297,7 +297,7 @@ impl Ast {
             Statement::Assignment(assignment) => {
                 // handle assignments like: p1 = a.at(i);
                 let Assignment::Binary(binary) = &assignment.value;
-                
+
                 // Only handle identifier assignments for prescan
                 let var_name = &binary.value.identifier.value.parts[0].value.value;
 

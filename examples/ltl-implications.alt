@@ -1,0 +1,54 @@
+// Example 11: Complex conditions with implications
+// If something happens, then something else must follow
+
+shared {
+    let Request: bool = false;
+    let Granted: bool = false;
+    let Completed: bool = false;
+}
+
+program RequestGrantComplete() {
+    loop {
+        await Request;
+
+        Granted = true;
+
+        Completed = true;
+
+        await Completed == false; // commenting this line make the check fails
+    }
+}
+
+program MakeRequest() {
+    loop {
+        // Make a request
+        Request = true;
+
+        await Completed;
+
+        print("Request completed.");
+
+        // Reset for next iteration
+        atomic {
+            Granted = false;
+            Completed = false;
+            Request = false;
+        }
+    }
+}
+
+// These formulas demonstrate implications
+check {
+    always (if Request { eventually Granted });
+    
+    always (if Granted { eventually Completed });
+    
+    eventually Request;
+    
+    always (if Completed { Granted });
+}
+
+main {
+    run RequestGrantComplete();
+    run MakeRequest();
+}

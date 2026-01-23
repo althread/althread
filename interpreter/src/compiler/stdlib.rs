@@ -5,7 +5,10 @@ use std::{
     rc::Rc,
 };
 
-use crate::{ast::token::{datatype::DataType, literal::Literal}, error::{AlthreadError, ErrorType, Pos}};
+use crate::{
+    ast::token::{datatype::DataType, literal::Literal},
+    error::{AlthreadError, ErrorType, Pos},
+};
 
 #[derive(Clone)]
 pub struct Interface {
@@ -78,10 +81,10 @@ impl Stdlib {
                             _ => Err(AlthreadError::new(
                                 ErrorType::RuntimeError,
                                 pos,
-                                "Expected List".to_string()
+                                "Expected List".to_string(),
                             )),
                         }
-                    })
+                    }),
                 });
                 new_interfaces.push(Interface {
                     name: "push".to_string(),
@@ -126,7 +129,7 @@ impl Stdlib {
                             return Err(AlthreadError::new(
                                 ErrorType::RuntimeError,
                                 pos,
-                                ".remove() expects one argument: l.remove(index);".to_string()
+                                ".remove() expects one argument: l.remove(index);".to_string(),
                             ));
                         }
                         let idx = args[0].to_integer().unwrap();
@@ -135,7 +138,7 @@ impl Stdlib {
                                 return Err(AlthreadError::new(
                                     ErrorType::RuntimeError,
                                     pos,
-                                    format!("Index out of bounds: {}", idx)
+                                    format!("Index out of bounds: {}", idx),
                                 ));
                             }
                             Ok(list.remove(idx as usize))
@@ -143,7 +146,7 @@ impl Stdlib {
                             Err(AlthreadError::new(
                                 ErrorType::RuntimeError,
                                 pos,
-                                "Expected List".to_string()
+                                "Expected List".to_string(),
                             ))
                         }
                     }),
@@ -201,7 +204,7 @@ impl Stdlib {
                                 return Err(AlthreadError::new(
                                     ErrorType::RuntimeError,
                                     pos,
-                                    format!("Index out of bounds: {}", v)
+                                    format!("Index out of bounds: {}", v),
                                 ));
                             }
                             Ok(list[v as usize].clone())
@@ -209,7 +212,7 @@ impl Stdlib {
                             return Err(AlthreadError::new(
                                 ErrorType::RuntimeError,
                                 pos,
-                                "Expected List".to_string()
+                                "Expected List".to_string(),
                             ));
                         }
                     }),

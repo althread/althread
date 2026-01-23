@@ -7,7 +7,7 @@ shared {
 
 program A() {
   print("starting A");
-  ! {
+  @ {
     A = false;
     B = true;
   }
@@ -17,7 +17,7 @@ program A() {
 
 program B() {
   print("starting B");
-  ! {
+  @ {
     A = true;
     B = false;
   }

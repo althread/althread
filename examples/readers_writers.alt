@@ -1,0 +1,60 @@
+shared {
+    let Readers = 0;
+    let Writers = 0;
+}
+
+program Reader() {
+    loop {
+        atomic { 
+            // Wait until no writer is active
+            await Writers == 0;
+            // Enter reading section
+            Readers = Readers + 1; 
+        }
+        
+        // Reading happens here...
+        
+        // Exit reading section
+        atomic { Readers = Readers - 1; }
+    }
+}
+
+program Writer() {
+    loop {
+        
+        // Enter writing section
+        atomic { 
+            // Wait until no readers and no other writers
+            await (Readers == 0 && Writers == 0);
+            
+            Writers = Writers + 1; 
+        }
+        
+        // Writing happens here...
+        
+        // Exit writing section
+        atomic { Writers = Writers - 1; }
+    }
+}
+
+check {
+    // Safety: Never more than one writer
+    always ( Writers <= 1 );
+}
+
+check {
+    // Safety: If a writer is active, there are no readers
+    always ( if (Writers > 0) { (Readers == 0) } );
+}
+
+check {
+    // Safety: If readers are active, there is no writer
+    always ( if (Readers > 0) { (Writers == 0) } );
+}
+
+main {
+    // One Writer, Two Readers
+    run Reader();
+    run Reader();
+    run Writer();
+}

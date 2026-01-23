@@ -8,6 +8,7 @@ pub mod fn_call;
 pub mod fn_return;
 pub mod for_control;
 pub mod if_control;
+pub mod label;
 pub mod loop_control;
 pub mod receive;
 pub mod run_call;
@@ -26,6 +27,7 @@ use fn_call::FnCall;
 use fn_return::FnReturn;
 use for_control::ForControl;
 use if_control::IfControl;
+use label::LabelStatement;
 use loop_control::LoopControl;
 use pest::iterators::Pairs;
 use run_call::RunCall;
@@ -61,6 +63,7 @@ pub enum Statement {
     Loop(Node<LoopControl>),
     For(Node<ForControl>),
     BreakLoop(Node<BreakLoopControl>),
+    Label(Node<LabelStatement>),
     Atomic(Node<atomic::Atomic>),
     Wait(Node<Wait>),
     Block(Node<Block>),
@@ -102,6 +105,7 @@ impl NodeBuilder for Statement {
             Rule::loop_control => Ok(Self::Loop(Node::build(pair, filepath)?)),
             Rule::for_control => Ok(Self::For(Node::build(pair, filepath)?)),
             Rule::break_loop_statement => Ok(Self::BreakLoop(Node::build(pair, filepath)?)),
+            Rule::label_statement => Ok(Self::Label(Node::build(pair, filepath)?)),
             Rule::code_block => Ok(Self::Block(Node::build(pair, filepath)?)),
             Rule::send_call => Ok(Self::Send(Node::build(pair, filepath)?)),
             Rule::channel_declaration => Ok(Self::ChannelDeclaration(Node::build(pair, filepath)?)),
@@ -125,6 +129,7 @@ impl InstructionBuilder for Statement {
             Self::Block(node) => node.compile(state),
             Self::Send(node) => node.compile(state),
             Self::BreakLoop(node) => node.compile(state),
+            Self::Label(node) => node.compile(state),
             Self::Run(node) => {
                 // a run call returns a value, so we have to ustack it
                 let mut builder = node.compile(state)?;
@@ -171,6 +176,7 @@ impl AstDisplay for Statement {
             Statement::Loop(node) => node.ast_fmt(f, prefix),
             Statement::For(node) => node.ast_fmt(f, prefix),
             Statement::BreakLoop(node) => node.ast_fmt(f, prefix),
+            Statement::Label(node) => node.ast_fmt(f, prefix),
             Statement::Atomic(node) => node.ast_fmt(f, prefix),
             Statement::Block(node) => node.ast_fmt(f, prefix),
         }

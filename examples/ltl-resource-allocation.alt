@@ -1,0 +1,47 @@
+// Example 9: Resource allocation
+// Resource count should never exceed available resources
+
+shared {
+    let Allocated: int = 0;
+    let MAX_RESOURCES: int = 5;
+}
+
+program Allocate() {
+    if (Allocated < MAX_RESOURCES) {
+        Allocated = Allocated + 1;
+    }
+}
+
+program Release() {
+    if (Allocated > 0) {
+        Allocated = Allocated - 1;
+    }
+}
+
+// These formulas PASS: resources managed correctly
+check {
+    always (Allocated >= 0);
+}
+
+check {
+    always (Allocated <= MAX_RESOURCES);
+}
+
+// Resource usage stays bounded
+check {
+    always (Allocated >= 0 && Allocated <= MAX_RESOURCES);
+}
+
+// This would FAIL without the guard in Allocate
+// If we had: Allocated = Allocated + 1; (without if)
+// check {
+//     always (Allocated <= MAX_RESOURCES)
+// }
+
+main {
+    run Allocate();
+    run Allocate();
+    run Allocate();
+    run Release();
+    run Allocate();
+}

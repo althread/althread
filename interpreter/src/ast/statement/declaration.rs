@@ -127,12 +127,15 @@ impl InstructionBuilder for Declaration {
 
             if let Some(declared_datatype) = datatype {
                 // Special case: allow assignment of empty list (list(void)) to typed list
-                let types_compatible = if let (DataType::List(declared_elem), DataType::List(computed_elem)) = (&declared_datatype, &computed_datatype) {
-                    // Allow list(void) to be assigned to list(T) for any T (empty list case)
-                    **computed_elem == DataType::Void || declared_elem == computed_elem
-                } else {
-                    declared_datatype == computed_datatype
-                };
+                let types_compatible =
+                    if let (DataType::List(declared_elem), DataType::List(computed_elem)) =
+                        (&declared_datatype, &computed_datatype)
+                    {
+                        // Allow list(void) to be assigned to list(T) for any T (empty list case)
+                        **computed_elem == DataType::Void || declared_elem == computed_elem
+                    } else {
+                        declared_datatype == computed_datatype
+                    };
 
                 if !types_compatible {
                     return Err(AlthreadError::new(
@@ -144,9 +147,11 @@ impl InstructionBuilder for Declaration {
                         ),
                     ));
                 }
-                
+
                 // For empty list assignment, add conversion instruction
-                if let (DataType::List(declared_elem), DataType::List(computed_elem)) = (&declared_datatype, &computed_datatype) {
+                if let (DataType::List(declared_elem), DataType::List(computed_elem)) =
+                    (&declared_datatype, &computed_datatype)
+                {
                     if **computed_elem == DataType::Void {
                         // Add instruction to convert empty list to declared type
                         builder.instructions.push(Instruction {

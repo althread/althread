@@ -25,10 +25,13 @@ use crate::{
     parser::Rule,
 };
 
+use crate::checker::ltl::ast::CheckBlock;
+
 #[derive(Debug)]
 pub struct Ast {
     pub process_blocks: HashMap<String, (Node<ArgsList>, Node<Block>, bool)>,
     pub condition_blocks: HashMap<ConditionKeyword, Node<ConditionBlock>>,
+    pub check_blocks: Vec<Node<CheckBlock>>,
     pub global_block: Option<Node<Block>>,
     pub function_blocks: HashMap<String, (Node<ArgsList>, DataType, Node<Block>, bool)>,
     pub import_block: Option<Node<ImportBlock>>,
@@ -39,6 +42,7 @@ impl Ast {
         Self {
             process_blocks: HashMap::new(),
             condition_blocks: HashMap::new(),
+            check_blocks: Vec::new(),
             global_block: None,
             function_blocks: HashMap::new(),
             import_block: None,
@@ -91,12 +95,15 @@ impl Ast {
                     let condition_keyword = match keyword_pair.as_rule() {
                         Rule::ALWAYS_KW => ConditionKeyword::Always,
                         Rule::NEVER_KW => ConditionKeyword::Never,
-                        Rule::EVENTUALLY_KW => ConditionKeyword::Eventually,
                         _ => return Err(no_rule!(keyword_pair, "condition keyword", filepath)),
                     };
                     let condition_block = Node::build(pairs.next().unwrap(), filepath)?;
                     ast.condition_blocks
                         .insert(condition_keyword, condition_block);
+                }
+                Rule::check_block => {
+                    let check_block: Node<CheckBlock> = Node::build(pair, filepath)?;
+                    ast.check_blocks.push(check_block);
                 }
                 Rule::program_block => {
                     let mut pairs = pair.into_inner();
@@ -183,6 +190,12 @@ impl AstDisplay for Ast {
             writeln!(f, "{}{}", prefix, condition_name)?;
             condition_node.ast_fmt(f, &prefix.add_branch())?;
             writeln!(f, "")?;
+            for check_block in &self.check_blocks {
+                writeln!(f, "{}check", prefix)?;
+                for form in &check_block.value.formulas {
+                    writeln!(f, "{}{}", prefix.add_branch(), form)?;
+                }
+            }
         }
 
         for (process_name, (_args, process_node, is_private)) in &self.process_blocks {

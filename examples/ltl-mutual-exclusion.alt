@@ -1,0 +1,41 @@
+// Example 6: Mutual exclusion property
+// Two processes should never be in critical section simultaneously
+
+shared {
+    let Cs1: bool = false;  // Process 1 in critical section
+    let Cs2: bool = false;  // Process 2 in critical section
+    let Turn: int = 1;
+}
+
+program Process1() {
+    // Enter critical section
+    Cs1 = true;
+    
+    // Critical section work
+    Turn = 2;
+    
+    // Exit critical section
+    Cs1 = false;
+}
+
+program Process2() {
+    // Enter critical section
+    Cs2 = true;
+    
+    // Critical section work
+    Turn = 1;
+    
+    // Exit critical section
+    Cs2 = false;
+}
+
+// This formula FAILS be
+check {
+    always (!(Cs1 == true && Cs2 == true));
+}
+
+
+main {
+    run Process1();
+    run Process2();
+}

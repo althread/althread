@@ -6,11 +6,7 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
-        statement::{
-            expression::{
-                SideEffectExpression, 
-            },
-        },
+        statement::expression::SideEffectExpression,
         token::{
             binary_assignment_operator::BinaryAssignmentOperator,
             object_identifier::ObjectIdentifier,
@@ -46,7 +42,9 @@ impl InstructionBuilder for Node<BinaryAssignment> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         let mut builder = InstructionBuilderOk::new();
 
-        let full_var_name = self.value.identifier
+        let full_var_name = self
+            .value
+            .identifier
             .value
             .parts
             .iter()

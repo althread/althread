@@ -1,4 +1,3 @@
-/** @jsxImportSource solid-js */
 import { createMemo } from 'solid-js';
 import SearchView from '@components/search/SearchView';
 import type { SearchResult } from '@components/search/SearchView';
