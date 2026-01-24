@@ -42,6 +42,9 @@ pub struct InstructionBuilderOk {
 
     /// The indexes of the return instructions
     pub return_indexes: Vec<usize>,
+    
+    /// Debug information for local variables in this builder's scope
+    pub debug_variables: Vec<LocalVariableDebugInfo>,
 }
 
 impl InstructionBuilderOk {
@@ -51,6 +54,7 @@ impl InstructionBuilderOk {
             break_indexes: HashMap::new(),
             continue_indexes: HashMap::new(),
             return_indexes: Vec::new(),
+            debug_variables: Vec::new(),
         }
     }
     pub fn from_instructions(instructions: Vec<Instruction>) -> Self {
@@ -59,6 +63,7 @@ impl InstructionBuilderOk {
             break_indexes: HashMap::new(),
             continue_indexes: HashMap::new(),
             return_indexes: Vec::new(),
+            debug_variables: Vec::new(),
         }
     }
     pub fn extend(&mut self, other: Self) {
@@ -81,6 +86,13 @@ impl InstructionBuilderOk {
 
         self.return_indexes
             .extend(other.return_indexes.iter().map(|x| x + off_set));
+        
+        // Offset debug variable scope IPs when merging builders
+        self.debug_variables.extend(other.debug_variables.into_iter().map(|mut var| {
+            var.scope_start_ip += off_set;
+            var.scope_end_ip = var.scope_end_ip.map(|end| end + off_set);
+            var
+        }));
     }
     pub fn contains_jump(&self) -> bool {
         self.break_indexes.len() > 0
@@ -96,6 +108,24 @@ pub struct Variable {
     pub datatype: DataType,
     pub depth: usize,
     pub declare_pos: Option<Pos>,
+}
+
+/// Debug information for a local variable
+#[derive(Debug, Clone)]
+pub struct LocalVariableDebugInfo {
+    pub name: String,
+    pub datatype: DataType,
+    pub stack_index: usize,
+    pub scope_start_ip: usize,
+    pub scope_end_ip: Option<usize>,
+    pub declare_pos: Option<Pos>,
+}
+
+/// Debug information for a program
+#[derive(Debug, Clone)]
+pub struct ProgramDebugInfo {
+    pub argument_names: Vec<String>,
+    pub local_variables: Vec<LocalVariableDebugInfo>,
 }
 
 #[derive(Debug)]
@@ -143,6 +173,12 @@ pub struct CompilerState {
     pub program_arguments: HashMap<String, (Vec<DataType>, bool)>,
     pub programs_code: HashMap<String, ProgramCode>,
     pub global_memory: BTreeMap<String, Literal>,
+    
+    /// Debug information for local variables being tracked during compilation
+    pub debug_variables: Vec<LocalVariableDebugInfo>,
+    
+    /// Accumulated debug info for all programs
+    pub program_debug_info: HashMap<String, ProgramDebugInfo>,
 }
 
 impl CompilerState {
@@ -164,6 +200,8 @@ impl CompilerState {
             always_conditions: Vec::new(),
             ltl_formulas: Vec::new(),
             programs_code: HashMap::new(),
+            debug_variables: Vec::new(),
+            program_debug_info: HashMap::new(),
         }
     }
 
@@ -270,6 +308,31 @@ impl CompilerState {
         self.current_stack_depth -= 1;
         unstack_len
     }
+    
+    /// Pop all variables from the program stack that have the same depth as the current stack depth,
+    /// recording their scope_end_ip for debug info, and decrease the current stack depth by one.
+    /// Returns the number of variables that were popped.
+    pub fn unstack_current_depth_with_debug(&mut self, current_ip: usize) -> usize {
+        let mut unstack_len = 0;
+        while self.program_stack.len() > 0
+            && self.program_stack.last().unwrap().depth == self.current_stack_depth
+        {
+            let var = self.program_stack.last().unwrap();
+            // Find matching debug variable and set its scope_end_ip
+            for debug_var in self.debug_variables.iter_mut().rev() {
+                if debug_var.name == var.name 
+                    && debug_var.scope_end_ip.is_none() 
+                    && debug_var.stack_index == self.program_stack.len() - 1 {
+                    debug_var.scope_end_ip = Some(current_ip);
+                    break;
+                }
+            }
+            self.program_stack.pop();
+            unstack_len += 1;
+        }
+        self.current_stack_depth -= 1;
+        unstack_len
+    }
 }
 
 #[derive(Debug)]
@@ -289,6 +352,9 @@ pub struct CompiledProject {
     pub compiled_ltl_formulas: Vec<CompiledLtlExpression>,
 
     pub stdlib: Rc<stdlib::Stdlib>,
+    
+    /// Debug information for programs (variable names, scopes, etc.)
+    pub program_debug_info: HashMap<String, ProgramDebugInfo>,
 }
 
 impl fmt::Display for CompiledProject {
@@ -320,6 +386,7 @@ impl CompiledProject {
                 name: "main".to_string(),
                 instructions: Vec::new(),
                 labels: HashMap::new(),
+                argument_names: Vec::new(),
             },
         );
 
@@ -336,6 +403,7 @@ impl CompiledProject {
             ltl_formulas: Vec::new(),
             compiled_ltl_formulas: Vec::new(),
             stdlib: Rc::new(stdlib::Stdlib::new()),
+            program_debug_info: HashMap::new(),
         }
     }
 }

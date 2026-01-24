@@ -1,0 +1,77 @@
+.call-frame-display {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+}
+
+.frame-card {
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--vscode-sideBar-background);
+}
+
+.frame-card.top-frame {
+    border-color: var(--vscode-focusBorder);
+    box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+
+.frame-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--vscode-editor-background);
+    border-bottom: 1px solid var(--vscode-panel-border);
+    gap: 12px;
+}
+
+.frame-title {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--vscode-symbolIcon-functionForeground, #DCDCAA);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.top-frame .frame-title::before {
+    content: "▶";
+    font-size: 10px;
+    color: var(--vscode-focusBorder);
+}
+
+.frame-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+}
+
+.frame-location {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.frame-location i {
+    font-size: 12px;
+}
+
+.frame-ip {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+.frame-body {
+    padding: 12px;
+}
+
+.no-variables {
+    color: var(--vscode-descriptionForeground);
+    font-style: italic;
+    font-size: 12px;
+    text-align: center;
+    padding: 8px;
+}

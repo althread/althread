@@ -91,17 +91,79 @@ fn create_vm_state_json(vm: &althread::vm::VM) -> serde_json::Value {
             let prog_name = vm.running_programs.get(index)
                 .map(|p| p.name.clone())
                 .unwrap_or_else(|| format!("PID_{}", index));
+            
+            eprintln!("DEBUG processing locals for index={}, prog_name='{}'", index, prog_name);
+            eprintln!("  - available program_debug_info keys: {:?}", vm.program_debug_info.keys().collect::<Vec<_>>());
+            
             let line = vm.programs_code.get(&prog_name)
                 .and_then(|code| code.instructions.get(*instruction_pointer))
                 .and_then(|inst| inst.pos.as_ref())
                 .map(|pos| pos.line);
+            
+            // Get debug info for this program
+            let debug_info = vm.program_debug_info.get(&prog_name);
+            eprintln!("DEBUG create_vm_state_json for program '{}': debug_info exists? {}", prog_name, debug_info.is_some());
+            if let Some(debug) = debug_info {
+                eprintln!("  - local_variables count: {}", debug.local_variables.len());
+                eprintln!("  - argument_names count: {}", debug.argument_names.len());
+            }
+            
+            let call_stack_info = vm.running_programs.get(index)
+                .map(|p| p.get_call_stack_info())
+                .unwrap_or_default();
+            eprintln!("  - call_stack_info entries: {}", call_stack_info.len());
+            
+            let _frame_pointer = vm.running_programs.get(index)
+                .map(|p| p.get_frame_pointer())
+                .unwrap_or(0);
+            
+            // Build frames information with named variables
+            let mut frames = Vec::new();
+            
+            // Current frame (top of call stack)
+            if let Some((fp, ip, pos)) = call_stack_info.first() {
+                let mut variables = serde_json::Map::new();
+                
+                // Add variables for the current frame
+                if let Some(debug) = debug_info {
+                    for var_info in &debug.local_variables {
+                        // Check if variable is in scope at current instruction pointer
+                        if var_info.scope_start_ip <= *ip 
+                            && var_info.scope_end_ip.map_or(true, |end| *ip < end) {
+                            // Get the variable value from memory
+                            if var_info.stack_index < memory.len() {
+                                variables.insert(
+                                    var_info.name.clone(),
+                                    serde_json::json!({
+                                        "value": format!("{:?}", memory[var_info.stack_index]),
+                                        "type": format!("{:?}", var_info.datatype),
+                                    })
+                                );
+                            }
+                        }
+                    }
+                }
+                
+                frames.push(serde_json::json!({
+                    "function": prog_name.clone(),
+                    "frame_pointer": fp,
+                    "instruction_pointer": ip,
+                    "line": pos.as_ref().map(|p| p.line),
+                    "variables": variables,
+                }));
+            }
+            
+            // TODO: Add parent frames from call stack
+            // (would need function debug info to be stored separately)
+            
             serde_json::json!({
                 "pid": index,
                 "name": prog_name,
                 "memory": memory.iter().map(|v| format!("{:?}", v)).collect::<Vec<String>>(),
                 "instruction_pointer": instruction_pointer,
                 "line": line,
-                "clock": clock
+                "clock": clock,
+                "frames": frames,
             })
         }).collect::<Vec<_>>()
     })
@@ -455,9 +517,49 @@ pub fn check(
         .compile(Path::new(filepath), virtual_filesystem, &mut input_map)
         .map_err(error_to_js)?;
 
-    let checked = checker::check_program(&compiled_project, max_states).map_err(error_to_js)?;
+    let (path, state_graph) = checker::check_program(&compiled_project, max_states).map_err(error_to_js)?;
+    
+    // Convert path VMs to enhanced JSON format with debug info
+    let enhanced_path: Vec<serde_json::Value> = path.iter().map(|state_link| {
+        serde_json::json!({
+            "to": create_vm_state_json(&state_link.to),
+            "lines": state_link.lines,
+            "instructions": state_link.instructions.iter().map(|i| format!("{:?}", i)).collect::<Vec<_>>(),
+            "actions": state_link.actions.iter().map(|a| format!("{:?}", a)).collect::<Vec<_>>(),
+            "pid": state_link.pid,
+            "name": state_link.name,
+        })
+    }).collect();
+    
+    // Convert state graph nodes to enhanced JSON format with debug info
+    // Frontend expects array of [vm, node_info] tuples
+    let enhanced_nodes: Vec<serde_json::Value> = state_graph.nodes.iter().map(|(vm, node)| {
+        let vm_json = create_vm_state_json(vm);
+        let node_json = serde_json::json!({
+            "level": node.level,
+            "successors": node.successors.iter().map(|succ| {
+                serde_json::json!({
+                    "to": create_vm_state_json(&succ.to),
+                    "lines": succ.lines,
+                    "instructions": succ.instructions.iter().map(|i| format!("{:?}", i)).collect::<Vec<_>>(),
+                    "actions": succ.actions.iter().map(|a| format!("{:?}", a)).collect::<Vec<_>>(),
+                    "pid": succ.pid,
+                    "name": succ.name,
+                })
+            }).collect::<Vec<_>>(),
+        });
+        serde_json::json!([vm_json, node_json])
+    }).collect();
+    
+    let result = serde_json::json!([
+        enhanced_path,
+        {
+            "nodes": enhanced_nodes,
+            "exhaustive": state_graph.exhaustive,
+        }
+    ]);
 
-    Ok(serde_wasm_bindgen::to_value(&checked).unwrap())
+    Ok(serde_wasm_bindgen::to_value(&result).unwrap())
 }
 
 // Package management utilities for web editor

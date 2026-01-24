@@ -1122,6 +1122,8 @@ impl LocalExpressionNode {
                     program_arguments: state.program_arguments.clone(),
                     programs_code: state.programs_code.clone(),
                     global_memory: state.global_memory.clone(),
+                    debug_variables: state.debug_variables.clone(),
+                    program_debug_info: state.program_debug_info.clone(),
                 };
 
                 let body_type = node.body.datatype(&temp_state)?;
@@ -1168,6 +1170,8 @@ impl LocalExpressionNode {
                     program_arguments: state.program_arguments.clone(),
                     programs_code: state.programs_code.clone(),
                     global_memory: state.global_memory.clone(),
+                    debug_variables: state.debug_variables.clone(),
+                    program_debug_info: state.program_debug_info.clone(),
                 };
 
                 let body_type = node.body.datatype(&temp_state)?;

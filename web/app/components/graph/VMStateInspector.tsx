@@ -1,5 +1,6 @@
 import { For, Show, createMemo } from "solid-js";
 import { Node, literal } from "./Node";
+import CallFrameDisplay from "./CallFrameDisplay";
 import "./VMStateInspector.css";
 
 interface VMStateInspectorProps {
@@ -8,6 +9,9 @@ interface VMStateInspectorProps {
 }
 
 export default function VMStateInspector(props: VMStateInspectorProps) {
+    // Debug logging
+    console.log("VMStateInspector received node:", props.node);
+    
     const getField = (obj: any, field: string) => {
         if (!obj) return undefined;
         if (typeof obj.get === 'function') {
@@ -345,6 +349,8 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
                                             const memory = getField(prog, 'memory') ?? getField(prog, 'stack');
                                             const memoryValues = Array.isArray(memory) ? memory : asArray(memory);
                                             const channels = getChannelsForProcess(node(), pid);
+                                            const frames = getField(prog, 'frames');
+                                            const framesList = Array.isArray(frames) ? frames : [];
 
                                             return (
                                                 <div class="process-card">
@@ -354,15 +360,10 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
                                                         <span class="process-pc">PC {pc ?? '-'}</span>
                                                     </div>
                                                     <div class="process-card-body">
-                                                        <div class="stack-row">
-                                                            <span class="row-label">Stack</span>
-                                                            <div class="stack-container">
-                                                                <For each={memoryValues}>
-                                                                    {(val) => <span class="stack-val">{literal(val)}</span>}
-                                                                </For>
-                                                                {memoryValues.length === 0 && <span class="empty-val">empty</span>}
-                                                            </div>
-                                                        </div>
+                                                        <CallFrameDisplay 
+                                                            frames={framesList}
+                                                            fallbackMemory={memoryValues}
+                                                        />
 
                                                         <Show when={channels.length > 0}>
                                                             <div class="channels-row">

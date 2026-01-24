@@ -938,15 +938,25 @@ export default function App() {
 
                   let res = await workerClient.check(editor.editorView().state.doc.toString(), filePath, virtualFS);
                   
+                  console.log(res);
+                  console.log("res[1]:", res[1]);
+                  console.log("res[1].nodes:", res[1].nodes);
+                  console.log("First node:", res[1].nodes?.[0]);
+                  
+                  // Convert Map to plain object if needed
+                  const stateGraph = res[1] instanceof Map ? {
+                    nodes: res[1].get('nodes'),
+                    exhaustive: res[1].get('exhaustive')
+                  } : res[1];
+                  
                   if (res[0].length > 0) {
                       setOut("Violation found! See the highlighted path in the VM states graph.");
-                  } else if (res[1].exhaustive) {
+                  } else if (stateGraph.exhaustive) {
                     setOut("Verification complete: No execution errors found.");
                   } else {
                     setOut("Warning: Exploration limit reached. The state space was not fully explored. No violation found in the explored part.");
                   }
                   
-                  console.log(res);
                   let colored_path: string[] = [];
                   if(res[0].length > 0) { // a violation occurred
                     res[0].forEach((path: any) => {
@@ -955,10 +965,20 @@ export default function App() {
                   }
 
                   let nodes: Record<string, number> = {};
-                  setNodes(res[1].nodes.map((n: any, i: number) => {
+                  setNodes(stateGraph.nodes.map((n: any, i: number) => {
+                    // Handle Map objects from serde_wasm_bindgen
+                    const nodeInfo = n[1] instanceof Map ? {
+                      level: n[1].get('level'),
+                      successors: n[1].get('successors')
+                    } : n[1];
+                    
                     let label = nodeToString(n[0]);
-                    const {level} = n[1];
+                    const {level} = nodeInfo;
                     nodes[label] = i;
+                    
+                    // Store the node by index for successor matching
+                    (n as any)._index = i;
+                    
                     const isViolationNode = colored_path.includes(label) || (colored_path.length > 0 && level == 0);
                     const background = isViolationNode ? "#4d3131" : "#314d31";
                     const border = isViolationNode ? "#ec9999" : "#a6dfa6";
@@ -991,16 +1011,69 @@ export default function App() {
 
                   let edges: any = [];
                   let edgeId = 0;
-                  res[1].nodes.forEach((n: any, i: number) => {
-                    const {successors} = n[1];
-                    successors.forEach(({lines, pid, name, to}: any) => {
-                      to = nodeToString(to);
+                  
+                  // Helper to create a stable string key from a VM state (handles Maps)
+                  const vmStateToKey = (vmState: any): string => {
+                    // Convert Maps to objects for stable serialization
+                    const normalize = (obj: any): any => {
+                      if (obj instanceof Map) {
+                        const result: any = {};
+                        obj.forEach((value: any, key: any) => {
+                          result[String(key)] = normalize(value);
+                        });
+                        return result;
+                      } else if (Array.isArray(obj)) {
+                        return obj.map(normalize);
+                      } else if (obj && typeof obj === 'object') {
+                        const result: any = {};
+                        for (const [key, value] of Object.entries(obj)) {
+                          result[key] = normalize(value);
+                        }
+                        return result;
+                      }
+                      return obj;
+                    };
+                    return JSON.stringify(normalize(vmState));
+                  };
+                  
+                  // Build a map from VM state to node index using stable string keys
+                  const vmStateToIndex = new Map<string, number>();
+                  stateGraph.nodes.forEach((n: any, i: number) => {
+                    const key = vmStateToKey(n[0]);
+                    vmStateToIndex.set(key, i);
+                  });
+                  
+                  stateGraph.nodes.forEach((n: any, i: number) => {
+                    // Handle Map objects from serde_wasm_bindgen
+                    const nodeInfo = n[1] instanceof Map ? {
+                      level: n[1].get('level'),
+                      successors: n[1].get('successors')
+                    } : n[1];
+                    
+                    const {successors} = nodeInfo;
+                    successors.forEach((succ: any) => {
+                      // Handle Map in successors if needed
+                      const succData = succ instanceof Map ? {
+                        lines: succ.get('lines'),
+                        pid: succ.get('pid'),
+                        name: succ.get('name'),
+                        to: succ.get('to')
+                      } : succ;
+                      
+                      // Find target node index by VM state serialization
+                      const targetKey = vmStateToKey(succData.to);
+                      const targetIndex = vmStateToIndex.get(targetKey);
+                      if (targetIndex === undefined) {
+                        console.warn("Could not find target node for successor", succData);
+                        return;
+                      }
+                      
                       edges.push({
                         id: edgeId++,
                         from: i,
-                        to: nodes[to],
-                        label: name+'#'+pid+': '+lines.join(','),
-                        lines: lines.map((l: any) => Number(l)),
+                        to: targetIndex,
+                        label: succData.name+'#'+succData.pid+': '+succData.lines.join(','),
+                        lines: succData.lines.map((l: any) => Number(l)),
                         font: { size: 0 } // Start with hidden label
                       });
                     })

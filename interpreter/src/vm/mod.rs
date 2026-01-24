@@ -100,6 +100,7 @@ pub struct VM<'a> {
     pub user_funcs: &'a HashMap<String, FunctionDefinition>,
     pub executable_programs: BTreeSet<usize>, // needs to be sorted to have a deterministic behavior
     pub always_conditions: &'a Vec<(HashSet<String>, Vec<String>, LocalExpressionNode, Pos)>,
+    pub program_debug_info: &'a HashMap<String, crate::compiler::ProgramDebugInfo>,
 
     /// The programs that are waiting for a condition to be true
     /// The condition depends on the global variables that are in the HashSet
@@ -120,6 +121,7 @@ impl<'a> VM<'a> {
             programs_code: &compiled_project.programs_code,
             user_funcs: &compiled_project.user_functions,
             always_conditions: &compiled_project.always_conditions,
+            program_debug_info: &compiled_project.program_debug_info,
             next_program_id: 0,
             waiting_programs: HashMap::new(),
             rng: Rng::new(),

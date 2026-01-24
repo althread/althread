@@ -1,0 +1,92 @@
+.variable-display {
+    width: 100%;
+}
+
+.variables-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.variable-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 4px 8px;
+    background: var(--vscode-editor-background);
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.var-name {
+    font-weight: 600;
+    color: var(--vscode-symbolIcon-variableForeground, #9CDCFE);
+    cursor: help;
+}
+
+.var-separator {
+    color: var(--vscode-foreground);
+    opacity: 0.5;
+}
+
+.var-type {
+    color: var(--vscode-symbolIcon-classForeground, #4EC9B0);
+    font-size: 11px;
+    font-style: italic;
+    opacity: 0.8;
+}
+
+.var-equals {
+    color: var(--vscode-foreground);
+    opacity: 0.5;
+}
+
+.var-value {
+    color: var(--vscode-debugTokenExpression-number, #B5CEA8);
+    flex: 1;
+    word-break: break-word;
+}
+
+/* Fallback memory display */
+.fallback-memory {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.memory-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--vscode-descriptionForeground);
+}
+
+.memory-item {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 4px 8px;
+    background: var(--vscode-editor-background);
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+}
+
+.memory-index {
+    color: var(--vscode-descriptionForeground);
+    font-size: 11px;
+    min-width: 30px;
+}
+
+.memory-value {
+    color: var(--vscode-debugTokenExpression-number);
+    flex: 1;
+}
+
+.stack-container {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}

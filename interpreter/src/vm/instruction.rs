@@ -369,6 +369,7 @@ pub struct ProgramCode {
     pub name: String,
     pub instructions: Vec<Instruction>,
     pub labels: HashMap<String, usize>,
+    pub argument_names: Vec<String>,
 }
 
 // impl display for ProcessCode
