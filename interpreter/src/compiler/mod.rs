@@ -310,16 +310,18 @@ impl CompilerState {
     }
     
     /// Pop all variables from the program stack that have the same depth as the current stack depth,
-    /// recording their scope_end_ip for debug info, and decrease the current stack depth by one.
+    /// recording their scope_end_ip for debug info in the provided builder, and decrease the 
+    /// current stack depth by one.
     /// Returns the number of variables that were popped.
-    pub fn unstack_current_depth_with_debug(&mut self, current_ip: usize) -> usize {
+    pub fn unstack_current_depth_with_debug(&mut self, builder: &mut InstructionBuilderOk) -> usize {
+        let current_ip = builder.instructions.len();
         let mut unstack_len = 0;
         while self.program_stack.len() > 0
             && self.program_stack.last().unwrap().depth == self.current_stack_depth
         {
             let var = self.program_stack.last().unwrap();
-            // Find matching debug variable and set its scope_end_ip
-            for debug_var in self.debug_variables.iter_mut().rev() {
+            // Find matching debug variable in the builder and set its scope_end_ip
+            for debug_var in builder.debug_variables.iter_mut().rev() {
                 if debug_var.name == var.name 
                     && debug_var.scope_end_ip.is_none() 
                     && debug_var.stack_index == self.program_stack.len() - 1 {

@@ -47,7 +47,7 @@ impl InstructionBuilder for Block {
             let sub_b = node.compile(state)?;
             builder.extend(sub_b);
         }
-        let unstack_len = state.unstack_current_depth();
+        let unstack_len = state.unstack_current_depth_with_debug(&mut builder);
         if unstack_len > 0 {
             builder.instructions.push(Instruction {
                 control: InstructionType::Unstack { unstack_len },
