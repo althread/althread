@@ -15,6 +15,7 @@ interface GraphProps {
     theme?: 'light' | 'dark';
     onEdgeClick?: (edgeId: string, edgeData: any) => void;
     onNodeSelect?: (node: any | null) => void;
+    ref?: (instance: { selectNode: (nodeId: string | number) => void }) => void;
 }
 
 export default (props: GraphProps) => {
@@ -138,6 +139,18 @@ export default (props: GraphProps) => {
         () => setMaximized((v: boolean) => !v),
         () => setDetails((v: boolean) => !v)
     );
+
+    // Expose methods via ref
+    if (props.ref) {
+        props.ref({
+            selectNode: (nodeId: string | number) => {
+                if (network) {
+                    network.selectNodes([nodeId]);
+                    network.focus(nodeId, { animation: true, scale: 1.5 });
+                }
+            }
+        });
+    }
 
     return (
       <div

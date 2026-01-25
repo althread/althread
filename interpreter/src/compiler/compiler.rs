@@ -196,6 +196,7 @@ impl Ast {
                 ltl_formulas: Vec::new(),
                 compiled_ltl_formulas: Vec::new(),
                 stdlib: Rc::new(stdlib::Stdlib::new()),
+                program_debug_info: HashMap::new(),
             });
         }
 
@@ -1024,6 +1025,7 @@ impl Ast {
             ltl_formulas: state.ltl_formulas().clone(),
             compiled_ltl_formulas: ltl::compile_ltl_formulas(state.ltl_formulas(), &state)?,
             stdlib: state.stdlib().clone(),
+            program_debug_info: state.program_debug_info.clone(),
         })
     }
 
@@ -1037,6 +1039,7 @@ impl Ast {
             instructions: Vec::new(),
             name: name.to_string(),
             labels: HashMap::new(),
+            argument_names: Vec::new(),
         };
         let (args, prog, _) = self
             .process_blocks
@@ -1045,12 +1048,29 @@ impl Ast {
 
         state.current_program_name = self.build_qualified_name(name, module_prefix);
 
+        // Capture argument names for debug info
+        let mut argument_names = Vec::new();
+        let mut debug_variables = Vec::new();
+        
         for (i, var) in args.value.identifiers.iter().enumerate() {
+            let var_name = var.value.value.clone();
+            argument_names.push(var_name.clone());
+            
             state.program_stack.push(Variable {
-                name: var.value.value.clone(),
+                name: var_name.clone(),
                 depth: state.current_stack_depth,
                 mutable: true,
                 datatype: args.value.datatypes[i].value.clone(),
+                declare_pos: Some(var.pos.clone()),
+            });
+            
+            // Add debug variable for program arguments (available from the start)
+            debug_variables.push(crate::compiler::LocalVariableDebugInfo {
+                name: var_name,
+                datatype: args.value.datatypes[i].value.clone(),
+                stack_index: i,
+                scope_start_ip: 0,
+                scope_end_ip: None,
                 declare_pos: Some(var.pos.clone()),
             });
         }
@@ -1062,6 +1082,10 @@ impl Ast {
         if compiled.contains_jump() {
             unimplemented!("breaks or return statements in programs are not yet implemented");
         }
+        
+        // Collect debug variables from the compiled builder
+        debug_variables.extend(compiled.debug_variables);
+        
         if !args.value.identifiers.is_empty() {
             process_code.instructions.push(Instruction {
                 control: InstructionType::Destruct,
@@ -1098,6 +1122,20 @@ impl Ast {
         let end_index = process_code.instructions.len() - 1;
         label_map.insert("end".to_string(), end_index);
         process_code.labels = label_map;
+        process_code.argument_names = argument_names.clone();
+        
+        // Store debug info for this program
+        state.program_debug_info.insert(
+            state.current_program_name.clone(),
+            crate::compiler::ProgramDebugInfo {
+                argument_names,
+                local_variables: debug_variables,
+            },
+        );
+        
+        // Clear debug variables for next program
+        state.debug_variables.clear();
+        
         Ok(process_code)
     }
 }

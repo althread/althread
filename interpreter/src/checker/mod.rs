@@ -521,6 +521,26 @@ fn check_program_with_ltl<'a>(
             visited_outer.insert(current_state.clone());
             on_stack.insert(current_state.clone());
             
+            // ================================================================
+            // OPTIMIZATION: Early violation detection
+            // ================================================================
+            // If we're in an accepting state with no temporal obligations,
+            // we can immediately report a violation. This gives:
+            // - Shorter counter-example traces (exactly where violation occurs)
+            // - Faster detection (no need to find the actual cycle)
+            let is_immediate_accepting = monitors_in_immediate_accepting_state(
+                &current_state.monitors,
+                &automatons,
+                &compiled_project.compiled_ltl_formulas,
+            );
+            
+            if is_immediate_accepting {
+                log::debug!("DEBUG: Immediate accepting state detected (no temporal obligations)");
+                println!("LTL violation detected: accepting state with no temporal obligations");
+                let violation_path = build_violation_path(&state_graph, &current_state.vm)?;
+                return Ok((violation_path, state_graph));
+            }
+            
             // Push post-order visit
             dfs_stack.push((current_state.clone(), 1));
             
@@ -534,16 +554,11 @@ fn check_program_with_ltl<'a>(
             // Handle terminal states (stuttering)
             // This includes both proper termination (is_finished=true) and deadlock states
             // (no successors but processes still waiting). In both cases, the execution
-            // can only "stutter" in place forever.
+            // can only "stutter" in place forever, which we model as a self-loop.
             if successors.is_empty() {
-                let is_finished = current_vm.is_finished();
-                log::debug!("DEBUG: Terminal state - is_finished={}", is_finished);
+                log::debug!("DEBUG: Terminal state - is_finished={}", current_vm.is_finished());
                 
-                // For both termination and deadlock, we need to check if the monitor
-                // can accept on a stuttering loop (staying in the same state forever).
-                // This is required for "eventually P" properties - if P never becomes true
-                // and we reach a state with no further progress, it's a violation.
-                
+                // Model stuttering as a self-loop: VM stays in same state, monitor transitions
                 let mut base_next_monitors = current_monitors.clone();
                 ltl::quantifier::update_monitors_for_new_processes(
                     &compiled_project.compiled_ltl_formulas,
@@ -556,20 +571,22 @@ fn check_program_with_ltl<'a>(
                 let possible_next_monitoring_states =
                     base_next_monitors.get_possible_successors(current_vm, &automatons)?;
                 
+                // Record stuttering transitions as edges (self-loops in the product automaton)
                 for next_monitors in possible_next_monitoring_states {
-                    let is_accepting = monitors_in_accepting_state(
-                        &next_monitors,
-                        &automatons,
-                        &compiled_project.compiled_ltl_formulas,
-                    );
+                    let next_product_state = CombinedProductState {
+                        vm: current_vm.clone(), // Same VM state (stuttering)
+                        monitors: next_monitors,
+                    };
                     
-                    // Terminal/deadlock state with accepting monitor = infinite accepting run via stuttering
-                    if is_accepting {
-                        let state_type = if is_finished { "terminal" } else { "deadlock" };
-                        log::debug!("LTL violation: {} state with accepting monitor (stuttering loop)", state_type);
-                        println!("LTL violation detected: accepting {} state (stuttering)", state_type);
-                        let violation_path = build_violation_path(&state_graph, current_vm)?;
-                        return Ok((violation_path, state_graph));
+                    // Record the edge (may be a self-loop if monitor state unchanged)
+                    product_edges
+                        .entry(current_state.clone())
+                        .or_insert_with(Vec::new)
+                        .push(next_product_state.clone());
+                    
+                    // If this is a new product state, add it to DFS
+                    if !visited_outer.contains(&next_product_state) {
+                        dfs_stack.push((next_product_state, 0));
                     }
                 }
                 continue;
@@ -623,21 +640,6 @@ fn check_program_with_ltl<'a>(
                     base_next_monitors.get_possible_successors(&next_vm, &automatons)?;
                 
                 for next_monitors in possible_next_monitoring_states {
-                    // Check if we've reached an accepting state with only propositional formulas.
-                    // In that case, the "eventually" is immediately satisfied - no cycle needed.
-                    let is_immediate_violation = monitors_in_immediate_accepting_state(
-                        &next_monitors,
-                        &automatons,
-                        &compiled_project.compiled_ltl_formulas,
-                    );
-                    
-                    if is_immediate_violation {
-                        log::debug!("LTL violation: reached accepting state with propositional formulas only");
-                        println!("LTL violation detected: immediate acceptance (propositional formula satisfied)");
-                        let violation_path = build_violation_path(&state_graph, &next_vm)?;
-                        return Ok((violation_path, state_graph));
-                    }
-                    
                     let next_product_state = CombinedProductState {
                         vm: next_vm.clone(),
                         monitors: next_monitors,
@@ -806,14 +808,15 @@ fn monitors_in_accepting_state(
         })
 }
 
-/// Check if any monitor is in an accepting state where all formulas are propositional.
-/// This means the "eventually P" has been satisfied immediately - no cycle needed.
+/// Check if any monitor is in an accepting state with no temporal obligations.
 /// 
-/// For example:
-/// - `eventually (Request ∧ ¬Granted)` - when Request=true and Granted=false, 
-///   the formula is immediately satisfied (propositional)
-/// - `eventually (Request ∧ always ¬Granted)` - even when Request=true,
-///   we still need to verify `always ¬Granted` holds infinitely (temporal)
+/// This is an optimization: when a Büchi state has no temporal obligations (no Next formulas),
+/// it means any infinite continuation will stay in accepting states. We can immediately
+/// report a violation without needing to find the actual cycle.
+/// 
+/// This provides:
+/// 1. Shorter counter-example traces (shows exactly where violation occurs)
+/// 2. Faster detection (no need to explore further)
 fn monitors_in_immediate_accepting_state(
     monitors: &MonitoringState,
     automatons: &[BuchiAutomaton],
@@ -823,30 +826,56 @@ fn monitors_in_immediate_accepting_state(
         .monitors_per_formula
         .iter()
         .enumerate()
-        .any(|(formula_idx, monitors_for_formula)| {
+        .any(|(formula_idx, monitors)| {
             let automaton = &automatons[formula_idx];
             
             match &formulas[formula_idx] {
                 CompiledLtlExpression::Exists { .. } => {
-                    if monitors_for_formula.is_empty() {
+                    if monitors.is_empty() {
                         return true;
                     }
-                    monitors_for_formula.iter().all(|monitor| {
-                        monitor.is_accepting(automaton) && 
-                        state_has_only_propositional_formulas(monitor.current_state_id, automaton)
+                    monitors.iter().all(|monitor| {
+                        monitor.is_accepting(automaton) 
+                            && state_has_only_propositional_formulas(automaton, monitor.current_state_id)
                     })
                 }
-                _ => monitors_for_formula.iter().any(|monitor| {
-                    monitor.is_accepting(automaton) && 
-                    state_has_only_propositional_formulas(monitor.current_state_id, automaton)
+                _ => monitors.iter().any(|monitor| {
+                    monitor.is_accepting(automaton)
+                        && state_has_only_propositional_formulas(automaton, monitor.current_state_id)
                 }),
             }
         })
 }
 
-/// Check if all formulas in an automaton state are propositional (no temporal operators).
-/// If true, reaching this accepting state is an immediate violation.
-fn state_has_only_propositional_formulas(state_id: usize, automaton: &BuchiAutomaton) -> bool {
-    let state = &automaton.states[state_id];
-    state.formulas.iter().all(|f| f.is_propositional())
+/// Check if a Büchi state has only propositional formulas
+/// (no temporal obligations like Next, Until, Eventually, Always).
+/// 
+/// When a state has no temporal obligations, any infinite suffix from this state
+/// will remain in accepting states, so we can detect violations immediately.
+fn state_has_only_propositional_formulas(automaton: &BuchiAutomaton, state_id: usize) -> bool {
+    if let Some(state) = automaton.states.get(state_id) {
+        state.formulas.iter().all(|f| is_propositional(f))
+    } else {
+        false
+    }
+}
+
+/// Check if an LTL expression is purely propositional (no temporal operators).
+fn is_propositional(expr: &CompiledLtlExpression) -> bool {
+    match expr {
+        CompiledLtlExpression::Boolean(_) => true,
+        CompiledLtlExpression::Predicate { .. } => true,
+        CompiledLtlExpression::Not(inner) => is_propositional(inner),
+        CompiledLtlExpression::And(a, b) | CompiledLtlExpression::Or(a, b) | CompiledLtlExpression::Implies(a, b) => {
+            is_propositional(a) && is_propositional(b)
+        }
+        // Temporal operators
+        CompiledLtlExpression::Next(_)
+        | CompiledLtlExpression::Eventually(_)
+        | CompiledLtlExpression::Always(_)
+        | CompiledLtlExpression::Until(_, _)
+        | CompiledLtlExpression::Release(_, _) => false,
+        // Quantifiers contain temporal formulas
+        CompiledLtlExpression::ForLoop { .. } | CompiledLtlExpression::Exists { .. } => false,
+    }
 }

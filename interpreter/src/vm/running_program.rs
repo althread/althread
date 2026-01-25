@@ -165,6 +165,37 @@ impl<'a> RunningProgramState<'a> {
     pub fn current_state(&self) -> (&Memory, usize, usize) {
         (&self.memory, self.instruction_pointer, self.clock)
     }
+    
+    /// Get call stack information for debugging
+    /// Returns a vector of (frame_pointer, instruction_pointer, source_position)
+    pub fn get_call_stack_info(&self) -> Vec<(usize, usize, Option<Pos>)> {
+        let mut stack_info = Vec::new();
+        
+        // Add current frame
+        stack_info.push((
+            self.frame_pointer,
+            self.instruction_pointer,
+            self.current_code
+                .get(self.instruction_pointer)
+                .and_then(|inst| inst.pos.clone()),
+        ));
+        
+        // Add caller frames
+        for frame in self.call_stack.iter().rev() {
+            stack_info.push((
+                frame.caller_fp,
+                frame.return_ip,
+                frame.pos.clone(),
+            ));
+        }
+        
+        stack_info
+    }
+    
+    /// Get the frame pointer (base of current function's local variables)
+    pub fn get_frame_pointer(&self) -> usize {
+        self.frame_pointer
+    }
 
     pub fn current_instruction(&self) -> AlthreadResult<&Instruction> {
         self.current_code

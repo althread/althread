@@ -16,7 +16,7 @@ import InteractivePanel from '@components/interactive/InteractivePanel';
 import VMStateInspector from "@components/graph/VMStateInspector";
 
 // Import our new modules
-import { STORAGE_KEYS, loadFileSystem, saveFileSystem, loadFileContent, saveFileContent } from '@utils/storage';
+import { loadFileSystem, saveFileSystem, loadFileContent, saveFileContent } from '@utils/storage';
 import { getPathFromId, buildVirtualFileSystem, getFileContentFromVirtualFS, findFileByPath } from '@utils/fileSystemUtils';  // Add buildVirtualFileSystem here
 import { createFileOperationsHandlers } from '@hooks/useFileOperations';
 import { createEditorManager } from '@hooks/useEditorManager';
@@ -26,6 +26,8 @@ import { EmptyEditor } from '@components/editor/EmptyEditor';
 import { formatAlthreadError } from '@utils/error';
 import ErrorDisplay from '@components/error/ErrorDisplay';
 import { workerClient } from '@utils/workerClient';
+import { buildGraphFromNodes } from '@utils/graphBuilders';
+import type { GraphNode, RunResult, CheckResult, VMStateSelection } from './types/vm-state';
 
 init().then(() => {
   console.log('loaded');
@@ -332,91 +334,69 @@ export default function App() {
     setActiveTab(tab);
   };
 
-  let [nodes, setNodes] = createSignal([]);
-  let [edges, setEdges] = createSignal([]);
+  let [nodes, setNodes] = createSignal<any[]>([]);
+  let [edges, setEdges] = createSignal<any[]>([]);
   let [isRun, setIsRun] = createSignal(true);
 
   let [stdout, setStdout] = createSignal("The console output will appear here.");
   let [out, setOut] = createSignal("The execution output will appear here.");
-  let [commgraphout, setCommGraphOut] = createSignal([]); //messageflow graph
-  let [vm_states, setVmStates] = createSignal<any[]>([]); //to display vm states information
+  let [commgraphout, setCommGraphOut] = createSignal<any[]>([]); //messageflow graph
+  let [runGraphNodes, setRunGraphNodes] = createSignal<GraphNode[]>([]); // For run mode - stores graph nodes
+  let [runBuiltGraph, setRunBuiltGraph] = createSignal<{ nodes: any[], edges: any[] }>({ nodes: [], edges: [] }); // Built graph for vis.js
   let [stepLines, setStepLines] = createSignal<number[][]>([]); //to store lines for each step
   let [activeAction, setActiveAction] = createSignal<string | null>(null);
   const [loadingAction, setLoadingAction] = createSignal<string | null>(null);
   const [executionError, setExecutionError] = createSignal(false);
   const [structuredError, setStructuredError] = createSignal<any>(null);
-  const [graphKey, setGraphKey] = createSignal(0);
-  const [runGraphKey, setRunGraphKey] = createSignal(0);
-  const [selectedVM, setSelectedVM] = createSignal<any | null>(null);
-
-  const resolveVmState = (vm: any) => {
-    if (!vm) return null;
-    return vm.state ?? vm.vm_state ?? vm.current_state ?? vm.rawState ?? vm;
-  };
-
-  const getField = (obj: any, field: string) => {
-    if (!obj) return undefined;
-    if (typeof obj.get === 'function') return obj.get(field);
-    return obj[field];
-  };
-
-  const normalizePrograms = (value: any) => {
-    if (!value) return [];
-    if (Array.isArray(value)) return value;
-    if (value instanceof Map) return Array.from(value.values());
-    if (typeof value.values === 'function') return Array.from(value.values());
-    if (typeof value === 'object') return Object.values(value);
-    return [];
-  };
+  const [selectedVM, setSelectedVM] = createSignal<VMStateSelection | null>(null);
+  
+  // Graph ref for programmatic control
+  let graphRef: { selectNode: (nodeId: string | number) => void } | null = null;
 
   const selectRunVmByIndex = (index: number) => {
-    const vms = vm_states();
-    if (!vms || vms.length === 0) return;
-    const clamped = Math.max(0, Math.min(index, vms.length - 1));
-    setSelectedVM({ state: vms[clamped], stepIndex: clamped });
+    const nodes = runGraphNodes();
+    if (!nodes || nodes.length === 0) return;
+    const clamped = Math.max(0, Math.min(index, nodes.length - 1));
+    setSelectedVM({ vm: nodes[clamped].vm, stepIndex: clamped });
+    
+    // Select the corresponding node in the graph
+    if (graphRef) {
+      graphRef.selectNode(clamped);
+    }
   };
 
-  // Highlight lines in editor when an VM state is selected
+  // Highlight lines in editor when a VM state is selected
   createEffect(() => {
-    const vm = selectedVM();
-    const baseVm = resolveVmState(vm);
-    if (baseVm && editor && editor.highlightLines) {
+    const selection = selectedVM();
+    if (!selection || !editor || !editor.highlightLines) {
+      if (editor) editor.clearHighlights?.();
+      return;
+    }
+
+    const vmState = selection.vm;
+    
+    if (vmState && vmState.locals && vmState.locals.length > 0) {
       // Collect lines/labels from all programs in the current VM state
-      const programs = normalizePrograms(getField(baseVm, 'locals') || getField(baseVm, 'programs'));
-      const specs = programs
-        .map((p: any) => {
-           let line, name, pid;
-           if (typeof p.get === 'function') {
-             line = p.get('line');
-             name = p.get('name');
-             pid = p.get('pid');
-           } else {
-             line = p.line;
-             name = p.name;
-             pid = p.pid;
-           }
-           return { line, label: `${name}#${pid}` };
-        })
+      const specs = vmState.locals
+        .map((p: any) => ({ line: p.line, label: `${p.name}#${p.pid}` }))
         .filter((s: any) => typeof s.line === 'number' && s.line > 0);
         
       if (specs.length > 0) {
         editor.highlightLines(specs);
         return;
       }
-
-      // If we have stepIndex (from Run mode), use stepLines
-      if (vm && vm.stepIndex !== undefined) {
-        const lines = stepLines()[vm.stepIndex];
-        if (lines && lines.length > 0) {
-          editor.highlightLines(lines);
-          return;
-        }
-      } else {
-        editor.clearHighlights?.();
-      }
-    } else if (editor) {
-      editor.clearHighlights?.();
     }
+
+    // If we have stepIndex (from Run mode), use stepLines as fallback
+    if (selection.stepIndex !== undefined) {
+      const lines = stepLines()[selection.stepIndex];
+      if (lines && lines.length > 0) {
+        editor.highlightLines(lines);
+        return;
+      }
+    }
+    
+    editor.clearHighlights?.();
   });
 
   createEffect(() => {
@@ -425,12 +405,11 @@ export default function App() {
     const handler = (event: KeyboardEvent) => {
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
 
-      const vms = vm_states();
-      if (!vms || vms.length === 0) return;
+      const nodes = runGraphNodes();
+      if (!nodes || nodes.length === 0) return;
 
       const vm = selectedVM();
-      const baseVm = resolveVmState(vm);
-      let currentIndex = vm?.stepIndex ?? vms.findIndex((s) => s === baseVm);
+      let currentIndex = vm?.stepIndex ?? 0;
       if (currentIndex < 0) currentIndex = 0;
 
       const nextIndex = event.key === "ArrowRight" ? currentIndex + 1 : currentIndex - 1;
@@ -441,55 +420,6 @@ export default function App() {
     window.addEventListener("keydown", handler);
     onCleanup(() => window.removeEventListener("keydown", handler));
   });
-
-  // Build a compact execution graph from vm_states (Run -> VM states tab)
-  const runGraphNodes = () => {
-    const vms = vm_states();
-    return vms.map((vm, i) => {
-      const fullLabel = nodeToString(vm);
-      return {
-        id: i,
-        level: i,
-        label: `${i}`,
-        fullLabel,
-        rawState: { state: vm, stepIndex: i },
-        borderWidth: 1,
-        font: {
-          size: 10,
-          color: '#ffffff'
-        },
-        color: {
-          border: "#a6dfa6",
-          background: "#314d31",
-          highlight: {
-            border: "hsla(29.329, 66.552%, 52.544%)",
-            background: "#314d31"
-          },
-          hover: {
-            border: "hsla(29.329, 66.552%, 52.544%)",
-            background: "#314d31"
-          }
-        }
-      };
-    });
-  };
-
-  const runGraphEdges = () => {
-    const vms = vm_states();
-    const lines = stepLines();
-    const edges: any[] = [];
-    for (let i = 0; i < vms.length - 1; i++) {
-      edges.push({
-        id: i,
-        from: i,
-        to: i + 1,
-        label: `step ${i + 1}`,
-        lines: lines[i] || [],
-        font: { size: 0 }
-      });
-    }
-    return edges;
-  };
 
   // Interactive mode state
   const [isInteractiveMode, setIsInteractiveMode] = createSignal(false);
@@ -585,16 +515,16 @@ export default function App() {
         newHistory
       );
 
-      setInteractiveStates(res.get('states') || []);
-      setCurrentVMState(stepResult.new_state || res.get('current_state'));
-      setInteractiveFinished(res.get('is_finished'));
+      setInteractiveStates(res.next_states || []);
+      setCurrentVMState(stepResult.new_state || res.current_state);
+      setInteractiveFinished(!res.next_states || res.next_states.length === 0);
       
-      if (res.get('is_finished')) {
+      if (!res.next_states || res.next_states.length === 0) {
         const currentExecutionOutput = accumulatedExecutionOutput();
         const finalOutput = currentExecutionOutput + (currentExecutionOutput ? '\n\n' : '') + "Program execution completed.";
         setAccumulatedExecutionOutput(finalOutput);
         setOut(finalOutput);
-      } else if (!res.get('states') || res.get('states').length === 0) {
+      } else if (res.next_states.length === 0) {
         const currentExecutionOutput = accumulatedExecutionOutput();
         const finalOutput = currentExecutionOutput + (currentExecutionOutput ? '\n\n' : '') + "No more states available.";
         setAccumulatedExecutionOutput(finalOutput);
@@ -662,14 +592,14 @@ export default function App() {
       
       let res = start_interactive_session(editor.editorView().state.doc.toString(), filePath, virtualFS);
       
-      setInteractiveStates(res.get('states') || []);
-      setCurrentVMState(res.get('current_state'));
-      setInteractiveFinished(res.get('is_finished'));
+      setInteractiveStates(res.next_states || []);
+      setCurrentVMState(res.current_state);
+      setInteractiveFinished(!res.next_states || res.next_states.length === 0);
       setExecutionHistory([]);
       
-      if (res.get('is_finished')) {
+      if (!res.next_states || res.next_states.length === 0) {
         setOut("Program execution completed immediately.");
-      } else if (!res.get('states') || res.get('states').length === 0) {
+      } else if (res.next_states.length === 0) {
         setOut("No more states available.");
         setInteractiveFinished(true);
       } else {
@@ -694,7 +624,8 @@ export default function App() {
     setCommGraphOut([]);
     setNodes([]);
     setEdges([]);
-    setVmStates([]);
+    setRunGraphNodes([]);
+    setRunBuiltGraph({ nodes: [], edges: [] });
     setActiveAction(null);
     setSelectedVM(null);
     // Reset interactive mode state
@@ -737,23 +668,21 @@ export default function App() {
 
       <Match when={isRun() && activeTab() === "msg_flow"}>
         <div class="console">
-          {renderMessageFlowGraph(commgraphout(), vm_states(), editor)}
+          {renderMessageFlowGraph(commgraphout(), [], editor)}
         </div>
       </Match>
 
       <Match when={isRun() && activeTab() === "vm_states"}>
         <div class="console">
-          <Resizable id="vm-states-layout" orientation="vertical" style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column" }}>
-            <Resizable.Panel initialSize={0.4} minSize={0.2} style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <Resizable id="vm-states-layout" orientation="vertical" style={{ height: "100%", width: "100%", display: "flex", "flex-direction": "column" }}>
+            <Resizable.Panel initialSize={0.4} minSize={0.2} style={{ display: "flex", "flex-direction": "column", overflow: "hidden" }}>
               <VMStateInspector node={selectedVM()} onClose={() => setSelectedVM(null)} />
             </Resizable.Panel>
             <Resizable.Handle class="Resizable-handle" />
-            <Resizable.Panel initialSize={0.6} minSize={0.2} style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <Resizable.Panel initialSize={0.6} minSize={0.2} style={{ display: "flex", "flex-direction": "column", overflow: "hidden" }}>
               <Graph
-                key={runGraphKey()}
-                nodes={runGraphNodes()}
-                edges={runGraphEdges()}
-                vm_states={vm_states()}
+                nodes={runBuiltGraph().nodes}
+                edges={runBuiltGraph().edges}
                 setLoadingAction={setLoadingAction}
                 theme="dark"
                 onEdgeClick={(_edgeId: string, edgeData: any) => {
@@ -762,6 +691,7 @@ export default function App() {
                   }
                 }}
                 onNodeSelect={setSelectedVM}
+                ref={(instance) => graphRef = instance}
               />
             </Resizable.Panel>
           </Resizable>
@@ -770,17 +700,15 @@ export default function App() {
 
       <Match when={!isRun()}>
         <div class="console">
-          <Resizable id="checker-states-layout" orientation="vertical" style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column" }}>
-            <Resizable.Panel initialSize={0.4} minSize={0.2} style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <Resizable id="checker-states-layout" orientation="vertical" style={{ height: "100%", width: "100%", display: "flex", "flex-direction": "column" }}>
+            <Resizable.Panel initialSize={0.4} minSize={0.2} style={{ display: "flex", "flex-direction": "column", overflow: "hidden" }}>
               <VMStateInspector node={selectedVM()} onClose={() => setSelectedVM(null)} />
             </Resizable.Panel>
             <Resizable.Handle class="Resizable-handle" />
-            <Resizable.Panel initialSize={0.6} minSize={0.2} style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <Resizable.Panel initialSize={0.6} minSize={0.2} style={{ display: "flex", "flex-direction": "column", overflow: "hidden" }}>
               <Graph 
-                key={graphKey()} 
                 nodes={nodes()} 
                 edges={edges()} 
-                vm_states={vm_states()} 
                 setLoadingAction={setLoadingAction} 
                 theme="dark" 
                 onEdgeClick={(_edgeId: string, edgeData: any) => {
@@ -789,6 +717,7 @@ export default function App() {
                     }
                 }}
                 onNodeSelect={setSelectedVM}
+                ref={(instance) => graphRef = instance}
               />
             </Resizable.Panel>
           </Resizable>
@@ -829,14 +758,14 @@ export default function App() {
                   }
                   
                   let res = start_interactive_session(editor.editorView().state.doc.toString(), filePath, virtualFS);
-                  setInteractiveStates(res.get('states') || []);
-                  setCurrentVMState(res.get('current_state'));
-                  setInteractiveFinished(res.get('is_finished'));
+                  setInteractiveStates(res.next_states || []);
+                  setCurrentVMState(res.current_state);
+                  setInteractiveFinished(!res.next_states || res.next_states.length === 0);
                   setExecutionHistory([]);
                   
-                  if (res.get('is_finished')) {
+                  if (!res.next_states || res.next_states.length === 0) {
                     setOut("Program execution completed.");
-                  } else if (!res.get('states') || res.get('states').length === 0) {
+                  } else if (res.next_states.length === 0) {
                     setOut("No interactive choices available.");
                   } else {
                     setOut("Interactive mode started. Select the next instruction to execute.");
@@ -878,18 +807,20 @@ export default function App() {
                   if (!filePath) {
                     filePath = editorManager.activeFile()!.name; // Fallback to name if ID not found
                   }
-                  let res = await workerClient.run(editor.editorView().state.doc.toString(), filePath, virtualFS); 
-                  console.log(res);
+                  let res: RunResult = await workerClient.run(editor.editorView().state.doc.toString(), filePath, virtualFS); 
                   if (res.debug.length === 0) {
                     resetSetOut();
                   } else {
                     setOut(res.debug);
                   }
-                  console.log(res.message_flow_graph);
-                  setCommGraphOut(res.message_flow_graph);
-                  setVmStates(res.vm_states);
+                  setCommGraphOut(res.message_flow_events);
+                  setRunGraphNodes(res.nodes);
                   setStepLines(res.step_lines || []);
-                  setRunGraphKey(k => k + 1);
+                  
+                  // Build the graph for visualization
+                  const builtGraph = buildGraphFromNodes(res.nodes, { mode: 'run', stepLines: res.step_lines || [] });
+                  setRunBuiltGraph(builtGraph);
+                  
                   setStdout(res.stdout.join('\n'));
                   setActiveTab("console");
                 } catch(e: any) {
@@ -902,7 +833,8 @@ export default function App() {
                   // reset other tabs to initial state
                   setStdout("The console output will appear here.");
                   setCommGraphOut([]);
-                  setVmStates([]);
+                  setRunGraphNodes([]);
+                  setRunBuiltGraph({ nodes: [], edges: [] });
                   setExecutionError(true);
                 } finally {
                   setTimeout(() => {
@@ -924,9 +856,6 @@ export default function App() {
                 setActiveTab("vm_states");
                 if (executionError()) setExecutionError(false);
                 if (!editorManager.activeFile()) return;
-
-                // Increment key to force re-render of Graph component
-                setGraphKey(k => k + 1);
                 
                 try {
                   const virtualFS = buildVirtualFileSystem(mockFileSystem());
@@ -936,77 +865,34 @@ export default function App() {
                     filePath = editorManager.activeFile()!.name; // Fallback to name if ID not found
                   }
 
-                  let res = await workerClient.check(editor.editorView().state.doc.toString(), filePath, virtualFS);
+                  let res: CheckResult = await workerClient.check(editor.editorView().state.doc.toString(), filePath, virtualFS);
                   
-                  if (res[0].length > 0) {
+                  console.log(res);
+                  
+                  if (res.path.length > 0) {
                       setOut("Violation found! See the highlighted path in the VM states graph.");
-                  } else if (res[1].exhaustive) {
+                  } else if (res.exhaustive) {
                     setOut("Verification complete: No execution errors found.");
                   } else {
                     setOut("Warning: Exploration limit reached. The state space was not fully explored. No violation found in the explored part.");
                   }
                   
-                  console.log(res);
-                  let colored_path: string[] = [];
-                  if(res[0].length > 0) { // a violation occurred
-                    res[0].forEach((path: any) => {
-                      colored_path.push(nodeToString(path.to));
+                  // Extract violation path node labels
+                  let violationPath: string[] = [];
+                  if(res.path.length > 0) {
+                    res.path.forEach((pathItem: any) => {
+                      violationPath.push(nodeToString(pathItem.to));
                     });
                   }
 
-                  let nodes: Record<string, number> = {};
-                  setNodes(res[1].nodes.map((n: any, i: number) => {
-                    let label = nodeToString(n[0]);
-                    const {level} = n[1];
-                    nodes[label] = i;
-                    const isViolationNode = colored_path.includes(label) || (colored_path.length > 0 && level == 0);
-                    const background = isViolationNode ? "#4d3131" : "#314d31";
-                    const border = isViolationNode ? "#ec9999" : "#a6dfa6";
-                    return {
-                      id: i,
-                      level,
-                      label: `${i}`,
-                      fullLabel: label,
-                      rawState: n[0],
-                      isViolationNode,
-                      borderWidth: 1,
-                      font: {
-                        size: 10,
-                        color: '#ffffff'
-                      },
-                      color: {
-                        border,
-                        background,
-                        highlight: {
-                          border: "hsla(29.329, 66.552%, 52.544%)", // theme primary
-                          background // keep original background
-                        },
-                        hover: {
-                          border: "hsla(29.329, 66.552%, 52.544%)",
-                          background
-                        }
-                      }
-                    }
-                  }));
-
-                  let edges: any = [];
-                  let edgeId = 0;
-                  res[1].nodes.forEach((n: any, i: number) => {
-                    const {successors} = n[1];
-                    successors.forEach(({lines, pid, name, to}: any) => {
-                      to = nodeToString(to);
-                      edges.push({
-                        id: edgeId++,
-                        from: i,
-                        to: nodes[to],
-                        label: name+'#'+pid+': '+lines.join(','),
-                        lines: lines.map((l: any) => Number(l)),
-                        font: { size: 0 } // Start with hidden label
-                      });
-                    })
-                    // console.log(node_entirely(n[0]));
+                  // Build the graph with violation highlighting
+                  const builtGraph = buildGraphFromNodes(res.nodes, { 
+                    mode: 'check', 
+                    violationPath 
                   });
-                  setEdges(edges);
+                  
+                  setNodes(builtGraph.nodes);
+                  setEdges(builtGraph.edges);
                   setIsRun(false);
 
                 } catch(e: any) {
@@ -1019,7 +905,8 @@ export default function App() {
                   // reset other tabs to initial state
                   setStdout("The console output will appear here.");
                   setCommGraphOut([]);
-                  setVmStates([]);
+                  setRunGraphNodes([]);
+                  setRunBuiltGraph({ nodes: [], edges: [] });
                   setExecutionError(true);
                 }
               }}>
@@ -1283,7 +1170,7 @@ export default function App() {
         onReset={resetInteractiveMode}
         stdout={accumulatedOutput()}
         commGraphOut={commgraphout()}
-        vmStates={vm_states()}
+        vmStates={[]}
         isRun={isRun()}
         interactiveMessageFlow={interactiveMessageFlow()}
         interactiveVmStates={interactiveVmStates()}
