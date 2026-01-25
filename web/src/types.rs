@@ -3,11 +3,26 @@ use std::collections::HashMap;
 use tsify::Tsify;
 use wasm_bindgen::prelude::*;
 
+/// Represents a literal value with its type and content
+#[derive(Serialize, Tsify, Clone, Debug)]
+#[tsify(into_wasm_abi)]
+#[serde(tag = "type", content = "value")]
+pub enum Literal {
+    Null,
+    Int(i64),
+    Float(f64),
+    String(String),
+    Bool(bool),
+    List(Vec<Literal>),
+    Tuple(Vec<Literal>),
+    Process(String, usize),
+}
+
 /// Represents a variable in a call frame
 #[derive(Serialize, Tsify, Clone)]
 #[tsify(into_wasm_abi)]
 pub struct VariableInfo {
-    pub value: String,
+    pub value: Literal,
     #[serde(rename = "type")]
     pub var_type: String,
 }
@@ -32,7 +47,7 @@ pub struct ProgramState {
     pub pid: usize,
     pub name: String,
     pub instruction_pointer: usize,
-    pub memory: Vec<String>,
+    pub memory: Vec<Literal>,
     pub clock: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub line: Option<usize>,
@@ -45,7 +60,7 @@ pub struct ProgramState {
 pub struct ChannelState {
     pub pid: usize,
     pub name: String,
-    pub values: Vec<String>,
+    pub values: Vec<Literal>,
 }
 
 /// Represents a message pending delivery between channels
@@ -56,7 +71,7 @@ pub struct PendingDelivery {
     pub from_channel: String,
     pub to_pid: usize,
     pub to_channel: String,
-    pub values: Vec<String>,
+    pub values: Vec<Literal>,
 }
 
 /// Represents a message waiting to be sent (unconnected channel)
@@ -65,7 +80,7 @@ pub struct PendingDelivery {
 pub struct WaitingSend {
     pub pid: usize,
     pub name: String,
-    pub values: Vec<String>,
+    pub values: Vec<Literal>,
 }
 
 /// Represents a connection between two channels
@@ -87,8 +102,8 @@ pub struct ChannelEndpoint {
 #[derive(Serialize, Tsify, Clone)]
 #[tsify(into_wasm_abi)]
 pub struct VMState {
-    #[tsify(type = "Record<string, string>")]
-    pub globals: HashMap<String, String>,
+    #[tsify(type = "Record<string, Literal>")]
+    pub globals: HashMap<String, Literal>,
     pub channels: Vec<ChannelState>,
     pub pending_deliveries: Vec<PendingDelivery>,
     pub waiting_send: Vec<WaitingSend>,

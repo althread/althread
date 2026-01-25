@@ -1,14 +1,17 @@
-import { For, Show } from "solid-js";
-import { literal } from "@utils/vmStateUtils";
+import { createMemo, For, Show } from "solid-js";
 import "./GlobalsDisplay.css";
+import { LiteralDisplay } from "./Literal";
+import type { Literal } from "../../types/vm-state";
 
 interface GlobalsDisplayProps {
-    globals: Record<string, string>;
+    globals: Record<string, Literal>;
 }
 
 export default function GlobalsDisplay(props: GlobalsDisplayProps) {
-    const globalsEntries = () => Object.entries(props.globals);
-
+    const globalsEntries = createMemo(() => {
+        return Object.entries(props.globals).sort((a, b) => a[0].localeCompare(b[0]));
+    });
+    
     return (
         <div class="globals-section">
             <div class="section-header">Globals</div>
@@ -22,7 +25,7 @@ export default function GlobalsDisplay(props: GlobalsDisplayProps) {
                             {([key, value]) => (
                                 <div class="variable-item">
                                     <span class="var-name">{key}</span>{ " = " }
-                                    <span class="var-value">{literal(value)}</span>
+                                    <span class="var-value"><LiteralDisplay value={value} /></span>
                                 </div>
                             )}
                         </For>

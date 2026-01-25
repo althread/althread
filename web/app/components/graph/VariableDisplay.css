@@ -12,7 +12,6 @@
     display: flex;
     align-items: baseline;
     gap: 6px;
-    padding: 4px 8px;
     background: var(--vscode-editor-background);
     border-radius: 4px;
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;

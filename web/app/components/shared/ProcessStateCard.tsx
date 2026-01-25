@@ -1,8 +1,8 @@
 import { For, Show } from "solid-js";
 import CallFrameDisplay from "../graph/CallFrameDisplay";
-import { literal } from "@utils/vmStateUtils";
 import type { ProgramState, ChannelState } from "../../types/vm-state";
 import "./ProcessStateCard.css";
+import { LiteralDisplay } from "./Literal";
 
 interface ProcessStateCardProps {
     process: ProgramState;
@@ -39,7 +39,7 @@ export default function ProcessStateCard(props: ProcessStateCardProps) {
                                             <div class="channel-values">
                                                 <For each={ch.values}>
                                                     {(val) => (
-                                                        <div class="channel-value-item">{literal(val)}</div>
+                                                        <div class="channel-value-item"><LiteralDisplay value={val} /></div>
                                                     )}
                                                 </For>
                                             </div>

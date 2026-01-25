@@ -235,6 +235,16 @@ impl InstructionBuilder for Node<FnCall> {
             }
         } else {
             // Handle method calls (e.g., obj.method())
+            if self.value.fn_name.value.parts.len() > 2 {
+                return Err(AlthreadError::new(
+                    ErrorType::UndefinedFunction,
+                    Some(self.pos.clone()),
+                    format!(
+                        "Chaining attributes or methods is not supported: {}",
+                        self.value.fn_name_to_string()
+                    ),
+                ));
+            }
             let receiver_name = &self.value.fn_name.value.parts[0].value.value;
             let method_name = &self.value.fn_name.value.parts.last().unwrap().value.value;
 
@@ -246,7 +256,7 @@ impl InstructionBuilder for Node<FnCall> {
                 .ok_or(AlthreadError::new(
                     ErrorType::VariableError,
                     Some(self.pos.clone()),
-                    format!("Variable '{}' not found", receiver_name),
+                    format!("Variable '{}' not found (if this is a global variable, it has not been implemented yet)", receiver_name),
                 ))?;
 
             let final_var_id = raw_var_id + state.method_call_stack_offset;

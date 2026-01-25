@@ -798,13 +798,11 @@ export default function App() {
                     filePath = editorManager.activeFile()!.name; // Fallback to name if ID not found
                   }
                   let res: RunResult = await workerClient.run(editor.editorView().state.doc.toString(), filePath, virtualFS); 
-                  console.log(res);
                   if (res.debug.length === 0) {
                     resetSetOut();
                   } else {
                     setOut(res.debug);
                   }
-                  console.log(res.message_flow_events);
                   setCommGraphOut(res.message_flow_events);
                   setRunGraphNodes(res.nodes);
                   setStepLines(res.step_lines || []);

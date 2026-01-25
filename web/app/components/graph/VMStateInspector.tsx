@@ -11,7 +11,7 @@ interface VMStateInspectorProps {
 }
 
 export default function VMStateInspector(props: VMStateInspectorProps) {
-    // Extract VM state - now it's properly typed!
+    // Extract VM state
     const state = createMemo((): VMState | null => {
         return props.node?.vm ?? null;
     });

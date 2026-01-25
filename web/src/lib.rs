@@ -54,19 +54,35 @@ fn error_to_js(err: AlthreadError) -> JsValue {
     to_js(&err)
 }
 
+// Convert a VM Literal to a typed web Literal
+fn value_to_literal(value: &althread::ast::token::literal::Literal) -> types::Literal {
+    use althread::ast::token::literal::Literal as VmLiteral;
+    
+    match value {
+        VmLiteral::Null => types::Literal::Null,
+        VmLiteral::Int(n) => types::Literal::Int(*n),
+        VmLiteral::Float(f) => types::Literal::Float(f.into_inner()),
+        VmLiteral::String(s) => types::Literal::String(s.clone()),
+        VmLiteral::Bool(b) => types::Literal::Bool(*b),
+        VmLiteral::List(_, items) => types::Literal::List(items.iter().map(value_to_literal).collect()),
+        VmLiteral::Tuple(items) => types::Literal::Tuple(items.iter().map(value_to_literal).collect()),
+        VmLiteral::Process(name, id) => types::Literal::Process(name.clone(), *id),
+    }
+}
+
 // Helper function to create typed VM state from VM
 fn create_vm_state(vm: &althread::vm::VM) -> VMState {
     let current_state = vm.current_state();
 
     let globals = current_state.0.iter()
-        .map(|(key, value)| (key.clone(), format!("{:?}", value)))
+        .map(|(key, value)| (key.clone(), value_to_literal(value)))
         .collect();
 
     let channels = current_state.1.iter()
         .map(|((pid, name), values)| ChannelState {
             pid: *pid,
             name: name.clone(),
-            values: values.iter().map(|v| format!("{:?}", v)).collect(),
+            values: values.iter().map(value_to_literal).collect(),
         })
         .collect();
 
@@ -76,7 +92,7 @@ fn create_vm_state(vm: &althread::vm::VM) -> VMState {
             from_channel: f_chan.clone(),
             to_pid: *t_pid,
             to_channel: t_chan.clone(),
-            values: values.iter().map(|v| format!("{:?}", v)).collect(),
+            values: values.iter().map(value_to_literal).collect(),
         })
         .collect();
 
@@ -84,7 +100,7 @@ fn create_vm_state(vm: &althread::vm::VM) -> VMState {
         .map(|((pid, name), values)| WaitingSend {
             pid: *pid,
             name: name.clone(),
-            values: values.iter().map(|v| format!("{:?}", v)).collect(),
+            values: values.iter().map(value_to_literal).collect(),
         })
         .collect();
 
@@ -135,7 +151,7 @@ fn create_vm_state(vm: &althread::vm::VM) -> VMState {
                                 variables.insert(
                                     var_info.name.clone(),
                                     VariableInfo {
-                                        value: format!("{:?}", memory[var_info.stack_index]),
+                                        value: value_to_literal(&memory[var_info.stack_index]),
                                         var_type: format!("{:?}", var_info.datatype),
                                     }
                                 );
@@ -156,7 +172,7 @@ fn create_vm_state(vm: &althread::vm::VM) -> VMState {
             ProgramState {
                 pid: index,
                 name: prog_name,
-                memory: memory.iter().map(|v| format!("{:?}", v)).collect(),
+                memory: memory.iter().map(value_to_literal).collect(),
                 instruction_pointer: *instruction_pointer,
                 line,
                 clock: *clock,

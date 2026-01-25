@@ -32,20 +32,22 @@ export default function CallFrameDisplay(props: CallFrameDisplayProps) {
                 <For each={props.frames}>
                     {(frame, index) => (
                         <div class="frame-card" classList={{ "top-frame": index() === 0 }}>
-                            <div class="frame-header">
-                                <span class="frame-title">{frame.function}</span>
-                                <div class="frame-meta">
-                                    <Show when={frame.line}>
-                                        <span class="frame-location" title="Source line">
-                                            <i class="codicon codicon-file-code"></i>
-                                            Line {frame.line}
+                            <Show when={index() > 0}>
+                                <div class="frame-header">
+                                    <span class="frame-title">{frame.function}</span>
+                                    <div class="frame-meta">
+                                        <Show when={frame.line}>
+                                            <span class="frame-location" title="Source line">
+                                                <i class="codicon codicon-file-code"></i>
+                                                Line {frame.line}
+                                            </span>
+                                        </Show>
+                                        <span class="frame-ip" title="Instruction pointer">
+                                            IP: {frame.instruction_pointer}
                                         </span>
-                                    </Show>
-                                    <span class="frame-ip" title="Instruction pointer">
-                                        IP: {frame.instruction_pointer}
-                                    </span>
+                                    </div>
                                 </div>
-                            </div>
+                            </Show>
                             <div class="frame-body">
                                 <Show 
                                     when={frame.variables && Object.keys(frame.variables).length > 0}

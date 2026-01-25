@@ -7,6 +7,7 @@
 
 // Re-export all generated types from WASM package
 export type {
+    Literal,
     VariableInfo,
     CallFrame,
     ProgramState,

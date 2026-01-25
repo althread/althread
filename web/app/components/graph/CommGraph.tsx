@@ -1,12 +1,13 @@
 import vis from "vis-network/dist/vis-network.esm";
-import { createSignal, onCleanup, createEffect, Show } from "solid-js"
-import { literal, Node} from "./Node";
+import { createSignal, onCleanup, createEffect, Show, For } from "solid-js"
+import { Node} from "./Node";
 import { ProgramStateJS } from "./State";
 import GraphToolbar from "./GraphToolbar";
 import { exportCommGraphToCSV } from "./exportToCSV";
 
 import { createGraphToolbarHandlers } from "./visHelpers";
 import { useGraphMaximizeHotkeys } from "@hooks/useGraphMaximizeHotkeys";
+import { LiteralDisplay } from "@components/shared/Literal";
 
 interface MessageFlowEvent {
     sender: number, // id of the sending process
@@ -67,9 +68,11 @@ const VmStatePopup = (props: { event: MessageFlowEvent }) => {
             <strong>Globals:</strong>
             {vmState.globals && vmState.globals.size > 0 ? (
               <ul>
-                {[...Array.from(vmState.globals.entries()).map(
-                  ([k, v]) => <li>{String(k)} = {literal(v)}</li>
-                )]}
+                <For each={Array.from(vmState.globals.entries())}>
+                  {([key, value]) => (
+                    <li>{String(key)} = <LiteralDisplay value={value} /></li>
+                  )}
+                </For>
               </ul>
             ) : (
               <p style={{"padding-left": "1rem", "font-style": "italic"}}>No global variables.</p>
@@ -85,7 +88,7 @@ const VmStatePopup = (props: { event: MessageFlowEvent }) => {
                   </p>
                   <ul>
                     <li><strong>pc:</strong> {prog_state.instruction_pointer}</li>
-                    <li><strong>stack:</strong> [{prog_state.memory.map(v => literal(v)).join(', ')}]</li>
+                    <li><strong>stack:</strong> [{prog_state.memory.map(v => <LiteralDisplay value={v} />).join(', ')}]</li>
                     <li>
                       <strong>Channels:</strong>
                       {(() => {
@@ -95,7 +98,7 @@ const VmStatePopup = (props: { event: MessageFlowEvent }) => {
                             if (Array.isArray(key) && key.length === 2 && key[0] === prog_state.pid) {
                               const channelName = key[1];
                               programChannels.push(
-                                <li>{channelName} &lt;- {Array.isArray(value) ? value.map(l => literal(l)).join(',') : String(value)}</li>
+                                <li>{channelName} &lt;- {Array.isArray(value) ? value.map(l => <LiteralDisplay value={l} />).join(',') : String(value)}</li>
                               );
                             }
                           }

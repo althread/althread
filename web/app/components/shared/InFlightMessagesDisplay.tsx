@@ -1,7 +1,7 @@
 import { For, Show } from "solid-js";
-import { literal } from "@utils/vmStateUtils";
 import type { PendingDelivery, WaitingSend } from "../../types/vm-state";
 import "./InFlightMessagesDisplay.css";
+import { LiteralDisplay } from "./Literal";
 
 interface InFlightMessagesDisplayProps {
     pendingDeliveries: PendingDelivery[];
@@ -33,7 +33,7 @@ export default function InFlightMessagesDisplay(props: InFlightMessagesDisplayPr
                                             <div class="message-payload">
                                                 <For each={item.values}>
                                                     {(val) => (
-                                                        <div class="payload-item">{literal(val)}</div>
+                                                        <div class="payload-item"><LiteralDisplay value={val} /></div>
                                                     )}
                                                 </For>
                                             </div>
@@ -60,7 +60,7 @@ export default function InFlightMessagesDisplay(props: InFlightMessagesDisplayPr
                                             <div class="message-payload">
                                                 <For each={item.values}>
                                                     {(val) => (
-                                                        <div class="payload-item">{literal(val)}</div>
+                                                        <div class="payload-item"><LiteralDisplay value={val} /></div>
                                                     )}
                                                 </For>
                                             </div>

@@ -1,7 +1,7 @@
 .call-frame-display {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 6px;
     width: 100%;
 }
 
@@ -21,7 +21,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 12px;
+    padding: 6px 10px;
     background: var(--vscode-editor-background);
     border-bottom: 1px solid var(--vscode-panel-border);
     gap: 12px;
@@ -65,7 +65,7 @@
 }
 
 .frame-body {
-    padding: 12px;
+    padding: 8px 10px;
 }
 
 .no-variables {

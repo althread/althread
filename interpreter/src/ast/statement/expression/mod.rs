@@ -1715,7 +1715,7 @@ impl InstructionBuilder for Node<Expression> {
             AlthreadError::new(
                 ErrorType::ExpressionError,
                 Some(self.pos.clone()),
-                format!("Type of expression is not well-defined: {}", err),
+                format!("Type of expression is not well-defined: {} (if this is a global variable, it has not been implemented yet)", err),
             )
         })?;
 
