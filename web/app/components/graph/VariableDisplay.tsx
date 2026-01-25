@@ -1,15 +1,11 @@
 import { For, Show } from "solid-js";
-import { literal } from "./Node";
+import { literal } from "@utils/vmStateUtils";
+import type { VariableInfo } from "../../types/vm-state";
 import "./VariableDisplay.css";
 
-interface Variable {
-    value: string;
-    type: string;
-}
-
 interface VariableDisplayProps {
-    variables: Record<string, Variable>;
-    fallbackMemory?: any[];
+    variables: Record<string, VariableInfo>;
+    fallbackMemory?: string[];
 }
 
 export default function VariableDisplay(props: VariableDisplayProps) {

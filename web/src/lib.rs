@@ -1,6 +1,5 @@
 use fastrand;
-use serde::ser::SerializeStruct;
-use serde::{Serialize, Serializer};
+use serde::Serialize;
 use serde_wasm_bindgen;
 use std::collections::HashMap;
 use std::path::Path;
@@ -13,8 +12,16 @@ use althread::vm::VM;
 use althread::{ast::Ast, checker, error::AlthreadError, vm::GlobalAction};
 use console_error_panic_hook;
 
+mod types;
+use types::*;
+
 const SEND: u8 = b's';
 const RECV: u8 = b'r';
+
+/// Helper to serialize with json_compatible mode (no Maps, plain objects)
+fn to_js<T: Serialize>(value: &T) -> JsValue {
+    value.serialize(&serde_wasm_bindgen::Serializer::json_compatible()).unwrap()
+}
 
 fn find_delivered_message(
     prev_channels: &althread::vm::channels::ChannelsState,
@@ -44,85 +51,78 @@ fn delivery_preview(prev_vm: &althread::vm::VM, next_vm: &althread::vm::VM) -> O
 }
 
 fn error_to_js(err: AlthreadError) -> JsValue {
-    serde_wasm_bindgen::to_value(&err).unwrap()
+    to_js(&err)
 }
 
-// Helper function to create VM state JSON object
-fn create_vm_state_json(vm: &althread::vm::VM) -> serde_json::Value {
+// Helper function to create typed VM state from VM
+fn create_vm_state(vm: &althread::vm::VM) -> VMState {
     let current_state = vm.current_state();
 
-    serde_json::json!({
-        "globals": current_state.0.iter().map(|(key, value)| {
-            (key.clone(), format!("{:?}", value))
-        }).collect::<HashMap<_, _>>(),
-        "channels": current_state.1.iter().map(|((pid, name), values)| {
-            serde_json::json!({
-                "pid": pid,
-                "name": name,
-                "values": values.iter().map(|v| format!("{:?}", v)).collect::<Vec<String>>()
-            })
-        }).collect::<Vec<_>>(),
-        "pending_deliveries": vm.channels.get_pending_deliveries().iter().map(|((f_pid, f_chan, t_pid, t_chan), values)| {
-           serde_json::json!({
-               "from_pid": f_pid,
-               "from_channel": f_chan,
-               "to_pid": t_pid,
-               "to_channel": t_chan,
-               "values": values.iter().map(|v| format!("{:?}", v)).collect::<Vec<String>>()
-           })
-        }).collect::<Vec<_>>(),
-        "waiting_send": vm.channels.get_waiting_send().iter().map(|((pid, name), values)| {
-           serde_json::json!({
-               "pid": pid,
-               "name": name,
-               "values": values.iter().map(|v| format!("{:?}", v)).collect::<Vec<String>>()
-           })
-        }).collect::<Vec<_>>(),
-        "channel_connections": vm.channels.get_connections()
-            .iter()
-            .map(|((from_pid, from_channel), (to_pid, to_channel))| {
-                serde_json::json!({
-                    "from": { "pid": from_pid, "channel": from_channel },
-                    "to": { "pid": to_pid, "channel": to_channel }
-                })
-            })
-            .collect::<Vec<_>>(),
-        "locals": current_state.2.iter().enumerate().map(|(index, (memory, instruction_pointer, clock))| {
+    let globals = current_state.0.iter()
+        .map(|(key, value)| (key.clone(), format!("{:?}", value)))
+        .collect();
+
+    let channels = current_state.1.iter()
+        .map(|((pid, name), values)| ChannelState {
+            pid: *pid,
+            name: name.clone(),
+            values: values.iter().map(|v| format!("{:?}", v)).collect(),
+        })
+        .collect();
+
+    let pending_deliveries = vm.channels.get_pending_deliveries().iter()
+        .map(|((f_pid, f_chan, t_pid, t_chan), values)| PendingDelivery {
+            from_pid: *f_pid,
+            from_channel: f_chan.clone(),
+            to_pid: *t_pid,
+            to_channel: t_chan.clone(),
+            values: values.iter().map(|v| format!("{:?}", v)).collect(),
+        })
+        .collect();
+
+    let waiting_send = vm.channels.get_waiting_send().iter()
+        .map(|((pid, name), values)| WaitingSend {
+            pid: *pid,
+            name: name.clone(),
+            values: values.iter().map(|v| format!("{:?}", v)).collect(),
+        })
+        .collect();
+
+    let channel_connections = vm.channels.get_connections().iter()
+        .map(|((from_pid, from_channel), (to_pid, to_channel))| ChannelConnection {
+            from: ChannelEndpoint {
+                pid: *from_pid,
+                channel: from_channel.clone(),
+            },
+            to: ChannelEndpoint {
+                pid: *to_pid,
+                channel: to_channel.clone(),
+            },
+        })
+        .collect();
+
+    let locals = current_state.2.iter().enumerate()
+        .map(|(index, (memory, instruction_pointer, clock))| {
             let prog_name = vm.running_programs.get(index)
                 .map(|p| p.name.clone())
                 .unwrap_or_else(|| format!("PID_{}", index));
-            
-            eprintln!("DEBUG processing locals for index={}, prog_name='{}'", index, prog_name);
-            eprintln!("  - available program_debug_info keys: {:?}", vm.program_debug_info.keys().collect::<Vec<_>>());
             
             let line = vm.programs_code.get(&prog_name)
                 .and_then(|code| code.instructions.get(*instruction_pointer))
                 .and_then(|inst| inst.pos.as_ref())
                 .map(|pos| pos.line);
             
-            // Get debug info for this program
             let debug_info = vm.program_debug_info.get(&prog_name);
-            eprintln!("DEBUG create_vm_state_json for program '{}': debug_info exists? {}", prog_name, debug_info.is_some());
-            if let Some(debug) = debug_info {
-                eprintln!("  - local_variables count: {}", debug.local_variables.len());
-                eprintln!("  - argument_names count: {}", debug.argument_names.len());
-            }
-            
             let call_stack_info = vm.running_programs.get(index)
                 .map(|p| p.get_call_stack_info())
                 .unwrap_or_default();
-            eprintln!("  - call_stack_info entries: {}", call_stack_info.len());
-            
-            let _frame_pointer = vm.running_programs.get(index)
-                .map(|p| p.get_frame_pointer())
-                .unwrap_or(0);
             
             // Build frames information with named variables
             let mut frames = Vec::new();
             
             // Current frame (top of call stack)
             if let Some((fp, ip, pos)) = call_stack_info.first() {
-                let mut variables = serde_json::Map::new();
+                let mut variables = HashMap::new();
                 
                 // Add variables for the current frame
                 if let Some(debug) = debug_info {
@@ -134,39 +134,45 @@ fn create_vm_state_json(vm: &althread::vm::VM) -> serde_json::Value {
                             if var_info.stack_index < memory.len() {
                                 variables.insert(
                                     var_info.name.clone(),
-                                    serde_json::json!({
-                                        "value": format!("{:?}", memory[var_info.stack_index]),
-                                        "type": format!("{:?}", var_info.datatype),
-                                    })
+                                    VariableInfo {
+                                        value: format!("{:?}", memory[var_info.stack_index]),
+                                        var_type: format!("{:?}", var_info.datatype),
+                                    }
                                 );
                             }
                         }
                     }
                 }
                 
-                frames.push(serde_json::json!({
-                    "function": prog_name.clone(),
-                    "frame_pointer": fp,
-                    "instruction_pointer": ip,
-                    "line": pos.as_ref().map(|p| p.line),
-                    "variables": variables,
-                }));
+                frames.push(CallFrame {
+                    function: prog_name.clone(),
+                    frame_pointer: *fp,
+                    instruction_pointer: *ip,
+                    line: pos.as_ref().map(|p| p.line),
+                    variables,
+                });
             }
             
-            // TODO: Add parent frames from call stack
-            // (would need function debug info to be stored separately)
-            
-            serde_json::json!({
-                "pid": index,
-                "name": prog_name,
-                "memory": memory.iter().map(|v| format!("{:?}", v)).collect::<Vec<String>>(),
-                "instruction_pointer": instruction_pointer,
-                "line": line,
-                "clock": clock,
-                "frames": frames,
-            })
-        }).collect::<Vec<_>>()
-    })
+            ProgramState {
+                pid: index,
+                name: prog_name,
+                memory: memory.iter().map(|v| format!("{:?}", v)).collect(),
+                instruction_pointer: *instruction_pointer,
+                line,
+                clock: *clock,
+                frames,
+            }
+        })
+        .collect();
+
+    VMState {
+        globals,
+        channels,
+        pending_deliveries,
+        waiting_send,
+        channel_connections,
+        locals,
+    }
 }
 
 #[wasm_bindgen]
@@ -201,96 +207,6 @@ pub fn compile(source: &str, file_path: &str, virtual_fs: JsValue) -> Result<Str
     Ok(format!("{}", compiled_project))
 }
 
-pub struct MessageFlowEvent {
-    pub sender: usize,           // id of the sending process
-    pub receiver: usize,         // id of the receiving process
-    pub evt_type: u8,            //send or receive
-    pub message: String,         // for SEND: channel name, for RECV: message content
-    pub number: usize,           // message sequence number (nmsg_sent for SEND, clock for RECV)
-    pub actor_prog_name: String, // Name of the program performing this action
-    pub vm_state: serde_json::Value,        //vm state associated with this event
-    pub lines: Vec<usize>,       // associated source lines
-}
-
-pub struct InteractiveStepResult<'a> {
-    executed_step: ExecutedStepInfo,
-    output: Vec<String>,
-    debug: String,
-    current_state: VM<'a>,
-    new_state: serde_json::Value,
-    message_flow_events: Vec<MessageFlowEvent>,
-    state_display: serde_json::Value,
-    lines: Vec<usize>,
-}
-
-#[derive(Serialize)]
-pub struct ExecutedStepInfo {
-    prog_name: String,
-    prog_id: usize,
-    instructions: Vec<String>,
-}
-
-pub struct RunResult {
-    debug: String,
-    stdout: Vec<String>,
-    message_flow_graph: Vec<MessageFlowEvent>,
-    vm_states: Vec<serde_json::Value>,
-    step_lines: Vec<Vec<usize>>,
-}
-
-impl<'a> Serialize for InteractiveStepResult<'a> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("InteractiveStepResult", 8)?;
-        state.serialize_field("executed_step", &self.executed_step)?;
-        state.serialize_field("output", &self.output)?;
-        state.serialize_field("debug", &self.debug)?;
-        state.serialize_field("current_state", &self.current_state)?;
-        state.serialize_field("new_state", &self.new_state)?;
-        state.serialize_field("message_flow_events", &self.message_flow_events)?;
-        state.serialize_field("state_display", &self.state_display)?;
-        state.serialize_field("lines", &self.lines)?;
-        state.end()
-    }
-}
-
-impl Serialize for MessageFlowEvent {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        // Updated field count to 8
-        let mut state = serializer.serialize_struct("MessageFlowEvent", 8)?;
-        state.serialize_field("sender", &self.sender)?;
-        state.serialize_field("receiver", &self.receiver)?;
-        state.serialize_field("evt_type", &self.evt_type)?;
-        state.serialize_field("message", &self.message)?;
-        state.serialize_field("number", &self.number)?;
-        state.serialize_field("actor_prog_name", &self.actor_prog_name)?;
-        state.serialize_field("vm_state", &self.vm_state)?;
-        state.serialize_field("lines", &self.lines)?;
-        state.end()
-    }
-}
-
-impl Serialize for RunResult {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        // Corrected field count to 5
-        let mut state = serializer.serialize_struct("RunResult", 5)?;
-        state.serialize_field("debug", &self.debug)?;
-        state.serialize_field("stdout", &self.stdout)?;
-        state.serialize_field("message_flow_graph", &self.message_flow_graph)?;
-        state.serialize_field("vm_states", &self.vm_states)?;
-        state.serialize_field("step_lines", &self.step_lines)?;
-        state.end()
-    }
-}
-
 #[wasm_bindgen]
 pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue, JsValue> {
     // Convert the JS file system to a Rust HashMap
@@ -323,26 +239,42 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
     let mut result = String::new();
     let mut stdout = vec![];
     let mut message_flow_graph = Vec::new();
-    let initial_vm_json = create_vm_state_json(&vm);
-    let mut vm_states = vec![initial_vm_json];
+    let initial_vm_state = create_vm_state(&vm);
+    let mut nodes = vec![GraphNode {
+        vm: initial_vm_state,
+        metadata: NodeMetadata {
+            level: 0,
+            step_index: Some(0),
+            successors: None,
+            lines: None,
+        },
+    }];
     let mut vm_history = vec![vm.clone()]; // For tracking channel states
-    let mut step_lines = Vec::new();
-    let mut i = 0; //index for vm_states
+    let mut i = 0; //index for nodes
 
     for _ in 0..100000 {
         if vm.is_finished() {
             break;
         }
         let info = vm.next_random().map_err(error_to_js)?;
-        vm_states.push(create_vm_state_json(&vm));
-        vm_history.push(vm.clone());
-
+        
         let lines: Vec<usize> = info
             .instructions
             .iter()
             .filter_map(|inst| inst.pos.as_ref().map(|p| p.line))
             .collect();
-        step_lines.push(lines);
+        
+        let new_vm_state = create_vm_state(&vm);
+        nodes.push(GraphNode {
+            vm: new_vm_state,
+            metadata: NodeMetadata {
+                level: i + 1,
+                step_index: Some(i + 1),
+                successors: None,
+                lines: Some(lines.clone()),
+            },
+        });
+        vm_history.push(vm.clone());
 
         let pid = info.prog_id;
 
@@ -413,7 +345,7 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
                                                         message: actual_message_content.to_string(),
                                                         number: max_clock, // Using max_clock as message number
                                                         actor_prog_name: receiver_name,
-                                                        vm_state: create_vm_state_json(&vm), // State after receive
+                                                        vm_state: create_vm_state(&vm), // State after receive
                                                         lines: inst.pos.as_ref().map(|p| vec![p.line]).unwrap_or_default(),
                                                     };
                                                     message_flow_graph.push(event);
@@ -461,7 +393,7 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
                     message: channel_name.clone(),
                     number: clock,
                     actor_prog_name: sender_name,
-                    vm_state: create_vm_state_json(&vm),
+                    vm_state: create_vm_state(&vm),
                     lines: inst.pos.as_ref().map(|p| vec![p.line]).unwrap_or_default(),
                 };
                 message_flow_graph.push(event);
@@ -479,14 +411,21 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
         i += 1;
     }
 
-    Ok(serde_wasm_bindgen::to_value(&RunResult {
+    // Collect step_lines from nodes
+    let step_lines: Vec<Vec<usize>> = nodes
+        .iter()
+        .filter_map(|node| node.metadata.lines.clone())
+        .collect();
+
+    let result = RunResult {
         debug: result,
         stdout,
-        message_flow_graph,
-        vm_states,
+        message_flow_events: message_flow_graph,
+        nodes,
         step_lines,
-    })
-    .unwrap())
+    };
+
+    Ok(to_js(&result))
 }
 
 #[wasm_bindgen]
@@ -519,47 +458,62 @@ pub fn check(
 
     let (path, state_graph) = checker::check_program(&compiled_project, max_states).map_err(error_to_js)?;
     
-    // Convert path VMs to enhanced JSON format with debug info
-    let enhanced_path: Vec<serde_json::Value> = path.iter().map(|state_link| {
-        serde_json::json!({
-            "to": create_vm_state_json(&state_link.to),
-            "lines": state_link.lines,
-            "instructions": state_link.instructions.iter().map(|i| format!("{:?}", i)).collect::<Vec<_>>(),
-            "actions": state_link.actions.iter().map(|a| format!("{:?}", a)).collect::<Vec<_>>(),
-            "pid": state_link.pid,
-            "name": state_link.name,
-        })
-    }).collect();
+    // Build mapping from VM state to node index for successors
+    let mut vm_to_index: HashMap<String, usize> = HashMap::new();
+    for (idx, (vm, _)) in state_graph.nodes.iter().enumerate() {
+        // Use a simple hash of the VM state as key
+        let vm_key = format!("{:?}", vm.current_state());
+        vm_to_index.insert(vm_key, idx);
+    }
     
-    // Convert state graph nodes to enhanced JSON format with debug info
-    // Frontend expects array of [vm, node_info] tuples
-    let enhanced_nodes: Vec<serde_json::Value> = state_graph.nodes.iter().map(|(vm, node)| {
-        let vm_json = create_vm_state_json(vm);
-        let node_json = serde_json::json!({
-            "level": node.level,
-            "successors": node.successors.iter().map(|succ| {
-                serde_json::json!({
-                    "to": create_vm_state_json(&succ.to),
-                    "lines": succ.lines,
-                    "instructions": succ.instructions.iter().map(|i| format!("{:?}", i)).collect::<Vec<_>>(),
-                    "actions": succ.actions.iter().map(|a| format!("{:?}", a)).collect::<Vec<_>>(),
-                    "pid": succ.pid,
-                    "name": succ.name,
-                })
-            }).collect::<Vec<_>>(),
-        });
-        serde_json::json!([vm_json, node_json])
-    }).collect();
-    
-    let result = serde_json::json!([
-        enhanced_path,
-        {
-            "nodes": enhanced_nodes,
-            "exhaustive": state_graph.exhaustive,
+    // Convert path to GraphNode structure
+    let path_nodes: Vec<GraphNode> = path.iter().enumerate().map(|(idx, state_link)| {
+        GraphNode {
+            vm: create_vm_state(&state_link.to),
+            metadata: NodeMetadata {
+                level: idx,
+                step_index: None,
+                successors: None,
+                lines: Some(state_link.lines.clone()),
+            },
         }
-    ]);
+    }).collect();
+    
+    // Convert state graph nodes to GraphNode structure
+    let graph_nodes: Vec<GraphNode> = state_graph.nodes.iter().enumerate().map(|(_idx, (vm, node))| {
+        let successors: Vec<Successor> = node.successors.iter().map(|succ| {
+            // Find the index of the successor's target VM
+            let to_key = format!("{:?}", succ.to.current_state());
+            let to_index = vm_to_index.get(&to_key).copied().unwrap_or(0);
+            
+            Successor {
+                to_index,
+                lines: succ.lines.clone(),
+                instructions: succ.instructions.iter().map(|i| format!("{:?}", i)).collect(),
+                actions: succ.actions.iter().map(|a| format!("{:?}", a)).collect(),
+                pid: succ.pid,
+                name: succ.name.clone(),
+            }
+        }).collect();
+        
+        GraphNode {
+            vm: create_vm_state(vm),
+            metadata: NodeMetadata {
+                level: node.level,
+                step_index: None,
+                successors: Some(successors),
+                lines: None,
+            },
+        }
+    }).collect();
+    
+    let result = CheckResult {
+        path: path_nodes,
+        nodes: graph_nodes,
+        exhaustive: state_graph.exhaustive,
+    };
 
-    Ok(serde_wasm_bindgen::to_value(&result).unwrap())
+    Ok(to_js(&result))
 }
 
 // Package management utilities for web editor
@@ -697,67 +651,46 @@ pub fn start_interactive_session(
     let next_states = vm.next().map_err(error_to_js)?;
 
     if next_states.is_empty() {
-        return Ok(serde_wasm_bindgen::to_value(&serde_json::json!({
-            "states": [],
-            "is_finished": true,
-            "current_state": create_vm_state_json(&vm),
-            "output": []
-        }))
-        .unwrap());
+        let result = InteractiveSessionState {
+            next_states: vec![],
+            current_state: create_vm_state(&vm),
+            state_display: vec![],
+            output: vec![],
+        };
+        return Ok(to_js(&result));
     }
 
-    // Convert the result to a more JS-friendly format
-    let js_next_states: Vec<_> = next_states
+    // Convert the result to NextStateOption format
+    let next_state_options: Vec<NextStateOption> = next_states
         .into_iter()
-        .enumerate()
-        .map(|(index, (name, pid, instructions, actions, __nvm))| {
+        .map(|(name, pid, instructions, _actions, _nvm)| {
+            let lines: Vec<usize> = instructions
+                .iter()
+                .filter_map(|inst| inst.pos.as_ref().map(|p| p.line))
+                .collect();
+            
             let instruction_strings: Vec<String> = instructions
                 .iter()
-                .map(|inst| {
-                    if let Some(pos) = &inst.pos {
-                        let line_content = source
-                            .lines()
-                            .nth(pos.line.saturating_sub(1))
-                            .unwrap_or("?");
-                        format!("{}:{}: {}", name, pid, line_content.trim())
-                    } else {
-                        format!("{}:{}: {}", name, pid, inst)
-                    }
-                })
+                .map(|inst| inst.to_string())
                 .collect();
 
-            let preview = if let Some(first) = instruction_strings.first() {
-                first.clone()
-            } else {
-                let mut delivery = None;
-                for action in &actions {
-                    if let althread::vm::GlobalAction::Deliver(info) = action {
-                        delivery =
-                            Some(format!("deliver {} -> {}", info.channel_name, info.message));
-                        break;
-                    }
-                }
-                delivery.unwrap_or_else(|| "No instruction".to_string())
-            };
-
-            serde_json::json!({
-                "index": index,
-                "prog_name": name,
-                "prog_id": pid,
-                "instruction_preview": preview,
-                "instructions": instruction_strings
-            })
+            NextStateOption {
+                prog_name: name,
+                prog_id: pid,
+                instructions: instruction_strings,
+                lines,
+            }
         })
         .collect();
 
-    let state_info = serde_json::json!({
-        "states": js_next_states,
-        "is_finished": false,
-        "current_state": create_vm_state_json(&vm),
-        "output": [] // No output for initial state
-    });
+    let result = InteractiveSessionState {
+        next_states: next_state_options,
+        current_state: create_vm_state(&vm),
+        state_display: vec![],
+        output: vec![],
+    };
 
-    Ok(serde_wasm_bindgen::to_value(&state_info).unwrap())
+    Ok(to_js(&result))
 }
 
 #[wasm_bindgen]
@@ -810,77 +743,29 @@ pub fn get_next_interactive_states(
     let next_states = vm.next().map_err(error_to_js)?;
 
     if next_states.is_empty() {
-        return Ok(serde_wasm_bindgen::to_value(&serde_json::json!({
-            "states": [],
-            "is_finished": true,
-            "message": "No next state",
-            "current_state": create_vm_state_json(&vm),
-            "output": []
-        }))
-        .unwrap());
+        return Err(JsValue::from_str("No next states available (execution finished)"));
     }
 
-    // Convert the result to a more JS-friendly format with enhanced state display
-    let js_next_states: Vec<_> = next_states
-        .into_iter()
-        .enumerate()
-        .map(|(index, (name, pid, instructions, actions, nvm))| {
+    // Convert next states to NextStateOption format
+    let next_state_options: Vec<NextStateOption> = next_states
+        .iter()
+        .map(|(name, pid, instructions, _actions, _nvm)| {
+            let lines: Vec<usize> = instructions
+                .iter()
+                .filter_map(|inst| inst.pos.as_ref().map(|p| p.line))
+                .collect();
+            
             let instruction_strings: Vec<String> = instructions
                 .iter()
-                .map(|inst| {
-                    if let Some(pos) = &inst.pos {
-                        let line_content = source
-                            .lines()
-                            .nth(pos.line.saturating_sub(1))
-                            .unwrap_or("?");
-                        format!("{}:{}: {}", name, pid, line_content.trim())
-                    } else {
-                        format!("{}:{}: {}", name, pid, inst)
-                    }
-                })
+                .map(|inst| inst.to_string())
                 .collect();
 
-            // Add state info similar to run_interactive format
-            let state_preview = if let Some(inst) = instructions.first() {
-                if let Some(pos) = &inst.pos {
-                    let line = source
-                        .lines()
-                        .nth(pos.line.saturating_sub(1))
-                        .unwrap_or_default();
-                    format!("{}:{}:{}", name, pid, line)
-                } else {
-                    format!("{}:{}:?", name, pid)
-                }
-            } else {
-                let mut delivery = None;
-                for action in &actions {
-                    if let althread::vm::GlobalAction::Deliver(info) = action {
-                        delivery = Some(format!(
-                            "{}:{}:deliver {} -> {}",
-                            name, pid, info.channel_name, info.message
-                        ));
-                        break;
-                    }
-                }
-                delivery.unwrap_or_else(|| format!("{}:{}:?", name, pid))
-            };
-
-            let preview = if let Some(first) = instruction_strings.first() {
-                first.clone()
-            } else if name.starts_with("__deliver__") {
-                delivery_preview(&vm, &nvm).unwrap_or_else(|| "deliver <unknown>".to_string())
-            } else {
-                "No instruction".to_string()
-            };
-
-            serde_json::json!({
-                "index": index,
-                "prog_name": name,
-                "prog_id": pid,
-                "instruction_preview": preview,
-                "instructions": instruction_strings,
-                "state_preview": state_preview
-            })
+            NextStateOption {
+                prog_name: name.clone(),
+                prog_id: *pid,
+                instructions: instruction_strings,
+                lines,
+            }
         })
         .collect();
 
@@ -909,15 +794,14 @@ pub fn get_next_interactive_states(
         ));
     }
 
-    let state_info = serde_json::json!({
-        "states": js_next_states,
-        "is_finished": false,
-        "state_display": state_display_info,
-        "current_state": create_vm_state_json(&vm),
-        "output": [] // This is the accumulated output up to this point
-    });
+    let result = InteractiveSessionState {
+        next_states: next_state_options,
+        current_state: create_vm_state(&vm),
+        state_display: state_display_info,
+        output: vec![],
+    };
 
-    Ok(serde_wasm_bindgen::to_value(&state_info).unwrap())
+    Ok(to_js(&result))
 }
 
 #[wasm_bindgen]
@@ -1026,7 +910,7 @@ pub fn execute_interactive_step(
                     message: info.to.channel_name,
                     number: info.n_msg,
                     actor_prog_name: info.from.process_name,
-                    vm_state: create_vm_state_json(&execution_vm),
+                    vm_state: create_vm_state(&execution_vm),
                     lines: step_lines.clone(),
                 });
             }
@@ -1038,7 +922,7 @@ pub fn execute_interactive_step(
                     message: info.message.to_string(),
                     number: info.sender_clock,
                     actor_prog_name: info.to.process_name,
-                    vm_state: create_vm_state_json(&execution_vm),
+                    vm_state: create_vm_state(&execution_vm),
                     lines: step_lines.clone(),
                 });
             }
@@ -1066,6 +950,30 @@ pub fn execute_interactive_step(
             .collect::<Vec<String>>()
     };
 
+    // Generate state display information
+    let current_state = execution_vm.current_state();
+    let mut state_display_info = Vec::new();
+    state_display_info.push(format!("global: {:?}", current_state.0));
+    for ((channel_pid, cname), state) in current_state.1.iter() {
+        state_display_info.push(format!("channel {},{}", channel_pid, cname));
+        for v in state.iter() {
+            state_display_info.push(format!("  * {}", v));
+        }
+    }
+    for (local_pid, local_state) in current_state.2.iter().enumerate() {
+        state_display_info.push(format!(
+            "{} ({}): {:?}",
+            local_pid,
+            local_state.1,
+            local_state
+                .0
+                .iter()
+                .map(|v| format!("{}", v))
+                .collect::<Vec<String>>()
+                .join(", ")
+        ));
+    }
+
     let result = InteractiveStepResult {
         executed_step: ExecutedStepInfo {
             prog_name: name,
@@ -1074,13 +982,11 @@ pub fn execute_interactive_step(
         },
         output: step_output,
         debug: step_debug,
-        current_state: execution_vm.clone(),
-        new_state: create_vm_state_json(&execution_vm),
+        new_state: create_vm_state(&execution_vm),
         message_flow_events,
-        state_display: create_vm_state_json(&execution_vm),
+        state_display: state_display_info,
         lines: step_lines,
     };
 
-    Ok(serde_wasm_bindgen::to_value(&result)
-        .map_err(|e| JsValue::from_str(&format!("Serialization error: {}", e)))?)
+    Ok(to_js(&result))
 }

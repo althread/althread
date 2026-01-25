@@ -1,78 +1,18 @@
 import { For, Show } from "solid-js";
 import VariableDisplay from "./VariableDisplay";
+import type { CallFrame } from "../../types/vm-state";
 import "./CallFrameDisplay.css";
 
-interface Frame {
-    function: string;
-    frame_pointer: number;
-    instruction_pointer: number;
-    line?: number;
-    variables?: Record<string, { value: string; type: string }>;
-}
-
 interface CallFrameDisplayProps {
-    frames: Frame[];
-    fallbackMemory?: any[];
+    frames: CallFrame[];
+    fallbackMemory?: string[];
 }
 
 export default function CallFrameDisplay(props: CallFrameDisplayProps) {
-    console.log("CallFrameDisplay received frames:", props.frames);
-    console.log("CallFrameDisplay received fallbackMemory:", props.fallbackMemory);
-    
-    // Convert Maps to plain objects (serde_wasm_bindgen serializes HashMaps as JS Maps)
-    const normalizeFrame = (frame: any): Frame => {
-        const getField = (obj: any, key: string) => {
-            if (obj instanceof Map) return obj.get(key);
-            return obj?.[key];
-        };
-        
-        const normalizeVariables = (vars: any): Record<string, { value: string; type: string }> => {
-            if (!vars) return {};
-            const result: Record<string, { value: string; type: string }> = {};
-            
-            if (vars instanceof Map) {
-                vars.forEach((varData: any, varName: string) => {
-                    if (varData instanceof Map) {
-                        result[varName] = {
-                            value: varData.get('value') ?? '',
-                            type: varData.get('type') ?? ''
-                        };
-                    } else {
-                        result[varName] = {
-                            value: varData?.value ?? '',
-                            type: varData?.type ?? ''
-                        };
-                    }
-                });
-            } else if (typeof vars === 'object') {
-                Object.entries(vars).forEach(([varName, varData]: [string, any]) => {
-                    result[varName] = {
-                        value: varData?.value ?? '',
-                        type: varData?.type ?? ''
-                    };
-                });
-            }
-            
-            return result;
-        };
-        
-        return {
-            function: getField(frame, 'function') ?? 'unknown',
-            frame_pointer: getField(frame, 'frame_pointer') ?? 0,
-            instruction_pointer: getField(frame, 'instruction_pointer') ?? 0,
-            line: getField(frame, 'line'),
-            variables: normalizeVariables(getField(frame, 'variables'))
-        };
-    };
-    
-    const normalizedFrames = Array.isArray(props.frames) 
-        ? props.frames.map(normalizeFrame)
-        : [];
-    
     return (
         <div class="call-frame-display">
             <Show 
-                when={normalizedFrames && normalizedFrames.length > 0}
+                when={props.frames && props.frames.length > 0}
                 fallback={
                     <Show when={props.fallbackMemory}>
                         <div class="frame-card">
@@ -89,7 +29,7 @@ export default function CallFrameDisplay(props: CallFrameDisplayProps) {
                     </Show>
                 }
             >
-                <For each={normalizedFrames}>
+                <For each={props.frames}>
                     {(frame, index) => (
                         <div class="frame-card" classList={{ "top-frame": index() === 0 }}>
                             <div class="frame-header">
