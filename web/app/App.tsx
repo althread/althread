@@ -349,12 +349,20 @@ export default function App() {
   const [executionError, setExecutionError] = createSignal(false);
   const [structuredError, setStructuredError] = createSignal<any>(null);
   const [selectedVM, setSelectedVM] = createSignal<VMStateSelection | null>(null);
+  
+  // Graph ref for programmatic control
+  let graphRef: { selectNode: (nodeId: string | number) => void } | null = null;
 
   const selectRunVmByIndex = (index: number) => {
     const nodes = runGraphNodes();
     if (!nodes || nodes.length === 0) return;
     const clamped = Math.max(0, Math.min(index, nodes.length - 1));
     setSelectedVM({ vm: nodes[clamped].vm, stepIndex: clamped });
+    
+    // Select the corresponding node in the graph
+    if (graphRef) {
+      graphRef.selectNode(clamped);
+    }
   };
 
   // Highlight lines in editor when a VM state is selected
@@ -683,6 +691,7 @@ export default function App() {
                   }
                 }}
                 onNodeSelect={setSelectedVM}
+                ref={(instance) => graphRef = instance}
               />
             </Resizable.Panel>
           </Resizable>
@@ -708,6 +717,7 @@ export default function App() {
                     }
                 }}
                 onNodeSelect={setSelectedVM}
+                ref={(instance) => graphRef = instance}
               />
             </Resizable.Panel>
           </Resizable>
