@@ -3,11 +3,12 @@ import Resizable from '@corvu/resizable'
 import { renderMessageFlowGraph } from "@components/graph/CommGraph";
 import { rendervmStates } from "@components/graph/vmStatesDisplay";
 import VMStateInspector from "@components/graph/VMStateInspector";
+import type { NextStateOption } from "../../types/vm-state";
 import './InteractivePanel.css';
 
 interface InteractivePanelProps {
   isVisible: boolean;
-  interactiveStates: any[];
+  interactiveStates: NextStateOption[];
   currentVMState: any;
   isFinished: boolean;
   executionOutput: string;
@@ -50,6 +51,68 @@ export default function InteractivePanel(props: InteractivePanelProps) {
     setRightPanelTab(tab);
   };
 
+  // Helper function to get source code lines from the editor
+  const getSourceLines = (lines: number[]): string[] => {
+    if (!props.editor || !lines || lines.length === 0) {
+      return [];
+    }
+    
+    try {
+      const doc = props.editor.editorView().state.doc;
+      const sourceLines = lines.map(lineNum => {
+        if (lineNum > 0 && lineNum <= doc.lines) {
+          return doc.line(lineNum).text.trim();
+        }
+        return "";
+      }).filter(line => line !== "");
+      
+      // Remove duplicates while preserving order
+      return [...new Set(sourceLines)];
+    } catch (e) {
+      return [];
+    }
+  };
+
+  // Helper to format instructions with message delivery info
+  const formatInstructions = (state: NextStateOption): JSX.Element => {
+    const lines = getSourceLines(state.lines);
+    
+    // Check if this is a message operation
+    const hasMessageOp = state.instructions.some(inst => 
+      inst.includes('SEND') || inst.includes('RECEIVE') || inst.includes('DELIVER')
+    );
+    
+    if (lines.length > 0) {
+      return (
+        <>
+          {lines.map((line, i) => (
+            <>
+              {i > 0 && <br />}
+              <code>{line}</code>
+            </>
+          ))}
+          {hasMessageOp && (
+            <>
+              <br />
+              <span class="message-operation">
+                {state.instructions.filter(inst => 
+                  inst.includes('SEND') || inst.includes('RECEIVE') || inst.includes('DELIVER')
+                ).map((inst, i) => (
+                  <>
+                    {i > 0 && ', '}
+                    <i class="codicon codicon-arrow-right"></i> {inst}
+                  </>
+                ))}
+              </span>
+            </>
+          )}
+        </>
+      );
+    }
+    
+    return <code>{state.instructions.join('; ')}</code>;
+  };
+
   const renderInteractiveChoices = () => {
     if (props.isFinished) {
       return (
@@ -78,17 +141,17 @@ export default function InteractivePanel(props: InteractivePanelProps) {
           <span class="choices-count">{props.interactiveStates.length} option{props.interactiveStates.length !== 1 ? 's' : ''}</span>
         </div>
         <div class="interactive-choices-list">
-          {props.interactiveStates.map((state: any, index: number) => (
+          {props.interactiveStates.map((state: NextStateOption, index: number) => (
             <button 
               class="interactive-choice-item"
               onClick={() => props.onExecuteStep(index)}
             >
               <div class="choice-header">
-                <span class="choice-program">{state.get('prog_name')}</span>
-                <span class="choice-id">#{state.get('prog_id')}</span>
+                <span class="choice-program">{state.prog_name}</span>
+                <span class="choice-id">#{state.prog_id}</span>
               </div>
               <div class="choice-instruction">
-                {state.get('instruction_preview')}
+                {formatInstructions(state)}
               </div>
               <i class="codicon codicon-chevron-right choice-arrow"></i>
             </button>

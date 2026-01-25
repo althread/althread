@@ -515,16 +515,16 @@ export default function App() {
         newHistory
       );
 
-      setInteractiveStates(res.get('states') || []);
-      setCurrentVMState(stepResult.new_state || res.get('current_state'));
-      setInteractiveFinished(res.get('is_finished'));
+      setInteractiveStates(res.next_states || []);
+      setCurrentVMState(stepResult.new_state || res.current_state);
+      setInteractiveFinished(!res.next_states || res.next_states.length === 0);
       
-      if (res.get('is_finished')) {
+      if (!res.next_states || res.next_states.length === 0) {
         const currentExecutionOutput = accumulatedExecutionOutput();
         const finalOutput = currentExecutionOutput + (currentExecutionOutput ? '\n\n' : '') + "Program execution completed.";
         setAccumulatedExecutionOutput(finalOutput);
         setOut(finalOutput);
-      } else if (!res.get('states') || res.get('states').length === 0) {
+      } else if (res.next_states.length === 0) {
         const currentExecutionOutput = accumulatedExecutionOutput();
         const finalOutput = currentExecutionOutput + (currentExecutionOutput ? '\n\n' : '') + "No more states available.";
         setAccumulatedExecutionOutput(finalOutput);
@@ -592,14 +592,14 @@ export default function App() {
       
       let res = start_interactive_session(editor.editorView().state.doc.toString(), filePath, virtualFS);
       
-      setInteractiveStates(res.get('states') || []);
-      setCurrentVMState(res.get('current_state'));
-      setInteractiveFinished(res.get('is_finished'));
+      setInteractiveStates(res.next_states || []);
+      setCurrentVMState(res.current_state);
+      setInteractiveFinished(!res.next_states || res.next_states.length === 0);
       setExecutionHistory([]);
       
-      if (res.get('is_finished')) {
+      if (!res.next_states || res.next_states.length === 0) {
         setOut("Program execution completed immediately.");
-      } else if (!res.get('states') || res.get('states').length === 0) {
+      } else if (res.next_states.length === 0) {
         setOut("No more states available.");
         setInteractiveFinished(true);
       } else {
@@ -758,14 +758,14 @@ export default function App() {
                   }
                   
                   let res = start_interactive_session(editor.editorView().state.doc.toString(), filePath, virtualFS);
-                  setInteractiveStates(res.get('states') || []);
-                  setCurrentVMState(res.get('current_state'));
-                  setInteractiveFinished(res.get('is_finished'));
+                  setInteractiveStates(res.next_states || []);
+                  setCurrentVMState(res.current_state);
+                  setInteractiveFinished(!res.next_states || res.next_states.length === 0);
                   setExecutionHistory([]);
                   
-                  if (res.get('is_finished')) {
+                  if (!res.next_states || res.next_states.length === 0) {
                     setOut("Program execution completed.");
-                  } else if (!res.get('states') || res.get('states').length === 0) {
+                  } else if (res.next_states.length === 0) {
                     setOut("No interactive choices available.");
                   } else {
                     setOut("Interactive mode started. Select the next instruction to execute.");
