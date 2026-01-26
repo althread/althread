@@ -9,8 +9,8 @@ program A(my_id: int) {
   }
 }
 
-eventually {
-  Sum == 2;
+check {
+  always if Sum == 2 { eventually Sum == 1 };
 }
 
 main {

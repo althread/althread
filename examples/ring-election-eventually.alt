@@ -22,7 +22,8 @@ program A(my_id: int) {
           break;
         }
       }
-  };
+  }
+  
   label L;
   if my_id == leader_id {
     print("I AM THE LEADER!!!");
