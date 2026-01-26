@@ -15,15 +15,12 @@ use crate::{
     vm::instruction::{Instruction, InstructionType},
 };
 
-use super::{
-    expression::tuple_expression::TupleExpression, waiting_case::WaitDependency, Statement,
-};
+use super::waiting_case::WaitDependency;
 
 #[derive(Debug, Clone)]
 pub struct ReceiveStatement {
     pub channel: String,
     pub variables: Vec<String>,
-    pub statement: Option<Node<Statement>>,
 }
 
 impl NodeBuilder for ReceiveStatement {
@@ -55,15 +52,9 @@ impl NodeBuilder for ReceiveStatement {
             variables.push(String::from(pair.as_str()));
         }
 
-        let statement = match pairs.next() {
-            Some(p) => Some(Node::build(p, filepath)?),
-            None => None,
-        };
-
         Ok(Self {
             channel,
             variables,
-            statement,
         })
     }
 }
@@ -111,33 +102,20 @@ impl InstructionBuilder for Node<ReceiveStatement> {
         builder.instructions.push(Instruction {
             control: InstructionType::ChannelPeek(channel_name.clone()),
             pos: Some(self.pos.clone()),
-        }); // Peek has the effect of adding an anonymous tuple to the stack
+        }); // Peek has the effect of adding the values of the tuple to the stack and a boolean
+        // We must push default values if the channel is empty, just so that the stack is consistent
+
+        for (i, variable) in self.value.variables.iter().enumerate() {
+            state.program_stack.push(Variable {
+                mutable: true,
+                name: variable.clone(),
+                datatype: channel_types[i].clone(),
+                depth: state.current_stack_depth,
+                declare_pos: Some(pos.clone()),
+            })
+        }
+
         state.program_stack.push(Variable {
-            mutable: false,
-            name: "".to_string(),
-            datatype: DataType::Tuple(channel_types.clone()),
-            depth: state.current_stack_depth,
-            declare_pos: Some(self.pos.clone()),
-        });
-
-        // Channel peek either push all the values and a true value, or just a false value
-        // here add all the variables to the stack and remove them only in the branch where the boolean is true
-
-        let destruct_instruction = TupleExpression::destruct_tuple(
-            &self.value.variables,
-            &channel_types,
-            state,
-            self.pos.clone(),
-        )?;
-        // destructing remove the top of the stack and replace it with n values
-
-        // Here we could add a boolean to the stack but if you look at the instructions below, we will remove it anyway
-        let guard_instructions = vec![Instruction {
-            control: InstructionType::Push(Literal::Bool(true)), //to be replaced by the evaluation of the guard condition
-            pos: Some(self.pos.clone()),
-        }];
-        state.program_stack.push(Variable {
-            // to be removed when the guard is implemented
             mutable: false,
             name: "".to_string(),
             datatype: DataType::Boolean,
@@ -145,98 +123,50 @@ impl InstructionBuilder for Node<ReceiveStatement> {
             declare_pos: None,
         });
 
-        // check if the top of the stack is a boolean
-        if state
-            .program_stack
-            .last()
-            .expect("stack should contain a value after an expression is compiled")
-            .datatype
-            != DataType::Boolean
-        {
-            return Err(AlthreadError::new(
-                ErrorType::TypeError,
-                Some(self.pos.clone()),
-                "guard condition must be a boolean".to_string(),
-            ));
-        }
-        state.program_stack.pop();
-
-        let statement_builder = match &self.value.statement {
-            Some(statement) => statement.compile(state)?,
-            None => InstructionBuilderOk::new(),
-        };
-
         builder.instructions.push(Instruction {
             control: InstructionType::JumpIf {
-                jump_false: 8
-                    + (guard_instructions.len() + statement_builder.instructions.len()) as i64, // If the channel is empty, jump to the end
-                unstack_len: 0, // we keep the false value on the stack
+                jump_false: 3, // If the channel is empty, ignore the channel pop
+                unstack_len: 0, // we keep the boolean value on the stack
             },
             pos: Some(self.pos.clone()),
         });
 
-        builder.instructions.push(Instruction {
-            control: InstructionType::Unstack {
-                unstack_len: 1, // we remove the true value on the stack (it will be replaced by the next expression
-            },
-            pos: Some(self.pos.clone()),
-        });
-
-        builder.instructions.push(destruct_instruction);
-
-        builder.instructions.extend(guard_instructions);
-
-        builder.instructions.push(Instruction {
-            control: InstructionType::JumpIf {
-                jump_false: 5 + statement_builder.instructions.len() as i64, // If the guard is false, jump to the end
-                unstack_len: 0, // keep the boolean of the guard on the stack
-            },
-            pos: Some(self.pos.clone()),
-        });
-
-        builder.instructions.push(Instruction {
-            control: InstructionType::Unstack {
-                unstack_len: 1, // remove the boolean of the guard from the stack (but keep the variables used in the statement)
-            },
-            pos: Some(self.pos.clone()),
-        });
         builder.instructions.push(Instruction {
             control: InstructionType::ChannelPop(channel_name.clone()), // actually do pop the channel
             pos: Some(self.pos.clone()),
         });
-        builder.extend(statement_builder);
-
+        // now we jump over the push of default values
         builder.instructions.push(Instruction {
-            control: InstructionType::Unstack {
-                unstack_len: self.value.variables.len(), // remove the variables from the stack
+            control: InstructionType::Jump (5),
+            pos: Some(self.pos.clone()),
+        });
+        // remove the false boolean
+        builder.instructions.push(Instruction {
+            control: InstructionType::Unstack{
+                unstack_len: 1,
             },
             pos: Some(self.pos.clone()),
         });
-
-        // removing the variables from the compiler stack (added in the destruct_tuple function)
-        for _ in 0..self.value.variables.len() {
-            state.program_stack.pop();
-        }
-
+        // push default values, by pushing a tuple and the descructuring it
         builder.instructions.push(Instruction {
-            control: InstructionType::Push(Literal::Bool(true)), // the statement is finished, the global condition is a success
+            control: InstructionType::Push(Literal::Tuple(
+                channel_types
+                    .iter()
+                    .map(|dt| dt.default())
+                    .collect(),
+            )),
             pos: Some(self.pos.clone()),
         });
-
-        // In all the branches above, a boolean is pushed on the stack:
-        state.program_stack.push(Variable {
-            mutable: false,
-            name: "".to_string(),
-            datatype: DataType::Boolean,
-            depth: state.current_stack_depth,
-            declare_pos: None,
+        builder.instructions.push(Instruction {
+            control: InstructionType::Destruct,
+            pos: Some(pos),
         });
-        // The next instruction will likely be a wait or an if based on the current stack top.
-
-        //if builder.contains_jump() {
-        //    todo!("breaking inside a receive statement is not yet implemented");
-        //}
-
+        //repush the false boolean
+        builder.instructions.push(Instruction {
+            control: InstructionType::Push(Literal::Bool(false)),
+            pos: Some(self.pos.clone()),
+        });
+        
         Ok(builder)
     }
 }
@@ -256,10 +186,6 @@ impl AstDisplay for ReceiveStatement {
                 .collect::<Vec<String>>()
                 .join(",")
         )?;
-
-        if let Some(stmt) = &self.statement {
-            stmt.ast_fmt(f, &prefix.add_leaf())?;
-        }
 
         Ok(())
     }

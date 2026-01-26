@@ -127,7 +127,7 @@ declaration         = { declaration_keyword ~ identifier ~ (":" ~ datatype)? ~ (
 declaration_keyword = { LET_KW | CONST_KW }
 
 
-receive_expression = { RECEIVE_KW ~ object_identifier? ~ pattern_list ~ ("=>" ~ statement)? }
+receive_expression = { RECEIVE_KW ~ object_identifier? ~ pattern_list }
 
 /// ### Expressions
 /// Expressions evaluate values based on arithmetic and logical operations, following standard precedence rules.

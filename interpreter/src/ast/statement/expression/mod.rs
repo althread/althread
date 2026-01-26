@@ -1670,7 +1670,7 @@ impl InstructionBuilder for Node<Expression> {
         if !state.in_condition_block
             && vars
                 .iter()
-                .any(|var| var.starts_with("GS.procs.") || var.starts_with("$.procs."))
+                .any(|var| var.starts_with("$.procs."))
         {
             return Err(AlthreadError::new(
                 ErrorType::InstructionNotAllowed,

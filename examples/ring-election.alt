@@ -13,17 +13,17 @@ program A(my_id: int) {
 
   loop atomic await receive in (x) => {
     print("receive", x);
-      if x > leader_id {
-        leader_id = x;
+    if x > leader_id {
+      leader_id = x;
+      send out(x);
+    } else {
+      if x == leader_id {
+        print("finished");
         send out(x);
-      } else {
-        if x == leader_id {
-          print("finished");
-          send out(x);
-          break;
-        }
+        break;
       }
-  };
+    }
+  }
   
   if my_id == leader_id {
     print("I AM THE LEADER!!!");

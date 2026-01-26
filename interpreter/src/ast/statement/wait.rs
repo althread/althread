@@ -98,6 +98,95 @@ impl InstructionBuilder for Node<Wait> {
             },
         });
 
+        // We must treat the case when there is only one waiting case differently
+        // Because in this case, if there is no statement following the condition
+        // we keep the declared variables in the stack
+
+        if self.value.waiting_cases.len() == 1 && self.value.waiting_cases[0].value.statement.is_none() {
+            let case = &self.value.waiting_cases[0];
+
+            // Here it is partucular, we only unstack these variables if the wait is not over
+            // and we leave the stack unchanged if the wait is over
+            // so we have to count how many variables were added by the condition without removing them
+            let stack_size_before = state.program_stack.len();
+
+            let case_condition = case.value.rule.compile(state)?;
+            builder.extend(case_condition);
+
+            // Remove the boolean from the compiler stack (it will be unstacked with the wait instruction at runtime)
+            let boolean_var = state.program_stack.pop();
+            debug_assert!(boolean_var.is_some() && boolean_var.as_ref().unwrap().datatype == DataType::Boolean);
+
+            let unstack_len = state.program_stack.len() - stack_size_before;
+
+            if !self.value.start_atomic {
+                // if the entire wait block is not atomic, stop the atomicity here
+                builder.instructions.push(Instruction {
+                    pos: Some(case.pos.clone()),
+                    control: InstructionType::AtomicEnd,
+                });
+            }
+
+            // jump over the unstacking if the wait is not over
+            builder.instructions.push(Instruction {
+                pos: Some(case.pos.clone()),
+                control: InstructionType::JumpIf { 
+                    jump_false: 2, // jump over the jump instruction
+                    unstack_len: 0, // leave the boolean
+                }
+            });
+            builder.instructions.push(Instruction {
+                pos: Some(case.pos.clone()),
+                control: InstructionType::Jump(3) // jump over the unstacking instruction and the push false
+            });
+
+            builder.instructions.push(Instruction {
+                pos: Some(case.pos.clone()),
+                control: InstructionType::Unstack { 
+                    unstack_len: unstack_len + 1 //unstack the boolean as well
+                },
+            });
+            // push a false to indicate that the wait was not over
+            builder.instructions.push(Instruction {
+                pos: Some(case.pos.clone()),
+                control: InstructionType::Push(Literal::Bool(false)),
+            });
+
+            builder.instructions.push(Instruction {
+                pos: Some(case.pos.clone()),
+                control: InstructionType::Wait {
+                    jump: -(builder.instructions.len() as i64),
+                    unstack_len: 1,
+                },
+            });
+            // when the wait is over the variables declared in case are still on the stack and will be removed when the current scope ends
+            // if the wait is not over, since there is only one case, we know that the variables declared will be eventually there.
+            return Ok(builder)
+        }
+
+
+        /*
+        In case we handle multiple waiting cases (or one with a statement), 
+        we push a false boolean at the beginning, start atomicity if needed,
+        then for each case:
+        - condition instructions (adding a boolean and possibly other variables to the stack)
+        - stop atomicity instruction (if needed)
+        - jump over the statement if the condition is false (and remove the boolean from the stack)
+          - statement instructions (possibly adding other variables to the stack)
+          - unstack the instructions from the statement and condition variables
+          - push true
+          - jump over the unstacking of the condition variables
+        -----
+          - unstack the condition variables
+          - push false
+        - OrAssign to the variable at index 0 (after unstacking the top boolean)
+        - add an empty instruction to be replaced if "first" is used
+        
+        Finally, we add:
+        - wait instruction (jumping back to the beginning of the wait)
+        */
+
+
         state.program_stack.push(Variable {
             datatype: DataType::Boolean,
             name: "".to_string(),
@@ -105,54 +194,19 @@ impl InstructionBuilder for Node<Wait> {
             depth: state.current_stack_depth,
             declare_pos: None,
         });
-
         builder.instructions.push(Instruction {
             pos: Some(self.pos.clone()),
             control: InstructionType::Push(Literal::Bool(false)),
         });
+        
 
-        let mut jump_if_offset = if self.value.block_kind == WaitingBlockKind::First {
-            1
-        } else {
-            0
-        };
-        // the if offset also depends on whether the await block is atomic or not
-        if !self.value.start_atomic {
-            jump_if_offset += 1;
-        }
-
+        // Store the indexes of the jumps to fill them later if "first" is used
         let mut jump_index = Vec::new();
         for case in &self.value.waiting_cases {
+            // In this case, the variables declared in the case condition are in their own scope
             state.current_stack_depth += 1;
-            let mut case_condition = case.value.rule.compile(state)?;
-            let unstack_len = state.unstack_current_depth();
+            let case_condition = case.value.rule.compile(state)?;
 
-            let mut case_statement = match &case.value.statement {
-                Some(s) => s.compile(state)?,
-                None => InstructionBuilderOk::new(),
-            };
-
-            case_statement.instructions.push(Instruction {
-                pos: Some(case.pos.clone()),
-                control: InstructionType::Push(Literal::Bool(true)),
-            });
-            case_statement.instructions.push(Instruction {
-                pos: Some(case.pos.clone()),
-                control: InstructionType::LocalAssignment {
-                    index: 0,
-                    operator: BinaryAssignmentOperator::OrAssign,
-                    unstack_len: 1,
-                },
-            });
-
-            // the offset is because a jump will be added after the statement
-            case_condition.instructions.push(Instruction {
-                pos: Some(case.pos.clone()),
-                control: InstructionType::JumpIf {
-                    jump_false: (case_statement.instructions.len() + 1 + jump_if_offset) as i64,
-                    unstack_len,
-                },
-            });
             builder.extend(case_condition);
             if !self.value.start_atomic {
                 // if the entire wait block is not atomic, stop the atomicity here
@@ -161,7 +215,78 @@ impl InstructionBuilder for Node<Wait> {
                     control: InstructionType::AtomicEnd,
                 });
             }
+            
+            // Remove the boolean from the compiler stack (it will be unstacked at runtime before the statement)
+            let boolean_var = state.program_stack.pop();
+            debug_assert!(boolean_var.is_some() && boolean_var.as_ref().unwrap().datatype == DataType::Boolean);
+                        
+            // a jumpIf instruction will be added between the condition and the statement, unstacking the boolean
+            // but we need to compile the statement to know how many instructions to jump over
+            // since we will have to unstack variables in the statement, we create a new depth for the statement
+            state.current_stack_depth += 1;
+
+            //  --- Statement compilation ---
+            let mut case_statement = match &case.value.statement {
+                Some(s) => s.compile(state)?,
+                None => InstructionBuilderOk::new(),
+            };
+
+            // now we know hwo many variables were stacked the case condition and the statement
+            let unstack_len_statement = state.unstack_current_depth();
+            let unstack_len_condition = state.unstack_current_depth();
+
+            case_statement.instructions.push(Instruction {
+                pos: Some(case.pos.clone()),
+                control: InstructionType::Unstack { 
+                    unstack_len: unstack_len_statement + unstack_len_condition
+                },
+            });
+            
+            case_statement.instructions.push(Instruction {
+                pos: Some(case.pos.clone()),
+                control: InstructionType::Push(Literal::Bool(true)),
+            });
+
+            case_statement.instructions.push(Instruction {
+                pos: Some(case.pos.clone()),
+                control: InstructionType::Jump(
+                    (3) as i64, // jump over the unstacking of the condition variables and the push false
+                )
+            });
+            //  --- Statement compilation is over ---
+
+
+            // now we can add the JumpIf instruction and the case statement instructions
+            builder.instructions.push(Instruction {
+                pos: Some(case.pos.clone()),
+                control: InstructionType::JumpIf { 
+                    jump_false: (case_statement.instructions.len() + 1) as i64,
+                    unstack_len: 1, // unstack the boolean variable
+                }
+            });
+
             builder.extend(case_statement);
+
+            builder.instructions.push(Instruction {
+                pos: Some(case.pos.clone()),
+                control: InstructionType::Unstack { 
+                    unstack_len: unstack_len_condition
+                },
+            });
+            builder.instructions.push(Instruction {
+                pos: Some(case.pos.clone()),
+                control: InstructionType::Push(Literal::Bool(false)),
+            });
+
+            builder.instructions.push(Instruction {
+                pos: Some(case.pos.clone()),
+                control: InstructionType::LocalAssignment {
+                    index: 0,
+                    operator: BinaryAssignmentOperator::OrAssign,
+                    unstack_len: 1,
+                },
+            });
+
             jump_index.push(builder.instructions.len());
             builder.instructions.push(Instruction {
                 pos: Some(case.pos.clone()),
@@ -185,34 +310,6 @@ impl InstructionBuilder for Node<Wait> {
             }
         }
 
-        /*
-                state.current_stack_depth += 1;
-                let cond_ins = self.value.condition.compile(state)?;
-                // Check if the top of the stack is a boolean
-                if state.program_stack.last().expect("stack should contain a value after an expression is compiled").datatype != DataType::Boolean {
-                    return Err(AlthreadError::new(
-                        ErrorType::TypeError,
-                        Some(self.value.condition.pos),
-                        "condition must be a boolean".to_string()
-                    ));
-                }
-                // pop all variables from the stack at the given depth
-                let unstack_len = state.unstack_current_depth();
-
-                instructions.extend(cond_ins);
-
-                instructions.push(Instruction {
-                    pos: Some(self.pos),
-                    control: InstructionType::Wait(WaitControl {
-                        jump: -(instructions.len() as i64),
-                        unstack_len,
-                    }),
-                });
-        */
-        // It should work!
-        //if builder.contains_jump() {
-        //    unimplemented!("breaks in await blocks are not yet implemented");
-        //}
         Ok(builder)
     }
 }
