@@ -128,6 +128,8 @@ program A() {
 Dans l'exemple précédent, `x` est déclaré dans le scope après l'instruction `await` et prend la valeur du message reçu.
 
 Il est aussi possible de définir un bloc d'instruction qui sera exécuté à la réception du message. Cette notation est particulièrement utile dans les blocs `first` ou `seq` définies juste après.
+
+```althread
 program A() {
     await receive channel_name(x) => {
         print("message reçu, x=", x);
