@@ -122,21 +122,21 @@ program A() {
     await receive channel_name(x);
 
     print("message reçu");
-    // x n'est pas dans le scope
+    // x est dans le scope
 }
 ```
-Dans l'exemple précédent, `x` n'est pas dans le scope après l'instruction `await` car l'instruction `receive` est suivie de manière optionnelle d'un bloc d'instruction, permettant d'utiliser les variables reçues.
+Dans l'exemple précédent, `x` est déclaré dans le scope après l'instruction `await` et prend la valeur du message reçu.
 
-```althread	
+Il est aussi possible de définir un bloc d'instruction qui sera exécuté à la réception du message. Cette notation est particulièrement utile dans les blocs `first` ou `seq` définies juste après.
 program A() {
     await receive channel_name(x) => {
         print("message reçu, x=", x);
-        // x est dans le scope
+        // x est dans le scope uniquement dans ce bloc
     }
 }
 ```
 
-L'instruction `await` peut aussi être utilisée pour attendre une condition parmis plusieurs conditions en la faisant suivre de l'instruction `first` ou `all`.
+L'instruction `await` peut aussi être utilisée pour attendre une condition parmis plusieurs conditions en la faisant suivre de l'instruction `first` ou `seq`.
 
 ```althread
 program A() {
