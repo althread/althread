@@ -311,6 +311,9 @@ impl<'a> RunningProgramState<'a> {
 
         let mut action = None;
 
+        // debug current instruction
+       //println!("Program '{}' (pid {}) executing instruction at {}: {}", self.name, self.id, self.instruction_pointer, cur_inst.control);
+
         let pos_inc = match &cur_inst.control {
             InstructionType::Empty => 1,
             InstructionType::AtomicStart => 1,
@@ -815,7 +818,10 @@ impl<'a> RunningProgramState<'a> {
                 let values = channels.peek(self.id, channel_name.clone());
                 match values {
                     Some(value) => {
-                        self.memory.push(value.clone());
+                        // value must be a tuple, and we destructure it on the stack
+                        for v in value.clone().into_tuple().expect("Panic: cannot convert peeked value to tuple") {
+                            self.memory.push(v);
+                        }
                         self.memory.push(Literal::Bool(true));
                     }
                     None => {

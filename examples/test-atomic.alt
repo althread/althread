@@ -35,9 +35,8 @@ main {
 
   channel a.out (int, bool)> self.in;
 
-  await receive in(x,y) => {
-    print("Receive", x, y);
-  };
+  await receive in(x,y);
+  print("Receive", x, y);
   print("DONE");
 }
     

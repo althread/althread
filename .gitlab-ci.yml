@@ -13,6 +13,7 @@ test-rust:
   image: rust:latest
   script:
     - cargo test --all
+    - sh test-examples.sh
 
 build-rust:
   stage: build-rust

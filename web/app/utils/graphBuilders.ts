@@ -96,7 +96,7 @@ export function buildGraphFromNodes(nodes: GraphNode[], options: GraphBuildOptio
             if (i < nodes.length - 1) {
                 const lines = stepLines[i] || [];
                 visEdges.push({
-                    id: i,
+                    id: `e${i}`,
                     from: i,
                     to: i + 1,
                     label: `step ${i + 1}`,
@@ -107,11 +107,12 @@ export function buildGraphFromNodes(nodes: GraphNode[], options: GraphBuildOptio
         } else {
             // Check mode: explicit successors with indices
             if (metadata.successors) {
+                let succIndex = 0;
                 for (const succ of metadata.successors) {
                     const edgeLabel = succ.name + '#' + succ.pid + ': ' + succ.lines.join(',');
                     
                     visEdges.push({
-                        id: `${i}-${succ.to_index}`,
+                        id: `e${i}-${succ.to_index}-${succIndex++}`,
                         from: i,
                         to: succ.to_index,
                         label: edgeLabel,

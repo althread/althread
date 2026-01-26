@@ -5,9 +5,8 @@ program sender() {
 
 program receiver() {
     label L;
-    await receive in(x) => {
-        print("receive", x);
-    };
+    await receive in(x);
+    print("receive", x);
 }
 
 main {

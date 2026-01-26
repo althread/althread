@@ -26,18 +26,17 @@ main {
 
     send out(0);
 
-    await receive in(i) => {
-        print("FINAL Received: ", i);
-    };
+    await receive in(i);
+    print("FINAL Received: ", i);
 }
 
 
 program A(id:int) {
     print("Hello from A");
-    await receive in (i) => {
-        id += i;
-        print("Received", i, " new value is ", id);
-    };
+    await receive in (i);
+    id += i;
+    print("Received", i, " new value is ", id);
+    
     send out(id);
 }
 

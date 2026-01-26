@@ -881,7 +881,7 @@ export default function App() {
                   let violationPath: string[] = [];
                   if(res.path.length > 0) {
                     res.path.forEach((pathItem: any) => {
-                      violationPath.push(nodeToString(pathItem.to));
+                      violationPath.push(nodeToString(pathItem.vm));
                     });
                   }
 

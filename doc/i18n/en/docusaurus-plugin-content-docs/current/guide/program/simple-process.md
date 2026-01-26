@@ -48,7 +48,7 @@ main {
 
 ### What Happens When a Program is Executed?
 
-Once a program is executed, it becomes a process. Process execution occurs by iteration. Each iteration corresponds to the execution of an [atomic instruction](/docs/guide/getting-started/syntaxe#expression-atomique) of a randomly chosen process among the currently running processes. When a process is executed, it can perform operations such as variable assignment, function calls, reading or writing to channels, etc...
+Once a program is executed, it becomes a process. Process execution occurs by iteration. Each iteration corresponds to the execution of an [atomic instruction](/docs/guide/getting-started/syntaxe#atomic-expression) of a randomly chosen process among the currently running processes. When a process is executed, it can perform operations such as variable assignment, function calls, reading or writing to channels, etc...
 
 
 ## Complete Example

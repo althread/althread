@@ -40,23 +40,18 @@ get_expected_result() {
         ltl-deadlock-freedom.alt) echo pass ;;
         ltl-implications.alt) echo pass ;;
         ltl-multiple-properties.alt) echo pass ;;
-        *) echo "" ;;
+        *) echo pass ;;
     esac
 }
 
 # Test each LTL example file
-for file in "$EXAMPLES_DIR"/ltl-*.alt; do
+for file in "$EXAMPLES_DIR"/*.alt; do
     if [ ! -f "$file" ]; then
         continue
     fi
     
     filename=$(basename "$file")
     expected=$(get_expected_result "$filename")
-    
-    if [ -z "$expected" ]; then
-        echo -e "${YELLOW}⚠ Skipping $filename (not in test list)${NC}"
-        continue
-    fi
     
     TOTAL=$((TOTAL + 1))
     echo -n "Testing $filename ... "

@@ -85,5 +85,5 @@ check {
 ```
 
 :::tip Fonction assert
-Pour des vérifications impératives au sein du code des processus, consultez la documentation de la [fonction `assert()`](../api/fonctions-intégrées.md#assert-vérification).
+Pour des vérifications impératives au sein du code des processus, consultez la documentation de la [fonction `assert()`](../api/built-in-functions.md).
 :::

@@ -23,7 +23,7 @@ export const EXAMPLES: ExampleInfo[] = [
     title: "Concurrency",
     description: "Example program: Concurrency",
     tags: ["example","shared","concurrency","atomic","channels","communication","programs","functions","loops","conditionals","synchronization","messaging","math"],
-    content: "shared {\n    let A = 1;\n    let B = 0;\n    let Start = false;\n    let WorkersFinished = 0;  // Counts finished workers\n}\n\nfn process_message(value: int, flag: bool) -> void {\n    print(\"Processing message: value=\" + value + \", flag=\" + flag);\n    atomic {\n        if flag {\n            A = value;\n        } else {\n            B = value;\n        }\n        WorkersFinished += 1; \n    }\n}\n\nfn verify_state() -> bool {\n    return (A == 125 && B == 125);\n}\n\nprogram Worker() {\n    await Start;\n    await receive in (x, y) => {\n        process_message(x, y);\n    };\n}\n\nmain {\n    let worker1 = run Worker();\n    let worker2 = run Worker();\n\n    channel self.out (int, bool)> worker1.in;\n    channel self.out2 (int, bool)> worker2.in;\n    \n    atomic { Start = true; }\n    \n    send out(125, true);\n    send out2(125, false);\n\n    // Waits for both workers to finish processing\n    await WorkersFinished == 2;\n\n    if verify_state() {\n        print(\"Channel test successful!\");\n    } else {\n        print(\"Channel test failed!\");\n    }\n}\n\n// Output:\n// Processing message: value=125, flag=true\n// Processing message: value=125, flag=false\n// Channel test successful!\n// or\n// Processing message: value=125, flag=false\n// Processing message: value=125, flag=true\n// Channel test successful!"
+    content: "shared {\n    let A = 1;\n    let B = 0;\n    let Start = false;\n    let WorkersFinished = 0;  // Counts finished workers\n}\n\nfn process_message(value: int, flag: bool) -> void {\n    print(\"Processing message: value=\" + value + \", flag=\" + flag);\n    atomic {\n        if flag {\n            A = value;\n        } else {\n            B = value;\n        }\n        WorkersFinished += 1; \n    }\n}\n\nfn verify_state() -> bool {\n    return (A == 125 && B == 125);\n}\n\nprogram Worker() {\n    await Start;\n    \n    await receive in (x, y);\n    \n    process_message(x, y);\n}\n\nmain {\n    let worker1 = run Worker();\n    let worker2 = run Worker();\n\n    channel self.out (int, bool)> worker1.in;\n    channel self.out2 (int, bool)> worker2.in;\n    \n    atomic { Start = true; }\n    \n    send out(125, true);\n    send out2(125, false);\n\n    // Waits for both workers to finish processing\n    await WorkersFinished == 2;\n\n    if verify_state() {\n        print(\"Channel test successful!\");\n    } else {\n        print(\"Channel test failed!\");\n    }\n}\n\n// Output:\n// Processing message: value=125, flag=true\n// Processing message: value=125, flag=false\n// Channel test successful!\n// or\n// Processing message: value=125, flag=false\n// Processing message: value=125, flag=true\n// Channel test successful!"
   },
   {
     fileName: "fibo.alt",
@@ -43,8 +43,8 @@ export const EXAMPLES: ExampleInfo[] = [
     fileName: "loop-sum.alt",
     title: "Loop-Sum",
     description: "Example program: Loop-Sum",
-    tags: ["example","shared","concurrency","programs","loops","math"],
-    content: "shared {\n  let Sum = 0;\n}\n\nprogram A(my_id: int) {\n  loop {\n    Sum += 1;\n    Sum -= 1;\n  }\n}\n\neventually {\n  Sum == 2;\n}\n\nmain {\n  let n = 2;\n  let a:list(proc(A));\n  for i in 0..n {\n    let p = run A(i);\n  }\n}"
+    tags: ["example","shared","concurrency","programs","loops","conditionals","math"],
+    content: "shared {\n  let Sum = 0;\n}\n\nprogram A(my_id: int) {\n  loop {\n    Sum += 1;\n    Sum -= 1;\n  }\n}\n\ncheck {\n  always if Sum == 2 { eventually Sum == 1 };\n}\n\nmain {\n  let n = 2;\n  let a:list(proc(A));\n  for i in 0..n {\n    let p = run A(i);\n  }\n}"
   },
   {
     fileName: "ltl-always-eventually-fail.alt",
@@ -86,7 +86,7 @@ export const EXAMPLES: ExampleInfo[] = [
     title: "Ltl-Broadcast-Pass",
     description: "Example program: Ltl-Broadcast-Pass",
     tags: ["example","channels","communication","programs","loops","synchronization","messaging"],
-    content: "program sender() {\n    send out.*(42);\n}\n\nprogram receiver() {\n    label L;\n    await receive in(x) => {\n        print(\"receive\", x);\n    };\n}\n\nmain {\n    let s = run sender();\n    let r1 = run receiver();\n    let r2 = run receiver();\n    \n    channel s.out.a.a (int)> r1.in;\n    channel s.out.b.b (int)> r2.in;\n}\n\ncheck {\n    for p in $.procs.receiver { eventually p.reaches(end) };\n}"
+    content: "program sender() {\n    send out.*(42);\n}\n\nprogram receiver() {\n    label L;\n    await receive in(x);\n    print(\"receive\", x);\n}\n\nmain {\n    let s = run sender();\n    let r1 = run receiver();\n    let r2 = run receiver();\n    \n    channel s.out.a.a (int)> r1.in;\n    channel s.out.b.b (int)> r2.in;\n}\n\ncheck {\n    for p in $.procs.receiver { eventually p.reaches(end) };\n}"
   },
   {
     fileName: "ltl-deadlock-freedom.alt",
@@ -184,14 +184,14 @@ export const EXAMPLES: ExampleInfo[] = [
     title: "Ring-Election-Eventually",
     description: "Example program: Ring-Election-Eventually",
     tags: ["example","shared","concurrency","channels","communication","programs","loops","conditionals","synchronization","messaging","math"],
-    content: "shared {\n  let Leader = 0;\n}\n\nprogram A(my_id: int) {\n\n  let leader_id = my_id;\n\n  send out(my_id);\n\n  loop atomic await receive in (x) => {\n    print(\"receive\", x);\n      if x > leader_id {\n        leader_id = x;\n        send out(x);\n      } else {\n        if x == leader_id {\n          print(\"finished\");\n          send out(x);\n          break;\n        }\n      }\n  };\n  label L;\n  if my_id == leader_id {\n    print(\"I AM THE LEADER!!!\");\n    @ {\n        Leader += 1;\n    }\n  }\n}\n\ncheck {\n  for p in $.procs.A { eventually p.reaches(L) };\n}\nalways {\n  Leader <= 1;\n}\n\n\nmain {\n  let n = 3;\n  let a:list(proc(A));\n  for i in 0..n {\n    let p = run A(i);\n    a.push(p);\n  }\n  for i in 0..n-1 {\n    let p1 = a.at(i);\n    let p2 = a.at(i+1);\n    channel p1.out (int)> p2.in;\n  }\n  \n  let p1 = a.at(n-1);\n  let p2 = a.at(0);\n  channel p1.out (int)> p2.in;\n}"
+    content: "shared {\n  let Leader = 0;\n}\n\nprogram A(my_id: int) {\n\n  let leader_id = my_id;\n\n  send out(my_id);\n\n  loop atomic await receive in (x) => {\n    print(\"receive\", x);\n      if x > leader_id {\n        leader_id = x;\n        send out(x);\n      } else {\n        if x == leader_id {\n          print(\"finished\");\n          send out(x);\n          break;\n        }\n      }\n  }\n  \n  label L;\n  if my_id == leader_id {\n    print(\"I AM THE LEADER!!!\");\n    @ {\n        Leader += 1;\n    }\n  }\n}\n\ncheck {\n  for p in $.procs.A { eventually p.reaches(L) };\n}\nalways {\n  Leader <= 1;\n}\n\n\nmain {\n  let n = 3;\n  let a:list(proc(A));\n  for i in 0..n {\n    let p = run A(i);\n    a.push(p);\n  }\n  for i in 0..n-1 {\n    let p1 = a.at(i);\n    let p2 = a.at(i+1);\n    channel p1.out (int)> p2.in;\n  }\n  \n  let p1 = a.at(n-1);\n  let p2 = a.at(0);\n  channel p1.out (int)> p2.in;\n}"
   },
   {
     fileName: "ring-election.alt",
     title: "Ring-Election",
     description: "Example program: Ring-Election",
     tags: ["example","shared","concurrency","channels","communication","programs","conditionals","synchronization","messaging","math"],
-    content: "shared {\n  let Done = false;\n  let Leader = 0;\n}\n\nprogram A(my_id: int) {\n\n  let leader_id = my_id;\n\n  send out(my_id);\n\n  loop atomic await receive in (x) => {\n    print(\"receive\", x);\n      if x > leader_id {\n        leader_id = x;\n        send out(x);\n      } else {\n        if x == leader_id {\n          print(\"finished\");\n          send out(x);\n          break;\n        }\n      }\n  };\n  \n  if my_id == leader_id {\n    print(\"I AM THE LEADER!!!\");\n    @ {\n        Done = true;\n        Leader += 1;\n    }\n  }\n}\n\nalways {\n  !Done || (Leader == 1);\n}\n\nmain {\n  let a = run A(1);\n  let b = run A(2);\n\n  channel a.out (int)> b.in;\n  channel b.out (int)> a.in;\n\n  print(\"DONE\");\n}"
+    content: "shared {\n  let Done = false;\n  let Leader = 0;\n}\n\nprogram A(my_id: int) {\n\n  let leader_id = my_id;\n\n  send out(my_id);\n\n  loop atomic await receive in (x) => {\n    print(\"receive\", x);\n    if x > leader_id {\n      leader_id = x;\n      send out(x);\n    } else {\n      if x == leader_id {\n        print(\"finished\");\n        send out(x);\n        break;\n      }\n    }\n  }\n  \n  if my_id == leader_id {\n    print(\"I AM THE LEADER!!!\");\n    @ {\n        Done = true;\n        Leader += 1;\n    }\n  }\n}\n\nalways {\n  !Done || (Leader == 1);\n}\n\nmain {\n  let a = run A(1);\n  let b = run A(2);\n\n  channel a.out (int)> b.in;\n  channel b.out (int)> a.in;\n\n  print(\"DONE\");\n}"
   },
   {
     fileName: "shared-list.alt",
@@ -205,7 +205,7 @@ export const EXAMPLES: ExampleInfo[] = [
     title: "Test-Atomic",
     description: "Example program: Test-Atomic",
     tags: ["example","shared","concurrency","channels","communication","programs","synchronization","messaging","math"],
-    content: "shared {\n  let A: bool = false;\n  let B: bool = true;\n  let Done = 0;\n}\n\nprogram A() {\n  print(\"starting A\");\n  @ {\n    A = false;\n    B = true;\n  }\n  Done += 1;\n  send out(42,true);\n}\n\nprogram B() {\n  print(\"starting B\");\n  @ {\n    A = true;\n    B = false;\n  }\n  Done += 1;\n}\n\nalways {\n  A || B;\n}\n\nmain {\n  let a = run A();\n  run B();\n  await Done == 2;\n\n  channel a.out (int, bool)> self.in;\n\n  await receive in(x,y) => {\n    print(\"Receive\", x, y);\n  };\n  print(\"DONE\");\n}"
+    content: "shared {\n  let A: bool = false;\n  let B: bool = true;\n  let Done = 0;\n}\n\nprogram A() {\n  print(\"starting A\");\n  @ {\n    A = false;\n    B = true;\n  }\n  Done += 1;\n  send out(42,true);\n}\n\nprogram B() {\n  print(\"starting B\");\n  @ {\n    A = true;\n    B = false;\n  }\n  Done += 1;\n}\n\nalways {\n  A || B;\n}\n\nmain {\n  let a = run A();\n  run B();\n  await Done == 2;\n\n  channel a.out (int, bool)> self.in;\n\n  await receive in(x,y);\n  print(\"Receive\", x, y);\n  print(\"DONE\");\n}"
   },
   {
     fileName: "test-break.alt",
@@ -219,7 +219,7 @@ export const EXAMPLES: ExampleInfo[] = [
     title: "Test-Channels",
     description: "Example program: Test-Channels",
     tags: ["example","shared","concurrency","channels","communication","programs","synchronization","messaging"],
-    content: "shared {\n    let A = 1;\n    let B = 0;\n    let Start = false;\n}\nprogram A() {\n    await Start;\n    await receive in (x,y) => {\n        print(\"received \");\n    };\n}\n\nmain {\n    let pa = run A();\n    let pb = run A();\n\n    channel self.out (int, bool)> pa.in;\n    channel self.out2 (int, bool)> pb.in;\n    Start = true;\n    send out (125, true);\n    send out2 (125, false);\n\n}"
+    content: "shared {\n    let A = 1;\n    let B = 0;\n    let Start = false;\n}\nprogram A() {\n    await Start;\n\n    await receive in (x,y);\n\n    print(\"received\", x,y);\n\n    await first {\n        receive in (x,y) => {\n            print(\"first received \", x, y);\n        }\n        A == x => {\n            print(\"first A == x\");\n        }\n    }\n\n\n}\n\nmain {\n    let pa = run A();\n\n    channel self.out (int, bool)> pa.in;\n    channel self.out2 (int, bool)> pa.in;\n    Start = true;\n    send out (125, true);\n    send out2 (125, false);\n\n}"
   },
   {
     fileName: "test-if-else.alt",
@@ -233,21 +233,14 @@ export const EXAMPLES: ExampleInfo[] = [
     title: "Test-List",
     description: "Example program: Test-List",
     tags: ["example","channels","communication","programs","loops","synchronization","messaging","math"],
-    content: "main {\n    let n = 6;\n    let p: list(proc(A));\n    for i in 0..n {\n        let pid = run A(i);\n        p.push(pid);\n    }\n    \n    //not yet supported\n    //let p = [run A(i) for i in 0..10];\n\n    for i in 0..(n-1) {\n        let n = p.len();\n        let at_i = p.at(i);\n        let at_i2 = p.at((i+1)%n);\n        print(at_i, \"->\", at_i2);\n        channel at_i.out (int)> at_i2.in;\n    }\n\n    let first = p.at(0);\n    channel self.out (int)> first.in;\n    let n = p.len();\n    let last = p.at(n-1);\n    channel last.out (int)> self.in;\n\n    send out(0);\n\n    await receive in(i) => {\n        print(\"FINAL Received: \", i);\n    };\n}\n\n\nprogram A(id:int) {\n    print(\"Hello from A\");\n    await receive in (i) => {\n        id += i;\n        print(\"Received\", i, \" new value is \", id);\n    };\n    send out(id);\n}"
-  },
-  {
-    fileName: "test-ltl-simple.alt",
-    title: "Test-Ltl-Simple",
-    description: "Example program: Test-Ltl-Simple",
-    tags: ["example","programs","loops"],
-    content: "// Test file for LTL verification\n// This tests a simple safety property\n\nshared x: int = 0;\n\nprogram Incrementer() {\n    x = x + 1;\n}\n\ncheck {\n    [] (x >= 0)\n}\n\nmain {\n    run Incrementer();\n}"
+    content: "main {\n    let n = 6;\n    let p: list(proc(A));\n    for i in 0..n {\n        let pid = run A(i);\n        p.push(pid);\n    }\n    \n    //not yet supported\n    //let p = [run A(i) for i in 0..10];\n\n    for i in 0..(n-1) {\n        let n = p.len();\n        let at_i = p.at(i);\n        let at_i2 = p.at((i+1)%n);\n        print(at_i, \"->\", at_i2);\n        channel at_i.out (int)> at_i2.in;\n    }\n\n    let first = p.at(0);\n    channel self.out (int)> first.in;\n    let n = p.len();\n    let last = p.at(n-1);\n    channel last.out (int)> self.in;\n\n    send out(0);\n\n    await receive in(i);\n    print(\"FINAL Received: \", i);\n}\n\n\nprogram A(id:int) {\n    print(\"Hello from A\");\n    await receive in (i);\n    id += i;\n    print(\"Received\", i, \" new value is \", id);\n    \n    send out(id);\n}"
   },
   {
     fileName: "test-reaches-simple.alt",
     title: "Test-Reaches-Simple",
     description: "Example program: Test-Reaches-Simple",
     tags: ["example","programs","conditionals"],
-    content: "program A() {\n    label START;\n    let x = 1;\n    label MIDDLE;\n    let y = 2;\n}\n\nmain {\n    run A();\n}\n\ncheck {\n    always (if $.procs.A.at(0).reaches(MIDDLE) { eventually $.procs.A.at(0).reaches(START) });\n}"
+    content: "program A() {\n    label START;\n    let x = 1;\n    label MIDDLE;\n    let y = 2;\n}\n\nmain {\n    run A();\n}\n\ncheck {\n    always (if $.procs.A.at(0).reaches(MIDDLE) { eventually $.procs.A.at(0).reaches(end) });\n}"
   },
   {
     fileName: "test-wait.alt",
