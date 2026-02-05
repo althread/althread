@@ -18,6 +18,7 @@ import { tutorial as tutorialStep6 } from '@tutorials/TutorialStep6_Programs';
 import { tutorial as tutorialStep7 } from '@tutorials/TutorialStep7_Wait';
 import { tutorial as tutorialStep8 } from '@tutorials/TutorialStep8_Channels';
 import { tutorial as tutorialStep9 } from '@tutorials/TutorialStep9_Imports';
+import { tutorial as tutorialStep10 } from '@tutorials/TutorialStep10_WaitFirst';
 import { useNavigate, useParams } from '@solidjs/router';
 import { Logo } from '@assets/images/Logo';
 
@@ -75,7 +76,8 @@ const tutorials: Record<string, TutorialStep> = {
   TutorialStep6_Programs: tutorialStep6,
   TutorialStep7_Wait: tutorialStep7,
   TutorialStep8_Channels: tutorialStep8,
-  TutorialStep9_Imports: tutorialStep9
+  TutorialStep9_Imports: tutorialStep9,
+  TutorialStep10_WaitFirst: tutorialStep10
 };
 
 const tutorialOrder: string[] = [
@@ -87,7 +89,8 @@ const tutorialOrder: string[] = [
   'TutorialStep6_Programs',
   'TutorialStep7_Wait',
   'TutorialStep8_Channels',
-  'TutorialStep9_Imports'
+  'TutorialStep9_Imports',
+  'TutorialStep10_WaitFirst'
 ];
 
 const Tutorial: Component = () => {
