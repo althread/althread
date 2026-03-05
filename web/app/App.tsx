@@ -7,7 +7,6 @@ import createEditor from '@components/editor/Editor';
 import Graph from "@components/graph/Graph";
 import { Logo } from "@assets/images/Logo";
 import { renderMessageFlowGraph } from "@components/graph/CommGraph";
-import { nodeToString } from "@components/graph/Node";
 import type { FileSystemEntry } from '@components/fileexplorer/FileExplorer';
 import '@components/fileexplorer/FileExplorer.css';
 import FileTabs from "@components/fileexplorer/FileTabs";
@@ -877,18 +876,12 @@ export default function App() {
                     setOut("Warning: Exploration limit reached. The state space was not fully explored. No violation found in the explored part.");
                   }
                   
-                  // Extract violation path node labels
-                  let violationPath: string[] = [];
-                  if(res.path.length > 0) {
-                    res.path.forEach((pathItem: any) => {
-                      violationPath.push(nodeToString(pathItem.vm));
-                    });
-                  }
+                  const violationPathStates = res.path.map((pathItem) => pathItem.vm);
 
                   // Build the graph with violation highlighting
                   const builtGraph = buildGraphFromNodes(res.nodes, { 
                     mode: 'check', 
-                    violationPath 
+                    violationPathStates
                   });
                   
                   setNodes(builtGraph.nodes);
