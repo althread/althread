@@ -64,6 +64,12 @@ export interface VisGraphEdge {
     to: number | string;
     label?: string;
     lines?: number[];
+    color?: string | {
+        color?: string;
+        highlight?: string;
+        hover?: string;
+    };
+    width?: number;
     font?: {
         size?: number;
         color?: string;

@@ -7,7 +7,6 @@ import createEditor from '@components/editor/Editor';
 import Graph from "@components/graph/Graph";
 import { Logo } from "@assets/images/Logo";
 import { renderMessageFlowGraph } from "@components/graph/CommGraph";
-import { nodeToString } from "@components/graph/Node";
 import type { FileSystemEntry } from '@components/fileexplorer/FileExplorer';
 import '@components/fileexplorer/FileExplorer.css';
 import FileTabs from "@components/fileexplorer/FileTabs";
@@ -26,7 +25,7 @@ import { EmptyEditor } from '@components/editor/EmptyEditor';
 import { formatAlthreadError } from '@utils/error';
 import ErrorDisplay from '@components/error/ErrorDisplay';
 import { workerClient } from '@utils/workerClient';
-import { buildGraphFromNodes } from '@utils/graphBuilders';
+import { buildGraphFromNodes, vmStateSignature } from '@utils/graphBuilders';
 import type { GraphNode, RunResult, CheckResult, VMStateSelection } from './types/vm-state';
 
 init().then(() => {
@@ -343,6 +342,8 @@ export default function App() {
   let [commgraphout, setCommGraphOut] = createSignal<any[]>([]); //messageflow graph
   let [runGraphNodes, setRunGraphNodes] = createSignal<GraphNode[]>([]); // For run mode - stores graph nodes
   let [runBuiltGraph, setRunBuiltGraph] = createSignal<{ nodes: any[], edges: any[] }>({ nodes: [], edges: [] }); // Built graph for vis.js
+  let [counterexampleReplayNodes, setCounterexampleReplayNodes] = createSignal<GraphNode[]>([]); // Replayable counter-example path
+  let [counterexampleReplayStepLines, setCounterexampleReplayStepLines] = createSignal<number[][]>([]); // Step lines for counter-example replay
   let [stepLines, setStepLines] = createSignal<number[][]>([]); //to store lines for each step
   let [activeAction, setActiveAction] = createSignal<string | null>(null);
   const [loadingAction, setLoadingAction] = createSignal<string | null>(null);
@@ -572,6 +573,34 @@ export default function App() {
     setActiveAction(null);
   }
 
+  const buildCounterexampleReplay = (pathNodes: GraphNode[], graphNodes: GraphNode[]) => {
+    if (!pathNodes || pathNodes.length === 0) {
+      return { replayNodes: [] as GraphNode[], replayStepLines: [] as number[][] };
+    }
+
+    const initialGraphNode = graphNodes.find((node) => node.metadata.level === 0);
+    let replayNodes = [...pathNodes];
+
+    if (initialGraphNode) {
+      const initialKey = vmStateSignature(initialGraphNode.vm);
+      const firstPathKey = vmStateSignature(pathNodes[0].vm);
+      if (initialKey !== firstPathKey) {
+        replayNodes = [initialGraphNode, ...pathNodes];
+      }
+    }
+
+    const replayStepLines: number[][] = [];
+    for (let i = 0; i < replayNodes.length - 1; i++) {
+      const rawLines = replayNodes[i + 1]?.metadata?.lines || [];
+      const normalizedLines = rawLines
+        .map((line: number) => Number(line))
+        .filter((line: number) => Number.isFinite(line) && line > 0);
+      replayStepLines.push(normalizedLines);
+    }
+
+    return { replayNodes, replayStepLines };
+  };
+
   const resetInteractiveMode = async () => {
     if (!editorManager.activeFile()) return;
     
@@ -626,6 +655,8 @@ export default function App() {
     setEdges([]);
     setRunGraphNodes([]);
     setRunBuiltGraph({ nodes: [], edges: [] });
+    setCounterexampleReplayNodes([]);
+    setCounterexampleReplayStepLines([]);
     setActiveAction(null);
     setSelectedVM(null);
     // Reset interactive mode state
@@ -876,19 +907,22 @@ export default function App() {
                   } else {
                     setOut("Warning: Exploration limit reached. The state space was not fully explored. No violation found in the explored part.");
                   }
-                  
-                  // Extract violation path node labels
-                  let violationPath: string[] = [];
-                  if(res.path.length > 0) {
-                    res.path.forEach((pathItem: any) => {
-                      violationPath.push(nodeToString(pathItem.vm));
-                    });
+
+                  if (res.path.length > 0) {
+                    const replay = buildCounterexampleReplay(res.path, res.nodes);
+                    setCounterexampleReplayNodes(replay.replayNodes);
+                    setCounterexampleReplayStepLines(replay.replayStepLines);
+                  } else {
+                    setCounterexampleReplayNodes([]);
+                    setCounterexampleReplayStepLines([]);
                   }
+                  
+                  const violationPathStates = res.path.map((pathItem) => pathItem.vm);
 
                   // Build the graph with violation highlighting
                   const builtGraph = buildGraphFromNodes(res.nodes, { 
                     mode: 'check', 
-                    violationPath 
+                    violationPathStates
                   });
                   
                   setNodes(builtGraph.nodes);
@@ -902,6 +936,8 @@ export default function App() {
                   setOut(errorInfo.message);
                   setActiveTab("execution");
                   setLoadingAction(null);
+                  setCounterexampleReplayNodes([]);
+                  setCounterexampleReplayStepLines([]);
                   // reset other tabs to initial state
                   setStdout("The console output will appear here.");
                   setCommGraphOut([]);
@@ -912,6 +948,45 @@ export default function App() {
               }}>
               <i class={loadingAction() === "check" ? "codicon codicon-loading codicon-modifier-spin" : "codicon codicon-check"}></i>
               Check
+            </button>
+
+            <button
+              class={`vscode-button${activeAction() === "run-counterexample" ? " active" : ""}`}
+              disabled={loadingAction() === "run-counterexample" || counterexampleReplayNodes().length === 0}
+              onClick={async () => {
+                const replayNodes = counterexampleReplayNodes();
+                if (replayNodes.length === 0) return;
+
+                if (!isRun()) setIsRun(true);
+                setExecutionError(false);
+                setStructuredError(null);
+                if (activeAction() !== "run-counterexample") setActiveAction("run-counterexample");
+                if (loadingAction() !== "run-counterexample") setLoadingAction("run-counterexample");
+                setSelectedVM(null);
+
+                try {
+                  const replayStepLines = counterexampleReplayStepLines();
+                  setRunGraphNodes(replayNodes);
+                  setStepLines(replayStepLines);
+
+                  const builtGraph = buildGraphFromNodes(replayNodes, {
+                    mode: 'run',
+                    stepLines: replayStepLines,
+                  });
+
+                  setRunBuiltGraph(builtGraph);
+                  setCommGraphOut([]);
+                  setStdout("Counter-example replay loaded from checker path.");
+                  setOut("Counter-example replay loaded. Open VM states to walk through the violating trace.");
+                  setActiveTab("vm_states");
+                } finally {
+                  setTimeout(() => {
+                    setLoadingAction(null);
+                  }, animationTimeOut);
+                }
+              }}>
+              <i class={loadingAction() === "run-counterexample" ? "codicon codicon-loading codicon-modifier-spin" : "codicon codicon-debug-start"}></i>
+              Run CE
             </button>
 
             <button

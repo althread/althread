@@ -18,15 +18,85 @@ interface GraphBuildOptions {
     mode?: 'run' | 'check';
     stepLines?: number[][];
     violationPath?: string[];
+    violationPathStates?: VMState[];
+}
+
+function stableStringify(value: unknown): string {
+    if (value === null || value === undefined) return JSON.stringify(value);
+
+    if (Array.isArray(value)) {
+        return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+    }
+
+    if (typeof value === 'object') {
+        const entries = Object.entries(value as Record<string, unknown>)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([key, val]) => `${JSON.stringify(key)}:${stableStringify(val)}`);
+        return `{${entries.join(',')}}`;
+    }
+
+    return JSON.stringify(value);
+}
+
+export function vmStateSignature(vm: VMState): string {
+    const normalized = {
+        globals: Object.entries(vm.globals || {})
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([key, value]) => ({ key, value })),
+        channels: [...(vm.channels || [])]
+            .map((channel) => ({ ...channel }))
+            .sort((a, b) => (a.pid - b.pid) || a.name.localeCompare(b.name)),
+        pending_deliveries: [...(vm.pending_deliveries || [])]
+            .map((delivery) => ({ ...delivery }))
+            .sort(
+                (a, b) =>
+                    (a.from_pid - b.from_pid)
+                    || a.from_channel.localeCompare(b.from_channel)
+                    || (a.to_pid - b.to_pid)
+                    || a.to_channel.localeCompare(b.to_channel)
+            ),
+        waiting_send: [...(vm.waiting_send || [])]
+            .map((waiting) => ({ ...waiting }))
+            .sort((a, b) => (a.pid - b.pid) || a.name.localeCompare(b.name)),
+        channel_connections: [...(vm.channel_connections || [])]
+            .map((connection) => ({ ...connection }))
+            .sort(
+                (a, b) =>
+                    (a.from.pid - b.from.pid)
+                    || a.from.channel.localeCompare(b.from.channel)
+                    || (a.to.pid - b.to.pid)
+                    || a.to.channel.localeCompare(b.to.channel)
+            ),
+        locals: [...(vm.locals || [])]
+            .map((local) => ({ ...local }))
+            .sort((a, b) => (a.pid - b.pid) || a.name.localeCompare(b.name)),
+    };
+
+    return stableStringify(normalized);
 }
 
 /**
  * Build vis.js graph from GraphNode array (works for both run and check modes)
  */
 export function buildGraphFromNodes(nodes: GraphNode[], options: GraphBuildOptions = {}): GraphBuildResult {
-    const { mode = 'check', stepLines = [], violationPath = [] } = options;
+    const { mode = 'check', stepLines = [], violationPath = [], violationPathStates = [] } = options;
     const visNodes: VisGraphNode[] = [];
     const visEdges: VisGraphEdge[] = [];
+    const nodeSignatures = nodes.map((node) => vmStateSignature(node.vm));
+    const hasViolationPathStates = violationPathStates.length > 0;
+    const violationPathSignatures = hasViolationPathStates
+        ? violationPathStates.map((state) => vmStateSignature(state))
+        : [];
+    const violationNodeSet = new Set(violationPathSignatures);
+    const violationEdgeSet = new Set<string>();
+
+    for (let i = 0; i < violationPathSignatures.length - 1; i++) {
+        const from = violationPathSignatures[i];
+        const to = violationPathSignatures[i + 1];
+        violationEdgeSet.add(`${from}->${to}`);
+    }
+
+    const fallbackViolationLabelSet = new Set(violationPath);
 
     for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];
@@ -50,7 +120,12 @@ export function buildGraphFromNodes(nodes: GraphNode[], options: GraphBuildOptio
 
         // Determine node color based on mode and violation path
         const nodeLabel = nodeToString(vmStateToNode(node.vm));
-        const isViolationNode = violationPath.includes(nodeLabel) || (violationPath.length > 0 && metadata.level === 0);
+        const nodeSignature = nodeSignatures[i];
+        const isViolationNode = mode === 'check' && (
+            hasViolationPathStates
+                ? violationNodeSet.has(nodeSignature)
+                : fallbackViolationLabelSet.has(nodeLabel)
+        );
         
         let backgroundColor, borderColor;
         if (mode === 'run') {
@@ -110,6 +185,10 @@ export function buildGraphFromNodes(nodes: GraphNode[], options: GraphBuildOptio
                 let succIndex = 0;
                 for (const succ of metadata.successors) {
                     const edgeLabel = succ.name + '#' + succ.pid + ': ' + succ.lines.join(',');
+                    const toSignature = nodeSignatures[succ.to_index];
+                    const isViolationEdge = hasViolationPathStates
+                        && typeof toSignature === 'string'
+                        && violationEdgeSet.has(`${nodeSignature}->${toSignature}`);
                     
                     visEdges.push({
                         id: `e${i}-${succ.to_index}-${succIndex++}`,
@@ -118,6 +197,10 @@ export function buildGraphFromNodes(nodes: GraphNode[], options: GraphBuildOptio
                         label: edgeLabel,
                         lines: succ.lines.map((l: number) => Number(l)),
                         font: { size: 0 }, // Hidden by default
+                        color: isViolationEdge
+                            ? { color: '#ec9999', highlight: '#ec9999', hover: '#ec9999' }
+                            : undefined,
+                        width: isViolationEdge ? 2 : undefined,
                     });
                 }
             }

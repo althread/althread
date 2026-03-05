@@ -28,9 +28,8 @@ Sending is not a blocking operation as we assume channel have infinite capacity.
 ## Receiving Messages
 Use the \`receive\` keyword to receive a value from a channel. This is not alone a blocking operation, but it can be seen as a boolean condition that is true when a message is correctly received. So it is tipically used in an \`await\` statement:
 \`\`\`althread
-await receive inPortName(value1, value2, ...) => {
-    // Do something with the received values
-}
+await receive inPortName(value1, value2, ...);
+// Do something with the received values
 \`\`\`
 
 **Example: Producer-Consumer**
@@ -44,10 +43,9 @@ program Producer() {
 }
 
 program Consumer() {
-    for _ in 0..3 { // We expect 3 messages
-        await receive inPort(val) => {
-            print("Consumer: received ", val);
-        }
+    for i in 0..3 { // We expect 3 messages
+        await receive inPort(val);
+        print("Consumer: received ", val);
     }
 }
 
@@ -80,20 +78,20 @@ main {
     const senderOutPort = isSenderProgramCorrect ? senderMatch[1] : null;
 
     if (!isSenderProgramCorrect) {
-        issues.push("Programme Sender : Doit être \'program Sender()\', envoyer \'\"Ping\"\' via un port de sortie (par ex., \'send monPortDeSortie(\"Ping\");\'), et afficher \"Sender: sent 'Ping'\".");
+        issues.push("Sender Program: Must be 'program Sender()', send '\"Ping\"' via an out port (e.g., 'send myOutPort(\"Ping\");'), and print \"Sender: sent 'Ping'\".");
     }
 
     // 2. Validate Receiver program and capture its in-port name and message variable
-    const receiverProgramRegex = /program\s+Receiver\s*\(\s*\)\s*\{[^}]*await\s+receive\s+(\w+)\s*\(\s*(\w+)\s*\)\s*=>\s*\{[^}]*print\s*\(\s*\"Receiver: received \"\s*,\s*\2\s*\)\s*;[^}]*\}\s*;[^}]*\}/s;
+    const receiverProgramRegex = /program\s+Receiver\s*\(\s*\)\s*\{[^}]*await\s+receive\s+(\w+)\s*\(\s*(\w+)\s*\)\s*;[^}]*print\s*\(\s*\"Receiver: received \"\s*,\s*\2\s*\)\s*;[^}]*\}/s;
     const receiverMatch = code.match(receiverProgramRegex);
     const isReceiverProgramCorrect = receiverMatch !== null;
     const receiverInPort = isReceiverProgramCorrect ? receiverMatch[1] : null;
     const receiverMessageVariable = isReceiverProgramCorrect ? receiverMatch[2] : null;
 
     if (!isReceiverProgramCorrect) {
-        issues.push("Programme Receiver : Doit être \'program Receiver()\', utiliser \'await receive monPortEntree(msg) => { ... }\' sur un port d\'entrée, et afficher \'\\\"Receiver: received \\\"\' suivi de la variable reçue (par ex., \'print(\\\"Receiver: received \\\", msg);\').");
-    } else if (receiverMessageVariable && !/^[a-zA-Z_]\\w*$/.test(receiverMessageVariable)) {
-        issues.push(`Programme Receiver : La variable utilisée dans \'receive ${receiverInPort}(${receiverMessageVariable})\' (\`${receiverMessageVariable}\`) n'est pas un identifiant valide.`);
+        issues.push("Receiver Program: Must be 'program Receiver()', use 'await receive myInPort(msg);' on an in port, and print '\"Receiver: received \"' followed by the received variable (e.g., 'print(\"Receiver: received \", msg);').");
+    } else if (receiverMessageVariable && !/^[a-zA-Z_]\w*$/.test(receiverMessageVariable)) {
+        issues.push(`Receiver Program: The variable used in 'receive ${receiverInPort}(${receiverMessageVariable})' (\`${receiverMessageVariable}\`) is not a valid identifier.`);
     }
 
 
@@ -102,7 +100,7 @@ main {
     const mainBlockContentMatch = code.match(/main\s*\{([\s\S]*?)\}/s);
 
     if (!mainBlockContentMatch) {
-        issues.push("Bloc Main : Un bloc \'main { ... }\' est requis.");
+        issues.push("Main Block: A 'main { ... }' block is required.");
     } else {
         const mainContent = mainBlockContentMatch[1];
         
@@ -118,10 +116,10 @@ main {
         let mainBlockSpecificIssues = [];
 
         if (!senderInstanceName) {
-            mainBlockSpecificIssues.push("Exécution de Sender : \'let instanceSender = run Sender();\' dans main.");
+            mainBlockSpecificIssues.push("Sender execution: 'let senderInstance = run Sender();' in main.");
         }
         if (!receiverInstanceName) {
-            mainBlockSpecificIssues.push("Exécution de Receiver : \'let instanceReceiver = run Receiver();\' dans main.");
+            mainBlockSpecificIssues.push("Receiver execution: 'let receiverInstance = run Receiver();' in main.");
         }
 
         if (isSenderProgramCorrect && isReceiverProgramCorrect && senderInstanceName && receiverInstanceName && senderOutPort && receiverInPort) {
@@ -131,42 +129,42 @@ main {
             const channelRegex = new RegExp(channelRegexString, "s");
             
             if (!channelRegex.test(mainContent)) {
-                mainBlockSpecificIssues.push(`Canal : Déclarer \'${expectedChannelString}\' dans main.`);
+                mainBlockSpecificIssues.push(`Channel: Declare '${expectedChannelString}' in main.`);
             } else {
                 isMainBlockCorrect = true;
             }
         } else {
             // This block provides feedback if parts are missing for full channel validation
             if (!mainContent.includes("channel ")) {
-                 mainBlockSpecificIssues.push("Canal : Une déclaration de canal est manquante dans main.");
+                 mainBlockSpecificIssues.push("Channel: A channel declaration is missing in main.");
             } else if (senderOutPort && receiverInPort) {
                  // Attempt to find a channel with the correct port names but possibly wrong instance names or type
                  const genericChannelRegexString = `channel\\s+\\w+\\.${escapeRegExp(senderOutPort)}\\s*\\(\\s*string\\s*\\)\\s*>\\s+\\w+\\.${escapeRegExp(receiverInPort)}\\s*;`;
                  const genericChannelRegex = new RegExp(genericChannelRegexString, 's');
                  if (!genericChannelRegex.test(mainContent)) {
-                    mainBlockSpecificIssues.push(`Canal : Un canal de type \'string\' connectant un port de sortie nommé \'${senderOutPort}\' à un port d\'entrée nommé \'${receiverInPort}\' semble manquant ou incorrect.`);
+                    mainBlockSpecificIssues.push(`Channel: A channel of type 'string' connecting an out port named '${senderOutPort}' to an in port named '${receiverInPort}' seems to be missing or incorrect.`);
                  } else {
-                    mainBlockSpecificIssues.push(`Canal : Un canal utilisant les ports \'${senderOutPort}\' et \'${receiverInPort}\' existe, mais assurez-vous qu\'il connecte les bonnes instances de Sender et Receiver (définies avec \'let ... = run ...;\'), et que le type est \'string\'.`);
+                    mainBlockSpecificIssues.push(`Channel: A channel using ports '${senderOutPort}' and '${receiverInPort}' exists, but make sure it connects the correct instances of Sender and Receiver (defined with 'let ... = run ...;'), and that the type is 'string'.`);
                  }
             } else if (issues.length === 0) { // Only add this generic message if no other specific program errors were found
-                 mainBlockSpecificIssues.push("Canal : La déclaration dans main n\'a pas pu être entièrement validée. Assurez-vous que les programmes Sender/Receiver sont corrects, exécutés avec \'let instance = run Programme();\', puis connectés par un canal.");
+                 mainBlockSpecificIssues.push("Channel: The declaration in main could not be fully validated. Ensure Sender/Receiver programs are correct, executed with 'let instance = run Program();', and then connected by a channel.");
             }
         }
         
         if (mainBlockSpecificIssues.length > 0) {
-            issues.push(`Problèmes du bloc Main : ${mainBlockSpecificIssues.join(' ')}`);
+            issues.push(`Main block issues: ${mainBlockSpecificIssues.join(' ')}`);
         }
     }
 
     if (isSenderProgramCorrect && isReceiverProgramCorrect && isMainBlockCorrect) {
-        return { success: true, message: "Canaux utilisés correctement pour l'envoi/réception !" };
+        return { success: true, message: "Channels used correctly for sending/receiving!" };
     } else {
         const finalIssues = [...new Set(issues)]; // Remove duplicates
         if (finalIssues.length === 0 && !(isSenderProgramCorrect && isReceiverProgramCorrect && isMainBlockCorrect) ) {
             // This case should ideally not be reached if logic is comprehensive
-            finalIssues.push("Une erreur de validation inconnue s'est produite. Veuillez vérifier votre code par rapport à la description de la tâche du tutoriel.");
+            finalIssues.push("An unknown validation error occurred. Please check your code against the tutorial task description.");
         }
-        return { success: false, message: `Veuillez revoir votre implémentation : ${finalIssues.join(' ')}` };
+        return { success: false, message: `Please review your implementation: ${finalIssues.join(' ')}` };
     }
   },
 }
