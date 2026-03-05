@@ -38,7 +38,7 @@ function stableStringify(value: unknown): string {
     return JSON.stringify(value);
 }
 
-function vmStateSignature(vm: VMState): string {
+export function vmStateSignature(vm: VMState): string {
     const normalized = {
         globals: Object.entries(vm.globals || {})
             .sort(([a], [b]) => a.localeCompare(b))
