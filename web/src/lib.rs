@@ -54,6 +54,25 @@ fn error_to_js(err: AlthreadError) -> JsValue {
     to_js(&err)
 }
 
+fn web_pos_from_rc(pos: &std::rc::Rc<althread::error::Pos>) -> WebPos {
+    WebPos {
+        line: pos.line,
+        col: pos.col,
+        start: pos.start,
+        end: pos.end,
+        file_path: pos.file_path.clone(),
+    }
+}
+
+fn runtime_error_info(err: AlthreadError) -> RuntimeErrorInfo {
+    RuntimeErrorInfo {
+        pos: err.pos.as_ref().map(web_pos_from_rc),
+        message: err.message,
+        error_type: format!("{:?}", err.error_type),
+        stack: err.stack.iter().map(web_pos_from_rc).collect(),
+    }
+}
+
 // Convert a VM Literal to a typed web Literal
 fn value_to_literal(value: &althread::ast::token::literal::Literal) -> types::Literal {
     use althread::ast::token::literal::Literal as VmLiteral;
@@ -267,12 +286,19 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
     }];
     let mut vm_history = vec![vm.clone()]; // For tracking channel states
     let mut i = 0; //index for nodes
+    let mut runtime_error = None;
 
     for _ in 0..100000 {
         if vm.is_finished() {
             break;
         }
-        let info = vm.next_random().map_err(error_to_js)?;
+        let info = match vm.next_random() {
+            Ok(info) => info,
+            Err(err) => {
+                runtime_error = Some(runtime_error_info(err));
+                break;
+            }
+        };
         
         let lines: Vec<usize> = info
             .instructions
@@ -439,6 +465,7 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
         message_flow_events: message_flow_graph,
         nodes,
         step_lines,
+        runtime_error,
     };
 
     Ok(to_js(&result))

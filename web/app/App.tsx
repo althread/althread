@@ -839,6 +839,8 @@ export default function App() {
                     filePath = editorManager.activeFile()!.name; // Fallback to name if ID not found
                   }
                   let res: RunResult = await workerClient.run(editor.editorView().state.doc.toString(), filePath, virtualFS); 
+                  const runtimeError = (res as any).runtime_error;
+
                   if (res.debug.length === 0) {
                     resetSetOut();
                   } else {
@@ -853,7 +855,24 @@ export default function App() {
                   setRunBuiltGraph(builtGraph);
                   
                   setStdout(res.stdout.join('\n'));
-                  setActiveTab("console");
+
+                  if (runtimeError) {
+                    const runtimeInfo = formatAlthreadError(
+                      runtimeError,
+                      getFileContentFromVirtualFS(virtualFS, runtimeError.pos?.file_path || filePath)
+                    );
+                    const executionOutput = res.debug.length > 0
+                      ? `${res.debug}\n${runtimeInfo.message}`
+                      : runtimeInfo.message;
+
+                    setStructuredError(null);
+                    setOut(executionOutput);
+                    setExecutionError(true);
+                    setActiveTab("execution");
+                  } else {
+                    setStructuredError(null);
+                    setActiveTab("console");
+                  }
                 } catch(e: any) {
                   console.error("Execution error:", e);
                   // show error in execution tab
