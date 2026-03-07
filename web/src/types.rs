@@ -3,6 +3,26 @@ use std::collections::HashMap;
 use tsify::Tsify;
 use wasm_bindgen::prelude::*;
 
+#[derive(Serialize, Tsify, Clone)]
+#[tsify(into_wasm_abi)]
+pub struct WebPos {
+    pub line: usize,
+    pub col: usize,
+    pub start: usize,
+    pub end: usize,
+    pub file_path: String,
+}
+
+#[derive(Serialize, Tsify, Clone)]
+#[tsify(into_wasm_abi)]
+pub struct RuntimeErrorInfo {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pos: Option<WebPos>,
+    pub message: String,
+    pub error_type: String,
+    pub stack: Vec<WebPos>,
+}
+
 /// Represents a literal value with its type and content
 #[derive(Serialize, Tsify, Clone, Debug)]
 #[tsify(into_wasm_abi)]
@@ -176,6 +196,8 @@ pub struct RunResult {
     pub message_flow_events: Vec<MessageFlowEvent>,
     pub nodes: Vec<GraphNode>,
     pub step_lines: Vec<Vec<usize>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub runtime_error: Option<RuntimeErrorInfo>,
 }
 
 /// Result from checking a program
