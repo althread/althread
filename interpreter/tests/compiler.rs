@@ -16,7 +16,7 @@ use althread::{
     },
     error::Pos,
     module_resolver::StandardFileSystem,
-    vm::instruction::{Instruction, InstructionType},
+    vm::{instruction::{Instruction, InstructionType}, GlobalAction, VM},
 };
 
 // A simple test to verify that the compiler can compile a simple program
@@ -244,6 +244,146 @@ main {
         }
         _ => panic!("Expected binary '&&' expression"),
     }
+}
+
+#[test]
+fn test_wait_first_can_match_later_receive_case() {
+    let input = r#"
+program A() {
+    await first {
+        receive chin (msg) => {
+            print("reçu:", msg);
+        }
+        receive chin2 (msg) => {
+            print("reçu:", msg);
+        }
+    }
+}
+
+program B() {
+    send chout("hello from B");
+}
+
+main {
+    let a = run A();
+    let b = run B();
+    channel self.chout (string)> a.chin;
+    channel b.chout (string)> a.chin2;
+    send chout("hello from main");
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let mut vm = VM::new(&compiled_project);
+    vm.start(0);
+
+    let (_, _, _, _, after_main) = vm.next().unwrap().into_iter().next().unwrap();
+    let (_, _, _, _, after_b) = after_main
+        .next()
+        .unwrap()
+        .into_iter()
+        .find(|(name, pid, _, _, _)| name == "B" && *pid == 2)
+        .unwrap();
+
+    let (_, _, _, _, after_b_delivery) = after_b
+        .next()
+        .unwrap()
+        .into_iter()
+        .find(|(name, _, _, _, _)| name == "__deliver__ chin2#1")
+        .unwrap();
+
+    let next_states = after_b_delivery.next().unwrap();
+    let a_step = next_states
+        .iter()
+        .find(|(name, pid, _, _, _)| name == "A" && *pid == 1)
+        .expect("A should be schedulable after a message arrives on chin2");
+
+    assert!(matches!(
+        &a_step.4.get_program(1).current_instruction().unwrap().control,
+        InstructionType::ChannelPeek(channel) if channel == "chin2"
+    ));
+}
+
+#[test]
+fn test_wait_first_eventually_consumes_later_receive_case() {
+    let input = r#"
+program A() {
+    await first {
+        receive chin (msg) => {
+            print("reçu:", msg);
+        }
+        receive chin2 (msg) => {
+            print("reçu:", msg);
+        }
+    }
+}
+
+program B() {
+    send chout("hello from B");
+}
+
+main {
+    let a = run A();
+    let b = run B();
+    channel self.chout (string)> a.chin;
+    channel b.chout (string)> a.chin2;
+    send chout("hello from main");
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let mut vm = VM::new(&compiled_project);
+    vm.start(0);
+
+    let (_, _, _, _, after_main) = vm.next().unwrap().into_iter().next().unwrap();
+    let (_, _, _, _, after_b) = after_main
+        .next()
+        .unwrap()
+        .into_iter()
+        .find(|(name, pid, _, _, _)| name == "B" && *pid == 2)
+        .unwrap();
+
+    let (_, _, _, _, after_b_delivery) = after_b
+        .next()
+        .unwrap()
+        .into_iter()
+        .find(|(name, _, _, _, _)| name == "__deliver__ chin2#1")
+        .unwrap();
+
+    let (_, _, _, _, after_a_ready) = after_b_delivery
+        .next()
+        .unwrap()
+        .into_iter()
+        .find(|(name, pid, _, _, _)| name == "A" && *pid == 1)
+        .unwrap();
+
+    let (_, _, _, actions, _) = after_a_ready
+        .next()
+        .unwrap()
+        .into_iter()
+        .find(|(name, pid, _, _, _)| name == "A" && *pid == 1)
+        .unwrap();
+
+    assert!(actions.iter().any(|action| matches!(
+        action,
+        GlobalAction::Print(msg) if msg == "reçu: hello from B"
+    )));
 }
 
 #[test]

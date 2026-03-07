@@ -200,8 +200,9 @@ impl InstructionBuilder for Node<Wait> {
         });
         
 
-        // Store the indexes of the jumps to fill them later if "first" is used
-        let mut jump_index = Vec::new();
+        // Store the indexes of the success-path jumps to fill them later if
+        // "first" is used. Failed cases must still fall through to later cases.
+        let mut success_jump_index = Vec::new();
         for case in &self.value.waiting_cases {
             // In this case, the variables declared in the case condition are in their own scope
             state.current_stack_depth += 1;
@@ -249,10 +250,19 @@ impl InstructionBuilder for Node<Wait> {
 
             case_statement.instructions.push(Instruction {
                 pos: Some(case.pos.clone()),
-                control: InstructionType::Jump(
-                    (3) as i64, // jump over the unstacking of the condition variables and the push false
-                )
+                control: InstructionType::LocalAssignment {
+                    index: 0,
+                    operator: BinaryAssignmentOperator::OrAssign,
+                    unstack_len: 1,
+                },
             });
+
+            if self.value.block_kind == WaitingBlockKind::First {
+                case_statement.instructions.push(Instruction {
+                    pos: Some(case.pos.clone()),
+                    control: InstructionType::Empty, // placeholder patched to jump to the final wait check
+                });
+            }
             //  --- Statement compilation is over ---
 
 
@@ -266,6 +276,10 @@ impl InstructionBuilder for Node<Wait> {
             });
 
             builder.extend(case_statement);
+
+            if self.value.block_kind == WaitingBlockKind::First {
+                success_jump_index.push(builder.instructions.len() - 1);
+            }
 
             builder.instructions.push(Instruction {
                 pos: Some(case.pos.clone()),
@@ -287,13 +301,9 @@ impl InstructionBuilder for Node<Wait> {
                 },
             });
 
-            jump_index.push(builder.instructions.len());
-            builder.instructions.push(Instruction {
-                pos: Some(case.pos.clone()),
-                control: InstructionType::Empty, // placeholder for the jump if the keyword "first" is used
-            });
         }
 
+        let wait_index = builder.instructions.len();
         builder.instructions.push(Instruction {
             pos: Some(self.pos.clone()),
             control: InstructionType::Wait {
@@ -304,9 +314,9 @@ impl InstructionBuilder for Node<Wait> {
         state.program_stack.pop();
 
         if self.value.block_kind == WaitingBlockKind::First {
-            for index in jump_index.iter() {
+            for index in success_jump_index.iter() {
                 builder.instructions[*index].control =
-                    InstructionType::Jump((builder.instructions.len() - index - 1) as i64);
+                    InstructionType::Jump((wait_index - index) as i64);
             }
         }
 
