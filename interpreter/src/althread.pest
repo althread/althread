@@ -109,9 +109,11 @@ pattern = { identifier | literal }
 /// - **Binary Assignments**: Assign the result of an expression to a variable (e.g., a = b + c).
 assignment = { binary_assignment }
 
-side_effect_expression    = { run_call | fn_call | expression |  bracket_expression }
+side_effect_expression    = { run_call | fn_call | expression }
 
 bracket_expression = { "[" ~ (range_expression | list_literal_inner) ~ "]" }
+
+
 
 list_literal_inner = { (side_effect_expression ~ ("," ~ side_effect_expression)*)? }
 
@@ -131,7 +133,7 @@ receive_expression = { RECEIVE_KW ~ object_identifier? ~ pattern_list }
 
 /// ### Expressions
 /// Expressions evaluate values based on arithmetic and logical operations, following standard precedence rules.
-expression = { binary_expression }
+expression = { binary_expression |  bracket_expression | tuple_expression}
 
 /// ### LTL Expressions
 /// LTL expressions are used in the check block to define Linear Temporal Logic formulas.
@@ -330,10 +332,16 @@ NULL    = @{ NULL_KW }
 
 /// ### Identifiers
 /// Identifiers are used for naming variables, functions, and other constructs.
-identifier        = { IDENT }
+identifier        = { IDENT | IDENT_GROUP }
 object_identifier = { (IDENT | DOLLAR) ~ ("." ~ IDENT)* }
 
 reserved_keywords = { (KEYWORDS | datatype) ~ !IDENT_CHAR }
+
+IDENT_GROUP = { "(" ~ (IDENT | IDENT_NOT_USED) ~ ("," ~ (IDENT | IDENT_NOT_USED))* ~ ")" }
+IDENT_NOT_USED = { "_" }
+//IDENT_GROUP = _{"(" (IDENT | NOT_USE_IDENT) ("," ( IDENT | NOT_USE_IDENT ) )*")"}
+//NOT_USE_IDENT = { "_" }
+
 
 IDENT      = @{ !reserved_keywords ~ ASCII_ALPHA ~ IDENT_CHAR* }
 IDENT_CHAR = _{ ASCII_ALPHANUMERIC | "_" }

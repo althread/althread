@@ -1,0 +1,4 @@
+main {
+    let n : tuple(int,string,float) = (12,"hello",11.99);
+    print(n);
+}

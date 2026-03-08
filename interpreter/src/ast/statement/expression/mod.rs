@@ -82,6 +82,8 @@ impl NodeBuilder for SideEffectExpression {
     }
 }
 
+
+
 impl NodeBuilder for BracketExpression {
     fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let pair = pairs.next().unwrap();
@@ -621,11 +623,32 @@ pub fn parse_expr(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Node<Exp
         .parse(pairs)
 }
 
+
 impl NodeBuilder for Expression {
     fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        parse_expr(pairs, filepath).map(|node| node.value)
+        let pair = pairs.clone().next().expect("Expected at least one pair to build an expression");
+        match pair.as_rule() {
+            Rule::tuple_expression => {
+                let node_exp = pair.clone();
+                let exp = TupleExpression::build(pair.into_inner(), filepath)?;
+                Ok(Expression::Tuple(Node{
+                    pos: Pos {
+                        line: node_exp.line_col().0,
+                        col: node_exp.line_col().1,
+                        start: node_exp.as_span().start(),
+                        end: node_exp.as_span().end(),
+                        file_path: filepath.to_string(),
+                    },
+                    value: exp,
+                }))
+            }
+            _ => parse_expr(pairs, filepath).map(|node| node.value)
+        }
     }
 }
+
+
+
 impl Expression {
     pub fn build_list_expression(pair: Pair<Rule>, filepath: &str) -> AlthreadResult<Node<Self>> {
         let pos = Pos {
