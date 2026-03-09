@@ -163,7 +163,7 @@ Dans cette construction, une condition booléenne peut aussi être suivie d'un b
 
 Une expression atomique est la plus petite unité d'exécution. En althread, il existe 6 types d'expressions atomiques :
 - **Déclaration** : `let x = 5;`
-- **Affectation** : `x = 5;`,  `x++;`, `x += 1`;
+- **Affectation** : `x = 5;`, `x += 1` (`+=` est autorisée uniquement pour les variables locales);
 - **Opération arithmétique** : `x + y;`, `x - y;`, `x * y;`, `x / y;`, `x % y;`
 - **Scope atomique**: `atomic { ... }`
 - **Appel de fonction** : `print("Hello world");`, `await x == 5;`

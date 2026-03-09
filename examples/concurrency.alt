@@ -13,7 +13,7 @@ fn process_message(value: int, flag: bool) -> void {
         } else {
             B = value;
         }
-        WorkersFinished += 1; 
+        WorkersFinished = WorkersFinished + 1; 
     }
 }
 

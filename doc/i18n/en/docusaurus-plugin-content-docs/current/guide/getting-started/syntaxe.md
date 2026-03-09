@@ -159,7 +159,7 @@ In this construction, a boolean condition can also be followed by an instruction
 
 An atomic expression is the smallest unit of execution. In Althread, there are 6 types of atomic expressions:
 - **Declaration**: `let x = 5;`
-- **Assignment**: `x = 5;`, `x++;`, `x += 1`;
+- **Assignment**: `x = 5;`, `x += 1` (`+=` is only allowed for local variables);
 - **Arithmetic Operation**: `x + y;`, `x - y;`, `x * y;`, `x / y;`, `x % y;`
 - **Atomic Scope**: `atomic { ... }`
 - **Function Call**: `print("Hello world");`, `await x == 5;`
