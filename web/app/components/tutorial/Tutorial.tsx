@@ -281,7 +281,16 @@ const Tutorial: Component = () => {
     console.log("Running code with virtual filesystem:", virtualFS);
     try {
       const result = await workerClient.run(currentEditorCode, "main.alt", virtualFS);
-      setExecutionResult(result.stdout.join('\n'));
+      const runtimeError = (result as any).runtime_error;
+      const stdout = result.stdout.join('\n');
+
+      if (runtimeError) {
+        setExecutionError(true);
+        const formattedError = formatAlthreadError(runtimeError, currentEditorCode).message;
+        setExecutionResult(stdout ? `${stdout}\n\n${formattedError}` : formattedError);
+      } else {
+        setExecutionResult(stdout);
+      }
     } catch (e) {
       setExecutionError(true);
       setExecutionResult(formatAlthreadError(e, currentEditorCode));
