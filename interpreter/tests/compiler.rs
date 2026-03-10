@@ -639,3 +639,447 @@ main {
         expected
     );
 }
+
+#[test]
+fn test_int_declaration() {
+    let input = r#"
+main {
+    let a = 5;
+    let b = 0X2a;
+    let c = 0x2A;
+    let d = 0b1010;
+    let e = 0B1010;
+}
+    "#;
+
+    let expected = vec![
+        Instruction {
+            pos: Some(Pos {
+                line: 3,
+                col: 13,
+                start: 20,
+                end: 21,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Expression(LocalExpressionNode::Primary(
+                LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                    value: Literal::Int(5),
+                }),
+            )),
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 3,
+                col: 5,
+                start: 12,
+                end: 15,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Declaration { unstack_len: 1 },
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 4,
+                col: 13,
+                start: 35,
+                end: 39,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Expression(LocalExpressionNode::Primary(
+                LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                    value: Literal::Int(42),
+                }),
+            )),
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 4,
+                col: 5,
+                start: 27,
+                end: 30,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Declaration { unstack_len: 1 },
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 5,
+                col: 13,
+                start: 53,
+                end: 57,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Expression(LocalExpressionNode::Primary(
+                LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                    value: Literal::Int(42),
+                }),
+            )),
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 5,
+                col: 5,
+                start: 45,
+                end: 48,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Declaration { unstack_len: 1 },
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 6,
+                col: 13,
+                start: 71,
+                end: 77,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Expression(LocalExpressionNode::Primary(
+                LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                    value: Literal::Int(10),
+                }),
+            )),
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 6,
+                col: 5,
+                start: 63,
+                end: 66,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Declaration { unstack_len: 1 },
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 7,
+                col: 13,
+                start: 91,
+                end: 97,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Expression(LocalExpressionNode::Primary(
+                LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                    value: Literal::Int(10),
+                }),
+            )),
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 7,
+                col: 5,
+                start: 83,
+                end: 86,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Declaration { unstack_len: 1 },
+        },
+        Instruction {
+            pos: None,
+            control: InstructionType::Unstack { unstack_len: 5 },
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 2,
+                col: 6,
+                start: 6,
+                end: 100,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::EndProgram,
+        },
+    ];
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    // parse code with pest
+    let pairs = althread::parser::parse(input, "").unwrap();
+
+    let ast = Ast::build(pairs, "").unwrap();
+
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    assert_eq!(
+        compiled_project
+            .programs_code
+            .get("main")
+            .unwrap()
+            .instructions,
+        expected
+    );
+}
+
+#[test]
+fn test_shift_operators() {
+    let input = r#"
+main {
+    let a = 5 << 2;
+    let b = 20 >> 1;
+}
+    "#;
+    let expected = vec![
+        Instruction {
+            pos: Some(Pos {
+                line: 3,
+                col: 13,
+                start: 20,
+                end: 26,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Expression(LocalExpressionNode::Binary(
+                LocalBinaryExpressionNode {
+                    left: Box::new(LocalExpressionNode::Primary(
+                        LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                            value: Literal::Int(5),
+                        }),
+                    )),
+                    operator: BinaryOperator::ShiftLeft,
+                    right: Box::new(LocalExpressionNode::Primary(
+                        LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                            value: Literal::Int(2),
+                        }),
+                    )),
+                },
+            )),
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 3,
+                col: 5,
+                start: 12,
+                end: 15,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Declaration { unstack_len: 1 },
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 4,
+                col: 13,
+                start: 40,
+                end: 47,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Expression(LocalExpressionNode::Binary(
+                LocalBinaryExpressionNode {
+                    left: Box::new(LocalExpressionNode::Primary(
+                        LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                            value: Literal::Int(20),
+                        }),
+                    )),
+                    operator: BinaryOperator::ShiftRight,
+                    right: Box::new(LocalExpressionNode::Primary(
+                        LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                            value: Literal::Int(1),
+                        }),
+                    )),
+                },
+            )),
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 4,
+                col: 5,
+                start: 32,
+                end: 35,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Declaration { unstack_len: 1 },
+        },
+        Instruction {
+            pos: None,
+            control: InstructionType::Unstack { unstack_len: 2 },
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 2,
+                col: 6,
+                start: 6,
+                end: 50,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::EndProgram,
+        },
+    ];
+    
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    // parse code with pest
+    let pairs = althread::parser::parse(input, "").unwrap();
+
+    let ast = Ast::build(pairs, "").unwrap();
+
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    assert_eq!(
+        compiled_project
+            .programs_code
+            .get("main")
+            .unwrap()
+            .instructions,
+        expected
+    );
+}
+
+#[test]
+fn test_bitwise_operators() {
+    let input = r#"
+main {
+    let a = 5 & 3;
+    let b = 5 | 2;
+    let c = 5 & 3 | 2;
+}
+    "#;
+    let expected = vec![
+        Instruction {
+            pos: Some(Pos {
+                line: 3,
+                col: 13,
+                start: 20,
+                end: 25,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Expression(LocalExpressionNode::Binary(
+                LocalBinaryExpressionNode {
+                    left: Box::new(LocalExpressionNode::Primary(
+                        LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                            value: Literal::Int(5),
+                        }),
+                    )),
+                    operator: BinaryOperator::BitAnd,
+                    right: Box::new(LocalExpressionNode::Primary(
+                        LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                            value: Literal::Int(3),
+                        }),
+                    )),
+                },
+            )),
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 3,
+                col: 5,
+                start: 12, 
+                end: 15,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Declaration { unstack_len: 1 },
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 4,
+                col: 13,
+                start: 39,
+                end: 44,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Expression(LocalExpressionNode::Binary(
+                LocalBinaryExpressionNode {
+                    left: Box::new(LocalExpressionNode::Primary(
+                        LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                            value: Literal::Int(5),
+                        }),
+                    )),
+                    operator: BinaryOperator::BitOr,
+                    right: Box::new(LocalExpressionNode::Primary(
+                        LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                            value: Literal::Int(2),
+                        }),
+                    )),
+                },
+            )),
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 4,
+                col: 5,
+                start: 31,
+                end: 34,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Declaration { unstack_len: 1 },
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 5,
+                col: 13,
+                start: 58,
+                end: 67,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Expression(LocalExpressionNode::Binary(
+                LocalBinaryExpressionNode {
+                    left: Box::new(LocalExpressionNode::Binary(LocalBinaryExpressionNode {
+                        left: Box::new(LocalExpressionNode::Primary(
+                            LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                                value: Literal::Int(5),
+                            }),
+                        )),
+                        operator: BinaryOperator::BitAnd,
+                        right: Box::new(LocalExpressionNode::Primary(
+                            LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                                value: Literal::Int(3),
+                            }),
+                        )),
+                    })),
+                    operator: BinaryOperator::BitOr,
+                    right: Box::new(LocalExpressionNode::Primary(
+                        LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                            value: Literal::Int(2),
+                        }),
+                    )),
+                },
+            )),
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 5,
+                col: 5,
+                start: 50,
+                end: 53,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Declaration { unstack_len: 1 },
+        },
+        Instruction {
+            pos: None,
+            control: InstructionType::Unstack { unstack_len: 3 },
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 2,
+                col: 6,
+                start: 6,
+                end: 70,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::EndProgram,
+        },
+    ];
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    // parse code with pest
+    let pairs = althread::parser::parse(input, "").unwrap();
+
+    let ast = Ast::build(pairs, "").unwrap();
+
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    assert_eq!(
+        compiled_project
+            .programs_code
+            .get("main")
+            .unwrap()
+            .instructions,
+        expected
+    );
+}
