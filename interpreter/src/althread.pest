@@ -323,7 +323,7 @@ TUPLE_TYPE = { "tuple" ~ "(" ~ datatype ~ ("," ~ datatype)* ~ ")" }
 /// Include literals such as booleans, integers, floats, strings, and null.
 literal =  { BOOL | FLOAT | INT | STR | NULL }
 BOOL    = @{ TRUE_KW | FALSE_KW }
-INT     = @{ ASCII_DIGIT+ }
+INT     = @{ ("0x" | "0X") ~ ASCII_HEX_DIGIT+ | ("0b" | "0B") ~ ASCII_BIN_DIGIT+ | ASCII_DIGIT+ }
 FLOAT   = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
 STR     = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 NULL    = @{ NULL_KW }

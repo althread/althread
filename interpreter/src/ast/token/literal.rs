@@ -74,10 +74,33 @@ impl NodeBuilder for Literal {
             })
         }
 
+        fn parse_int(pair: &Pair<Rule>, filepath: &str) -> Result<i64, AlthreadError> {
+            // parse int with support for hex and binary
+            let s = pair.as_str();
+            let (s, radix) = if s.starts_with("0x") || s.starts_with("0X") {
+                (&s[2..], 16)
+            } else if s.starts_with("0b") || s.starts_with("0B") {
+                (&s[2..], 2)
+            } else { (s, 10) };
+            i64::from_str_radix(s, radix).map_err(|_| {
+                AlthreadError::new(
+                    ErrorType::SyntaxError,
+                    Some(Pos {
+                        start: pair.as_span().start(),
+                        end: pair.as_span().end(),
+                        line: pair.line_col().0,
+                        col: pair.line_col().1,
+                        file_path: filepath.to_string(),
+                    }),
+                    format!("Cannot parse {}", pair.as_str()),
+                )
+            })
+        }
+
         Ok(match pair.as_rule() {
             Rule::NULL => Self::Null,
             Rule::BOOL => Self::Bool(safe_parse(&pair, filepath)?),
-            Rule::INT => Self::Int(safe_parse(&pair, filepath)?),
+            Rule::INT => Self::Int(parse_int(&pair, filepath)?),
             Rule::FLOAT => Self::Float(safe_parse(&pair, filepath)?),
             Rule::STR => {
                 let s = pair.as_str();
