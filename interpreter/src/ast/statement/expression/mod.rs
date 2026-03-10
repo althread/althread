@@ -43,6 +43,7 @@ lazy_static::lazy_static! {
             .op(Op::infix(Rule::and_operator, Left))
             .op(Op::infix(Rule::equality_operator, Left))
             .op(Op::infix(Rule::comparison_operator, Left))
+            .op(Op::infix(Rule::shift_operator, Left))
             .op(Op::infix(Rule::term_operator, Left))
             .op(Op::infix(Rule::factor_operator, Left))
             .op(Op::prefix(Rule::unary_operator))
@@ -1292,6 +1293,18 @@ impl LocalExpressionNode {
                         crate::ast::token::binary_operator::BinaryOperator::GreaterThanOrEqual => {
                             left.greater_than_or_equal(&right)
                         }
+                        crate::ast::token::binary_operator::BinaryOperator::ShiftLeft => {
+                            left.shift_left(&right)
+                        }
+                        crate::ast::token::binary_operator::BinaryOperator::ShiftRight => {
+                            left.shift_right(&right)
+                        }
+                        crate::ast::token::binary_operator::BinaryOperator::BitAnd => {
+                            left.bit_and(&right)
+                        }
+                        crate::ast::token::binary_operator::BinaryOperator::BitOr => {
+                            left.bit_or(&right)
+                        }
                         _ => unreachable!("short-circuit handled above"),
                     }
                 }
@@ -2148,5 +2161,466 @@ mod tests {
             local_expr.eval(&Memory::new()).unwrap(),
             Literal::Int(42 + 42)
         );
+    }
+    
+    #[test]
+    fn test_shift_left_expression() {
+        let literal_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: Literal::Int(8),
+        };
+        let shift_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: Literal::Int(2),
+        };
+
+        let left_expr = Expression::Primary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: PrimaryExpression::Literal(literal_node),
+        });
+
+        let right_expr = Expression::Primary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: PrimaryExpression::Literal(shift_node),
+        });
+
+        let expr = Expression::Binary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: BinaryExpression {
+                left: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: left_expr,
+                }),
+                right: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: right_expr,
+                }),
+                operator: Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: BinaryOperator::ShiftLeft,
+                },
+            },
+        });
+
+        let local_expr = LocalExpressionNode::from_expression(&expr, &vec![]).unwrap();
+        assert_eq!(local_expr.eval(&Memory::new()).unwrap(), Literal::Int(32));
+    }
+
+    #[test]
+    fn test_shift_right_expression() {
+        let literal_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: Literal::Int(32),
+        };
+        let shift_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: Literal::Int(3),
+        };
+
+        let left_expr = Expression::Primary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: PrimaryExpression::Literal(literal_node),
+        });
+
+        let right_expr = Expression::Primary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: PrimaryExpression::Literal(shift_node),
+        });
+
+        let expr = Expression::Binary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: BinaryExpression {
+                left: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: left_expr,
+                }),
+                right: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: right_expr,
+                }),
+                operator: Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: BinaryOperator::ShiftRight,
+                },
+            },
+        });
+
+        let local_expr = LocalExpressionNode::from_expression(&expr, &vec![]).unwrap();
+        assert_eq!(local_expr.eval(&Memory::new()).unwrap(), Literal::Int(4));
+    }
+
+    #[test]
+    fn test_shift_out_of_range_fails() {
+        let left = Literal::Int(1);
+        let right = Literal::Int(64); // i64::BITS
+        let err = left.shift_left(&right).unwrap_err();
+        assert!(err.contains("Shift count out of range"));
+    }
+
+    #[test]
+    fn test_bitwise_and_expression() {
+        let literal_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: Literal::Int(6), // 110 in binary
+        };
+        let and_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: Literal::Int(3), // 011 in binary
+        };
+
+        let left_expr = Expression::Primary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: PrimaryExpression::Literal(literal_node),
+        });
+
+        let right_expr = Expression::Primary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: PrimaryExpression::Literal(and_node),
+        });
+
+        let expr = Expression::Binary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: BinaryExpression {
+                left: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: left_expr,
+                }),
+                right: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: right_expr,
+                }),
+                operator: Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: BinaryOperator::BitAnd,
+                },
+            },
+        });
+
+        let local_expr = LocalExpressionNode::from_expression(&expr, &vec![]).unwrap();
+        assert_eq!(local_expr.eval(&Memory::new()).unwrap(), Literal::Int(2)); // 010 in binary
+    }
+
+    #[test]
+    fn test_bitwise_or_expression() {
+        let literal_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: Literal::Int(6), // 110 in binary
+        };
+        let or_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: Literal::Int(3), // 011 in binary
+        };
+        let left_expr = Expression::Primary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: PrimaryExpression::Literal(literal_node),
+        });
+        let right_expr = Expression::Primary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: PrimaryExpression::Literal(or_node),
+        });
+
+        let expression = Expression::Binary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: BinaryExpression {
+                left: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: left_expr,
+                }),
+                right: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: right_expr,
+                }),
+                operator: Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: BinaryOperator::BitOr,
+                },
+            },
+        });
+        let local_expr = LocalExpressionNode::from_expression(&expression, &vec![]).unwrap();
+        assert_eq!(local_expr.eval(&Memory::new()).unwrap(), Literal::Int(7)); // 111 in binary
+    }
+
+    #[test]
+    fn test_bitwise_operation_type_error() {
+        let literal_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: Literal::Int(6),
+        };
+        let float_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: Literal::Float(ordered_float::OrderedFloat(0.33)),
+        };
+
+        let left_expr = Expression::Primary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: PrimaryExpression::Literal(literal_node),
+        });
+
+        let right_expr = Expression::Primary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: PrimaryExpression::Literal(float_node),
+        });
+
+        let expr = Expression::Binary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: BinaryExpression {
+                left: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: left_expr,
+                }),
+                right: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: right_expr,
+                }),
+                operator: Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: BinaryOperator::BitAnd,
+                },
+            },
+        });
+
+        let local_expr = LocalExpressionNode::from_expression(&expr, &vec![]).unwrap();
+        let err = local_expr.eval(&Memory::new()).unwrap_err();
+        assert!(err.contains("Cannot perform bitwise AND between int and float"));
     }
 }
