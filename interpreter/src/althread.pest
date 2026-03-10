@@ -170,12 +170,12 @@ unary_expression = _{ unary_operator? ~ postfix_expression }
 unary_operator   =  { POS_OP | NEG_OP | NOT_OP }
 
 binary_expression   = _{ unary_expression ~ (binary_operator ~ unary_expression)* }
-binary_operator     = _{ or_operator | and_operator | biwise_operator | equality_operator | shift_operator | comparison_operator | term_operator | factor_operator }
+binary_operator     = _{ or_operator | and_operator | bitwise_operator | equality_operator | shift_operator | comparison_operator | term_operator | factor_operator }
 or_operator         =  { OR_OP }
 and_operator        =  { AND_OP }
 equality_operator   =  { EQ_OP | NE_OP }
 shift_operator      =  { SHL_OP | SHR_OP }
-biwise_operator     =  { BITWISE_AND_OP | BITWISE_OR_OP}
+bitwise_operator     =  { BITWISE_AND_OP | BITWISE_OR_OP}
 comparison_operator =  { LE_OP | GE_OP | LT_OP | GT_OP }
 term_operator       =  { ADD_OP | SUB_OP }
 factor_operator     =  { MUL_OP | DIV_OP | MOD_OP }
