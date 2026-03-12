@@ -46,7 +46,7 @@ shared {
     let X : int;
 }
 program Prog1() {
-    X++;
+    X = X + 1;
     await X == 2;
 }
 main {

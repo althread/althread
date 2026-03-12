@@ -17,7 +17,7 @@ shared {
 }
 
 program A() {
-    X++;
+    X = X + 1;
 }
 
 always {
