@@ -232,6 +232,76 @@ main {
 }
 
 #[test]
+fn test_await_method_call_keeps_right_operand_stack_index() {
+    let input = r#"
+shared {
+    let T = 1;
+    let Flag:list(bool);
+}
+
+program A() {
+    await Flag.at(0) || T == 0;
+}
+
+main {
+    Flag = [false, false];
+    run A();
+}
+    "#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let instructions = &compiled_project.programs_code.get("A").unwrap().instructions;
+
+    assert!(instructions.iter().any(|instruction| {
+        matches!(
+            &instruction.control,
+            InstructionType::ExpressionAndCleanup {
+                expression: LocalExpressionNode::Binary(LocalBinaryExpressionNode {
+                    left,
+                    operator: BinaryOperator::Or,
+                    right,
+                }),
+                unstack_len: 1,
+            }
+            if matches!(
+                left.as_ref(),
+                LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(LocalVarNode {
+                    index: 0,
+                }))
+            ) && matches!(
+                right.as_ref(),
+                LocalExpressionNode::Binary(LocalBinaryExpressionNode {
+                    left,
+                    operator: BinaryOperator::Equals,
+                    right,
+                })
+                if matches!(
+                    left.as_ref(),
+                    LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(LocalVarNode {
+                        index: 1,
+                    }))
+                ) && matches!(
+                    right.as_ref(),
+                    LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Literal(
+                        LocalLiteralNode {
+                            value: Literal::Int(0),
+                        }
+                    ))
+                )
+            )
+        )
+    }));
+}
+
+#[test]
 fn test_mutating_shared_method_call_updates_global_memory() {
     let input = r#"
 shared {
