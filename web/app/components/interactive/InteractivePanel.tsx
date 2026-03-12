@@ -11,6 +11,7 @@ interface InteractivePanelProps {
   interactiveStates: NextStateOption[];
   currentVMState: any;
   isFinished: boolean;
+  deadlockDetected?: boolean;
   executionOutput: string;
   executionError: boolean;
   onExecuteStep: (index: number) => void;
@@ -40,6 +41,12 @@ export default function InteractivePanel(props: InteractivePanelProps) {
   createEffect(() => {
     if (rightPanelTab() === "execution" && executionConsoleRef && props.executionOutput) {
       executionConsoleRef.scrollTop = executionConsoleRef.scrollHeight;
+    }
+  });
+
+  createEffect(() => {
+    if (props.deadlockDetected) {
+      setRightPanelTab('console');
     }
   });
 
@@ -115,6 +122,16 @@ export default function InteractivePanel(props: InteractivePanelProps) {
 
   const renderInteractiveChoices = () => {
     if (props.isFinished) {
+      if (props.deadlockDetected) {
+        return (
+          <div class="interactive-empty-state">
+            <i class="codicon codicon-debug-pause empty-state-icon"></i>
+            <h4>Deadlock Detected</h4>
+            <p>The execution is blocked. Check the console or Message flow for the last observed activity.</p>
+          </div>
+        );
+      }
+
       return (
         <div class="interactive-empty-state">
           <i class="codicon codicon-check-all empty-state-icon"></i>
