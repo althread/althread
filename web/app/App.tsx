@@ -428,6 +428,7 @@ export default function App() {
   const [executionHistory, setExecutionHistory] = createSignal<number[]>([]);
   const [currentVMState, setCurrentVMState] = createSignal<any>(null);
   const [interactiveFinished, setInteractiveFinished] = createSignal(false);
+  const [interactiveDeadlock, setInteractiveDeadlock] = createSignal(false);
   const [interactiveStepLines, setInteractiveStepLines] = createSignal<number[][]>([]);
   const [accumulatedOutput, setAccumulatedOutput] = createSignal<string>("");
   const [accumulatedExecutionOutput, setAccumulatedExecutionOutput] = createSignal<string>("");
@@ -438,9 +439,26 @@ export default function App() {
     setOut("The execution output will appear here.");
   }
 
+  const isDeadlockError = (error: any) =>
+    typeof error?.message === "string" && error.message.toLowerCase().includes("deadlock");
+
+  const appendStatusNotice = (text: string, notice: string) => {
+    const trimmed = text.trimEnd();
+    return trimmed.length > 0 ? `${trimmed}\n\n${notice}` : notice;
+  };
+
+  const getDeadlockExecutionOutput = (error: any, fallbackOutput = "") => {
+    const errorInfo = formatAlthreadError(
+      error,
+      getFileContentFromVirtualFS(buildVirtualFileSystem(mockFileSystem()), error?.pos?.file_path || "")
+    );
+    return appendStatusNotice(fallbackOutput, errorInfo.message);
+  };
+
   const executeInteractiveStep = async (selectedIndex: number) => {
     try {
       if (!editorManager.activeFile()) return;
+      setInteractiveDeadlock(false);
       
       const virtualFS = buildVirtualFileSystem(mockFileSystem());
       let filePath = getPathFromId(mockFileSystem(), editorManager.activeFile()!.id, '');
@@ -508,17 +526,37 @@ export default function App() {
         setOut(updatedExecutionOutput);
       }
       
-      // Get next states with updated history
-      let res = get_next_interactive_states(
-        editor.editorView().state.doc.toString(), 
-        filePath, 
-        virtualFS, 
-        newHistory
-      );
+      let res;
+      try {
+        // Get next states with updated history
+        res = get_next_interactive_states(
+          editor.editorView().state.doc.toString(), 
+          filePath, 
+          virtualFS, 
+          newHistory
+        );
+      } catch (e: any) {
+        if (!isDeadlockError(e)) {
+          throw e;
+        }
+
+        const deadlockConsoleOutput = appendStatusNotice(updatedConsoleOutput, "Deadlock detected.");
+        const deadlockExecutionOutput = getDeadlockExecutionOutput(e, accumulatedExecutionOutput());
+
+        setAccumulatedOutput(deadlockConsoleOutput);
+        setAccumulatedExecutionOutput(deadlockExecutionOutput);
+        setOut(deadlockExecutionOutput);
+        setInteractiveStates([]);
+        setInteractiveFinished(true);
+        setInteractiveDeadlock(true);
+        setExecutionError(false);
+        return;
+      }
 
       setInteractiveStates(res.next_states || []);
       setCurrentVMState(stepResult.new_state || res.current_state);
       setInteractiveFinished(!res.next_states || res.next_states.length === 0);
+      setInteractiveDeadlock(false);
       
       if (!res.next_states || res.next_states.length === 0) {
         const currentExecutionOutput = accumulatedExecutionOutput();
@@ -534,6 +572,20 @@ export default function App() {
       }
     } catch(e: any) {
       console.error("Interactive step error:", e);
+      if (isDeadlockError(e)) {
+        const deadlockConsoleOutput = appendStatusNotice(accumulatedOutput(), "Deadlock detected.");
+        const deadlockExecutionOutput = getDeadlockExecutionOutput(e, accumulatedExecutionOutput());
+
+        setAccumulatedOutput(deadlockConsoleOutput);
+        setAccumulatedExecutionOutput(deadlockExecutionOutput);
+        setOut(deadlockExecutionOutput);
+        setInteractiveStates([]);
+        setInteractiveFinished(true);
+        setInteractiveDeadlock(true);
+        setExecutionError(false);
+        return;
+      }
+
       const errorInfo = formatAlthreadError(e, getFileContentFromVirtualFS(buildVirtualFileSystem(mockFileSystem()), e.pos?.file_path || ""));
       setStructuredError(errorInfo);
       setOut(errorInfo.message);
@@ -566,6 +618,7 @@ export default function App() {
     setExecutionHistory([]);
     setCurrentVMState(null);
     setInteractiveFinished(false);
+    setInteractiveDeadlock(false);
     setAccumulatedOutput("");
     setAccumulatedExecutionOutput("");
     setInteractiveMessageFlow([]);
@@ -612,6 +665,7 @@ export default function App() {
       setInteractiveMessageFlow([]);
       setInteractiveVmStates([]);
       setInteractiveStepLines([]);
+      setInteractiveDeadlock(false);
       
       const virtualFS = buildVirtualFileSystem(mockFileSystem());
       let filePath = getPathFromId(mockFileSystem(), editorManager.activeFile()!.id, '');
@@ -636,6 +690,18 @@ export default function App() {
       }
     } catch(e: any) {
       console.error("Interactive reset error:", e);
+      if (isDeadlockError(e)) {
+        setInteractiveStates([]);
+        setCurrentVMState(null);
+        setInteractiveFinished(true);
+        setInteractiveDeadlock(true);
+        setAccumulatedOutput("Deadlock detected.");
+        setAccumulatedExecutionOutput(getDeadlockExecutionOutput(e));
+        setOut(getDeadlockExecutionOutput(e));
+        setExecutionError(false);
+        return;
+      }
+
       const errorInfo = formatAlthreadError(e, getFileContentFromVirtualFS(buildVirtualFileSystem(mockFileSystem()), e.pos?.file_path || ""));
       setStructuredError(errorInfo);
       setOut(errorInfo.message);
@@ -664,6 +730,7 @@ export default function App() {
     setExecutionHistory([]);
     setCurrentVMState(null);
     setInteractiveFinished(false);
+    setInteractiveDeadlock(false);
     setAccumulatedOutput("");
     setAccumulatedExecutionOutput("");
     setInteractiveMessageFlow([]);
@@ -777,6 +844,7 @@ export default function App() {
                   setIsInteractiveMode(true);
                   setExecutionError(false);
                   resetSetOut();
+                  setInteractiveDeadlock(false);
                   // Reset accumulated output for new session
                   setAccumulatedOutput("");
                   // Go to console by default, execution only if there are errors
@@ -803,6 +871,18 @@ export default function App() {
                   }
                 } catch(e: any) {
                   console.error("Interactive mode error:", e);
+                  if (isDeadlockError(e)) {
+                    setInteractiveStates([]);
+                    setCurrentVMState(null);
+                    setInteractiveFinished(true);
+                    setInteractiveDeadlock(true);
+                    setAccumulatedOutput("Deadlock detected.");
+                    setAccumulatedExecutionOutput(getDeadlockExecutionOutput(e));
+                    setOut(getDeadlockExecutionOutput(e));
+                    setExecutionError(false);
+                    return;
+                  }
+
                   const errorInfo = formatAlthreadError(e, getFileContentFromVirtualFS(buildVirtualFileSystem(mockFileSystem()), e.pos?.file_path || ""));
                   setStructuredError(errorInfo);
                   setOut(errorInfo.message);
@@ -853,8 +933,9 @@ export default function App() {
                   // Build the graph for visualization
                   const builtGraph = buildGraphFromNodes(res.nodes, { mode: 'run', stepLines: res.step_lines || [] });
                   setRunBuiltGraph(builtGraph);
-                  
-                  setStdout(res.stdout.join('\n'));
+
+                  const plainStdout = res.stdout.join('\n');
+                  setStdout(plainStdout);
 
                   if (runtimeError) {
                     const runtimeInfo = formatAlthreadError(
@@ -867,10 +948,17 @@ export default function App() {
 
                     setStructuredError(null);
                     setOut(executionOutput);
-                    setExecutionError(true);
-                    setActiveTab("execution");
+                    if (isDeadlockError(runtimeError)) {
+                      setStdout(appendStatusNotice(plainStdout, "Deadlock detected."));
+                      setExecutionError(false);
+                      setActiveTab("console");
+                    } else {
+                      setExecutionError(true);
+                      setActiveTab("execution");
+                    }
                   } else {
                     setStructuredError(null);
+                    setExecutionError(false);
                     setActiveTab("console");
                   }
                 } catch(e: any) {
@@ -1257,6 +1345,7 @@ export default function App() {
         interactiveStates={interactiveStates()}
         currentVMState={currentVMState()}
         isFinished={interactiveFinished()}
+        deadlockDetected={interactiveDeadlock()}
         executionOutput={out()}
         executionError={executionError()}
         onExecuteStep={executeInteractiveStep}

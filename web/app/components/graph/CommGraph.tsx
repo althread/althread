@@ -30,6 +30,25 @@ interface MessageNode {
   color: string;
 }
 
+const buildMessageNodeId = (event: MessageFlowEvent, index: number) => {
+  const evtType = String.fromCharCode(event.evt_type);
+
+  if (evtType === 'r') {
+    return `p${event.receiver}_recv_from${event.sender}_${event.number}_${index}`;
+  }
+
+  const receiverId = event.receiver === undefined ? 'B' : event.receiver;
+  return `p${event.sender}_send_to${receiverId}_${event.number}_${index}`;
+};
+
+const DEFAULT_MESSAGE_EDGE_COLOR = "hsla(29, 67%, 53%, 1)";
+const MAIN_MESSAGE_EDGE_COLOR = "hsla(205, 18%, 58%, 0.75)";
+
+const getMessageEdgeColor = (event: MessageFlowEvent) =>
+  event.sender === 0 || event.receiver === 0
+    ? MAIN_MESSAGE_EDGE_COLOR
+    : DEFAULT_MESSAGE_EDGE_COLOR;
+
 const VmStatePopup = (props: { event: MessageFlowEvent }) => {
   const [activeTab, setActiveTab] = createSignal('details');
   const vmState: Node = props.event.vm_state;
@@ -147,25 +166,18 @@ export const printCommGrapEventList = (eventl: any) => {
   }
 }
 
-const searchSenderNode = (size, graphNodes, receivingEvent, msgNum, broadcast, matchedIds: Set<string>) => {
-  //searches for the sending event corresponding to the receiving event
-  let suite = "";
-  (broadcast) ? suite = "B" : suite = receivingEvent.receiver;
-  let str = "p" + receivingEvent.sender + "_send" + "_to" + suite + "_" + msgNum;
-  let sender_node = graphNodes.get(str);
-
-  let number = Infinity;
+const searchSenderNode = (graphNodes, receivingEvent, matchedIds: Set<string>) => {
+  // searches for the sending event corresponding to the receiving event
+  let sender_node;
   graphNodes.forEach((node) => {
     if (node.event && node.event.evt_type === 115
         && node.event.sender === receivingEvent.sender
         && node.event.receiver === receivingEvent.receiver
+        && node.event.number === receivingEvent.number
 
         && !matchedIds.has(node.id) // Check if the sender node has already been matched
     ) {
-      if (number > node.event.number) {
-        number = node.event.number; // Find the smallest number for the sender node
-        sender_node = node;
-      } 
+      sender_node = node;
     }
   });
 
@@ -269,12 +281,11 @@ export const renderMessageFlowGraph = (commGraphData, vm_states, editor?: any) =
 
     // message arrows
     let i: number = 0;
-    let broadcast: boolean = false;
-
-    commGraphData.forEach((event: MessageFlowEvent) => {
+    commGraphData.forEach((event: MessageFlowEvent, eventIndex: number) => {
       let yposLine = 0;
-      let id_txt = "p";
       let evt_type = String.fromCharCode(event.evt_type);
+      const nodeId = buildMessageNodeId(event, eventIndex);
+      const isBroadcast = event.receiver === undefined;
             
       //lengthen the process lines for each new event so it doesnt go overboard
       processes.forEach((_, processNumber) => {
@@ -283,27 +294,14 @@ export const renderMessageFlowGraph = (commGraphData, vm_states, editor?: any) =
       
       if (evt_type === 'r') { /// evt_type === 114
         yposLine = event.receiver; //reception -> node on receiver line
-        id_txt += event.receiver.toString();
-        id_txt += "_recv" + "_from" + event.sender + "_"  + event.number;
       }
 
       else {
-        let id_suite;
         yposLine = event.sender;
-        id_txt += event.sender.toString();
-        
-        if (event.receiver === undefined){
-          broadcast = true;
-          id_suite = "B";
-        }
-        else{
-          broadcast = false; id_suite = event.receiver;
-        }
-        id_txt += "_send" + "_to" + id_suite + "_" + event.number;
       }
 
-      let msgNode = { id: id_txt, y: yposLine * ySpacing, x: xStart+20+i*50, 
-                      shape: "dot", size: 5, color: "#cccccc", event: event, broadcast: broadcast };
+      let msgNode = { id: nodeId, y: yposLine * ySpacing, x: xStart+20+i*50, 
+                      shape: "dot", size: 5, color: "#cccccc", event: event, broadcast: isBroadcast };
       nodes.add(msgNode);
       i++;
     });
@@ -315,7 +313,7 @@ export const renderMessageFlowGraph = (commGraphData, vm_states, editor?: any) =
       let evt_type = node.event?.evt_type !== undefined ? String.fromCharCode(node.event.evt_type) : "";
       
       if ((evt_type) === 'r'){
-        let sender = searchSenderNode(commGraphData.length, nodes, node.event, node.event.number, node.broadcast, matchedSendNodeIds);
+        let sender = searchSenderNode(nodes, node.event, matchedSendNodeIds);
         if (sender){
           edges.add({
             from: sender.id,
@@ -330,7 +328,7 @@ export const renderMessageFlowGraph = (commGraphData, vm_states, editor?: any) =
               strokeWidth: 0,
             },
             arrows: "to",
-            color: "hsla(29.329, 66.552%, 52.544%)", // theme orange
+            color: getMessageEdgeColor(node.event),
           })
         }
       }
