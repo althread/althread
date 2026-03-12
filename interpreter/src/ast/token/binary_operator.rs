@@ -20,6 +20,10 @@ pub enum BinaryOperator {
     GreaterThanOrEqual,
     And,
     Or,
+    ShiftLeft,
+    ShiftRight,
+    BitAnd,
+    BitOr,
 }
 
 impl NodeBuilder for BinaryOperator {
@@ -39,6 +43,10 @@ impl NodeBuilder for BinaryOperator {
             Rule::GE_OP => Ok(Self::GreaterThanOrEqual),
             Rule::AND_OP => Ok(Self::And),
             Rule::OR_OP => Ok(Self::Or),
+            Rule::SHL_OP => Ok(Self::ShiftLeft),
+            Rule::SHR_OP => Ok(Self::ShiftRight),
+            Rule::BITWISE_AND_OP => Ok(Self::BitAnd),
+            Rule::BITWISE_OR_OP => Ok(Self::BitOr),
             _ => Err(no_rule!(pair, "BinaryOperator", filepath)),
         }
     }
@@ -60,6 +68,10 @@ impl fmt::Display for BinaryOperator {
             BinaryOperator::GreaterThanOrEqual => ">=",
             BinaryOperator::And => "&&",
             BinaryOperator::Or => "||",
+            BinaryOperator::ShiftLeft => "<<",
+            BinaryOperator::ShiftRight => ">>",
+            BinaryOperator::BitAnd => "&",
+            BinaryOperator::BitOr => "|",
         };
 
         write!(f, "{}", op)

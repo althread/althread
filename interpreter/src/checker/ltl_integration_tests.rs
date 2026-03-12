@@ -122,6 +122,33 @@ check {
         Ok(())
     }
 
+    #[test]
+    fn test_guarded_process_list_at_in_predicate() -> AlthreadResult<()> {
+        let source = r#"
+program A() {
+    label START;
+    let x = 1;
+    label MIDDLE;
+    let y = 2;
+}
+
+main {
+    run A();
+}
+
+check {
+    always (if $.procs.A.len() > 0 && $.procs.A.at(0).reaches(MIDDLE) {
+        eventually $.procs.A.at(0).reaches(end)
+    });
+}
+"#;
+
+        let project = compile_from_source(source);
+        let (violations, _graph) = check_program(&project, Some(1000))?;
+        assert!(violations.is_empty(), "Expected no LTL violation for guarded .at access");
+        Ok(())
+    }
+
     // ============================================================
     // Safety Property Tests
     // ============================================================
@@ -207,6 +234,40 @@ check {
         let project = compile_from_source(source);
         let (violations, _graph) = check_program(&project, Some(1000))?;
         assert!(violations.is_empty(), "Expected no LTL violation - Done eventually becomes true");
+        Ok(())
+    }
+
+    #[test]
+    fn test_eventually_shared_list_updates_are_observed() -> AlthreadResult<()> {
+        let source = r#"
+shared {
+    let Global = [0..2];
+}
+
+program A() {
+    Global.set(0, 1);
+}
+
+program B() {
+    Global.set(1, 2);
+}
+
+main {
+    run A();
+    run B();
+}
+
+check {
+    eventually (Global.at(0) == 1 && Global.at(1) == 2);
+}
+"#;
+
+        let project = compile_from_source(source);
+        let (violations, _graph) = check_program(&project, Some(1000))?;
+        assert!(
+            violations.is_empty(),
+            "Expected no LTL violation when both shared list updates eventually become visible"
+        );
         Ok(())
     }
 

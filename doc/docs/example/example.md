@@ -20,9 +20,9 @@ program A() {
     T = B_TURN;
     await Y == false || T == A_TURN;
 
-    NbSC += 1;
+    NbSC = NbSC + 1;
     //section critique
-    NbSC -= 1;
+    NbSC = NbSC - 1;
 
     X = false;
 }
@@ -32,9 +32,9 @@ program B() {
     T = A_TURN;
     await X == false || T == B_TURN;
 
-    NbSC += 1;
+    NbSC = NbSC + 1;
     //section critique
-    NbSC -= 1;
+    NbSC = NbSC - 1;
 
     Y = false;
 }

@@ -716,6 +716,13 @@ impl Ast {
                     InstructionType::GlobalAssignment { identifier, .. } => {
                         *identifier = self.build_qualified_name(identifier, module_prefix);
                     }
+                    InstructionType::MethodCall {
+                        global_receiver, ..
+                    } => {
+                        if let Some(identifier) = global_receiver {
+                            *identifier = self.build_qualified_name(identifier, module_prefix);
+                        }
+                    }
                     InstructionType::RunCall {
                         name: call_name, ..
                     } => {
@@ -959,6 +966,13 @@ impl Ast {
                     }
                     InstructionType::GlobalAssignment { identifier, .. } => {
                         *identifier = self.build_qualified_name(identifier, module_prefix);
+                    }
+                    InstructionType::MethodCall {
+                        global_receiver, ..
+                    } => {
+                        if let Some(identifier) = global_receiver {
+                            *identifier = self.build_qualified_name(identifier, module_prefix);
+                        }
                     }
                     InstructionType::RunCall {
                         name: call_name, ..

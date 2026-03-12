@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     ast::token::{datatype::DataType, literal::Literal},
-    compiler::{stdlib::Stdlib, FunctionDefinition},
+    compiler::{stdlib::{invoke_interface_method, Stdlib}, FunctionDefinition},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
 };
 
@@ -65,6 +65,17 @@ impl Hash for RunningProgramState<'_> {
 }
 
 impl<'a> RunningProgramState<'a> {
+    fn call_interface_method_on_literal(
+        &self,
+        name: &String,
+        receiver: &mut Literal,
+        mut args: Literal,
+        pos: Option<Pos>,
+    ) -> AlthreadResult<(Literal, bool)> {
+        invoke_interface_method(self.stdlib.as_ref(), name, receiver, &mut args, pos)
+            .map_err(|e| self.build_error_stack(e))
+    }
+
     fn call_interface_method(
         &mut self,
         name: &String,
@@ -78,31 +89,8 @@ impl<'a> RunningProgramState<'a> {
             .expect("Panic: stack is empty, cannot perform method call")
             .clone();
 
-        let interfaces = self
-            .stdlib
-            .get_interfaces(&lit.get_datatype())
-            .ok_or_else(|| {
-                let e = AlthreadError::new(
-                    ErrorType::UndefinedFunction,
-                    pos.clone(),
-                    format!("Type {:?} has no interface available", lit.get_datatype()),
-                );
-                self.build_error_stack(e)
-            })?;
-
-        let fn_idx = interfaces.iter().position(|i| i.name == *name);
-        if fn_idx.is_none() {
-            let e = AlthreadError::new(
-                ErrorType::UndefinedFunction,
-                pos.clone(),
-                format!("undefined function {}", name),
-            );
-            return Err(self.build_error_stack(e));
-        }
-        let interface = interfaces.get(fn_idx.unwrap()).unwrap();
-        let mut args = args;
-
-        let ret = interface.f.as_ref()(&mut lit, &mut args, pos)?;
+        let (ret, _mutates_receiver) =
+            self.call_interface_method_on_literal(name, &mut lit, args, pos)?;
         self.memory[receiver_mem_idx] = lit;
 
         Ok(ret)
@@ -661,8 +649,8 @@ impl<'a> RunningProgramState<'a> {
                 unstack_len,
                 drop_receiver,
                 arguments,
+                global_receiver,
             } => {
-                let receiver_mem_idx = self.memory.len() - 1 - *receiver_idx;
                 let args = match &arguments {
                     None => self
                         .memory
@@ -678,8 +666,29 @@ impl<'a> RunningProgramState<'a> {
                         Literal::Tuple(args)
                     }
                 };
-                let ret =
-                    self.call_interface_method(name, receiver_mem_idx, args, cur_inst.pos.clone())?;
+                let ret = if let Some(global_name) = global_receiver {
+                    let mut receiver = globals
+                        .get(global_name)
+                        .expect(format!("global variable '{}' not found", global_name).as_str())
+                        .clone();
+
+                    let (ret, mutates_receiver) = self.call_interface_method_on_literal(
+                        name,
+                        &mut receiver,
+                        args,
+                        cur_inst.pos.clone(),
+                    )?;
+
+                    if mutates_receiver {
+                        globals.insert(global_name.clone(), receiver);
+                        action = Some(GlobalAction::Write(global_name.clone()));
+                    }
+
+                    ret
+                } else {
+                    let receiver_mem_idx = self.memory.len() - 1 - *receiver_idx;
+                    self.call_interface_method(name, receiver_mem_idx, args, cur_inst.pos.clone())?
+                };
 
                 for _ in 0..*unstack_len {
                     self.memory.pop();
