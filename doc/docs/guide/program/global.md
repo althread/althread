@@ -55,7 +55,7 @@ shared {
 }
 
 program Prog1() {
-    X++;
+    X = X + 1;
     await X == 2;
 }
 
