@@ -2,6 +2,7 @@
     "rust-analyzer.cargo.workspaceRoot": "./interpreter",
     "rust-analyzer.cargo.targetDir": "./target",
     "chat.tools.terminal.autoApprove": {
-        "cargo test": true
+        "cargo test": true,
+        "cargo run": true
     }
 }

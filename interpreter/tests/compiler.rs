@@ -586,6 +586,57 @@ main {
 }
 
 #[test]
+fn test_wait_seq_executes_following_matching_cases() {
+    let input = r#"
+shared {
+    let VA = 1;
+}
+
+main {
+    await seq {
+        (VA == 0) => { print("CASE 0"); }
+        (VA == 1) => { print("CASE 1"); VA = 2; }
+        (VA == 2) => { print("CASE 2"); }
+    }
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let mut vm = VM::new(&compiled_project);
+    vm.start(0);
+
+    let mut actions = Vec::new();
+    loop {
+        let next_states = vm.next().unwrap();
+        if next_states.is_empty() {
+            break;
+        }
+
+        let (_, _, _, step_actions, next_vm) = next_states.into_iter().next().unwrap();
+        actions.extend(step_actions);
+        vm = next_vm;
+    }
+
+    assert!(actions.iter().any(|action| matches!(
+        action,
+        GlobalAction::Print(msg) if msg == "CASE 1"
+    )));
+    assert!(actions.iter().any(|action| matches!(
+        action,
+        GlobalAction::Print(msg) if msg == "CASE 2"
+    )));
+    assert_eq!(vm.globals.get("VA"), Some(&Literal::Int(2)));
+}
+
+#[test]
 fn test_compiler_while() {
     let input = r#"
 main {

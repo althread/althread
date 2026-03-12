@@ -257,12 +257,19 @@ impl InstructionBuilder for Node<Wait> {
                 },
             });
 
-            if self.value.block_kind == WaitingBlockKind::First {
-                case_statement.instructions.push(Instruction {
-                    pos: Some(case.pos.clone()),
-                    control: InstructionType::Empty, // placeholder patched to jump to the final wait check
-                });
-            }
+            case_statement.instructions.push(Instruction {
+                pos: Some(case.pos.clone()),
+                control: match self.value.block_kind {
+                    WaitingBlockKind::First => {
+                        // Placeholder patched to jump to the final wait check.
+                        InstructionType::Empty
+                    }
+                    WaitingBlockKind::Seq => {
+                        // Skip this case's failure cleanup and continue with the next case.
+                        InstructionType::Jump(4)
+                    }
+                },
+            });
             //  --- Statement compilation is over ---
 
 
