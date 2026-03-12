@@ -10,7 +10,7 @@ use althread::{
         },
         token::{
             binary_assignment_operator::BinaryAssignmentOperator, binary_operator::BinaryOperator,
-            literal::Literal,
+            datatype::DataType, literal::Literal,
         },
         Ast,
     },
@@ -179,6 +179,172 @@ main {
 }
 
 #[test]
+fn test_shared_method_call_in_expression() {
+    let input = r#"
+shared {
+    let Global:list(int);
+}
+
+main {
+    Global = [1, 2, 3];
+    print(Global.at(0));
+}
+    "#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let mut vm = VM::new(&compiled_project);
+    vm.start(0);
+
+    let mut actions = Vec::new();
+    loop {
+        let next_states = vm.next().unwrap();
+        if next_states.is_empty() {
+            break;
+        }
+        let (_, _, _, step_actions, next_vm) = next_states.into_iter().next().unwrap();
+        actions.extend(step_actions);
+        vm = next_vm;
+    }
+
+    assert!(actions.iter().any(|action| matches!(
+        action,
+        GlobalAction::Write(name) if name == "Global"
+    )));
+    assert!(actions.iter().any(|action| matches!(
+        action,
+        GlobalAction::Print(msg) if msg == "1"
+    )));
+    assert_eq!(
+        vm.globals.get("Global"),
+        Some(&Literal::List(
+            DataType::Integer,
+            vec![Literal::Int(1), Literal::Int(2), Literal::Int(3)]
+        ))
+    );
+}
+
+#[test]
+fn test_mutating_shared_method_call_updates_global_memory() {
+    let input = r#"
+shared {
+    let Global:list(int);
+}
+
+main {
+    Global = [1, 2, 3];
+    Global.push(4);
+}
+    "#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let mut vm = VM::new(&compiled_project);
+    vm.start(0);
+
+    let mut actions = Vec::new();
+    loop {
+        let next_states = vm.next().unwrap();
+        if next_states.is_empty() {
+            break;
+        }
+        let (_, _, _, step_actions, next_vm) = next_states.into_iter().next().unwrap();
+        actions.extend(step_actions);
+        vm = next_vm;
+    }
+
+    assert!(actions.iter().any(|action| matches!(
+        action,
+        GlobalAction::Write(name) if name == "Global"
+    )));
+    assert_eq!(
+        vm.globals.get("Global"),
+        Some(&Literal::List(
+            DataType::Integer,
+            vec![
+                Literal::Int(1),
+                Literal::Int(2),
+                Literal::Int(3),
+                Literal::Int(4),
+            ]
+        ))
+    );
+}
+
+#[test]
+fn test_disjoint_shared_list_writes_do_not_lose_updates() {
+    let input = r#"
+shared {
+    let Global:list(int);
+}
+
+program A() {
+    Global.set(0, 1);
+}
+
+program B() {
+    Global.set(1, 2);
+}
+
+main {
+    Global = [0, 0];
+    run A();
+    run B();
+}
+    "#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let mut initial_vm = VM::new(&compiled_project);
+    initial_vm.start(0);
+
+    let mut frontier = vec![initial_vm];
+    let mut terminal_states = 0;
+
+    while let Some(vm) = frontier.pop() {
+        let next_states = vm.next().unwrap();
+        if next_states.is_empty() {
+            terminal_states += 1;
+            assert_eq!(
+                vm.globals.get("Global"),
+                Some(&Literal::List(
+                    DataType::Integer,
+                    vec![Literal::Int(1), Literal::Int(2)]
+                ))
+            );
+            continue;
+        }
+
+        for (_, _, _, _, next_vm) in next_states {
+            frontier.push(next_vm);
+        }
+    }
+
+    assert!(terminal_states > 0);
+}
+
+#[test]
 fn test_condition_quantifiers_and_if_expr() {
     let input = r#"
 shared {
@@ -244,6 +410,39 @@ main {
         }
         _ => panic!("Expected binary '&&' expression"),
     }
+}
+
+#[test]
+fn test_always_condition_supports_shared_method_calls() {
+    let input = r#"
+shared {
+    let Global = [1..3];
+}
+
+always {
+    Global.len() == 2 && Global.at(0) == 1;
+}
+
+main {
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    assert_eq!(compiled_project.always_conditions.len(), 1);
+
+    let mut vm = VM::new(&compiled_project);
+    vm.start(0);
+
+    assert_eq!(vm.check_invariants().unwrap(), 1);
 }
 
 #[test]
