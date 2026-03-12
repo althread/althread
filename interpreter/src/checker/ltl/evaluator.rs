@@ -36,7 +36,7 @@ pub fn evaluate_ltl_predicate(
             let memory = prepare_memory(read_variables, vm, variable_bindings)?;
 
             // Evaluate the expression with the VM context
-            let result = local_expr.eval_with_context(&memory, vm).map_err(|msg| {
+            let result = local_expr.eval_with_scope(&memory, read_variables, vm).map_err(|msg| {
                 AlthreadError::new(
                     ErrorType::ExpressionError,
                     None,
@@ -56,7 +56,7 @@ pub fn evaluate_ltl_predicate(
             // Evaluate the list expression
             let memory = prepare_memory(list_read_variables, vm, variable_bindings)?;
             let list_value = list_expression
-                .eval_with_context(&memory, vm)
+                .eval_with_scope(&memory, list_read_variables, vm)
                 .map_err(|msg| {
                     AlthreadError::new(
                         ErrorType::ExpressionError,
@@ -103,7 +103,7 @@ pub fn evaluate_ltl_predicate(
             // Evaluate the list expression
             let memory = prepare_memory(list_read_variables, vm, variable_bindings)?;
             let list_value = list_expression
-                .eval_with_context(&memory, vm)
+                .eval_with_scope(&memory, list_read_variables, vm)
                 .map_err(|msg| {
                     AlthreadError::new(
                         ErrorType::ExpressionError,

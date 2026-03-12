@@ -38,8 +38,8 @@ main {
 
 ```
 first { 
-    condition1 => block1,
-    condition2 => block2,
+    condition1 => block1
+    condition2 => block2
 }
 ``` 
 is an boolean expression that is true if one of the conditions is true. Each condition is evaluated sequentially from top to bottom, if one condition is true, it executes only the first corresponding block and then goes to the first instruction outside the block, hence:

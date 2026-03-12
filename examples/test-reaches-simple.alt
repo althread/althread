@@ -10,5 +10,7 @@ main {
 }
 
 check {
-    always (if $.procs.A.at(0).reaches(MIDDLE) { eventually $.procs.A.at(0).reaches(end) });
+    always (if $.procs.A.len() > 0 && $.procs.A.at(0).reaches(MIDDLE) {
+        eventually $.procs.A.at(0).reaches(end)
+    });
 }

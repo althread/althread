@@ -647,7 +647,7 @@ impl<'a> VM<'a> {
                     );
                 }
             }
-            match expr.eval_with_context(&memory, self) {
+            match expr.eval_with_scope(&memory, read_vars, self) {
                 Ok(cond) => {
                     if !cond.is_true() {
                         return Err(AlthreadError::new(
