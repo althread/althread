@@ -7,11 +7,7 @@ use crate::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node, NodeBuilder},
         token::datatype::DataType,
-    },
-    compiler::{CompilerState, InstructionBuilderOk},
-    error::{AlthreadError, AlthreadResult, ErrorType, Pos},
-    parser::Rule,
-    vm::instruction::{Instruction, InstructionType},
+    }, compiler::{CompilerState, InstructionBuilderOk}, error::{AlthreadError, AlthreadResult, ErrorType, Pos}, no_rule, parser::Rule, vm::instruction::{Instruction, InstructionType}
 };
 
 #[derive(Debug, Clone)]
@@ -25,7 +21,7 @@ pub struct ChannelDeclaration {
 }
 
 impl NodeBuilder for ChannelDeclaration {
-    fn build(mut pairs: Pairs<Rule>, _filepath: &str) -> AlthreadResult<Self> {
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let mut left_pairs = pairs.next().unwrap().into_inner();
         let left_prog = String::from(left_pairs.next().unwrap().as_str());
         let mut left_parts = Vec::new();
@@ -38,7 +34,13 @@ impl NodeBuilder for ChannelDeclaration {
 
         let types_pair = pairs.next();
         for pair in types_pair.unwrap().into_inner() {
-            let datatype = DataType::from_str(pair.as_str());
+            let datatype;
+            match pair.as_rule() {
+                Rule::datatype => {
+                    datatype = Some(Node::build(pair, filepath)?).unwrap().value;
+                }
+                _ => return Err(no_rule!(pair, "Type of data in the channel not recognized", filepath)),
+            }
             datatypes.push(datatype);
         }
 

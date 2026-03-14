@@ -32,15 +32,6 @@ impl DataType {
             DataType::List(t) => Literal::List(t.as_ref().clone(), vec![]),
         }
     }
-    pub fn from_str(value: &str) -> Self {
-        match value {
-            "bool" => Self::Boolean,
-            "int" => Self::Integer,
-            "float" => Self::Float,
-            "string" => Self::String,
-            _ => Self::Void,
-        }
-    }
 
     /*     pub fn from_value(val: &Value) -> Self {
         match val {
@@ -120,7 +111,7 @@ impl NodeBuilder for DataType {
             Rule::INT_TYPE => Ok(Self::Integer),
             Rule::FLOAT_TYPE => Ok(Self::Float),
             Rule::STR_TYPE => Ok(Self::String),
-            Rule::VOID_TYPE => Ok(Self::Void),
+            Rule::VOID_TYPE => {print!("pass ici : void !\n");Ok(Self::Void)},
             Rule::PROCESS_TYPE => Ok(Self::Process(
                 pair.into_inner().next().unwrap().as_str().to_string(),
             )),
@@ -131,6 +122,7 @@ impl NodeBuilder for DataType {
                     let datatype = DataType::build(datatype_pair.into_inner(), filepath)?;
                     types.push(datatype);
                 }
+                print!("super je suis ici\n");
                 Ok(Self::Tuple(types))
             },
             Rule::LIST_TYPE => {

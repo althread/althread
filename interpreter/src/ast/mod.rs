@@ -135,12 +135,20 @@ impl Ast {
                     }
 
                     let function_identifier = pairs.next().unwrap().as_str().to_string();
-
+                    
                     let args_list: Node<token::args_list::ArgsList> =
                         Node::build(pairs.next().unwrap(), filepath)?;
                     pairs.next(); // skip the "->" token
-                    let return_datatype = DataType::from_str(pairs.next().unwrap().as_str());
 
+                    let pair = pairs.next().unwrap();
+                    let return_datatype;
+                    match pair.as_rule() {
+                        Rule::datatype => {
+                            return_datatype = Some(Node::build(pair, filepath)?).unwrap().value;
+                        }
+                        _ => return Err(no_rule!(pair, "function return type not recognized", filepath)),
+                    }
+                    
                     let function_block: Node<Block> = Node::build(pairs.next().unwrap(), filepath)?;
 
                     // check if function definition is already defined
