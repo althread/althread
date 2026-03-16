@@ -1889,6 +1889,82 @@ impl InstructionBuilder for Node<Expression> {
                 }
             }
 
+            fn shift_non_temp_var_indices(
+                expr: &LocalExpressionNode,
+                shift: usize,
+                temp_count: usize,
+            ) -> LocalExpressionNode {
+                match expr {
+                    LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(var)) => {
+                        let index = if var.index >= temp_count {
+                            var.index + shift
+                        } else {
+                            var.index
+                        };
+
+                        LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(
+                            LocalVarNode { index },
+                        ))
+                    }
+                    LocalExpressionNode::Binary(node) => {
+                        LocalExpressionNode::Binary(LocalBinaryExpressionNode {
+                            left: Box::new(shift_non_temp_var_indices(
+                                &node.left,
+                                shift,
+                                temp_count,
+                            )),
+                            operator: node.operator.clone(),
+                            right: Box::new(shift_non_temp_var_indices(
+                                &node.right,
+                                shift,
+                                temp_count,
+                            )),
+                        })
+                    }
+                    LocalExpressionNode::Unary(node) => {
+                        LocalExpressionNode::Unary(LocalUnaryExpressionNode {
+                            operand: Box::new(shift_non_temp_var_indices(
+                                &node.operand,
+                                shift,
+                                temp_count,
+                            )),
+                            operator: node.operator.clone(),
+                        })
+                    }
+                    LocalExpressionNode::Tuple(node) => {
+                        LocalExpressionNode::Tuple(LocalTupleExpressionNode {
+                            values: node
+                                .values
+                                .iter()
+                                .map(|value| {
+                                    shift_non_temp_var_indices(value, shift, temp_count)
+                                })
+                                .collect(),
+                        })
+                    }
+                    LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Expression(expr)) => {
+                        LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Expression(
+                            Box::new(shift_non_temp_var_indices(expr, shift, temp_count)),
+                        ))
+                    }
+                    LocalExpressionNode::Range(node) => {
+                        LocalExpressionNode::Range(LocalRangeListExpressionNode {
+                            expression_start: Box::new(shift_non_temp_var_indices(
+                                &node.expression_start,
+                                shift,
+                                temp_count,
+                            )),
+                            expression_end: Box::new(shift_non_temp_var_indices(
+                                &node.expression_end,
+                                shift,
+                                temp_count,
+                            )),
+                        })
+                    }
+                    _ => expr.clone(),
+                }
+            }
+
             fn compile_recursive(
                 expr: &LocalExpressionNode,
                 state: &mut CompilerState,
@@ -1942,9 +2018,15 @@ impl InstructionBuilder for Node<Expression> {
                             left_expr
                         };
 
+                        let shifted_right = if left_calls > 0 {
+                            shift_non_temp_var_indices(&right_expr, left_calls, right_calls)
+                        } else {
+                            right_expr
+                        };
+
                         let new_expr = LocalExpressionNode::Binary(LocalBinaryExpressionNode {
                             left: Box::new(shifted_left),
-                            right: Box::new(right_expr),
+                            right: Box::new(shifted_right),
                             operator: node.operator.clone(),
                         });
 
