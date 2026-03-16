@@ -440,6 +440,8 @@ pub fn check(
     virtual_fs: JsValue,
     max_states: Option<usize>,
 ) -> Result<JsValue, JsValue> {
+    const WEB_GRAPH_DETAILS_THRESHOLD: usize = 200;
+
     // Convert the JS file system to a Rust HashMap
     let fs_map: HashMap<String, String> = serde_wasm_bindgen::from_value(virtual_fs)
         .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
@@ -462,19 +464,12 @@ pub fn check(
         .map_err(error_to_js)?;
 
     let (path, state_graph) = checker::check_program(&compiled_project, max_states).map_err(error_to_js)?;
-    
-    // Build mapping from VM state to node index for successors
-    let mut vm_to_index: HashMap<String, usize> = HashMap::new();
-    for (idx, (vm, _)) in state_graph.nodes.iter().enumerate() {
-        // Use a simple hash of the VM state as key
-        let vm_key = format!("{:?}", vm.current_state());
-        vm_to_index.insert(vm_key, idx);
-    }
+    let omit_transition_details = path.is_empty() && state_graph.nodes.len() > WEB_GRAPH_DETAILS_THRESHOLD;
     
     // Convert path to GraphNode structure
     let path_nodes: Vec<GraphNode> = path.iter().enumerate().map(|(idx, state_link)| {
         GraphNode {
-            vm: create_vm_state(&state_link.to),
+            vm: create_vm_state(state_graph.vm(state_link.to)),
             metadata: NodeMetadata {
                 level: idx,
                 step_index: None,
@@ -485,28 +480,28 @@ pub fn check(
     }).collect();
     
     // Convert state graph nodes to GraphNode structure
-    let graph_nodes: Vec<GraphNode> = state_graph.nodes.iter().enumerate().map(|(_idx, (vm, node))| {
-        let successors: Vec<Successor> = node.successors.iter().map(|succ| {
-            // Find the index of the successor's target VM
-            let to_key = format!("{:?}", succ.to.current_state());
-            let to_index = vm_to_index.get(&to_key).copied().unwrap_or(0);
-            
-            Successor {
-                to_index,
-                lines: succ.lines.clone(),
-                instructions: succ.instructions.iter().map(|i| format!("{:?}", i)).collect(),
-                actions: succ.actions.iter().map(|a| format!("{:?}", a)).collect(),
-                pid: succ.pid,
-                name: succ.name.clone(),
-            }
-        }).collect();
+    let graph_nodes: Vec<GraphNode> = state_graph.nodes.iter().enumerate().map(|(idx, node)| {
+        let successors = if omit_transition_details {
+            None
+        } else {
+            Some(node.successors.iter().map(|succ| {
+                Successor {
+                    to_index: succ.to,
+                    lines: succ.lines.clone(),
+                    instructions: succ.instructions.iter().map(|i| format!("{:?}", i)).collect(),
+                    actions: succ.actions.iter().map(|a| format!("{:?}", a)).collect(),
+                    pid: succ.pid,
+                    name: succ.name.clone(),
+                }
+            }).collect())
+        };
         
         GraphNode {
-            vm: create_vm_state(vm),
+            vm: create_vm_state(state_graph.vm(idx)),
             metadata: NodeMetadata {
                 level: node.level,
                 step_index: None,
-                successors: Some(successors),
+                successors,
                 lines: None,
             },
         }

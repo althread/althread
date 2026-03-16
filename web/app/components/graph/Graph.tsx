@@ -1,6 +1,7 @@
 import vis from "vis-network/dist/vis-network.esm";
 import { createEffect, onCleanup, createSignal } from "solid-js";
 import GraphToolbar from "./GraphToolbar";
+import { nodeToString } from "./Node";
 import { themes } from "./visOptions";
 import { setupNodeClickZoom, createGraphToolbarHandlers, formatState } from "./visHelpers";
 import { useGraphMaximizeHotkeys } from "@hooks/useGraphMaximizeHotkeys";
@@ -15,15 +16,22 @@ interface GraphProps {
     theme?: 'light' | 'dark';
     onEdgeClick?: (edgeId: string, edgeData: any) => void;
     onNodeSelect?: (node: any | null) => void;
+    tooLargeStatusMessage?: string;
     ref?: (instance: { selectNode: (nodeId: string | number) => void }) => void;
 }
 
 export default (props: GraphProps) => {
+    const MAX_VISIBLE_GRAPH_NODES = 200;
     let container: HTMLDivElement | undefined;
     let network: vis.Network | null = null;
     const [maximized, setMaximized] = createSignal(false);
     const [showDetails, setDetails] = createSignal(false);
     const [selectedNodeContent, setSelectedNodeContent] = createSignal<string | null>(null);
+    const isGraphTooLarge = () => (props.nodes?.length || 0) > MAX_VISIBLE_GRAPH_NODES;
+    const resolveVMState = (rawState: any) => {
+        if (!rawState) return null;
+        return rawState.vm ?? rawState.state ?? rawState;
+    };
     const resolveNodeState = (node: any, originalNode: any) => {
         return (
             node?.rawState ??
@@ -37,8 +45,16 @@ export default (props: GraphProps) => {
     };
 
     createEffect(() => {
+        if (isGraphTooLarge()) {
+            setSelectedNodeContent(null);
+            if (props.onNodeSelect) {
+                props.onNodeSelect(null);
+            }
+            props.setLoadingAction(null);
+            return;
+        }
+
         if (!container) {
-            console.error("Graph container element not found.");
             return;
         }
 
@@ -50,7 +66,16 @@ export default (props: GraphProps) => {
             edges: edges.get()
         };
 
-        const options = props.theme === 'dark' ? themes.dark : themes.light;
+        const isLargeGraph = (props.nodes?.length || 0) > 1000 || (props.edges?.length || 0) > 3000;
+        const baseOptions: any = props.theme === 'dark' ? themes.dark : themes.light;
+        const options: any = isLargeGraph
+            ? {
+                ...baseOptions,
+                physics: { ...(baseOptions.physics || {}), enabled: false },
+                layout: { ...(baseOptions.layout || {}) },
+                interaction: { ...(baseOptions.interaction || {}) },
+            }
+            : baseOptions;
         network = new vis.Network(container, data, options);
         
         // Setup node click handler
@@ -70,9 +95,12 @@ export default (props: GraphProps) => {
 
             const fullLabel = node?.fullLabel ?? originalNode?.fullLabel;
             const rawState = resolveNodeState(node, originalNode);
+            const vmState = resolveVMState(rawState);
 
             if (fullLabel) {
                 setSelectedNodeContent(fullLabel);
+            } else if (vmState) {
+                setSelectedNodeContent(nodeToString(vmState));
             }
             if (props.onNodeSelect) {
                 props.onNodeSelect(rawState || null);
@@ -116,12 +144,19 @@ export default (props: GraphProps) => {
             }
         });
 
-        network.once('stabilized', function() {
-          if (network) {
-            network.fit();
-            props.setLoadingAction(null);
-          }
-        });
+                if (isLargeGraph) {
+                        if (network) {
+                                network.fit({ animation: false });
+                        }
+                        props.setLoadingAction(null);
+                } else {
+                        network.once('stabilized', function() {
+                            if (network) {
+                                network.fit();
+                                props.setLoadingAction(null);
+                            }
+                        });
+                }
 
         onCleanup(() => {
             if (network) {
@@ -156,10 +191,26 @@ export default (props: GraphProps) => {
       <div
         class={`state-graph${maximized() ? " maximized" : ""}`}
       >
-        <div
-          ref={container}
-          style="width: 100%; height: 100%;"
-        />
+                {isGraphTooLarge() ? (
+                        <div style="display: flex; height: 100%; width: 100%; align-items: center; justify-content: center; padding: 24px; color: #cccccc; text-align: center;">
+                                <div>
+                                        <div style="font-weight: 600; margin-bottom: 8px;">Graph not displayed</div>
+                            {props.tooLargeStatusMessage ? (
+                                <div style="margin-bottom: 8px; opacity: 0.9;">
+                                    {props.tooLargeStatusMessage}
+                                </div>
+                            ) : null}
+                                        <div>
+                                                This graph has {props.nodes.length} nodes, which is above the display limit of {MAX_VISIBLE_GRAPH_NODES}.
+                                        </div>
+                                </div>
+                        </div>
+                ) : (
+                        <div
+                            ref={container}
+                            style="width: 100%; height: 100%;"
+                        />
+                )}
 
         {!props.onNodeSelect && selectedNodeContent() && (
             <div class="node-details-overlay" style="position: absolute; top: 10px; right: 10px; background: #1e1e1e; color: #ffffff; padding: 10px; border: 1px solid #454545; border-radius: 5px; max-width: 400px; max-height: 80%; overflow: auto; white-space: pre-wrap; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
@@ -173,15 +224,17 @@ export default (props: GraphProps) => {
             </div>
         )}
 
-        {showDetails() ? <MetadataDisplay nodes={props.nodes} /> : null}
-        <GraphToolbar
-          onFullscreen={handleMaximize}
-          onRecenter={handleRecenter}
-          onDownload={handleDownload}
-          onDownloadCSV={() => exportStatesToCSV(props.nodes, props.edges)}
-          onDetails={handleDetails}
-          isFullscreen={maximized()}
-        />
+                {!isGraphTooLarge() && showDetails() ? <MetadataDisplay nodes={props.nodes} /> : null}
+                {!isGraphTooLarge() ? (
+                        <GraphToolbar
+                            onFullscreen={handleMaximize}
+                            onRecenter={handleRecenter}
+                            onDownload={handleDownload}
+                            onDownloadCSV={() => exportStatesToCSV(props.nodes, props.edges)}
+                            onDetails={handleDetails}
+                            isFullscreen={maximized()}
+                        />
+                ) : null}
       </div>
     );
 };

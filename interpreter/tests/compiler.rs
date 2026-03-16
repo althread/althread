@@ -232,6 +232,92 @@ main {
 }
 
 #[test]
+fn test_shared_list_literal_initialization() {
+    let input = r#"
+shared {
+    let Tab = [1, 2];
+}
+
+main {
+}
+    "#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    assert_eq!(
+        compiled_project.global_memory.get("Tab"),
+        Some(&Literal::List(
+            DataType::Integer,
+            vec![Literal::Int(1), Literal::Int(2)]
+        ))
+    );
+}
+
+#[test]
+fn test_shared_empty_typed_list_initialization() {
+    let input = r#"
+shared {
+    let Tab:list(int) = [];
+}
+
+main {
+}
+    "#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    assert_eq!(
+        compiled_project.global_memory.get("Tab"),
+        Some(&Literal::List(DataType::Integer, vec![]))
+    );
+}
+
+#[test]
+fn test_shared_initializer_can_reference_previous_shared_variable() {
+    let input = r#"
+shared {
+    let Base = 1;
+    let Tab = [Base, Base + 1];
+}
+
+main {
+}
+    "#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    assert_eq!(compiled_project.global_memory.get("Base"), Some(&Literal::Int(1)));
+    assert_eq!(
+        compiled_project.global_memory.get("Tab"),
+        Some(&Literal::List(
+            DataType::Integer,
+            vec![Literal::Int(1), Literal::Int(2)]
+        ))
+    );
+}
+
+#[test]
 fn test_await_method_call_keeps_right_operand_stack_index() {
     let input = r#"
 shared {

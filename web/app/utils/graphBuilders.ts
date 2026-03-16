@@ -82,21 +82,24 @@ export function buildGraphFromNodes(nodes: GraphNode[], options: GraphBuildOptio
     const { mode = 'check', stepLines = [], violationPath = [], violationPathStates = [] } = options;
     const visNodes: VisGraphNode[] = [];
     const visEdges: VisGraphEdge[] = [];
-    const nodeSignatures = nodes.map((node) => vmStateSignature(node.vm));
     const hasViolationPathStates = violationPathStates.length > 0;
-    const violationPathSignatures = hasViolationPathStates
+    const needsViolationSignatures = mode === 'check' && hasViolationPathStates;
+    const nodeSignatures = needsViolationSignatures
+        ? nodes.map((node) => vmStateSignature(node.vm))
+        : [];
+    const violationPathSignatures = needsViolationSignatures
         ? violationPathStates.map((state) => vmStateSignature(state))
         : [];
     const violationNodeSet = new Set(violationPathSignatures);
     const violationEdgeSet = new Set<string>();
+    const fallbackViolationLabelSet = new Set(violationPath);
+    const needsFallbackLabels = mode === 'check' && !needsViolationSignatures && fallbackViolationLabelSet.size > 0;
 
     for (let i = 0; i < violationPathSignatures.length - 1; i++) {
         const from = violationPathSignatures[i];
         const to = violationPathSignatures[i + 1];
         violationEdgeSet.add(`${from}->${to}`);
     }
-
-    const fallbackViolationLabelSet = new Set(violationPath);
 
     for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];
@@ -115,15 +118,12 @@ export function buildGraphFromNodes(nodes: GraphNode[], options: GraphBuildOptio
         
         const title = `Level: ${metadata.level}\nProcesses: ${processCount}\nGlobals: ${globalCount}\nChannels: ${channelCount}\nPending: ${pendingCount}`;
 
-        // Generate full state string for display
-        const fullLabel = nodeToString(vmStateToNode(node.vm));
-
         // Determine node color based on mode and violation path
-        const nodeLabel = nodeToString(vmStateToNode(node.vm));
-        const nodeSignature = nodeSignatures[i];
+        const nodeSignature = needsViolationSignatures ? nodeSignatures[i] : undefined;
+        const nodeLabel = needsFallbackLabels ? nodeToString(vmStateToNode(node.vm)) : undefined;
         const isViolationNode = mode === 'check' && (
-            hasViolationPathStates
-                ? violationNodeSet.has(nodeSignature)
+            needsViolationSignatures
+                ? (typeof nodeSignature === 'string' && violationNodeSet.has(nodeSignature))
                 : fallbackViolationLabelSet.has(nodeLabel)
         );
         
@@ -155,7 +155,6 @@ export function buildGraphFromNodes(nodes: GraphNode[], options: GraphBuildOptio
             font: { size: 10, color: '#ffffff' } as any,
             borderWidth: 1,
             title,
-            fullLabel,
             // Unified format for both run and check modes
             rawState: { 
                 vm: node.vm, 
@@ -185,9 +184,10 @@ export function buildGraphFromNodes(nodes: GraphNode[], options: GraphBuildOptio
                 let succIndex = 0;
                 for (const succ of metadata.successors) {
                     const edgeLabel = succ.name + '#' + succ.pid + ': ' + succ.lines.join(',');
-                    const toSignature = nodeSignatures[succ.to_index];
-                    const isViolationEdge = hasViolationPathStates
+                    const toSignature = needsViolationSignatures ? nodeSignatures[succ.to_index] : undefined;
+                    const isViolationEdge = needsViolationSignatures
                         && typeof toSignature === 'string'
+                        && typeof nodeSignature === 'string'
                         && violationEdgeSet.has(`${nodeSignature}->${toSignature}`);
                     
                     visEdges.push({

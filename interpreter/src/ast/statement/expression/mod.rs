@@ -983,13 +983,13 @@ impl LocalExpressionNode {
                             {
                                 Ok(method.ret.clone())
                             } else {
-                                Err(format!("Method {} not found in interface", method_name))
+                                Err(format!("No method {} found on variable of type {}", method_name, var.datatype))
                             }
                         } else {
-                            Err(format!("No interface found for type {}", var.datatype))
+                            Err(format!("Type {} has no available methods", var.datatype))
                         }
                     } else {
-                        Err(format!("Receiver {} not found", receiver_name))
+                        Err(format!("Variable {} not found", receiver_name))
                     }
                 }
             }
@@ -1060,7 +1060,7 @@ impl LocalExpressionNode {
                             let interfaces = state.stdlib().interfaces(&current_type);
                             let method = interfaces.iter().find(|m| m.name == *name);
                             let method =
-                                method.ok_or_else(|| format!("undefined function {}", name))?;
+                                method.ok_or_else(|| format!("No method {} found on variable of type {}", name, current_type))?;
 
                             let args_type = args.datatype(state)?;
                             if let DataType::Tuple(arg_types) = args_type {

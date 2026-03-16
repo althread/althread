@@ -310,7 +310,7 @@ impl InstructionBuilder for Node<FnCall> {
                 return Err(AlthreadError::new(
                     ErrorType::UndefinedFunction,
                     Some(self.pos.clone()),
-                    format!("undefined function {}", method_name),
+                    format!("No method {} found on variable of type {}", method_name, receiver_type),
                 ));
             }
             let fn_idx = fn_idx.unwrap();
