@@ -255,6 +255,104 @@ export const EXAMPLES: ExampleInfo[] = [
     description: "Example program: Traffic Lights",
     tags: ["example","shared","concurrency","programs","conditionals"],
     content: "shared {\n    // 0: Green, 1: Yellow, 2: Red\n    let Ns_state = 0;\n    let Ew_state = 2;\n}\n\nprogram TrafficController() {\n    loop {\n        // NS is Green, EW is Red\n        // Transition NS to Yellow\n        Ns_state = 1;\n        \n        // Transition NS to Red\n        Ns_state = 2;\n        \n        // Transition EW to Green\n        Ew_state = 0;\n        \n        // Transition EW to Yellow\n        Ew_state = 1;\n        \n        // Transition EW to Red\n        Ew_state = 2;\n        \n        // Transition NS to Green\n        Ns_state = 0;\n    }\n}\n\ncheck {\n    // Safety: Cannot have both lights passing (Green or Yellow) at the same time\n    // Passing means state < 2 (0 or 1)\n    always ( (Ns_state == 2) || (Ew_state == 2) );\n}\n\ncheck {\n    // Liveness: If NS is Red, it eventually becomes Green\n    always ( if (Ns_state == 2) { eventually (Ns_state == 0) } );\n}\n\ncheck {\n    // Liveness: If EW is Red, it eventually becomes Green\n    always ( if (Ew_state == 2) { eventually (Ew_state == 0) } );\n}\n\nmain {\n    run TrafficController();\n}"
+  },
+  {
+    fileName: "TP2-communication.alt",
+    title: "TP2-Communication",
+    description: "Example program: TP2-Communication",
+    tags: ["example","shared","concurrency","programs","loops","conditionals","chanels"],
+    content: `
+program proc(id:string) {
+  let value:string;
+  await receive next(o) => value = o;
+
+  loop await receive in(type, i) => {
+    print(id, "received", type, i);
+    if type == "nack" {
+      send up(i);
+      send out("ack", value);
+    } else if type == "ack" {
+      send up(i);
+      await receive next(o) => value = o;
+      send out("ack", value);
+    } else {
+      send out("nack", value);
+    }
+  }
+  print(id, "terminated");
+}
+
+main {
+  let a = run proc("a");
+  let b = run proc("b");
+
+  channel self.toA (string)> a.next;
+  channel self.toB (string)> b.next;
+
+  channel a.up (string)> self.fromA;
+  channel b.up (string)> self.fromB;
+
+  channel a.out (string,string)> b.in;
+  channel b.out (string,string)> a.in;
+
+  channel self.hackA (string,string)> a.in;
+
+  const hello = ["H", "e", "l", "l", "o", "!"];
+  for c in hello {
+    send toA(c);
+  }
+
+  const bonjour = ["B", "o", "n", "j", "o", "u", "r", "!"];
+  for c in bonjour {
+    send toB(c);
+  }
+
+  print("==== a accepted =======|");
+  print("==== b accepted =======|");
+  loop await first {
+    receive fromA(v) => print("======================", v);
+    receive fromB(v) => print("=========================", v);
+  }
+}`
+  },
+  {
+    fileName: "TP2-election.alt",
+    title: "TP2-Election",
+    description: "Example program: TP2-Election",
+    tags: ["example","loops","conditionals","chanels","election", "ring"],
+    content: `
+program node(id:int) {
+  // TODO
+}
+main {
+  let n = 4; // nombre de processus
+  let procs:list(proc(node));
+  for i in 0..n {
+    let a = run node(i);
+    procs.push(a);
+  }
+
+  // Création des canaux de communication en anneau
+  for i in 0..n {
+    let a = procs.at(i);
+    let b = procs.at((i+1) % n);
+    channel a.out (string, int)> b.in;
+  }
+
+  // on ne peut pas encore creer des channels dont le nom 
+  // dépend d'une variable donc on le fait manuellement
+  let a = procs.at(0);
+  channel self.out.a (string)> a.fromMain;
+  let a = procs.at(1);
+  channel self.out.b (string)> a.fromMain;
+  let a = procs.at(2);
+  channel self.out.c (string)> a.fromMain;
+  let a = procs.at(3);
+  channel self.out.d (string)> a.fromMain;
+
+  // Initialisation de l'élection
+  send out.*("candidat");
+}`
   }
 ];
 
