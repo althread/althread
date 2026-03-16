@@ -223,7 +223,7 @@ pub fn check_command(cli_args: &CheckCommand) {
 
     println!("\nVerification Statistics:");
     println!("  States explored: {}", checked.1.nodes.len());
-    let max_depth = checked.1.nodes.values().map(|n| n.level).max().unwrap_or(0);
+    let max_depth = checked.1.nodes.iter().map(|n| n.level).max().unwrap_or(0);
     println!("  Maximum depth:  {}", max_depth);
 
     if !checked.0.is_empty() {

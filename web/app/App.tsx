@@ -344,6 +344,7 @@ export default function App() {
   let [runBuiltGraph, setRunBuiltGraph] = createSignal<{ nodes: any[], edges: any[] }>({ nodes: [], edges: [] }); // Built graph for vis.js
   let [counterexampleReplayNodes, setCounterexampleReplayNodes] = createSignal<GraphNode[]>([]); // Replayable counter-example path
   let [counterexampleReplayStepLines, setCounterexampleReplayStepLines] = createSignal<number[][]>([]); // Step lines for counter-example replay
+  let [checkTooLargeStatus, setCheckTooLargeStatus] = createSignal<string | null>(null);
   let [stepLines, setStepLines] = createSignal<number[][]>([]); //to store lines for each step
   let [activeAction, setActiveAction] = createSignal<string | null>(null);
   const [loadingAction, setLoadingAction] = createSignal<string | null>(null);
@@ -445,6 +446,16 @@ export default function App() {
   const appendStatusNotice = (text: string, notice: string) => {
     const trimmed = text.trimEnd();
     return trimmed.length > 0 ? `${trimmed}\n\n${notice}` : notice;
+  };
+
+  const getCheckTooLargeStatus = (result: CheckResult) => {
+    if (result.path.length > 0) {
+      return "Verification result: a violation was found.";
+    }
+    if (result.exhaustive) {
+      return "Verification result: the check succeeded with no violation.";
+    }
+    return "Verification result: exploration stopped before the check could complete.";
   };
 
   const getDeadlockExecutionOutput = (error: any, fallbackOutput = "") => {
@@ -809,6 +820,7 @@ export default function App() {
                 edges={edges()} 
                 setLoadingAction={setLoadingAction} 
                 theme="dark" 
+                tooLargeStatusMessage={checkTooLargeStatus() ?? undefined}
                 onEdgeClick={(_edgeId: string, edgeData: any) => {
                     if (edgeData && edgeData.lines && editor.highlightLines) {
                         editor.highlightLines(edgeData.lines);
@@ -993,6 +1005,7 @@ export default function App() {
                 setSelectedVM(null);
                 setActiveTab("vm_states");
                 if (executionError()) setExecutionError(false);
+                setCheckTooLargeStatus(null);
                 if (!editorManager.activeFile()) return;
                 
                 try {
@@ -1005,8 +1018,6 @@ export default function App() {
 
                   let res: CheckResult = await workerClient.check(editor.editorView().state.doc.toString(), filePath, virtualFS);
                   
-                  console.log(res);
-                  
                   if (res.path.length > 0) {
                       setOut("Violation found! See the highlighted path in the VM states graph.");
                   } else if (res.exhaustive) {
@@ -1014,6 +1025,7 @@ export default function App() {
                   } else {
                     setOut("Warning: Exploration limit reached. The state space was not fully explored. No violation found in the explored part.");
                   }
+                  setCheckTooLargeStatus(getCheckTooLargeStatus(res));
 
                   if (res.path.length > 0) {
                     const replay = buildCounterexampleReplay(res.path, res.nodes);
@@ -1043,6 +1055,7 @@ export default function App() {
                   setOut(errorInfo.message);
                   setActiveTab("execution");
                   setLoadingAction(null);
+                  setCheckTooLargeStatus(null);
                   setCounterexampleReplayNodes([]);
                   setCounterexampleReplayStepLines([]);
                   // reset other tabs to initial state
