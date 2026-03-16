@@ -12,6 +12,20 @@ export interface ExampleInfo {
 
 export const EXAMPLES: ExampleInfo[] = [
   {
+    fileName: "TP2-communication.alt",
+    title: "TP2-Communication",
+    description: "Example program: TP2-Communication",
+    tags: ["example","channels","communication","programs","loops","conditionals","synchronization","messaging","ring"],
+    content: "program proc(id:string) {\n  let value:string;\n  await receive next(o) => value = o;\n\n  loop await receive in(type, i) => {\n    print(id, \"received\", type, i);\n    if type == \"nack\" {\n      send up(i);\n      send out(\"ack\", value);\n    } else if type == \"ack\" {\n      send up(i);\n      await receive next(o) => value = o;\n      send out(\"ack\", value);\n    } else {\n      send out(\"nack\", value);\n    }\n  }\n  print(id, \"terminated\");\n}\n\nmain {\n  let a = run proc(\"a\");\n  let b = run proc(\"b\");\n\n  channel self.toA (string)> a.next;\n  channel self.toB (string)> b.next;\n\n  channel a.up (string)> self.fromA;\n  channel b.up (string)> self.fromB;\n\n  channel a.out (string,string)> b.in;\n  channel b.out (string,string)> a.in;\n\n  channel self.hackA (string,string)> a.in;\n\n  const hello = [\"H\", \"e\", \"l\", \"l\", \"o\", \"!\"];\n  for c in hello {\n    send toA(c);\n  }\n\n  const bonjour = [\"B\", \"o\", \"n\", \"j\", \"o\", \"u\", \"r\", \"!\"];\n  for c in bonjour {\n    send toB(c);\n  }\n\n  print(\"==== a accepted =======|\");\n  print(\"==== b accepted =======|\");\n  loop await first {\n    receive fromA(v) => print(\"======================\", v);\n    receive fromB(v) => print(\"=========================\", v);\n  }\n}"
+  },
+  {
+    fileName: "TP2-election.alt",
+    title: "TP2-Election",
+    description: "Example program: TP2-Election",
+    tags: ["example","channels","communication","programs","loops","messaging","ring"],
+    content: "program node(id:int) {\n  // TODO\n}\nmain {\n  let n = 4; // nombre de processus\n  let procs:list(proc(node));\n  for i in 0..n {\n    let a = run node(i);\n    procs.push(a);\n  }\n\n  // Création des canaux de communication en anneau\n  for i in 0..n {\n    let a = procs.at(i);\n    let b = procs.at((i+1) % n);\n    channel a.out (string, int)> b.in;\n  }\n\n  // on ne peut pas encore creer des channels dont le nom \n  // dépend d'une variable donc on le fait manuellement\n  let a = procs.at(0);\n  channel self.out.a (string)> a.fromMain;\n  let a = procs.at(1);\n  channel self.out.b (string)> a.fromMain;\n  let a = procs.at(2);\n  channel self.out.c (string)> a.fromMain;\n  let a = procs.at(3);\n  channel self.out.d (string)> a.fromMain;\n\n  // Initialisation de l'élection\n  send out.*(\"candidat\");\n}"
+  },
+  {
     fileName: "coffee_machine.alt",
     title: "Coffee Machine",
     description: "Example program: Coffee Machine",
@@ -22,7 +36,7 @@ export const EXAMPLES: ExampleInfo[] = [
     fileName: "concurrency.alt",
     title: "Concurrency",
     description: "Example program: Concurrency",
-    tags: ["example","shared","concurrency","atomic","channels","communication","programs","functions","loops","conditionals","synchronization","messaging","math"],
+    tags: ["example","shared","concurrency","atomic","channels","communication","programs","functions","loops","conditionals","synchronization","messaging"],
     content: "shared {\n    let A = 1;\n    let B = 0;\n    let Start = false;\n    let WorkersFinished = 0;  // Counts finished workers\n}\n\nfn process_message(value: int, flag: bool) -> void {\n    print(\"Processing message: value=\" + value + \", flag=\" + flag);\n    atomic {\n        if flag {\n            A = value;\n        } else {\n            B = value;\n        }\n        WorkersFinished = WorkersFinished + 1; \n    }\n}\n\nfn verify_state() -> bool {\n    return (A == 125 && B == 125);\n}\n\nprogram Worker() {\n    await Start;\n    \n    await receive in (x, y);\n    \n    process_message(x, y);\n}\n\nmain {\n    let worker1 = run Worker();\n    let worker2 = run Worker();\n\n    channel self.out (int, bool)> worker1.in;\n    channel self.out2 (int, bool)> worker2.in;\n    \n    atomic { Start = true; }\n    \n    send out(125, true);\n    send out2(125, false);\n\n    // Waits for both workers to finish processing\n    await WorkersFinished == 2;\n\n    if verify_state() {\n        print(\"Channel test successful!\");\n    } else {\n        print(\"Channel test failed!\");\n    }\n}\n\n// Output:\n// Processing message: value=125, flag=true\n// Processing message: value=125, flag=false\n// Channel test successful!\n// or\n// Processing message: value=125, flag=false\n// Processing message: value=125, flag=true\n// Channel test successful!"
   },
   {
@@ -43,7 +57,7 @@ export const EXAMPLES: ExampleInfo[] = [
     fileName: "loop-sum.alt",
     title: "Loop-Sum",
     description: "Example program: Loop-Sum",
-    tags: ["example","shared","concurrency","programs","loops","conditionals","math"],
+    tags: ["example","shared","concurrency","programs","loops","conditionals"],
     content: "shared {\n  let Sum = 0;\n}\n\nprogram A(my_id: int) {\n  loop {\n    Sum = Sum + 1;\n    Sum = Sum - 1;\n  }\n}\n\ncheck {\n  always if Sum == 2 { eventually Sum == 1 };\n}\n\nmain {\n  let n = 2;\n  let a:list(proc(A));\n  for i in 0..n {\n    let p = run A(i);\n  }\n}"
   },
   {
@@ -169,8 +183,8 @@ export const EXAMPLES: ExampleInfo[] = [
     fileName: "peterson_mutual_exlusion.alt",
     title: "Peterson Mutual Exlusion",
     description: "Example program: Peterson Mutual Exlusion",
-    tags: ["example","shared","concurrency","programs","synchronization","math"],
-    content: "shared {\n    const A_TURN = 1;\n    const B_TURN = 2;\n    let X: bool = false;\n    let Y: bool = false;\n    let T: int = 0;\n    let NbSC = 0;\n}\n\nprogram A() {\n    X = true;\n    T = B_TURN;\n\n    await Y == false || T == A_TURN;\n\n    NbSC = NbSC + 1;\n    //section critique\n    NbSC = NbSc - 1;\n\n    X = false;\n    print(\"A is done\");\n}\n\nprogram B() {\n    Y = true;\n    T = A_TURN;\n    await X == false || T == B_TURN;\n\n    NbSC = NbSc + 1;\n    //section critique\n    NbSC = NbSc - 1;\n\n    Y = false;\n    print(\"B is done\");\n}\n\nalways {\n    NbSC == 0 || NbSC == 1;\n}\n\nmain {\n    run A();\n    run B();\n}"
+    tags: ["example","shared","concurrency","programs","synchronization"],
+    content: "shared {\n    const A_TURN = 1;\n    const B_TURN = 2;\n    let X: bool = false;\n    let Y: bool = false;\n    let T: int = 0;\n    let NbSC = 0;\n}\n\nprogram A() {\n    X = true;\n    T = B_TURN;\n\n    await Y == false || T == A_TURN;\n\n    NbSC = NbSC + 1;\n    //section critique\n    NbSC = NbSC - 1;\n\n    X = false;\n    print(\"A is done\");\n}\n\nprogram B() {\n    Y = true;\n    T = A_TURN;\n    await X == false || T == B_TURN;\n\n    NbSC = NbSC + 1;\n    //section critique\n    NbSC = NbSC - 1;\n\n    Y = false;\n    print(\"B is done\");\n}\n\nalways {\n    NbSC == 0 || NbSC == 1;\n}\n\nmain {\n    run A();\n    run B();\n}"
   },
   {
     fileName: "readers_writers.alt",
@@ -183,14 +197,14 @@ export const EXAMPLES: ExampleInfo[] = [
     fileName: "ring-election-eventually.alt",
     title: "Ring-Election-Eventually",
     description: "Example program: Ring-Election-Eventually",
-    tags: ["example","shared","concurrency","channels","communication","programs","loops","conditionals","synchronization","messaging","math"],
+    tags: ["example","shared","concurrency","channels","communication","programs","loops","conditionals","synchronization","messaging"],
     content: "shared {\n  let Leader = 0;\n}\n\nprogram A(my_id: int) {\n\n  let leader_id = my_id;\n\n  send out(my_id);\n\n  loop atomic await receive in (x) => {\n    print(\"receive\", x);\n      if x > leader_id {\n        leader_id = x;\n        send out(x);\n      } else {\n        if x == leader_id {\n          print(\"finished\");\n          send out(x);\n          break;\n        }\n      }\n  }\n  \n  label L;\n  if my_id == leader_id {\n    print(\"I AM THE LEADER!!!\");\n    @ {\n        Leader = Leader + 1;\n    }\n  }\n}\n\ncheck {\n  for p in $.procs.A { eventually p.reaches(L) };\n}\nalways {\n  Leader <= 1;\n}\n\n\nmain {\n  let n = 3;\n  let a:list(proc(A));\n  for i in 0..n {\n    let p = run A(i);\n    a.push(p);\n  }\n  for i in 0..n-1 {\n    let p1 = a.at(i);\n    let p2 = a.at(i+1);\n    channel p1.out (int)> p2.in;\n  }\n  \n  let p1 = a.at(n-1);\n  let p2 = a.at(0);\n  channel p1.out (int)> p2.in;\n}"
   },
   {
     fileName: "ring-election.alt",
     title: "Ring-Election",
     description: "Example program: Ring-Election",
-    tags: ["example","shared","concurrency","channels","communication","programs","conditionals","synchronization","messaging","math"],
+    tags: ["example","shared","concurrency","channels","communication","programs","conditionals","synchronization","messaging"],
     content: "shared {\n  let Done = false;\n  let Leader = 0;\n}\n\nprogram A(my_id: int) {\n\n  let leader_id = my_id;\n\n  send out(my_id);\n\n  loop atomic await receive in (x) => {\n    print(\"receive\", x);\n    if x > leader_id {\n      leader_id = x;\n      send out(x);\n    } else {\n      if x == leader_id {\n        print(\"finished\");\n        send out(x);\n        break;\n      }\n    }\n  }\n  \n  if my_id == leader_id {\n    print(\"I AM THE LEADER!!!\");\n    @ {\n        Done = true;\n        Leader = Leader + 1;\n    }\n  }\n}\n\nalways {\n  !Done || (Leader == 1);\n}\n\nmain {\n  let a = run A(1);\n  let b = run A(2);\n\n  channel a.out (int)> b.in;\n  channel b.out (int)> a.in;\n\n  print(\"DONE\");\n}"
   },
   {
@@ -204,7 +218,7 @@ export const EXAMPLES: ExampleInfo[] = [
     fileName: "test-atomic.alt",
     title: "Test-Atomic",
     description: "Example program: Test-Atomic",
-    tags: ["example","shared","concurrency","channels","communication","programs","synchronization","messaging","math"],
+    tags: ["example","shared","concurrency","channels","communication","programs","synchronization","messaging"],
     content: "shared {\n  let A: bool = false;\n  let B: bool = true;\n  let Done = 0;\n}\n\nprogram A() {\n  print(\"starting A\");\n  @ {\n    A = false;\n    B = true;\n  }\n  Done = Done + 1;\n  send out(42,true);\n}\n\nprogram B() {\n  print(\"starting B\");\n  @ {\n    A = true;\n    B = false;\n  }\n  Done = Done + 1;\n}\n\nalways {\n  A || B;\n}\n\nmain {\n  let a = run A();\n  run B();\n  await Done == 2;\n\n  channel a.out (int, bool)> self.in;\n\n  await receive in(x,y);\n  print(\"Receive\", x, y);\n  print(\"DONE\");\n}"
   },
   {
@@ -240,14 +254,14 @@ export const EXAMPLES: ExampleInfo[] = [
     title: "Test-Reaches-Simple",
     description: "Example program: Test-Reaches-Simple",
     tags: ["example","programs","conditionals"],
-    content: "program A() {\n    label START;\n    let x = 1;\n    label MIDDLE;\n    let y = 2;\n}\n\nmain {\n    run A();\n}\n\ncheck {\n    always (if $.procs.A.at(0).reaches(MIDDLE) { eventually $.procs.A.at(0).reaches(end) });\n}"
+    content: "program A() {\n    label START;\n    let x = 1;\n    label MIDDLE;\n    let y = 2;\n}\n\nmain {\n    run A();\n}\n\ncheck {\n    always (if $.procs.A.len() > 0 && $.procs.A.at(0).reaches(MIDDLE) {\n        eventually $.procs.A.at(0).reaches(end)\n    });\n}"
   },
   {
     fileName: "test-wait.alt",
     title: "Test-Wait",
     description: "Example program: Test-Wait",
     tags: ["example","shared","concurrency","programs","loops","conditionals","synchronization","ring"],
-    content: "shared {\n    let VA = 1;\n}\n\nmain {\n\n    print(\"await first\");\n    //print \"CASE 1\" (because the keyword first is used)\n    await first {\n        (VA == 0) => { print(\"CASE 0\"); }\n        (VA == 1) => { print(\"CASE 1\"); VA = 2; }\n        (VA == 2) => { print(\"CASE 2\"); }\n    }\n    \n    print(\"await seq\");\n    VA = 1;\n    //print \"CASE 1\" and \"CASE 2\"\n    await seq {\n        (VA == 0) => { print(\"CASE 0\"); }\n        (VA == 1) => { print(\"CASE 1\"); VA = 2; }\n        (VA == 2) => { print(\"CASE 2\"); }\n    }\n    \n    \n    if VA == 0 {\n        print(\"if condition\");\n    }\n\n    VA = 0; // comment to see a deadlock\n    \n    await (VA == 0);\n    print(\"await condition\");\n}\n/**\n`condition` is a boolean expression\n`await condition` is a statement that waits for the condition to be true\n\n```\nfirst { \n    condition1 => block1,\n    condition2 => block2,\n}\n``` \nis an boolean expression that is true if one of the conditions is true. Each condition is evaluated sequentially from top to bottom, if one condition is true, it executes only the first corresponding block and then goes to the first instruction outside the block, hence:\n```\nawait first {\n    condition1 => block1,\n    condition2 => block2,\n}\n```\nwaits for one of the conditions to be true, then executes only the corresponding block, then continues with the rest of the program\n\nSimilarly, \n```\nseq { \n    condition1 => block1,\n    condition2 => block2,\n}\n```\nis an boolean expression that evaluates to true if one of the conditions is true, however here, when the block corresponding to the first true condition is executed, the remaining conditions are also evaluated, and the blocks associated with all the true conditions are executed sequentially from top to bottom. Hence,\n```\nawait seq {\n    condition1 => block1,\n    condition2 => block2,\n}\n```\nwaits for one of the conditions to be true, then executes the corresponding block, then evaluate the remaining conditions from this first true condition and execute all the blocks associated with true conditions. Then, the rest of the program continues.\n\nSince seq {} and first {} are boolean expressions, they can be used in if statements, while loops, and first/seq conditions.\n\nExample:\n```\nif seq {\n        first {\n            condition1 => block1,\n            condition2 => block2,\n        }\n        condition3 => block3,\n    } \n{\n    print(\"if seq\")\n}\n```\nmeans that if condition1 is true, block1 is executed, then condition3 is evaluated (if it is true, block3 is executed). Otherwise if condition1 is false, then condition2 is evaluated, if it is true, block2 is executed, then condition3 is evaluated (if it is true, block3 is executed), if condition2 is false, condition3 is evaluated, if it is true, block3 is executed. If all conditions are false, the entier expression is false and the pring statement is not executed.\n */"
+    content: "shared {\n    let VA = 1;\n}\n\nmain {\n\n    print(\"await first\");\n    //print \"CASE 1\" (because the keyword first is used)\n    await first {\n        (VA == 0) => { print(\"CASE 0\"); }\n        (VA == 1) => { print(\"CASE 1\"); VA = 2; }\n        (VA == 2) => { print(\"CASE 2\"); }\n    }\n    \n    print(\"await seq\");\n    VA = 1;\n    //print \"CASE 1\" and \"CASE 2\"\n    await seq {\n        (VA == 0) => { print(\"CASE 0\"); }\n        (VA == 1) => { print(\"CASE 1\"); VA = 2; }\n        (VA == 2) => { print(\"CASE 2\"); }\n    }\n    \n    \n    if VA == 0 {\n        print(\"if condition\");\n    }\n\n    VA = 0; // comment to see a deadlock\n    \n    await (VA == 0);\n    print(\"await condition\");\n}\n/**\n`condition` is a boolean expression\n`await condition` is a statement that waits for the condition to be true\n\n```\nfirst { \n    condition1 => block1\n    condition2 => block2\n}\n``` \nis an boolean expression that is true if one of the conditions is true. Each condition is evaluated sequentially from top to bottom, if one condition is true, it executes only the first corresponding block and then goes to the first instruction outside the block, hence:\n```\nawait first {\n    condition1 => block1,\n    condition2 => block2,\n}\n```\nwaits for one of the conditions to be true, then executes only the corresponding block, then continues with the rest of the program\n\nSimilarly, \n```\nseq { \n    condition1 => block1,\n    condition2 => block2,\n}\n```\nis an boolean expression that evaluates to true if one of the conditions is true, however here, when the block corresponding to the first true condition is executed, the remaining conditions are also evaluated, and the blocks associated with all the true conditions are executed sequentially from top to bottom. Hence,\n```\nawait seq {\n    condition1 => block1,\n    condition2 => block2,\n}\n```\nwaits for one of the conditions to be true, then executes the corresponding block, then evaluate the remaining conditions from this first true condition and execute all the blocks associated with true conditions. Then, the rest of the program continues.\n\nSince seq {} and first {} are boolean expressions, they can be used in if statements, while loops, and first/seq conditions.\n\nExample:\n```\nif seq {\n        first {\n            condition1 => block1,\n            condition2 => block2,\n        }\n        condition3 => block3,\n    } \n{\n    print(\"if seq\")\n}\n```\nmeans that if condition1 is true, block1 is executed, then condition3 is evaluated (if it is true, block3 is executed). Otherwise if condition1 is false, then condition2 is evaluated, if it is true, block2 is executed, then condition3 is evaluated (if it is true, block3 is executed), if condition2 is false, condition3 is evaluated, if it is true, block3 is executed. If all conditions are false, the entier expression is false and the pring statement is not executed.\n */"
   },
   {
     fileName: "traffic_lights.alt",
@@ -255,104 +269,6 @@ export const EXAMPLES: ExampleInfo[] = [
     description: "Example program: Traffic Lights",
     tags: ["example","shared","concurrency","programs","conditionals"],
     content: "shared {\n    // 0: Green, 1: Yellow, 2: Red\n    let Ns_state = 0;\n    let Ew_state = 2;\n}\n\nprogram TrafficController() {\n    loop {\n        // NS is Green, EW is Red\n        // Transition NS to Yellow\n        Ns_state = 1;\n        \n        // Transition NS to Red\n        Ns_state = 2;\n        \n        // Transition EW to Green\n        Ew_state = 0;\n        \n        // Transition EW to Yellow\n        Ew_state = 1;\n        \n        // Transition EW to Red\n        Ew_state = 2;\n        \n        // Transition NS to Green\n        Ns_state = 0;\n    }\n}\n\ncheck {\n    // Safety: Cannot have both lights passing (Green or Yellow) at the same time\n    // Passing means state < 2 (0 or 1)\n    always ( (Ns_state == 2) || (Ew_state == 2) );\n}\n\ncheck {\n    // Liveness: If NS is Red, it eventually becomes Green\n    always ( if (Ns_state == 2) { eventually (Ns_state == 0) } );\n}\n\ncheck {\n    // Liveness: If EW is Red, it eventually becomes Green\n    always ( if (Ew_state == 2) { eventually (Ew_state == 0) } );\n}\n\nmain {\n    run TrafficController();\n}"
-  },
-  {
-    fileName: "TP2-communication.alt",
-    title: "TP2-Communication",
-    description: "Example program: TP2-Communication",
-    tags: ["example","shared","concurrency","programs","loops","conditionals","chanels"],
-    content: `
-program proc(id:string) {
-  let value:string;
-  await receive next(o) => value = o;
-
-  loop await receive in(type, i) => {
-    print(id, "received", type, i);
-    if type == "nack" {
-      send up(i);
-      send out("ack", value);
-    } else if type == "ack" {
-      send up(i);
-      await receive next(o) => value = o;
-      send out("ack", value);
-    } else {
-      send out("nack", value);
-    }
-  }
-  print(id, "terminated");
-}
-
-main {
-  let a = run proc("a");
-  let b = run proc("b");
-
-  channel self.toA (string)> a.next;
-  channel self.toB (string)> b.next;
-
-  channel a.up (string)> self.fromA;
-  channel b.up (string)> self.fromB;
-
-  channel a.out (string,string)> b.in;
-  channel b.out (string,string)> a.in;
-
-  channel self.hackA (string,string)> a.in;
-
-  const hello = ["H", "e", "l", "l", "o", "!"];
-  for c in hello {
-    send toA(c);
-  }
-
-  const bonjour = ["B", "o", "n", "j", "o", "u", "r", "!"];
-  for c in bonjour {
-    send toB(c);
-  }
-
-  print("==== a accepted =======|");
-  print("==== b accepted =======|");
-  loop await first {
-    receive fromA(v) => print("======================", v);
-    receive fromB(v) => print("=========================", v);
-  }
-}`
-  },
-  {
-    fileName: "TP2-election.alt",
-    title: "TP2-Election",
-    description: "Example program: TP2-Election",
-    tags: ["example","loops","conditionals","chanels","election", "ring"],
-    content: `
-program node(id:int) {
-  // TODO
-}
-main {
-  let n = 4; // nombre de processus
-  let procs:list(proc(node));
-  for i in 0..n {
-    let a = run node(i);
-    procs.push(a);
-  }
-
-  // Création des canaux de communication en anneau
-  for i in 0..n {
-    let a = procs.at(i);
-    let b = procs.at((i+1) % n);
-    channel a.out (string, int)> b.in;
-  }
-
-  // on ne peut pas encore creer des channels dont le nom 
-  // dépend d'une variable donc on le fait manuellement
-  let a = procs.at(0);
-  channel self.out.a (string)> a.fromMain;
-  let a = procs.at(1);
-  channel self.out.b (string)> a.fromMain;
-  let a = procs.at(2);
-  channel self.out.c (string)> a.fromMain;
-  let a = procs.at(3);
-  channel self.out.d (string)> a.fromMain;
-
-  // Initialisation de l'élection
-  send out.*("candidat");
-}`
   }
 ];
 
