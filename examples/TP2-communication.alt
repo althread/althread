@@ -1,0 +1,52 @@
+program proc(id:string) {
+  let value:string;
+  await receive next(o) => value = o;
+
+  loop await receive in(type, i) => {
+    print(id, "received", type, i);
+    if type == "nack" {
+      send up(i);
+      send out("ack", value);
+    } else if type == "ack" {
+      send up(i);
+      await receive next(o) => value = o;
+      send out("ack", value);
+    } else {
+      send out("nack", value);
+    }
+  }
+  print(id, "terminated");
+}
+
+main {
+  let a = run proc("a");
+  let b = run proc("b");
+
+  channel self.toA (string)> a.next;
+  channel self.toB (string)> b.next;
+
+  channel a.up (string)> self.fromA;
+  channel b.up (string)> self.fromB;
+
+  channel a.out (string,string)> b.in;
+  channel b.out (string,string)> a.in;
+
+  channel self.hackA (string,string)> a.in;
+
+  const hello = ["H", "e", "l", "l", "o", "!"];
+  for c in hello {
+    send toA(c);
+  }
+
+  const bonjour = ["B", "o", "n", "j", "o", "u", "r", "!"];
+  for c in bonjour {
+    send toB(c);
+  }
+
+  print("==== a accepted =======|");
+  print("==== b accepted =======|");
+  loop await first {
+    receive fromA(v) => print("======================", v);
+    receive fromB(v) => print("=========================", v);
+  }
+}
