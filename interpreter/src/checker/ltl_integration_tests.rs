@@ -238,6 +238,36 @@ check {
     }
 
     #[test]
+    fn test_eventually_on_partial_graph_does_not_report_frontier_as_terminal() -> AlthreadResult<()> {
+        let source = r#"
+shared {
+    let Step: int = 0;
+}
+
+program Worker() {
+    Step = 1;
+    Step = 2;
+}
+
+main {
+    run Worker();
+}
+
+check {
+    eventually Step == 2;
+}
+"#;
+
+        let project = compile_from_source(source);
+        let (violations, graph) = check_program(&project, Some(2))?;
+
+        assert!(violations.is_empty(), "Partial exploration must not invent a liveness counterexample at the frontier");
+        assert!(!graph.exhaustive, "Expected the graph to be truncated by the state limit");
+        assert!(graph.nodes.iter().any(|node| !node.expanded), "Expected at least one frontier node to remain unexpanded");
+        Ok(())
+    }
+
+    #[test]
     fn test_eventually_shared_list_updates_are_observed() -> AlthreadResult<()> {
         let source = r#"
 shared {

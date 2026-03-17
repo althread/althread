@@ -464,7 +464,7 @@ pub fn check(
         .map_err(error_to_js)?;
 
     let (path, state_graph) = checker::check_program(&compiled_project, max_states).map_err(error_to_js)?;
-    let omit_transition_details = path.is_empty() && state_graph.nodes.len() > WEB_GRAPH_DETAILS_THRESHOLD;
+    let omit_transition_details = state_graph.nodes.len() > WEB_GRAPH_DETAILS_THRESHOLD;
     
     // Convert path to GraphNode structure
     let path_nodes: Vec<GraphNode> = path.iter().enumerate().map(|(idx, state_link)| {

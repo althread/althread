@@ -20,8 +20,9 @@ interface GraphProps {
     ref?: (instance: { selectNode: (nodeId: string | number) => void }) => void;
 }
 
+export const MAX_VISIBLE_GRAPH_NODES = 200;
+
 export default (props: GraphProps) => {
-    const MAX_VISIBLE_GRAPH_NODES = 200;
     let container: HTMLDivElement | undefined;
     let network: vis.Network | null = null;
     const [maximized, setMaximized] = createSignal(false);
