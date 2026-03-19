@@ -51,6 +51,7 @@ pub struct GraphNode {
     pub predecessor: Option<StateId>,
     pub successors: Vec<StateLink>,
     pub eventually: bool,
+    pub expanded: bool,
 }
 
 #[derive(Debug)]
@@ -92,11 +93,12 @@ impl Serialize for GraphNode {
         S: Serializer,
     {
         // 3 is the number of fields in the struct.
-        let mut state = serializer.serialize_struct("GraphNode", 4)?;
+        let mut state = serializer.serialize_struct("GraphNode", 5)?;
         state.serialize_field("level", &self.level)?;
         state.serialize_field("predecessor", &self.predecessor)?;
         state.serialize_field("successors", &self.successors)?;
         state.serialize_field("eventually", &self.eventually)?;
+        state.serialize_field("expanded", &self.expanded)?;
         state.end()
     }
 }
@@ -127,6 +129,7 @@ impl GraphNode {
             predecessor,
             eventually: false,
             successors: Vec::new(),
+            expanded: false,
         }
     }
 }
@@ -221,6 +224,8 @@ fn build_state_graph<'a>(
                 name,
             });
         }
+
+        state_graph.nodes[current_state].expanded = true;
     }
 
     Ok(state_graph)
@@ -501,6 +506,7 @@ fn check_program_with_ltl<'a>(
             
             visited_outer.insert(current_state.clone());
             on_stack.insert(current_state.clone());
+            let current_vm_id = current_state.vm;
             
             // ================================================================
             // OPTIMIZATION: Early violation detection
@@ -509,11 +515,14 @@ fn check_program_with_ltl<'a>(
             // we can immediately report a violation. This gives:
             // - Shorter counter-example traces (exactly where violation occurs)
             // - Faster detection (no need to find the actual cycle)
-            let is_immediate_accepting = monitors_in_immediate_accepting_state(
-                &current_state.monitors,
-                &automatons,
-                &compiled_project.compiled_ltl_formulas,
-            );
+            let is_terminal_state = state_graph.nodes[current_vm_id].expanded
+                && state_graph.nodes[current_vm_id].successors.is_empty();
+            let is_immediate_accepting = is_terminal_state
+                && monitors_in_immediate_accepting_state(
+                    &current_state.monitors,
+                    &automatons,
+                    &compiled_project.compiled_ltl_formulas,
+                );
             
             if is_immediate_accepting {
                 log::debug!("DEBUG: Immediate accepting state detected (no temporal obligations)");
@@ -525,7 +534,6 @@ fn check_program_with_ltl<'a>(
             // Push post-order visit
             dfs_stack.push((current_state.clone(), 1));
             
-            let current_vm_id = current_state.vm;
             let current_vm = state_graph.vm(current_vm_id).clone();
             let current_monitors = &current_state.monitors;
             // Get VM successors from the prebuilt state graph
@@ -535,7 +543,7 @@ fn check_program_with_ltl<'a>(
             // This includes both proper termination (is_finished=true) and deadlock states
             // (no successors but processes still waiting). In both cases, the execution
             // can only "stutter" in place forever, which we model as a self-loop.
-            if successors.is_empty() {
+            if successors.is_empty() && state_graph.nodes[current_vm_id].expanded {
                 log::debug!("DEBUG: Terminal state - is_finished={}", current_vm.is_finished());
                 
                 // Model stuttering as a self-loop: VM stays in same state, monitor transitions
@@ -569,6 +577,11 @@ fn check_program_with_ltl<'a>(
                         dfs_stack.push((next_product_state, 0));
                     }
                 }
+                continue;
+            }
+
+            if successors.is_empty() {
+                log::debug!("DEBUG: Frontier state reached before full expansion, skipping terminal-state reasoning");
                 continue;
             }
             

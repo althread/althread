@@ -4,7 +4,7 @@ import Resizable from '@corvu/resizable'
 
 import init, { initialize, start_interactive_session, get_next_interactive_states, execute_interactive_step } from '../pkg/althread_web';
 import createEditor from '@components/editor/Editor';
-import Graph from "@components/graph/Graph";
+import Graph, { MAX_VISIBLE_GRAPH_NODES } from "@components/graph/Graph";
 import { Logo } from "@assets/images/Logo";
 import { renderMessageFlowGraph } from "@components/graph/CommGraph";
 import type { FileSystemEntry } from '@components/fileexplorer/FileExplorer';
@@ -34,6 +34,7 @@ init().then(() => {
 });
 
 const animationTimeOut = 100; //ms
+const DEFAULT_WEB_CHECK_MAX_STATES = 10_000;
 
 export default function App() {
   // Load file system from localStorage
@@ -450,13 +451,19 @@ export default function App() {
 
   const getCheckTooLargeStatus = (result: CheckResult) => {
     if (result.path.length > 0) {
-      return "Verification result: a violation was found.";
+      if (result.exhaustive) {
+        return "Verification result: a violation was found.";
+      }
+      return "Verification result: a violation was found before exploration completed. The counterexample is valid, but the explored graph is partial.";
     }
     if (result.exhaustive) {
       return "Verification result: the check succeeded with no violation.";
     }
     return "Verification result: exploration stopped before the check could complete.";
   };
+
+  const buildHiddenGraphPlaceholders = (count: number) =>
+    Array.from({ length: count }, (_, id) => ({ id }));
 
   const getDeadlockExecutionOutput = (error: any, fallbackOutput = "") => {
     const errorInfo = formatAlthreadError(
@@ -1016,10 +1023,19 @@ export default function App() {
                     filePath = editorManager.activeFile()!.name; // Fallback to name if ID not found
                   }
 
-                  let res: CheckResult = await workerClient.check(editor.editorView().state.doc.toString(), filePath, virtualFS);
+                  let res: CheckResult = await workerClient.check(
+                    editor.editorView().state.doc.toString(),
+                    filePath,
+                    virtualFS,
+                    DEFAULT_WEB_CHECK_MAX_STATES,
+                  );
                   
                   if (res.path.length > 0) {
-                      setOut("Violation found! See the highlighted path in the VM states graph.");
+                      if (res.exhaustive) {
+                        setOut("Violation found! See the highlighted path in the VM states graph.");
+                      } else {
+                        setOut("Violation found before exploration completed. The counterexample is valid, but the explored graph is partial. See the highlighted path in the VM states graph.");
+                      }
                   } else if (res.exhaustive) {
                     setOut("Verification complete: No execution errors found.");
                   } else {
@@ -1038,14 +1054,18 @@ export default function App() {
                   
                   const violationPathStates = res.path.map((pathItem) => pathItem.vm);
 
-                  // Build the graph with violation highlighting
-                  const builtGraph = buildGraphFromNodes(res.nodes, { 
-                    mode: 'check', 
-                    violationPathStates
-                  });
-                  
-                  setNodes(builtGraph.nodes);
-                  setEdges(builtGraph.edges);
+                  if (res.nodes.length > MAX_VISIBLE_GRAPH_NODES) {
+                    setNodes(buildHiddenGraphPlaceholders(res.nodes.length));
+                    setEdges([]);
+                  } else {
+                    const builtGraph = buildGraphFromNodes(res.nodes, { 
+                      mode: 'check', 
+                      violationPathStates
+                    });
+                    
+                    setNodes(builtGraph.nodes);
+                    setEdges(builtGraph.edges);
+                  }
                   setIsRun(false);
 
                 } catch(e: any) {
