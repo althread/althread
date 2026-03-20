@@ -16,7 +16,10 @@ use althread::{
     },
     error::Pos,
     module_resolver::StandardFileSystem,
-    vm::{instruction::{Instruction, InstructionType}, GlobalAction, VM},
+    vm::{
+        instruction::{Instruction, InstructionType},
+        GlobalAction, VM,
+    },
 };
 
 // A simple test to verify that the compiler can compile a simple program
@@ -307,7 +310,10 @@ main {
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
 
-    assert_eq!(compiled_project.global_memory.get("Base"), Some(&Literal::Int(1)));
+    assert_eq!(
+        compiled_project.global_memory.get("Base"),
+        Some(&Literal::Int(1))
+    );
     assert_eq!(
         compiled_project.global_memory.get("Tab"),
         Some(&Literal::List(
@@ -344,7 +350,11 @@ main {
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
 
-    let instructions = &compiled_project.programs_code.get("A").unwrap().instructions;
+    let instructions = &compiled_project
+        .programs_code
+        .get("A")
+        .unwrap()
+        .instructions;
 
     assert!(instructions.iter().any(|instruction| {
         matches!(
@@ -1309,7 +1319,7 @@ main {
             control: InstructionType::EndProgram,
         },
     ];
-    
+
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
 
@@ -1370,7 +1380,7 @@ main {
             pos: Some(Pos {
                 line: 3,
                 col: 5,
-                start: 12, 
+                start: 12,
                 end: 15,
                 file_path: "".to_string(),
             }),

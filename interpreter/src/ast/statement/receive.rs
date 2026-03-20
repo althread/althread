@@ -52,10 +52,7 @@ impl NodeBuilder for ReceiveStatement {
             variables.push(String::from(pair.as_str()));
         }
 
-        Ok(Self {
-            channel,
-            variables,
-        })
+        Ok(Self { channel, variables })
     }
 }
 
@@ -103,7 +100,7 @@ impl InstructionBuilder for Node<ReceiveStatement> {
             control: InstructionType::ChannelPeek(channel_name.clone()),
             pos: Some(self.pos.clone()),
         }); // Peek has the effect of adding the values of the tuple to the stack and a boolean
-        // We must push default values if the channel is empty, just so that the stack is consistent
+            // We must push default values if the channel is empty, just so that the stack is consistent
 
         for (i, variable) in self.value.variables.iter().enumerate() {
             state.program_stack.push(Variable {
@@ -125,7 +122,7 @@ impl InstructionBuilder for Node<ReceiveStatement> {
 
         builder.instructions.push(Instruction {
             control: InstructionType::JumpIf {
-                jump_false: 3, // If the channel is empty, ignore the channel pop
+                jump_false: 3,  // If the channel is empty, ignore the channel pop
                 unstack_len: 0, // we keep the boolean value on the stack
             },
             pos: Some(self.pos.clone()),
@@ -137,23 +134,18 @@ impl InstructionBuilder for Node<ReceiveStatement> {
         });
         // now we jump over the push of default values
         builder.instructions.push(Instruction {
-            control: InstructionType::Jump (5),
+            control: InstructionType::Jump(5),
             pos: Some(self.pos.clone()),
         });
         // remove the false boolean
         builder.instructions.push(Instruction {
-            control: InstructionType::Unstack{
-                unstack_len: 1,
-            },
+            control: InstructionType::Unstack { unstack_len: 1 },
             pos: Some(self.pos.clone()),
         });
         // push default values, by pushing a tuple and the descructuring it
         builder.instructions.push(Instruction {
             control: InstructionType::Push(Literal::Tuple(
-                channel_types
-                    .iter()
-                    .map(|dt| dt.default())
-                    .collect(),
+                channel_types.iter().map(|dt| dt.default()).collect(),
             )),
             pos: Some(self.pos.clone()),
         });
@@ -166,7 +158,7 @@ impl InstructionBuilder for Node<ReceiveStatement> {
             control: InstructionType::Push(Literal::Bool(false)),
             pos: Some(self.pos.clone()),
         });
-        
+
         Ok(builder)
     }
 }

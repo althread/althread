@@ -281,14 +281,13 @@ impl fmt::Display for InstructionType {
 impl InstructionType {
     pub fn is_local(&self) -> bool {
         match self {
-              Self::GlobalAssignment {..}
+            Self::GlobalAssignment { .. }
             | Self::ChannelPeek(_)
-            | Self::AtomicStart // starts a block that surely contains a global operation           
-            
-             // Labels are NOT local - they create a state in the state graph
+            | Self::AtomicStart // starts a block that surely contains a global operation
+            // Labels are NOT local - they create a state in the state graph
             // This allows checking if a process is at a specific label using reaches()
-            | Self::Label {..}
-            | Self::WaitStart {..} => false, // wait starts an atomic block to evaluate the conditions
+            | Self::Label { ..}
+            | Self::WaitStart { .. } => false, // wait starts an atomic block to evaluate the conditions
 
             Self::GlobalReads {only_const, ..} => *only_const, // a global read is local only if it reads constant variables
 

@@ -195,7 +195,7 @@ impl InstructionBuilder for Declaration {
         let stack_index = state.program_stack.len();
         // Variable becomes valid at the next instruction (after the declaration instruction)
         let scope_start_ip = builder.instructions.len();
-        
+
         state.program_stack.push(Variable {
             mutable: self.keyword.value == DeclarationKeyword::Let,
             name: var_name.clone(), // Use the simple variable name, not the full qualified name
@@ -203,16 +203,18 @@ impl InstructionBuilder for Declaration {
             depth: state.current_stack_depth,
             declare_pos: Some(self.identifier.pos.clone()),
         });
-        
+
         // Add debug info to the builder (will be adjusted when builders are extended)
-        builder.debug_variables.push(crate::compiler::LocalVariableDebugInfo {
-            name: var_name.clone(),
-            datatype,
-            stack_index,
-            scope_start_ip,
-            scope_end_ip: None,
-            declare_pos: Some(self.identifier.pos.clone()),
-        });
+        builder
+            .debug_variables
+            .push(crate::compiler::LocalVariableDebugInfo {
+                name: var_name.clone(),
+                datatype,
+                stack_index,
+                scope_start_ip,
+                scope_end_ip: None,
+                declare_pos: Some(self.identifier.pos.clone()),
+            });
 
         Ok(builder)
     }

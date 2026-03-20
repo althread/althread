@@ -371,7 +371,7 @@ impl<'a> VM<'a> {
                 GlobalAction::Exit => self.running_programs.clear(),
                 GlobalAction::Print(_) => {} // do nothing, this is just a print action
                 GlobalAction::Send(_) => {}  // do nothing, sending is already handled
-                GlobalAction::Broadcast(_) => {} 
+                GlobalAction::Broadcast(_) => {}
             }
         }
         if actions.end {
@@ -481,7 +481,7 @@ impl<'a> VM<'a> {
                 GlobalAction::Exit => self.running_programs.clear(),
                 GlobalAction::Print(_) => {} // do nothing, this is just a print action
                 GlobalAction::Send(_) => {}  // do nothing, sending is already handled
-                GlobalAction::Broadcast(_) => {} 
+                GlobalAction::Broadcast(_) => {}
             }
         }
         if actions.end {
@@ -791,7 +791,10 @@ impl<'a> Serialize for VM<'a> {
             .collect();
 
         s.serialize_field("locals", &serializable_program_states)?;
-        s.serialize_field("pending_deliveries", &self.channels.get_pending_deliveries())?;
+        s.serialize_field(
+            "pending_deliveries",
+            &self.channels.get_pending_deliveries(),
+        )?;
         s.serialize_field("waiting_send", &self.channels.get_waiting_send())?;
         s.serialize_field("channel_connections", &self.channels.get_connections())?;
 

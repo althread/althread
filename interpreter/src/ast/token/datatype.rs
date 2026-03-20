@@ -132,7 +132,7 @@ impl NodeBuilder for DataType {
                     types.push(datatype);
                 }
                 Ok(Self::Tuple(types))
-            },
+            }
             Rule::LIST_TYPE => {
                 let mut pairs = pair.into_inner();
                 let datatype = DataType::build(pairs.next().unwrap().into_inner(), filepath)?;

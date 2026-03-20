@@ -30,14 +30,22 @@ impl NodeBuilder for BinaryAssignment {
         let operator = Node::build(pairs.next().unwrap(), filepath)?;
         let value = Node::build(pairs.next().unwrap(), filepath)?;
 
-
         // do not allow read-update assignment (e.g., a += 1) on global variables
         if operator.value != BinaryAssignmentOperator::Assign {
             //check if the identifier starts with an uppercase letter, which indicates a global variable
             let first_ident = identifier
                 .value
-                .parts.first().expect("identifier must have at least one part");
-            if first_ident.value.value.chars().next().unwrap().is_uppercase() {
+                .parts
+                .first()
+                .expect("identifier must have at least one part");
+            if first_ident
+                .value
+                .value
+                .chars()
+                .next()
+                .unwrap()
+                .is_uppercase()
+            {
                 return Err(AlthreadError::new(
                     ErrorType::VariableError,
                     Some(first_ident.pos.clone()),

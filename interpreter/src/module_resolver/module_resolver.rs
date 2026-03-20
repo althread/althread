@@ -117,11 +117,12 @@ impl<F: FileSystem + Clone> ModuleResolver<F> {
             }
 
             import_stack.push(resolved.path.clone());
-            let pairs = parser::parse(
+            let module_ast = parser::parse_ast(
                 &module_content,
                 &resolved.path.to_string_lossy().to_string(),
-            )?;
-            let module_ast = Ast::build(pairs, &resolved.path.to_string_lossy().to_string())?;
+                parser::ParserOptions::default(),
+            )?
+            .ast;
 
             if let Some(import_block) = &module_ast.import_block {
                 let mut nested_resolver = Self::new(&resolved.path, self.filesystem.clone());

@@ -139,7 +139,10 @@ impl LocalBinaryExpressionNode {
                 if left_type == DataType::Integer && right_type == DataType::Integer {
                     Ok(DataType::Integer)
                 } else {
-                    Err("bitwise shift operations can only be performed between integers".to_string())
+                    Err(
+                        "bitwise shift operations can only be performed between integers"
+                            .to_string(),
+                    )
                 }
             }
             BinaryOperator::BitAnd | BinaryOperator::BitOr => {

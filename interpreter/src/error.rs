@@ -1,3 +1,4 @@
+use ariadne::{Color, Label, Report, ReportKind, Source};
 use pest::Span;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt, rc::Rc};
@@ -32,6 +33,23 @@ impl<'i> Pos {
             col: start_pos.1,
             start: span.start(),
             end: span.end(),
+            file_path: file_path.to_string(),
+        }
+    }
+
+    pub fn from_offsets(source: &str, file_path: &str, start: usize, end: usize) -> Self {
+        let safe_start = start.min(source.len());
+        let safe_end = end.min(source.len()).max(safe_start);
+        let prefix = &source[..safe_start];
+        let line = prefix.bytes().filter(|byte| *byte == b'\n').count() + 1;
+        let line_start = prefix.rfind('\n').map_or(0, |idx| idx + 1);
+        let col = safe_start.saturating_sub(line_start) + 1;
+
+        Self {
+            line,
+            col,
+            start: safe_start,
+            end: safe_end,
             file_path: file_path.to_string(),
         }
     }
@@ -151,20 +169,24 @@ impl AlthreadError {
     }
 
     pub fn report(&self, input_map: &HashMap<String, String>) {
-        match &self.pos {
-            Some(pos) => {
-                if !pos.file_path.is_empty() {
-                    eprintln!("Error in {} at {}:{}", pos.file_path, pos.line, pos.col);
-                } else {
-                    eprintln!("Error at {}:{}", pos.line, pos.col);
+        if let Some(rendered) = self.rendered_report(input_map) {
+            eprint!("{rendered}");
+        } else {
+            match &self.pos {
+                Some(pos) => {
+                    if !pos.file_path.is_empty() {
+                        eprintln!("Error in {} at {}:{}", pos.file_path, pos.line, pos.col);
+                    } else {
+                        eprintln!("Error at {}:{}", pos.line, pos.col);
+                    }
+                    self.print_err_line(input_map);
                 }
-                self.print_err_line(input_map);
-            }
-            None => {
-                eprintln!("Runtime Error:");
-            }
-        };
-        eprintln!("{}: {}", self.error_type, self.message);
+                None => {
+                    eprintln!("Runtime Error:");
+                }
+            };
+            eprintln!("{}: {}", self.error_type, self.message);
+        }
 
         // Print error stack
         if !self.stack.is_empty() {
@@ -196,5 +218,39 @@ impl AlthreadError {
             eprintln!("{} |{}^---", line_indent, " ".repeat(pos.col));
             eprintln!("{} |", line_indent);
         }
+    }
+
+    pub fn rendered_report(&self, input_map: &HashMap<String, String>) -> Option<String> {
+        let pos = self.pos.as_ref()?;
+        let file_path = if pos.file_path.is_empty() {
+            "<input>".to_string()
+        } else {
+            pos.file_path.clone()
+        };
+        let source = if pos.file_path.is_empty() {
+            input_map
+                .get("")
+                .or_else(|| input_map.values().next())
+                .cloned()?
+        } else {
+            input_map.get(&pos.file_path).cloned()?
+        };
+
+        let mut output = Vec::new();
+        let start = pos.start.min(source.len());
+        let end = pos.end.max(start + 1).min(source.len());
+        let report = Report::build(ReportKind::Error, (&file_path, start..end))
+            .with_message(format!("{}: {}", self.error_type, self.message))
+            .with_label(
+                Label::new((&file_path, start..end))
+                    .with_message(self.message.clone())
+                    .with_color(Color::Red),
+            )
+            .finish();
+
+        report
+            .write((&file_path, Source::from(source)), &mut output)
+            .ok()?;
+        Some(String::from_utf8_lossy(&output).into_owned())
     }
 }

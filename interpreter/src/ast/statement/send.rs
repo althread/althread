@@ -49,8 +49,7 @@ impl NodeBuilder for SendStatement {
             next_pair = pairs.next().unwrap();
         }
 
-        let values: Node<Expression> =
-            Expression::build_top_level(next_pair, filepath)?;
+        let values: Node<Expression> = Expression::build_top_level(next_pair, filepath)?;
 
         if !values.value.is_tuple() {
             return Err(AlthreadError::new(

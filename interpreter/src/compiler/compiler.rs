@@ -284,11 +284,8 @@ impl Ast {
                 let mut element_type = DataType::Void;
 
                 for (index, element) in elements.iter().enumerate() {
-                    let literal = Self::evaluate_shared_side_effect_expression(
-                        element,
-                        scope,
-                        memory,
-                    )?;
+                    let literal =
+                        Self::evaluate_shared_side_effect_expression(element, scope, memory)?;
                     let literal_type = literal.get_datatype();
 
                     if index == 0 {
@@ -516,9 +513,7 @@ impl Ast {
                         state
                             .global_table_mut()
                             .insert(var_name.clone(), last_program_stack);
-                        state
-                            .global_memory_mut()
-                            .insert(var_name.clone(), literal);
+                        state.global_memory_mut().insert(var_name.clone(), literal);
                     }
                     _ => {
                         return Err(AlthreadError::new(
@@ -1246,11 +1241,11 @@ impl Ast {
         // Capture argument names for debug info
         let mut argument_names = Vec::new();
         let mut debug_variables = Vec::new();
-        
+
         for (i, var) in args.value.identifiers.iter().enumerate() {
             let var_name = var.value.value.clone();
             argument_names.push(var_name.clone());
-            
+
             state.program_stack.push(Variable {
                 name: var_name.clone(),
                 depth: state.current_stack_depth,
@@ -1258,7 +1253,7 @@ impl Ast {
                 datatype: args.value.datatypes[i].value.clone(),
                 declare_pos: Some(var.pos.clone()),
             });
-            
+
             // Add debug variable for program arguments (available from the start)
             debug_variables.push(crate::compiler::LocalVariableDebugInfo {
                 name: var_name,
@@ -1277,10 +1272,10 @@ impl Ast {
         if compiled.contains_jump() {
             unimplemented!("breaks or return statements in programs are not yet implemented");
         }
-        
+
         // Collect debug variables from the compiled builder
         debug_variables.extend(compiled.debug_variables);
-        
+
         if !args.value.identifiers.is_empty() {
             process_code.instructions.push(Instruction {
                 control: InstructionType::Destruct,
@@ -1318,7 +1313,7 @@ impl Ast {
         label_map.insert("end".to_string(), end_index);
         process_code.labels = label_map;
         process_code.argument_names = argument_names.clone();
-        
+
         // Store debug info for this program
         state.program_debug_info.insert(
             state.current_program_name.clone(),
@@ -1327,10 +1322,10 @@ impl Ast {
                 local_variables: debug_variables,
             },
         );
-        
+
         // Clear debug variables for next program
         state.debug_variables.clear();
-        
+
         Ok(process_code)
     }
 }

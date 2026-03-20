@@ -976,14 +976,18 @@ impl LocalExpressionNode {
                     if let Some(var) = var.or(global_var) {
                         let interfaces = state.stdlib().interfaces(&var.datatype);
                         if !interfaces.is_empty() {
-                            let method_name = node.value.method_name().ok_or_else(|| {
-                                format!("Method name missing in {}", full_name)
-                            })?;
+                            let method_name = node
+                                .value
+                                .method_name()
+                                .ok_or_else(|| format!("Method name missing in {}", full_name))?;
                             if let Some(method) = interfaces.iter().find(|m| m.name == method_name)
                             {
                                 Ok(method.ret.clone())
                             } else {
-                                Err(format!("No method {} found on variable of type {}", method_name, var.datatype))
+                                Err(format!(
+                                    "No method {} found on variable of type {}",
+                                    method_name, var.datatype
+                                ))
                             }
                         } else {
                             Err(format!("Type {} has no available methods", var.datatype))
@@ -996,7 +1000,7 @@ impl LocalExpressionNode {
             Self::Reaches(node) => {
                 if !state.in_condition_block {
                     return Err(
-                        "'reaches' is only available inside always/check blocks".to_string(),
+                        "'reaches' is only available inside always/check blocks".to_string()
                     );
                 }
                 let mem_len = state.program_stack.len();
@@ -1059,8 +1063,12 @@ impl LocalExpressionNode {
                         LocalCallChainSegment::Call { name, args } => {
                             let interfaces = state.stdlib().interfaces(&current_type);
                             let method = interfaces.iter().find(|m| m.name == *name);
-                            let method =
-                                method.ok_or_else(|| format!("No method {} found on variable of type {}", name, current_type))?;
+                            let method = method.ok_or_else(|| {
+                                format!(
+                                    "No method {} found on variable of type {}",
+                                    name, current_type
+                                )
+                            })?;
 
                             let args_type = args.datatype(state)?;
                             if let DataType::Tuple(arg_types) = args_type {
@@ -1123,8 +1131,7 @@ impl LocalExpressionNode {
             Self::IfExpr(node) => {
                 if !state.in_condition_block {
                     return Err(
-                        "if-expressions are only supported inside always/check blocks"
-                            .to_string(),
+                        "if-expressions are only supported inside always/check blocks".to_string(),
                     );
                 }
                 let cond_type = node.condition.datatype(state)?;
@@ -1132,7 +1139,7 @@ impl LocalExpressionNode {
                     return Err("if condition must be boolean".to_string());
                 }
                 let then_type = node.then_expr.datatype(state)?;
-                
+
                 if let Some(else_expr) = &node.else_expr {
                     let else_type = else_expr.datatype(state)?;
                     if then_type != else_type {
@@ -1141,16 +1148,17 @@ impl LocalExpressionNode {
                     Ok(then_type)
                 } else {
                     if then_type != DataType::Boolean {
-                         return Err("if A { B } (without else) is an implication, so B must be boolean".to_string());
+                        return Err(
+                            "if A { B } (without else) is an implication, so B must be boolean"
+                                .to_string(),
+                        );
                     }
                     Ok(DataType::Boolean)
                 }
             }
             Self::ForAll(node) => {
                 if !state.in_condition_block {
-                    return Err(
-                        "forall is only supported inside always/check blocks".to_string()
-                    );
+                    return Err("forall is only supported inside always/check blocks".to_string());
                 }
                 let list_type = node.list.datatype(state)?;
                 let elem_type = match list_type {
@@ -1196,9 +1204,7 @@ impl LocalExpressionNode {
             }
             Self::Exists(node) => {
                 if !state.in_condition_block {
-                    return Err(
-                        "exists is only supported inside always/check blocks".to_string()
-                    );
+                    return Err("exists is only supported inside always/check blocks".to_string());
                 }
                 let list_type = node.list.datatype(state)?;
                 let elem_type = match list_type {
@@ -1476,7 +1482,8 @@ impl LocalExpressionNode {
                     None => {
                         log::debug!(
                             "reaches({}) for pid {}: process not in running_programs (terminated)",
-                            node.label, pid
+                            node.label,
+                            pid
                         );
                         if node.label == "end" {
                             return Ok(Literal::Bool(true));
@@ -1501,13 +1508,18 @@ impl LocalExpressionNode {
 
                 let (_, ip, _) = prog_state.current_state();
                 let reached = ip == *label_pc;
-                
+
                 // Debug logging to understand the issue
                 log::debug!(
                     "reaches({}) for process {} (pid={}): ip={}, label_pc={}, reached={}",
-                    node.label, program_name, pid, ip, label_pc, reached
+                    node.label,
+                    program_name,
+                    pid,
+                    ip,
+                    label_pc,
+                    reached
                 );
-                
+
                 Ok(Literal::Bool(reached))
             }
             LocalExpressionNode::CallChain(node) => {
@@ -1525,7 +1537,10 @@ impl LocalExpressionNode {
                             )?;
                         }
                         LocalCallChainSegment::Reaches { label } => {
-                            log::debug!("CallChain Reaches evaluation started for label '{}'", label);
+                            log::debug!(
+                                "CallChain Reaches evaluation started for label '{}'",
+                                label
+                            );
                             let (program_name, pid) = match &current {
                                 Literal::Process(name, pid) => {
                                     log::debug!("  Current is Process({}, {})", name, pid);
@@ -1540,7 +1555,11 @@ impl LocalExpressionNode {
 
                             let prog_state = match vm.running_programs.get(pid) {
                                 Some(p) => {
-                                    log::debug!("  Process {} (pid={}) found in running_programs", program_name, pid);
+                                    log::debug!(
+                                        "  Process {} (pid={}) found in running_programs",
+                                        program_name,
+                                        pid
+                                    );
                                     p
                                 }
                                 None => {
@@ -1555,7 +1574,11 @@ impl LocalExpressionNode {
                             };
 
                             if prog_state.name != program_name {
-                                log::debug!("  Program name mismatch: expected {}, got {}", program_name, prog_state.name);
+                                log::debug!(
+                                    "  Program name mismatch: expected {}, got {}",
+                                    program_name,
+                                    prog_state.name
+                                );
                                 current = Literal::Bool(false);
                                 continue;
                             }
@@ -1575,7 +1598,11 @@ impl LocalExpressionNode {
                                     pc
                                 }
                                 None => {
-                                    log::debug!("  Label '{}' not found in program {}", label, program_name);
+                                    log::debug!(
+                                        "  Label '{}' not found in program {}",
+                                        label,
+                                        program_name
+                                    );
                                     current = Literal::Bool(false);
                                     continue;
                                 }
@@ -1774,16 +1801,11 @@ impl InstructionBuilder for Node<Expression> {
             self.value.get_vars(&mut vars);
         }
 
-        if !state.in_condition_block
-            && vars
-                .iter()
-                .any(|var| var.starts_with("$.procs."))
-        {
+        if !state.in_condition_block && vars.iter().any(|var| var.starts_with("$.procs.")) {
             return Err(AlthreadError::new(
                 ErrorType::InstructionNotAllowed,
                 Some(self.pos.clone()),
-                "$.procs.* is only available inside always/check blocks"
-                    .to_string(),
+                "$.procs.* is only available inside always/check blocks".to_string(),
             ));
         }
 
@@ -1909,9 +1931,7 @@ impl InstructionBuilder for Node<Expression> {
                     LocalExpressionNode::Binary(node) => {
                         LocalExpressionNode::Binary(LocalBinaryExpressionNode {
                             left: Box::new(shift_non_temp_var_indices(
-                                &node.left,
-                                shift,
-                                temp_count,
+                                &node.left, shift, temp_count,
                             )),
                             operator: node.operator.clone(),
                             right: Box::new(shift_non_temp_var_indices(
@@ -1936,9 +1956,7 @@ impl InstructionBuilder for Node<Expression> {
                             values: node
                                 .values
                                 .iter()
-                                .map(|value| {
-                                    shift_non_temp_var_indices(value, shift, temp_count)
-                                })
+                                .map(|value| shift_non_temp_var_indices(value, shift, temp_count))
                                 .collect(),
                         })
                     }
@@ -2343,7 +2361,7 @@ mod tests {
             Literal::Int(42 + 42)
         );
     }
-    
+
     #[test]
     fn test_shift_left_expression() {
         let literal_node = Node {

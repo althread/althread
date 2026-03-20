@@ -19,7 +19,9 @@ const RECV: u8 = b'r';
 
 /// Helper to serialize with json_compatible mode (no Maps, plain objects)
 fn to_js<T: Serialize>(value: &T) -> JsValue {
-    value.serialize(&serde_wasm_bindgen::Serializer::json_compatible()).unwrap()
+    value
+        .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
+        .unwrap()
 }
 
 fn find_delivered_message(
@@ -81,15 +83,19 @@ fn runtime_error_info(err: AlthreadError) -> RuntimeErrorInfo {
 // Convert a VM Literal to a typed web Literal
 fn value_to_literal(value: &althread::ast::token::literal::Literal) -> types::Literal {
     use althread::ast::token::literal::Literal as VmLiteral;
-    
+
     match value {
         VmLiteral::Null => types::Literal::Null,
         VmLiteral::Int(n) => types::Literal::Int(*n),
         VmLiteral::Float(f) => types::Literal::Float(f.into_inner()),
         VmLiteral::String(s) => types::Literal::String(s.clone()),
         VmLiteral::Bool(b) => types::Literal::Bool(*b),
-        VmLiteral::List(_, items) => types::Literal::List(items.iter().map(value_to_literal).collect()),
-        VmLiteral::Tuple(items) => types::Literal::Tuple(items.iter().map(value_to_literal).collect()),
+        VmLiteral::List(_, items) => {
+            types::Literal::List(items.iter().map(value_to_literal).collect())
+        }
+        VmLiteral::Tuple(items) => {
+            types::Literal::Tuple(items.iter().map(value_to_literal).collect())
+        }
         VmLiteral::Process(name, id) => types::Literal::Process(name.clone(), *id),
     }
 }
@@ -98,11 +104,15 @@ fn value_to_literal(value: &althread::ast::token::literal::Literal) -> types::Li
 fn create_vm_state(vm: &althread::vm::VM) -> VMState {
     let current_state = vm.current_state();
 
-    let globals = current_state.0.iter()
+    let globals = current_state
+        .0
+        .iter()
         .map(|(key, value)| (key.clone(), value_to_literal(value)))
         .collect();
 
-    let channels = current_state.1.iter()
+    let channels = current_state
+        .1
+        .iter()
         .map(|((pid, name), values)| ChannelState {
             pid: *pid,
             name: name.clone(),
@@ -110,7 +120,10 @@ fn create_vm_state(vm: &althread::vm::VM) -> VMState {
         })
         .collect();
 
-    let pending_deliveries = vm.channels.get_pending_deliveries().iter()
+    let pending_deliveries = vm
+        .channels
+        .get_pending_deliveries()
+        .iter()
         .map(|((f_pid, f_chan, t_pid, t_chan), values)| PendingDelivery {
             from_pid: *f_pid,
             from_channel: f_chan.clone(),
@@ -120,7 +133,10 @@ fn create_vm_state(vm: &althread::vm::VM) -> VMState {
         })
         .collect();
 
-    let waiting_send = vm.channels.get_waiting_send().iter()
+    let waiting_send = vm
+        .channels
+        .get_waiting_send()
+        .iter()
         .map(|((pid, name), values)| WaitingSend {
             pid: *pid,
             name: name.clone(),
@@ -128,48 +144,63 @@ fn create_vm_state(vm: &althread::vm::VM) -> VMState {
         })
         .collect();
 
-    let channel_connections = vm.channels.get_connections().iter()
-        .map(|((from_pid, from_channel), (to_pid, to_channel))| ChannelConnection {
-            from: ChannelEndpoint {
-                pid: *from_pid,
-                channel: from_channel.clone(),
+    let channel_connections = vm
+        .channels
+        .get_connections()
+        .iter()
+        .map(
+            |((from_pid, from_channel), (to_pid, to_channel))| ChannelConnection {
+                from: ChannelEndpoint {
+                    pid: *from_pid,
+                    channel: from_channel.clone(),
+                },
+                to: ChannelEndpoint {
+                    pid: *to_pid,
+                    channel: to_channel.clone(),
+                },
             },
-            to: ChannelEndpoint {
-                pid: *to_pid,
-                channel: to_channel.clone(),
-            },
-        })
+        )
         .collect();
 
-    let locals = current_state.2.iter().enumerate()
+    let locals = current_state
+        .2
+        .iter()
+        .enumerate()
         .map(|(index, (memory, instruction_pointer, clock))| {
-            let prog_name = vm.running_programs.get(index)
+            let prog_name = vm
+                .running_programs
+                .get(index)
                 .map(|p| p.name.clone())
                 .unwrap_or_else(|| format!("PID_{}", index));
-            
-            let line = vm.programs_code.get(&prog_name)
+
+            let line = vm
+                .programs_code
+                .get(&prog_name)
                 .and_then(|code| code.instructions.get(*instruction_pointer))
                 .and_then(|inst| inst.pos.as_ref())
                 .map(|pos| pos.line);
-            
+
             let debug_info = vm.program_debug_info.get(&prog_name);
-            let call_stack_info = vm.running_programs.get(index)
+            let call_stack_info = vm
+                .running_programs
+                .get(index)
                 .map(|p| p.get_call_stack_info())
                 .unwrap_or_default();
-            
+
             // Build frames information with named variables
             let mut frames = Vec::new();
-            
+
             // Current frame (top of call stack)
             if let Some((fp, ip, pos)) = call_stack_info.first() {
                 let mut variables = HashMap::new();
-                
+
                 // Add variables for the current frame
                 if let Some(debug) = debug_info {
                     for var_info in &debug.local_variables {
                         // Check if variable is in scope at current instruction pointer
-                        if var_info.scope_start_ip <= *ip 
-                            && var_info.scope_end_ip.map_or(true, |end| *ip < end) {
+                        if var_info.scope_start_ip <= *ip
+                            && var_info.scope_end_ip.map_or(true, |end| *ip < end)
+                        {
                             // Get the variable value from memory
                             if var_info.stack_index < memory.len() {
                                 variables.insert(
@@ -177,13 +208,13 @@ fn create_vm_state(vm: &althread::vm::VM) -> VMState {
                                     VariableInfo {
                                         value: value_to_literal(&memory[var_info.stack_index]),
                                         var_type: format!("{:?}", var_info.datatype),
-                                    }
+                                    },
                                 );
                             }
                         }
                     }
                 }
-                
+
                 frames.push(CallFrame {
                     function: prog_name.clone(),
                     frame_pointer: *fp,
@@ -192,7 +223,7 @@ fn create_vm_state(vm: &althread::vm::VM) -> VMState {
                     variables,
                 });
             }
-            
+
             ProgramState {
                 pid: index,
                 name: prog_name,
@@ -304,13 +335,13 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
                 break;
             }
         };
-        
+
         let lines: Vec<usize> = info
             .instructions
             .iter()
             .filter_map(|inst| inst.pos.as_ref().map(|p| p.line))
             .collect();
-        
+
         let new_vm_state = create_vm_state(&vm);
         nodes.push(GraphNode {
             vm: new_vm_state,
@@ -463,12 +494,15 @@ pub fn check(
         .compile(Path::new(filepath), virtual_filesystem, &mut input_map)
         .map_err(error_to_js)?;
 
-    let (path, state_graph) = checker::check_program(&compiled_project, max_states).map_err(error_to_js)?;
+    let (path, state_graph) =
+        checker::check_program(&compiled_project, max_states).map_err(error_to_js)?;
     let omit_transition_details = state_graph.nodes.len() > WEB_GRAPH_DETAILS_THRESHOLD;
-    
+
     // Convert path to GraphNode structure
-    let path_nodes: Vec<GraphNode> = path.iter().enumerate().map(|(idx, state_link)| {
-        GraphNode {
+    let path_nodes: Vec<GraphNode> = path
+        .iter()
+        .enumerate()
+        .map(|(idx, state_link)| GraphNode {
             vm: create_vm_state(state_graph.vm(state_link.to)),
             metadata: NodeMetadata {
                 level: idx,
@@ -476,37 +510,49 @@ pub fn check(
                 successors: None,
                 lines: Some(state_link.lines.clone()),
             },
-        }
-    }).collect();
-    
+        })
+        .collect();
+
     // Convert state graph nodes to GraphNode structure
-    let graph_nodes: Vec<GraphNode> = state_graph.nodes.iter().enumerate().map(|(idx, node)| {
-        let successors = if omit_transition_details {
-            None
-        } else {
-            Some(node.successors.iter().map(|succ| {
-                Successor {
-                    to_index: succ.to,
-                    lines: succ.lines.clone(),
-                    instructions: succ.instructions.iter().map(|i| format!("{:?}", i)).collect(),
-                    actions: succ.actions.iter().map(|a| format!("{:?}", a)).collect(),
-                    pid: succ.pid,
-                    name: succ.name.clone(),
-                }
-            }).collect())
-        };
-        
-        GraphNode {
-            vm: create_vm_state(state_graph.vm(idx)),
-            metadata: NodeMetadata {
-                level: node.level,
-                step_index: None,
-                successors,
-                lines: None,
-            },
-        }
-    }).collect();
-    
+    let graph_nodes: Vec<GraphNode> = state_graph
+        .nodes
+        .iter()
+        .enumerate()
+        .map(|(idx, node)| {
+            let successors = if omit_transition_details {
+                None
+            } else {
+                Some(
+                    node.successors
+                        .iter()
+                        .map(|succ| Successor {
+                            to_index: succ.to,
+                            lines: succ.lines.clone(),
+                            instructions: succ
+                                .instructions
+                                .iter()
+                                .map(|i| format!("{:?}", i))
+                                .collect(),
+                            actions: succ.actions.iter().map(|a| format!("{:?}", a)).collect(),
+                            pid: succ.pid,
+                            name: succ.name.clone(),
+                        })
+                        .collect(),
+                )
+            };
+
+            GraphNode {
+                vm: create_vm_state(state_graph.vm(idx)),
+                metadata: NodeMetadata {
+                    level: node.level,
+                    step_index: None,
+                    successors,
+                    lines: None,
+                },
+            }
+        })
+        .collect();
+
     let result = CheckResult {
         path: path_nodes,
         nodes: graph_nodes,
@@ -668,11 +714,9 @@ pub fn start_interactive_session(
                 .iter()
                 .filter_map(|inst| inst.pos.as_ref().map(|p| p.line))
                 .collect();
-            
-            let instruction_strings: Vec<String> = instructions
-                .iter()
-                .map(|inst| inst.to_string())
-                .collect();
+
+            let instruction_strings: Vec<String> =
+                instructions.iter().map(|inst| inst.to_string()).collect();
 
             NextStateOption {
                 prog_name: name,
@@ -743,7 +787,9 @@ pub fn get_next_interactive_states(
     let next_states = vm.next().map_err(error_to_js)?;
 
     if next_states.is_empty() {
-        return Err(JsValue::from_str("No next states available (execution finished)"));
+        return Err(JsValue::from_str(
+            "No next states available (execution finished)",
+        ));
     }
 
     // Convert next states to NextStateOption format
@@ -754,11 +800,9 @@ pub fn get_next_interactive_states(
                 .iter()
                 .filter_map(|inst| inst.pos.as_ref().map(|p| p.line))
                 .collect();
-            
-            let instruction_strings: Vec<String> = instructions
-                .iter()
-                .map(|inst| inst.to_string())
-                .collect();
+
+            let instruction_strings: Vec<String> =
+                instructions.iter().map(|inst| inst.to_string()).collect();
 
             NextStateOption {
                 prog_name: name.clone(),

@@ -25,7 +25,7 @@ pub struct ChannelDeclaration {
 }
 
 impl NodeBuilder for ChannelDeclaration {
-    fn build(mut pairs: Pairs<Rule>, _filepath: &str) -> AlthreadResult<Self> {
+    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
         let mut left_pairs = pairs.next().unwrap().into_inner();
         let left_prog = String::from(left_pairs.next().unwrap().as_str());
         let mut left_parts = Vec::new();
@@ -38,7 +38,7 @@ impl NodeBuilder for ChannelDeclaration {
 
         let types_pair = pairs.next();
         for pair in types_pair.unwrap().into_inner() {
-            let datatype = DataType::from_str(pair.as_str());
+            let datatype = Node::<DataType>::build(pair, filepath)?.value;
             datatypes.push(datatype);
         }
 

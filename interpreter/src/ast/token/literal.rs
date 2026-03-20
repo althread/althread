@@ -81,7 +81,9 @@ impl NodeBuilder for Literal {
                 (&s[2..], 16)
             } else if s.starts_with("0b") || s.starts_with("0B") {
                 (&s[2..], 2)
-            } else { (s, 10) };
+            } else {
+                (s, 10)
+            };
             i64::from_str_radix(s, radix).map_err(|_| {
                 AlthreadError::new(
                     ErrorType::SyntaxError,
@@ -360,38 +362,52 @@ impl Literal {
     }
 
     pub fn shift_left(&self, other: &Self) -> Result<Self, String> {
-    match (self, other) {
-        (Self::Int(i), Self::Int(j)) if *j >= 0 && *j < i64::BITS as i64 => {
-            i.checked_shl(*j as u32)
+        match (self, other) {
+            (Self::Int(i), Self::Int(j)) if *j >= 0 && *j < i64::BITS as i64 => i
+                .checked_shl(*j as u32)
                 .map(Self::Int)
-                .ok_or("Cannot shift left".to_string())
+                .ok_or("Cannot shift left".to_string()),
+            (Self::Int(_), Self::Int(_)) => Err("Shift count out of range".to_string()),
+            (a, b) => Err(format!(
+                "Cannot shift {} by {}",
+                a.get_datatype(),
+                b.get_datatype()
+            )),
         }
-        (Self::Int(_), Self::Int(_)) => Err("Shift count out of range".to_string()),
-        (a, b) => Err(format!("Cannot shift {} by {}", a.get_datatype(), b.get_datatype())),
     }
-}
 
     pub fn shift_right(&self, other: &Self) -> Result<Self, String> {
         match (self, other) {
-            (Self::Int(i), Self::Int(j)) if *j >= 0 && *j < i64::BITS as i64 => {
-                i.checked_shr(*j as u32)
-                    .map(Self::Int)
-                    .ok_or("Cannot shift right".to_string())
-            }
+            (Self::Int(i), Self::Int(j)) if *j >= 0 && *j < i64::BITS as i64 => i
+                .checked_shr(*j as u32)
+                .map(Self::Int)
+                .ok_or("Cannot shift right".to_string()),
             (Self::Int(_), Self::Int(_)) => Err("Shift count out of range".to_string()),
-            (a, b) => Err(format!("Cannot shift {} by {}", a.get_datatype(), b.get_datatype())),
+            (a, b) => Err(format!(
+                "Cannot shift {} by {}",
+                a.get_datatype(),
+                b.get_datatype()
+            )),
         }
     }
     pub fn bit_and(&self, other: &Self) -> Result<Self, String> {
         match (self, other) {
             (Self::Int(i), Self::Int(j)) => Ok(Self::Int(i & j)),
-            (a, b) => Err(format!("Cannot perform bitwise AND between {} and {}", a.get_datatype(), b.get_datatype())),
+            (a, b) => Err(format!(
+                "Cannot perform bitwise AND between {} and {}",
+                a.get_datatype(),
+                b.get_datatype()
+            )),
         }
     }
     pub fn bit_or(&self, other: &Self) -> Result<Self, String> {
         match (self, other) {
             (Self::Int(i), Self::Int(j)) => Ok(Self::Int(i | j)),
-            (a, b) => Err(format!("Cannot perform bitwise OR between {} and {}", a.get_datatype(), b.get_datatype())),
+            (a, b) => Err(format!(
+                "Cannot perform bitwise OR between {} and {}",
+                a.get_datatype(),
+                b.get_datatype()
+            )),
         }
     }
 }

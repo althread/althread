@@ -74,7 +74,7 @@ impl BuchiAutomaton {
         // 2. Identify all Until subformulas to define acceptance sets
         let mut until_constraints = Vec::new();
         collect_untils(&neg_expr, &mut until_constraints);
-        
+
         log::debug!("Until constraints for automaton:");
         for (i, uc) in until_constraints.iter().enumerate() {
             log::debug!("  [{}]: {:?}", i, uc);
@@ -118,7 +118,7 @@ impl BuchiAutomaton {
             let current_formulas = states[current_id].formulas.clone();
 
             // Compute acceptance sets for this state
-            // 
+            //
             // For GBA acceptance, a state is accepting for an Until(A, B) constraint if:
             // 1. The right side B is satisfied in this state, OR
             // 2. The Until obligation is NOT present in this state (neither the Until itself
@@ -137,27 +137,30 @@ impl BuchiAutomaton {
                         } else {
                             // Check 2: the Until obligation is not present in this state
                             // (the Until has been discharged and we're in a "post-satisfaction" state)
-                            let next_until = CompiledLtlExpression::Next(Box::new(until_expr.clone()));
+                            let next_until =
+                                CompiledLtlExpression::Next(Box::new(until_expr.clone()));
                             let until_present = contains_formula(&current_formulas, until_expr)
                                 || contains_formula(&current_formulas, &next_until);
                             !until_present
                         }
-                    },
+                    }
                     CompiledLtlExpression::Eventually(inner) => {
                         // Same logic for Eventually: either inner is satisfied, or
                         // the Eventually obligation is not present (discharged)
                         if check_satisfaction(inner, &current_formulas) {
                             true
                         } else {
-                            let next_eventually = CompiledLtlExpression::Next(Box::new(until_expr.clone()));
-                            let eventually_present = contains_formula(&current_formulas, until_expr)
-                                || contains_formula(&current_formulas, &next_eventually);
+                            let next_eventually =
+                                CompiledLtlExpression::Next(Box::new(until_expr.clone()));
+                            let eventually_present =
+                                contains_formula(&current_formulas, until_expr)
+                                    || contains_formula(&current_formulas, &next_eventually);
                             !eventually_present
                         }
-                    },
+                    }
                     _ => false,
                 };
-                
+
                 if is_accepting {
                     acc_sets.push(i);
                 }
@@ -216,7 +219,7 @@ fn collect_untils(expr: &CompiledLtlExpression, acc: &mut Vec<CompiledLtlExpress
     // If expr is Until or Eventually, add it. Then recurse children.
     match expr {
         CompiledLtlExpression::Until(l, r) => {
-           if !acc.contains(expr) {
+            if !acc.contains(expr) {
                 acc.push(expr.clone());
             }
             collect_untils(l, acc);
@@ -237,8 +240,7 @@ fn collect_untils(expr: &CompiledLtlExpression, acc: &mut Vec<CompiledLtlExpress
             collect_untils(r, acc);
         }
         CompiledLtlExpression::Not(e) => collect_untils(e, acc),
-        CompiledLtlExpression::Next(e)
-        | CompiledLtlExpression::Always(e) => collect_untils(e, acc),
+        CompiledLtlExpression::Next(e) | CompiledLtlExpression::Always(e) => collect_untils(e, acc),
         CompiledLtlExpression::And(a, b)
         | CompiledLtlExpression::Or(a, b)
         | CompiledLtlExpression::Implies(a, b) => {
@@ -267,12 +269,18 @@ fn check_satisfaction(f: &CompiledLtlExpression, formulas: &[CompiledLtlExpressi
 
     // 3. Structural recursion
     match f {
-        CompiledLtlExpression::And(a, b) => check_satisfaction(a, formulas) && check_satisfaction(b, formulas),
-        CompiledLtlExpression::Or(a, b) => check_satisfaction(a, formulas) || check_satisfaction(b, formulas),
-        CompiledLtlExpression::Implies(a, b) => !check_satisfaction(a, formulas) || check_satisfaction(b, formulas),
+        CompiledLtlExpression::And(a, b) => {
+            check_satisfaction(a, formulas) && check_satisfaction(b, formulas)
+        }
+        CompiledLtlExpression::Or(a, b) => {
+            check_satisfaction(a, formulas) || check_satisfaction(b, formulas)
+        }
+        CompiledLtlExpression::Implies(a, b) => {
+            !check_satisfaction(a, formulas) || check_satisfaction(b, formulas)
+        }
         CompiledLtlExpression::Not(_) => {
-             // For Not, apply negation and check that.
-             check_satisfaction(&f.clone().negate(), formulas)
+            // For Not, apply negation and check that.
+            check_satisfaction(&f.clone().negate(), formulas)
         }
         // Release(A, B) is satisfied if:
         // - B is satisfied AND (A is satisfied OR Next(Release(A, B)) is in the state)
@@ -295,14 +303,14 @@ fn check_satisfaction(f: &CompiledLtlExpression, formulas: &[CompiledLtlExpressi
             let next_until = CompiledLtlExpression::Next(Box::new(f.clone()));
             check_satisfaction(a, formulas) && contains_formula(formulas, &next_until)
         }
-        CompiledLtlExpression::Eventually(_) |
-        CompiledLtlExpression::Always(_) |
-        CompiledLtlExpression::Next(_) => {
-             // These should be in the set if they are true
-             contains_formula(formulas, f)
+        CompiledLtlExpression::Eventually(_)
+        | CompiledLtlExpression::Always(_)
+        | CompiledLtlExpression::Next(_) => {
+            // These should be in the set if they are true
+            contains_formula(formulas, f)
         }
-        
-        _ => false 
+
+        _ => false,
     }
 }
 

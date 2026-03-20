@@ -63,7 +63,7 @@ impl NodeBuilder for ImportBlock {
 }
 
 impl ImportBlock {
-    fn validate_import_names(imports: &[Node<ImportItem>]) -> AlthreadResult<()> {
+    pub(crate) fn validate_import_names(imports: &[Node<ImportItem>]) -> AlthreadResult<()> {
         let mut used_names = HashSet::new();
 
         for import in imports {

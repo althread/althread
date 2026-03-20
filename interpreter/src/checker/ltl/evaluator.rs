@@ -36,13 +36,15 @@ pub fn evaluate_ltl_predicate(
             let memory = prepare_memory(read_variables, vm, variable_bindings)?;
 
             // Evaluate the expression with the VM context
-            let result = local_expr.eval_with_scope(&memory, read_variables, vm).map_err(|msg| {
-                AlthreadError::new(
-                    ErrorType::ExpressionError,
-                    None,
-                    format!("Error evaluating predicate: {}", msg),
-                )
-            })?;
+            let result = local_expr
+                .eval_with_scope(&memory, read_variables, vm)
+                .map_err(|msg| {
+                    AlthreadError::new(
+                        ErrorType::ExpressionError,
+                        None,
+                        format!("Error evaluating predicate: {}", msg),
+                    )
+                })?;
 
             Ok(result.is_true())
         }
