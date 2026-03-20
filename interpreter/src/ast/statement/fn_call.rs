@@ -6,7 +6,10 @@ use crate::{
         node::{InstructionBuilder, Node},
         token::{datatype::DataType, object_identifier::ObjectIdentifier},
     },
-    compiler::{CompilerState, InstructionBuilderOk, Variable},
+    compiler::{
+        stdlib::{resolve_interface_method, validate_interface_call},
+        CompilerState, InstructionBuilderOk, Variable,
+    },
     error::{AlthreadError, AlthreadResult, ErrorType},
     vm::instruction::{Instruction, InstructionType},
 };
@@ -288,22 +291,24 @@ impl InstructionBuilder for Node<FnCall> {
                     ));
                 };
 
-            let interfaces = state.stdlib().interfaces(&receiver_type);
-
-            let fn_idx = interfaces.iter().position(|i| i.name == method_name);
-            if fn_idx.is_none() {
-                return Err(AlthreadError::new(
+            let fn_info = resolve_interface_method(&state.stdlib(), &receiver_type, &method_name)
+                .map_err(|message| {
+                AlthreadError::new(
                     ErrorType::UndefinedFunction,
                     Some(self.pos.clone()),
-                    format!(
-                        "No method {} found on variable of type {}",
-                        method_name, receiver_type
-                    ),
-                ));
-            }
-            let fn_idx = fn_idx.unwrap();
-            let fn_info = &interfaces[fn_idx];
+                    message,
+                )
+            })?;
             let ret_type = fn_info.ret.clone();
+
+            let provided_arg_types = args_on_stack_var.datatype.tuple_unwrap();
+            validate_interface_call(&fn_info, &provided_arg_types).map_err(|message| {
+                AlthreadError::new(
+                    ErrorType::FunctionArgumentTypeMismatch,
+                    Some(self.pos.clone()),
+                    message,
+                )
+            })?;
 
             if fn_info.mutates_receiver && !receiver_is_mutable {
                 return Err(AlthreadError::new(

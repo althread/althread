@@ -257,6 +257,32 @@ main {
 }
 
 #[test]
+fn test_direct_method_call_argument_validation() {
+    let input = r#"
+shared {
+    let Global:list(int) = [1, 2];
+}
+
+main {
+    print(Global.at());
+}
+    "#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+    let ast = althread::parser::parse_ast(input, "").unwrap();
+    let err = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap_err();
+
+    assert_eq!(
+        err.error_type.to_string(),
+        "Function argument type mismatch"
+    );
+    assert!(err.message.contains("expects 1 arguments, got 0"));
+}
+
+#[test]
 fn test_shared_empty_typed_list_initialization() {
     let input = r#"
 shared {

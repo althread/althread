@@ -107,3 +107,20 @@ main {
     assert_eq!(err.error_type.to_string(), "Syntax Error");
     assert!(err.pos.is_some());
 }
+
+#[test]
+fn postfix_errors_report_expected_method_name() {
+    let source = r#"
+main {
+    let xs = [1, 2];
+    let y = xs.;
+}
+"#;
+
+    let err = parse_ast(source, "").unwrap_err();
+
+    assert_eq!(err.error_type.to_string(), "Syntax Error");
+    assert!(err
+        .message
+        .contains("expected method name or 'reaches' after '.'"));
+}

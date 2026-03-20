@@ -1007,107 +1007,18 @@ impl<'a> ExprParser<'a> {
     }
 
     fn parse_postfix_primary(&mut self) -> Result<Node<Expression>, AlthreadError> {
-        let start = self.index;
-        let mut base = self.parse_primary()?;
+        let base = self.parse_primary()?;
         let mut segments = Vec::new();
 
-        loop {
-            let saved = self.index;
-            skip_inline_ws_and_comments(self.text, &mut self.index)?;
-            if self.text.as_bytes().get(self.index) != Some(&b'.') {
-                self.index = saved;
-                break;
-            }
-            let dot_index = self.index;
-            self.index += 1;
-            skip_inline_ws_and_comments(self.text, &mut self.index)?;
-            if starts_with_word_local(self.text, self.index, "reaches") {
-                self.index += "reaches".len();
-                let label_start = self.index;
-                let (tuple_snippet, tuple_end) = sub_snippet_from(
-                    self.text,
-                    self.source,
-                    self.file_path,
-                    self.snippet.pos.start,
-                    self.index,
-                )?;
-                self.index = tuple_end;
-                let mut tuple_index = 0;
-                expect_char(
-                    tuple_snippet.text.as_str(),
-                    self.source,
-                    self.file_path,
-                    tuple_snippet.pos.start,
-                    &mut tuple_index,
-                    '(',
-                )?;
-                let label = scan_identifier(
-                    tuple_snippet.text.as_str(),
-                    self.source,
-                    self.file_path,
-                    tuple_snippet.pos.start,
-                    &mut tuple_index,
-                )?;
-                let _ = label_start;
-                segments.push(CallChainSegment::Reaches { label });
-            } else {
-                let name = scan_identifier(
-                    self.text,
-                    self.source,
-                    self.file_path,
-                    self.snippet.pos.start,
-                    &mut self.index,
-                )?;
-                let (tuple_snippet, tuple_end) = sub_snippet_from(
-                    self.text,
-                    self.source,
-                    self.file_path,
-                    self.snippet.pos.start,
-                    self.index,
-                )?;
-                let args =
-                    parse_tuple_expression_node(self.source, &tuple_snippet, self.file_path)?;
-                self.index = tuple_end;
-                segments.push(CallChainSegment::Call { name, args });
-            }
-
-            if dot_index < start {
-                break;
-            }
+        while let Some(segment) = self.parse_postfix_segment()? {
+            segments.push(segment);
         }
 
         if segments.is_empty() {
             return Ok(base);
         }
 
-        if let Expression::FnCall(call_node) = &base.value {
-            let parts = call_node.value.fn_name.value.parts.clone();
-            if parts.len() > 1 {
-                let base_parts = parts[..parts.len() - 1].to_vec();
-                let base_ident = Node {
-                    pos: call_node.value.fn_name.pos.clone(),
-                    value: crate::ast::token::object_identifier::ObjectIdentifier {
-                        parts: base_parts,
-                    },
-                };
-                let base_primary = Node {
-                    pos: base_ident.pos.clone(),
-                    value: PrimaryExpression::Identifier(base_ident),
-                };
-                let args = (*call_node.value.values).clone();
-                segments.insert(
-                    0,
-                    CallChainSegment::Call {
-                        name: parts.last().cloned().unwrap(),
-                        args,
-                    },
-                );
-                base = Node {
-                    pos: base_primary.pos.clone(),
-                    value: Expression::Primary(base_primary),
-                };
-            }
-        }
+        let (base, segments) = promote_fn_call_base_to_call_chain(base, segments);
 
         let end = self.snippet.pos.start + self.index;
         let pos = Pos::from_offsets(self.source, self.file_path, base.pos.start, end);
@@ -1121,6 +1032,131 @@ impl<'a> ExprParser<'a> {
                 },
             }),
         })
+    }
+
+    fn parse_postfix_segment(&mut self) -> Result<Option<CallChainSegment>, AlthreadError> {
+        let saved = self.index;
+        skip_inline_ws_and_comments(self.text, &mut self.index)?;
+        if self.text.as_bytes().get(self.index) != Some(&b'.') {
+            self.index = saved;
+            return Ok(None);
+        }
+
+        let dot_offset = self.snippet.pos.start + self.index;
+        self.index += 1;
+        skip_inline_ws_and_comments(self.text, &mut self.index)?;
+
+        if starts_with_word_local(self.text, self.index, "reaches") {
+            self.index += "reaches".len();
+            return Ok(Some(self.parse_reaches_segment(dot_offset)?));
+        }
+
+        if self.index >= self.text.len() || !self.text.as_bytes()[self.index].is_ascii_alphabetic()
+        {
+            return Err(scan_error(
+                self.source,
+                self.file_path,
+                dot_offset,
+                (dot_offset + 1).min(self.source.len()),
+                "expected method name or 'reaches' after '.'",
+            ));
+        }
+        let identifier_end = self.index
+            + self.text[self.index..]
+                .chars()
+                .take_while(|ch| ch.is_ascii_alphanumeric() || *ch == '_')
+                .map(char::len_utf8)
+                .sum::<usize>();
+
+        let name = scan_identifier(
+            self.text,
+            self.source,
+            self.file_path,
+            self.snippet.pos.start,
+            &mut self.index,
+        )?;
+        skip_inline_ws_and_comments(self.text, &mut self.index)?;
+        if self.text.as_bytes().get(self.index) != Some(&b'(') {
+            let message = format!("expected argument list after method '{}'", name.value.value);
+            return Err(scan_error(
+                self.source,
+                self.file_path,
+                self.snippet.pos.start + identifier_end,
+                self.snippet.pos.end,
+                &message,
+            ));
+        }
+        let (tuple_snippet, tuple_end) = sub_snippet_from(
+            self.text,
+            self.source,
+            self.file_path,
+            self.snippet.pos.start,
+            self.index,
+        )?;
+        let args = parse_tuple_expression_node(self.source, &tuple_snippet, self.file_path)?;
+        self.index = tuple_end;
+        Ok(Some(CallChainSegment::Call { name, args }))
+    }
+
+    fn parse_reaches_segment(
+        &mut self,
+        reaches_start: usize,
+    ) -> Result<CallChainSegment, AlthreadError> {
+        skip_inline_ws_and_comments(self.text, &mut self.index)?;
+        if self.text.as_bytes().get(self.index) != Some(&b'(') {
+            return Err(scan_error(
+                self.source,
+                self.file_path,
+                reaches_start,
+                self.snippet.pos.end,
+                "expected '(label)' after 'reaches'",
+            ));
+        }
+
+        let (tuple_snippet, tuple_end) = sub_snippet_from(
+            self.text,
+            self.source,
+            self.file_path,
+            self.snippet.pos.start,
+            self.index,
+        )?;
+        self.index = tuple_end;
+        let mut tuple_index = 0;
+        expect_char(
+            tuple_snippet.text.as_str(),
+            self.source,
+            self.file_path,
+            tuple_snippet.pos.start,
+            &mut tuple_index,
+            '(',
+        )?;
+        let label = scan_identifier(
+            tuple_snippet.text.as_str(),
+            self.source,
+            self.file_path,
+            tuple_snippet.pos.start,
+            &mut tuple_index,
+        )?;
+        skip_inline_ws_and_comments(tuple_snippet.text.as_str(), &mut tuple_index)?;
+        expect_char(
+            tuple_snippet.text.as_str(),
+            self.source,
+            self.file_path,
+            tuple_snippet.pos.start,
+            &mut tuple_index,
+            ')',
+        )?;
+        skip_inline_ws_and_comments(tuple_snippet.text.as_str(), &mut tuple_index)?;
+        if tuple_index != tuple_snippet.text.len() {
+            return Err(scan_error(
+                self.source,
+                self.file_path,
+                tuple_snippet.pos.start + tuple_index,
+                tuple_snippet.pos.end,
+                "unexpected trailing input in reaches(label)",
+            ));
+        }
+        Ok(CallChainSegment::Reaches { label })
     }
 
     fn parse_primary(&mut self) -> Result<Node<Expression>, AlthreadError> {
@@ -1469,6 +1505,45 @@ impl<'a> ExprParser<'a> {
         }
         Ok(None)
     }
+}
+
+fn promote_fn_call_base_to_call_chain(
+    base: Node<Expression>,
+    mut segments: Vec<CallChainSegment>,
+) -> (Node<Expression>, Vec<CallChainSegment>) {
+    if let Expression::FnCall(call_node) = &base.value {
+        let parts = call_node.value.fn_name.value.parts.clone();
+        if parts.len() > 1 {
+            let base_parts = parts[..parts.len() - 1].to_vec();
+            let base_ident = Node {
+                pos: call_node.value.fn_name.pos.clone(),
+                value: crate::ast::token::object_identifier::ObjectIdentifier { parts: base_parts },
+            };
+            let base_primary = Node {
+                pos: base_ident.pos.clone(),
+                value: PrimaryExpression::Identifier(base_ident),
+            };
+            segments.insert(
+                0,
+                CallChainSegment::Call {
+                    name: parts
+                        .last()
+                        .cloned()
+                        .expect("call target has at least one part"),
+                    args: (*call_node.value.values).clone(),
+                },
+            );
+            return (
+                Node {
+                    pos: base_primary.pos.clone(),
+                    value: Expression::Primary(base_primary),
+                },
+                segments,
+            );
+        }
+    }
+
+    (base, segments)
 }
 
 fn normalize_binary_operand(node: Node<Expression>) -> Node<Expression> {

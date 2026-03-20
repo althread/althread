@@ -18,7 +18,10 @@ use crate::{
         node::{InstructionBuilder, Node},
         token::{datatype::DataType, identifier::Identifier, literal::Literal},
     },
-    compiler::{stdlib::invoke_interface_method, CompilerState, InstructionBuilderOk, Variable},
+    compiler::{
+        stdlib::{invoke_interface_method, resolve_interface_method, validate_interface_call},
+        CompilerState, InstructionBuilderOk, Variable,
+    },
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
     vm::{
         instruction::{Instruction, InstructionType},
@@ -392,6 +395,13 @@ impl fmt::Display for LocalExpressionNode {
 
 impl Expression {}
 
+fn tuple_arg_types(datatype: &DataType) -> Result<&[DataType], String> {
+    match datatype {
+        DataType::Tuple(types) => Ok(types),
+        _ => Err("Method call expects tuple arguments".to_string()),
+    }
+}
+
 impl LocalExpressionNode {
     pub fn from_expression(
         expression: &Expression,
@@ -677,24 +687,12 @@ impl LocalExpressionNode {
                         .find(|v| v.name == receiver_name);
                     let global_var = state.global_table().get(&receiver_name);
                     if let Some(var) = var.or(global_var) {
-                        let interfaces = state.stdlib().interfaces(&var.datatype);
-                        if !interfaces.is_empty() {
-                            let method_name = node
-                                .value
-                                .method_name()
-                                .ok_or_else(|| format!("Method name missing in {}", full_name))?;
-                            if let Some(method) = interfaces.iter().find(|m| m.name == method_name)
-                            {
-                                Ok(method.ret.clone())
-                            } else {
-                                Err(format!(
-                                    "No method {} found on variable of type {}",
-                                    method_name, var.datatype
-                                ))
-                            }
-                        } else {
-                            Err(format!("Type {} has no available methods", var.datatype))
-                        }
+                        let method_name = node
+                            .value
+                            .method_name()
+                            .ok_or_else(|| format!("Method name missing in {}", full_name))?;
+                        resolve_interface_method(&state.stdlib(), &var.datatype, &method_name)
+                            .map(|method| method.ret)
                     } else {
                         Err(format!("Variable {} not found", receiver_name))
                     }
@@ -764,38 +762,10 @@ impl LocalExpressionNode {
                 for (idx, segment) in node.segments.iter().enumerate() {
                     match segment {
                         LocalCallChainSegment::Call { name, args } => {
-                            let interfaces = state.stdlib().interfaces(&current_type);
-                            let method = interfaces.iter().find(|m| m.name == *name);
-                            let method = method.ok_or_else(|| {
-                                format!(
-                                    "No method {} found on variable of type {}",
-                                    name, current_type
-                                )
-                            })?;
-
+                            let method =
+                                resolve_interface_method(&state.stdlib(), &current_type, name)?;
                             let args_type = args.datatype(state)?;
-                            if let DataType::Tuple(arg_types) = args_type {
-                                if method.args.len() != arg_types.len() {
-                                    return Err(format!(
-                                        "Method '{}' expects {} arguments, got {}",
-                                        name,
-                                        method.args.len(),
-                                        arg_types.len()
-                                    ));
-                                }
-                                for (expected, provided) in method.args.iter().zip(arg_types.iter())
-                                {
-                                    if expected != provided {
-                                        return Err(format!(
-                                            "Method '{}' expects argument of type {}, got {}",
-                                            name, expected, provided
-                                        ));
-                                    }
-                                }
-                            } else {
-                                return Err("Method call expects tuple arguments".to_string());
-                            }
-
+                            validate_interface_call(&method, tuple_arg_types(&args_type)?)?;
                             current_type = method.ret.clone();
                         }
                         LocalCallChainSegment::Reaches { label } => {
@@ -1406,47 +1376,30 @@ impl CallChainExpression {
                         .program_stack
                         .get(state.program_stack.len() - 2)
                         .unwrap();
-                    let interfaces = state.stdlib().interfaces(&receiver_var.datatype);
-                    let method = interfaces.iter().find(|m| m.name == name.value.value);
-                    let method = method.ok_or(AlthreadError::new(
-                        ErrorType::UndefinedFunction,
-                        Some(pos.clone()),
-                        format!("undefined function {}", name.value.value),
-                    ))?;
+                    let method = resolve_interface_method(
+                        &state.stdlib(),
+                        &receiver_var.datatype,
+                        &name.value.value,
+                    )
+                    .map_err(|message| {
+                        AlthreadError::new(ErrorType::UndefinedFunction, Some(pos.clone()), message)
+                    })?;
 
                     let args_var = state.program_stack.last().unwrap();
-                    if let DataType::Tuple(arg_types) = &args_var.datatype {
-                        if method.args.len() != arg_types.len() {
-                            return Err(AlthreadError::new(
-                                ErrorType::FunctionArgumentCountError,
-                                Some(pos.clone()),
-                                format!(
-                                    "Method '{}' expects {} arguments, got {}",
-                                    name.value.value,
-                                    method.args.len(),
-                                    arg_types.len()
-                                ),
-                            ));
-                        }
-                        for (expected, provided) in method.args.iter().zip(arg_types.iter()) {
-                            if expected != provided {
-                                return Err(AlthreadError::new(
-                                    ErrorType::FunctionArgumentTypeMismatch,
-                                    Some(pos.clone()),
-                                    format!(
-                                        "Method '{}' expects argument of type {}, got {}",
-                                        name.value.value, expected, provided
-                                    ),
-                                ));
-                            }
-                        }
-                    } else {
-                        return Err(AlthreadError::new(
+                    let arg_types = tuple_arg_types(&args_var.datatype).map_err(|message| {
+                        AlthreadError::new(
                             ErrorType::FunctionArgumentTypeMismatch,
                             Some(pos.clone()),
-                            "Method call expects tuple arguments".to_string(),
-                        ));
-                    }
+                            message,
+                        )
+                    })?;
+                    validate_interface_call(&method, arg_types).map_err(|message| {
+                        AlthreadError::new(
+                            ErrorType::FunctionArgumentTypeMismatch,
+                            Some(pos.clone()),
+                            message,
+                        )
+                    })?;
 
                     builder.instructions.push(Instruction {
                         pos: Some(pos.clone()),

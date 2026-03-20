@@ -234,6 +234,52 @@ impl Stdlib {
     }
 }
 
+pub fn resolve_interface_method(
+    stdlib: &Stdlib,
+    receiver_type: &DataType,
+    name: &str,
+) -> Result<Interface, String> {
+    let interfaces = stdlib.interfaces(receiver_type);
+    if interfaces.is_empty() {
+        return Err(format!("Type {} has no available methods", receiver_type));
+    }
+
+    interfaces
+        .into_iter()
+        .find(|interface| interface.name == name)
+        .ok_or_else(|| {
+            format!(
+                "No method {} found on variable of type {}",
+                name, receiver_type
+            )
+        })
+}
+
+pub fn validate_interface_call(
+    interface: &Interface,
+    provided_arg_types: &[DataType],
+) -> Result<(), String> {
+    if interface.args.len() != provided_arg_types.len() {
+        return Err(format!(
+            "Method '{}' expects {} arguments, got {}",
+            interface.name,
+            interface.args.len(),
+            provided_arg_types.len()
+        ));
+    }
+
+    for (expected, provided) in interface.args.iter().zip(provided_arg_types.iter()) {
+        if expected != provided {
+            return Err(format!(
+                "Method '{}' expects argument of type {}, got {}",
+                interface.name, expected, provided
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 pub fn invoke_interface_method(
     stdlib: &Stdlib,
     name: &str,
