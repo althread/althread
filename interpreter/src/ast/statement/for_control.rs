@@ -1,11 +1,9 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
+        node::{InstructionBuilder, Node},
         statement::expression::{
             binary_expression::LocalBinaryExpressionNode,
             primary_expression::{LocalPrimaryExpressionNode, LocalVarNode},
@@ -18,8 +16,6 @@ use crate::{
     },
     compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
-    no_rule,
-    parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };
 
@@ -30,25 +26,6 @@ pub struct ForControl {
     pub identifier: Node<Identifier>,
     pub expression: Node<Expression>,
     pub statement: Box<Node<Statement>>,
-}
-
-impl NodeBuilder for ForControl {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let identifier = Node::build(pairs.next().unwrap(), filepath)?;
-        let exp_pair = pairs.next().unwrap();
-        let expression = match exp_pair.as_rule() {
-            Rule::expression => Node::build(exp_pair, filepath),
-            Rule::range_expression => Expression::build_list_expression(exp_pair, filepath),
-            _ => Err(no_rule!(exp_pair, "For loop expression", filepath)),
-        }?;
-        let statement = Box::new(Node::build(pairs.next().unwrap(), filepath)?);
-
-        Ok(Self {
-            statement,
-            identifier,
-            expression,
-        })
-    }
 }
 
 impl InstructionBuilder for Node<ForControl> {

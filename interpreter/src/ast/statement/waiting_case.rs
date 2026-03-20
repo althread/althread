@@ -1,17 +1,15 @@
 use std::collections::HashSet;
 use std::fmt;
 
-use pest::iterators::Pairs;
 use serde::{Deserialize, Serialize};
 
 use crate::compiler::CompilerState;
 use crate::error::AlthreadResult;
-use crate::parser::Rule;
 use crate::{ast::node::InstructionBuilder, compiler::InstructionBuilderOk};
 
 use super::super::{
     display::{AstDisplay, Prefix},
-    node::{Node, NodeBuilder},
+    node::Node,
     statement::Statement,
 };
 use super::expression::Expression;
@@ -43,27 +41,6 @@ pub enum WaitingBlockCaseRule {
 pub struct WaitingBlockCase {
     pub rule: WaitingBlockCaseRule,
     pub statement: Option<Node<Statement>>,
-}
-
-impl NodeBuilder for WaitingBlockCase {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let pair = pairs.next().unwrap();
-
-        let rule = match pair.as_rule() {
-            Rule::expression => WaitingBlockCaseRule::Expression(Node::build(pair, filepath)?),
-            Rule::receive_expression => WaitingBlockCaseRule::Receive(Node::build(pair, filepath)?),
-            _ => panic!("Invalid rule while parsing waiting block case"),
-        };
-
-        let pair = pairs.next();
-
-        let statement = match pair {
-            Some(p) => Some(Node::build(p, filepath)?),
-            None => None,
-        };
-
-        Ok(Self { rule, statement })
-    }
 }
 
 impl AstDisplay for WaitingBlockCase {

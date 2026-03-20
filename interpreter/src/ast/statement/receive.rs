@@ -1,17 +1,13 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
-        token::{datatype::DataType, literal::Literal, object_identifier::ObjectIdentifier},
+        node::{InstructionBuilder, Node},
+        token::{datatype::DataType, literal::Literal},
     },
     compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
-    no_rule,
-    parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };
 
@@ -21,39 +17,6 @@ use super::waiting_case::WaitDependency;
 pub struct ReceiveStatement {
     pub channel: String,
     pub variables: Vec<String>,
-}
-
-impl NodeBuilder for ReceiveStatement {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let mut pair = pairs.next().unwrap();
-
-        let mut channel = "".to_string();
-
-        if pair.as_rule() == Rule::object_identifier {
-            // Parse the object_identifier and convert it to a string
-            let object_id = Node::<ObjectIdentifier>::build(pair, filepath)?;
-            channel = object_id
-                .value
-                .parts
-                .iter()
-                .map(|p| p.value.value.as_str())
-                .collect::<Vec<_>>()
-                .join(".");
-            pair = pairs.next().unwrap();
-        }
-
-        if pair.as_rule() != Rule::pattern_list {
-            return Err(no_rule!(pair, "ReceiveStatement", filepath));
-        }
-
-        let mut variables = Vec::new();
-        let sub_pairs: Pairs<'_, Rule> = pair.into_inner();
-        for pair in sub_pairs {
-            variables.push(String::from(pair.as_str()));
-        }
-
-        Ok(Self { channel, variables })
-    }
 }
 
 impl ReceiveStatement {

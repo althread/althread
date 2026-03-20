@@ -19,12 +19,7 @@ use args::{
 use clap::Parser;
 use owo_colors::{OwoColorize, Style};
 
-use althread::{
-    ast::Ast,
-    checker,
-    module_resolver::StandardFileSystem,
-    parser::{self, ParseComparison},
-};
+use althread::{ast::Ast, checker, module_resolver::StandardFileSystem, parser};
 
 use crate::package::{DependencySpec, Package};
 
@@ -72,12 +67,7 @@ pub fn compile_command(cli_args: &CompileCommand) {
     let mut input_map = HashMap::new();
     input_map.insert(path.to_string_lossy().to_string(), source.clone());
 
-    let ast = parse_with_options(
-        &source,
-        &path.to_string_lossy(),
-        &input_map,
-        cli_args.common.parser_options(),
-    );
+    let ast = parse_with_options(&source, &path.to_string_lossy(), &input_map);
 
     println!("{}", &ast);
 
@@ -115,12 +105,7 @@ pub fn check_command(cli_args: &CheckCommand) {
     let mut input_map = HashMap::new();
     input_map.insert(path.to_string_lossy().to_string(), source.clone());
 
-    let ast = parse_with_options(
-        &source,
-        &path.to_string_lossy(),
-        &input_map,
-        cli_args.common.parser_options(),
-    );
+    let ast = parse_with_options(&source, &path.to_string_lossy(), &input_map);
 
     let compiled_project = ast
         .compile(&path, StandardFileSystem, &mut input_map)
@@ -373,12 +358,7 @@ pub fn run_command(cli_args: &RunCommand) {
     let mut input_map = HashMap::new();
     input_map.insert(path.to_string_lossy().to_string(), source.clone());
 
-    let ast = parse_with_options(
-        &source,
-        &path.to_string_lossy(),
-        &input_map,
-        cli_args.common.parser_options(),
-    );
+    let ast = parse_with_options(&source, &path.to_string_lossy(), &input_map);
 
     let compiled_project = ast
         .compile(&path, StandardFileSystem, &mut input_map)
@@ -522,12 +502,7 @@ pub fn random_search_command(cli_args: &RandomSearchCommand) {
     let mut input_map = HashMap::new();
     input_map.insert(path.to_string_lossy().to_string(), source.clone());
 
-    let ast = parse_with_options(
-        &source,
-        &path.to_string_lossy(),
-        &input_map,
-        cli_args.common.parser_options(),
-    );
+    let ast = parse_with_options(&source, &path.to_string_lossy(), &input_map);
 
     let compiled_project = ast
         .compile(&path, StandardFileSystem, &mut input_map)
@@ -621,30 +596,11 @@ pub fn init_command(cli_args: &InitCommand) {
     }
 }
 
-fn parse_with_options(
-    source: &str,
-    file_path: &str,
-    input_map: &HashMap<String, String>,
-    options: parser::ParserOptions,
-) -> Ast {
-    let output = parser::parse_ast(source, file_path, options).unwrap_or_else(|e| {
+fn parse_with_options(source: &str, file_path: &str, input_map: &HashMap<String, String>) -> Ast {
+    parser::parse_ast(source, file_path).unwrap_or_else(|e| {
         e.report(input_map);
         exit(1);
-    });
-    if let Some(comparison) = output.comparison.as_ref() {
-        report_parser_comparison(comparison);
-    }
-    output.ast
-}
-
-fn report_parser_comparison(comparison: &ParseComparison) {
-    if comparison.matched {
-        println!("Parser comparison: ASTs match");
-    } else if let Some(summary) = &comparison.summary {
-        eprintln!("Parser comparison mismatch: {summary}");
-    } else {
-        eprintln!("Parser comparison mismatch");
-    }
+    })
 }
 
 pub fn add_command(cli_args: &AddCommand) {

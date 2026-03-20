@@ -12,7 +12,6 @@ use althread::{
             binary_assignment_operator::BinaryAssignmentOperator, binary_operator::BinaryOperator,
             datatype::DataType, literal::Literal,
         },
-        Ast,
     },
     error::Pos,
     module_resolver::StandardFileSystem,
@@ -163,9 +162,7 @@ main {
     input_map.insert("".to_string(), input.to_string());
 
     // parse code with pest
-    let pairs = althread::parser::parse(input, "").unwrap();
-
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
 
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
@@ -196,9 +193,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
@@ -247,9 +242,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
@@ -276,9 +269,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
@@ -303,9 +294,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
@@ -343,9 +332,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
@@ -412,9 +399,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
@@ -475,9 +460,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
@@ -528,9 +511,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
 
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
@@ -595,9 +576,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
 
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
@@ -640,9 +619,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
@@ -706,9 +683,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
@@ -769,9 +744,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
@@ -1038,9 +1011,7 @@ main {
     input_map.insert("".to_string(), input.to_string());
 
     // parse code with pest
-    let pairs = althread::parser::parse(input, "").unwrap();
-
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
 
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
@@ -1209,9 +1180,7 @@ main {
     input_map.insert("".to_string(), input.to_string());
 
     // parse code with pest
-    let pairs = althread::parser::parse(input, "").unwrap();
-
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
 
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
@@ -1324,9 +1293,7 @@ main {
     input_map.insert("".to_string(), input.to_string());
 
     // parse code with pest
-    let pairs = althread::parser::parse(input, "").unwrap();
-
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
 
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
@@ -1482,9 +1449,7 @@ main {
     input_map.insert("".to_string(), input.to_string());
 
     // parse code with pest
-    let pairs = althread::parser::parse(input, "").unwrap();
-
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
 
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)

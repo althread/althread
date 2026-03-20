@@ -3,33 +3,19 @@ pub mod binary_assignment;
 use std::fmt::{self};
 
 use binary_assignment::BinaryAssignment;
-use pest::iterators::Pairs;
 
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
+        node::{InstructionBuilder, Node},
     },
     compiler::{CompilerState, InstructionBuilderOk},
     error::AlthreadResult,
-    no_rule,
-    parser::Rule,
 };
 
 #[derive(Debug, Clone)]
 pub enum Assignment {
     Binary(Node<BinaryAssignment>),
-}
-
-impl NodeBuilder for Assignment {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let pair = pairs.next().unwrap();
-
-        match pair.as_rule() {
-            Rule::binary_assignment => Ok(Self::Binary(Node::build(pair, filepath)?)),
-            _ => Err(no_rule!(pair, "Assignment", filepath)),
-        }
-    }
 }
 
 impl InstructionBuilder for Assignment {

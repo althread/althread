@@ -16,27 +16,26 @@ use condition_block::ConditionBlock;
 use display::{AstDisplay, Prefix};
 use import_block::ImportBlock;
 use node::Node;
-use pest::iterators::Pairs;
 use statement::{
-    atomic::Atomic,
     assignment::{binary_assignment::BinaryAssignment, Assignment},
+    atomic::Atomic,
     break_loop::{BreakLoopControl, BreakLoopType},
     declaration::Declaration,
     expression::{primary_expression::PrimaryExpression, Expression, SideEffectExpression},
-    for_control::ForControl,
     fn_return::FnReturn,
+    for_control::ForControl,
     if_control::IfControl,
     label::LabelStatement,
     loop_control::LoopControl,
     receive::ReceiveStatement,
     wait::{Wait, WaitingBlockKind},
     waiting_case::{WaitingBlockCase, WaitingBlockCaseRule},
-    Statement,
     while_control::WhileControl,
+    Statement,
 };
 use token::{
-    args_list::ArgsList, condition_keyword::ConditionKeyword, datatype::DataType,
-    binary_assignment_operator::BinaryAssignmentOperator,
+    args_list::ArgsList, binary_assignment_operator::BinaryAssignmentOperator,
+    condition_keyword::ConditionKeyword, datatype::DataType,
     declaration_keyword::DeclarationKeyword, identifier::Identifier,
     object_identifier::ObjectIdentifier,
 };
@@ -44,23 +43,14 @@ use token::{
 use crate::{
     checker::ltl::ast::parse_ltl_expression_with_chumsky,
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
-    no_rule,
     parser::{
-        parse_args_list_with_chumsky,
-        parse_channel_declaration_with_chumsky,
-        parse_datatype_with_chumsky,
-        parse_expression_with_chumsky,
-        parse_fn_call_with_chumsky,
-        parse_import_block_with_chumsky,
-        parse_list_expression_with_chumsky,
-        parse_object_identifier_with_chumsky,
-        parse_rule,
-        parse_run_call_with_chumsky,
-        parse_send_call_with_chumsky,
-        parse_side_effect_expression_with_chumsky,
+        parse_args_list_with_chumsky, parse_channel_declaration_with_chumsky,
+        parse_datatype_with_chumsky, parse_expression_with_chumsky, parse_fn_call_with_chumsky,
+        parse_import_block_with_chumsky, parse_list_expression_with_chumsky,
+        parse_object_identifier_with_chumsky, parse_run_call_with_chumsky,
+        parse_send_call_with_chumsky, parse_side_effect_expression_with_chumsky,
         parse_statement_block_with_chumsky,
         syntax::{SyntaxBlockDetail, SyntaxBlockKind, SyntaxProgram, SyntaxSnippet},
-        Rule,
     },
 };
 
@@ -87,16 +77,6 @@ impl Ast {
             import_block: None,
         }
     }
-    /// Builds an AST from the given pairs of rules.
-    pub fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let mut ast = Self::new();
-        for pair in pairs {
-            ast.apply_root_pair(pair, filepath)?;
-        }
-
-        Ok(ast)
-    }
-
     pub fn from_syntax(
         source: &str,
         syntax: SyntaxProgram,
@@ -106,25 +86,16 @@ impl Ast {
         for block in syntax.blocks {
             match &block.detail {
                 SyntaxBlockDetail::Opaque => {
-                    if block.kind == SyntaxBlockKind::Import {
-                        let snippet = SyntaxSnippet::new(block.pos.clone(), block.text.clone());
-                        ast.import_block =
-                            Some(parse_import_block_with_chumsky(source, &snippet, filepath)?);
-                    } else {
-                        let padded_source = pad_prefix(source, block.pos.start);
-                        let combined_source = format!("{padded_source}{}", block.text);
-                        let mut pairs = parse_rule(&combined_source, Rule::program, filepath)?;
-                        let pair = pairs
-                            .find(|pair| pair.as_rule() == block.rule())
-                            .ok_or_else(|| {
-                                AlthreadError::new(
-                                    ErrorType::SyntaxError,
-                                    Some(block.pos.clone()),
-                                    "Expected a top-level block".to_string(),
-                                )
-                            })?;
-                        ast.apply_root_pair(pair, filepath)?;
+                    if block.kind != SyntaxBlockKind::Import {
+                        return Err(AlthreadError::new(
+                            ErrorType::SyntaxError,
+                            Some(block.pos.clone()),
+                            "Unexpected opaque top-level block in chumsky parser".to_string(),
+                        ));
                     }
+                    let snippet = SyntaxSnippet::new(block.pos.clone(), block.text.clone());
+                    ast.import_block =
+                        Some(parse_import_block_with_chumsky(source, &snippet, filepath)?);
                 }
                 SyntaxBlockDetail::Main { body_pos, body } => {
                     let main_block =
@@ -243,119 +214,6 @@ impl Ast {
         Some("AST mismatch".to_string())
     }
 
-    fn apply_root_pair(
-        &mut self,
-        pair: pest::iterators::Pair<Rule>,
-        filepath: &str,
-    ) -> AlthreadResult<()> {
-        match pair.as_rule() {
-            Rule::import_block => {
-                if self.import_block.is_some() {
-                    return Err(AlthreadError::new(
-                        ErrorType::SyntaxError,
-                        Some(Pos::from_span(pair.as_span(), filepath)),
-                        "Only one import block is allowed per file.".to_string(),
-                    ));
-                }
-
-                let import_block = Node::build(pair, filepath)?;
-                self.import_block = Some(import_block);
-            }
-            Rule::main_block => {
-                let mut pairs = pair.into_inner();
-
-                let mut is_private = false;
-                let first = pairs.peek().unwrap();
-                if first.as_rule() == Rule::private_directive {
-                    is_private = true;
-                    pairs.next();
-                };
-
-                let main_block = Node::build(pairs.next().unwrap(), filepath)?;
-                self.process_blocks.insert(
-                    "main".to_string(),
-                    (Node::<ArgsList>::new(), main_block, is_private),
-                );
-            }
-            Rule::global_block => {
-                let mut pairs = pair.into_inner();
-
-                let global_block = Node::build(pairs.next().unwrap(), filepath)?;
-                self.global_block = Some(global_block);
-            }
-            Rule::condition_block => {
-                let mut pairs = pair.into_inner();
-
-                let keyword_pair = pairs.next().unwrap();
-                let condition_keyword = match keyword_pair.as_rule() {
-                    Rule::ALWAYS_KW => ConditionKeyword::Always,
-                    Rule::NEVER_KW => ConditionKeyword::Never,
-                    _ => return Err(no_rule!(keyword_pair, "condition keyword", filepath)),
-                };
-                let condition_block = Node::build(pairs.next().unwrap(), filepath)?;
-                self.condition_blocks
-                    .insert(condition_keyword, condition_block);
-            }
-            Rule::check_block => {
-                let check_block: Node<CheckBlock> = Node::build(pair, filepath)?;
-                self.check_blocks.push(check_block);
-            }
-            Rule::program_block => {
-                let mut pairs = pair.into_inner();
-
-                let mut is_private = false;
-                let first = pairs.peek().unwrap();
-                if first.as_rule() == Rule::private_directive {
-                    is_private = true;
-                    pairs.next();
-                }
-
-                let process_identifier = pairs.next().unwrap().as_str().to_string();
-                let args_list: Node<token::args_list::ArgsList> =
-                    Node::build(pairs.next().unwrap(), filepath)?;
-                let program_block = Node::build(pairs.next().unwrap(), filepath)?;
-                self.process_blocks
-                    .insert(process_identifier, (args_list, program_block, is_private));
-            }
-            Rule::function_block => {
-                let mut pairs = pair.into_inner();
-
-                let mut is_private = false;
-                let first = pairs.peek().unwrap();
-                if first.as_rule() == Rule::private_directive {
-                    is_private = true;
-                    pairs.next();
-                }
-
-                let function_identifier = pairs.next().unwrap().as_str().to_string();
-
-                let args_list: Node<token::args_list::ArgsList> =
-                    Node::build(pairs.next().unwrap(), filepath)?;
-                pairs.next();
-                let return_datatype = Node::<DataType>::build(pairs.next().unwrap(), filepath)?.value;
-
-                let function_block: Node<Block> = Node::build(pairs.next().unwrap(), filepath)?;
-
-                if self.function_blocks.contains_key(&function_identifier) {
-                    return Err(AlthreadError::new(
-                        ErrorType::FunctionAlreadyDefined,
-                        Some(function_block.pos),
-                        format!("Function '{}' is already defined", function_identifier),
-                    ));
-                }
-
-                self.function_blocks.insert(
-                    function_identifier,
-                    (args_list, return_datatype, function_block, is_private),
-                );
-            }
-            Rule::EOI => (),
-            _ => return Err(no_rule!(pair, "root ast", filepath)),
-        }
-
-        Ok(())
-    }
-
     fn canonical_repr(&self) -> String {
         let mut out = String::new();
         if let Some(import_block) = &self.import_block {
@@ -418,7 +276,7 @@ fn build_expression_block(
     let children = snippets
         .iter()
         .map(|snippet| {
-            let expr = parse_expression_or_fallback(source, snippet, filepath)?;
+            let expr = parse_expression_snippet(source, snippet, filepath)?;
             Ok(Node {
                 pos: Pos::from_offsets(source, filepath, snippet.pos.start, snippet.pos.end + 1),
                 value: Expression::Primary(Node {
@@ -450,7 +308,7 @@ fn build_check_block(
     })
 }
 
-fn parse_expression_or_fallback(
+fn parse_expression_snippet(
     source: &str,
     snippet: &SyntaxSnippet,
     filepath: &str,
@@ -458,25 +316,12 @@ fn parse_expression_or_fallback(
     parse_expression_with_chumsky(source, snippet, filepath)
 }
 
-fn parse_side_effect_expression_or_fallback(
+fn parse_side_effect_expression_snippet(
     source: &str,
     snippet: &SyntaxSnippet,
     filepath: &str,
 ) -> AlthreadResult<Node<SideEffectExpression>> {
     parse_side_effect_expression_with_chumsky(source, snippet, filepath)
-}
-
-fn pad_prefix(source: &str, prefix_len: usize) -> String {
-    source
-        .as_bytes()
-        .iter()
-        .take(prefix_len.min(source.len()))
-        .map(|byte| match byte {
-            b'\n' => '\n',
-            b'\r' => '\r',
-            _ => ' ',
-        })
-        .collect()
 }
 
 fn parse_statement_with_chumsky(
@@ -547,7 +392,9 @@ fn parse_statement_with_chumsky(
 
     index = 0;
     skip_inline_ws(&snippet.text, &mut index);
-    if consume_keyword(&snippet.text, &mut index, "atomic") || snippet.text.trim_start().starts_with('@') {
+    if consume_keyword(&snippet.text, &mut index, "atomic")
+        || snippet.text.trim_start().starts_with('@')
+    {
         return parse_atomic_statement(source, snippet, filepath).map(Some);
     }
 
@@ -625,11 +472,16 @@ fn parse_declaration_statement(
     let datatype = if snippet.text.as_bytes().get(index) == Some(&b':') {
         index += 1;
         let datatype_start = index;
-        let datatype_end =
-            find_top_level_char(&snippet.text, datatype_start, &['=', ';']).unwrap_or(snippet.text.len());
-        let datatype_snippet = sub_snippet(source, filepath, snippet, datatype_start, datatype_end)?;
+        let datatype_end = find_top_level_char(&snippet.text, datatype_start, &['=', ';'])
+            .unwrap_or(snippet.text.len());
+        let datatype_snippet =
+            sub_snippet(source, filepath, snippet, datatype_start, datatype_end)?;
         index = datatype_end;
-        Some(parse_datatype_with_chumsky(source, &datatype_snippet, filepath)?)
+        Some(parse_datatype_with_chumsky(
+            source,
+            &datatype_snippet,
+            filepath,
+        )?)
     } else {
         None
     };
@@ -649,7 +501,7 @@ fn parse_declaration_statement(
         })?;
         let value_snippet = sub_snippet(source, filepath, snippet, value_start, value_end)?;
         index = value_end;
-        Some(parse_side_effect_expression_or_fallback(
+        Some(parse_side_effect_expression_snippet(
             source,
             &value_snippet,
             filepath,
@@ -660,10 +512,18 @@ fn parse_declaration_statement(
 
     let value_end = index;
     let statement_end = expect_statement_end(source, filepath, snippet, &mut index)?;
-    let statement_pos =
-        Pos::from_offsets(source, filepath, snippet.pos.start, snippet.pos.start + statement_end);
-    let declaration_pos =
-        Pos::from_offsets(source, filepath, snippet.pos.start, snippet.pos.start + value_end);
+    let statement_pos = Pos::from_offsets(
+        source,
+        filepath,
+        snippet.pos.start,
+        snippet.pos.start + statement_end,
+    );
+    let declaration_pos = Pos::from_offsets(
+        source,
+        filepath,
+        snippet.pos.start,
+        snippet.pos.start + value_end,
+    );
     Ok(Node {
         pos: statement_pos.clone(),
         value: Statement::Declaration(Node {
@@ -710,11 +570,16 @@ fn parse_return_statement(
         })?;
         let expr_snippet = sub_snippet(source, filepath, snippet, index, expr_end)?;
         index = expr_end;
-        Some(parse_expression_or_fallback(source, &expr_snippet, filepath)?)
+        Some(parse_expression_snippet(source, &expr_snippet, filepath)?)
     };
 
     let statement_end = expect_statement_end(source, filepath, snippet, &mut index)?;
-    let pos = Pos::from_offsets(source, filepath, snippet.pos.start, snippet.pos.start + statement_end);
+    let pos = Pos::from_offsets(
+        source,
+        filepath,
+        snippet.pos.start,
+        snippet.pos.start + statement_end,
+    );
     Ok(Node {
         pos: pos.clone(),
         value: Statement::FnReturn(Node {
@@ -743,7 +608,12 @@ fn parse_label_statement(
 
     let name = parse_identifier_node(source, filepath, snippet, &mut index)?;
     let statement_end = expect_statement_end(source, filepath, snippet, &mut index)?;
-    let pos = Pos::from_offsets(source, filepath, snippet.pos.start, snippet.pos.start + statement_end);
+    let pos = Pos::from_offsets(
+        source,
+        filepath,
+        snippet.pos.start,
+        snippet.pos.start + statement_end,
+    );
     Ok(Node {
         pos: pos.clone(),
         value: Statement::Label(Node {
@@ -778,11 +648,20 @@ fn parse_break_loop_statement(
     let label = if snippet.text.as_bytes().get(index) == Some(&b';') {
         None
     } else {
-        Some(parse_identifier_node(source, filepath, snippet, &mut index)?.value.value)
+        Some(
+            parse_identifier_node(source, filepath, snippet, &mut index)?
+                .value
+                .value,
+        )
     };
 
     let statement_end = expect_statement_end(source, filepath, snippet, &mut index)?;
-    let pos = Pos::from_offsets(source, filepath, snippet.pos.start, snippet.pos.start + statement_end);
+    let pos = Pos::from_offsets(
+        source,
+        filepath,
+        snippet.pos.start,
+        snippet.pos.start + statement_end,
+    );
     Ok(Node {
         pos: pos.clone(),
         value: Statement::BreakLoop(Node {
@@ -811,7 +690,7 @@ fn parse_if_statement(
         )
     })?;
     let cond_snippet = sub_snippet_preserve_end(source, filepath, snippet, cond_start, then_start)?;
-    let mut condition = parse_expression_or_fallback(source, &cond_snippet, filepath)?;
+    let mut condition = parse_expression_snippet(source, &cond_snippet, filepath)?;
     condition.pos = Pos::from_offsets(
         source,
         filepath,
@@ -825,7 +704,9 @@ fn parse_if_statement(
     let else_block = if consume_keyword(&snippet.text, &mut index, "else") {
         skip_inline_ws(&snippet.text, &mut index);
         if snippet.text[index..].starts_with("if") {
-            let child = Box::new(parse_statement_or_fallback(source, filepath, snippet, index)?);
+            let child = Box::new(parse_statement_from_offset(
+                source, filepath, snippet, index,
+            )?);
             Some(Box::new(Node {
                 pos: child.pos.clone(),
                 value: Block {
@@ -873,7 +754,7 @@ fn parse_while_statement(
         )
     })?;
     let cond_snippet = sub_snippet_preserve_end(source, filepath, snippet, cond_start, body_start)?;
-    let mut condition = parse_expression_or_fallback(source, &cond_snippet, filepath)?;
+    let mut condition = parse_expression_snippet(source, &cond_snippet, filepath)?;
     condition.pos = Pos::from_offsets(
         source,
         filepath,
@@ -902,7 +783,9 @@ fn parse_loop_statement(
     let mut index = 0;
     skip_inline_ws(&snippet.text, &mut index);
     consume_keyword(&snippet.text, &mut index, "loop");
-    let statement = Box::new(parse_statement_or_fallback(source, filepath, snippet, index)?);
+    let statement = Box::new(parse_statement_from_offset(
+        source, filepath, snippet, index,
+    )?);
     let end = snippet.text.len();
     Ok(Node {
         pos: Pos::from_offsets(source, filepath, snippet.pos.start, snippet.pos.start + end),
@@ -927,7 +810,9 @@ fn parse_atomic_statement(
         consume_keyword(&snippet.text, &mut index, "atomic");
     }
     skip_inline_ws(&snippet.text, &mut index);
-    let mut statement = Box::new(parse_statement_or_fallback(source, filepath, snippet, index)?);
+    let mut statement = Box::new(parse_statement_from_offset(
+        source, filepath, snippet, index,
+    )?);
     let delegated = mark_atomic_wait_delegation(statement.as_mut());
     let end = snippet.text.len();
     let pos = Pos::from_offsets(
@@ -940,7 +825,10 @@ fn parse_atomic_statement(
         pos: pos.clone(),
         value: Statement::Atomic(Node {
             pos,
-            value: Atomic { statement, delegated },
+            value: Atomic {
+                statement,
+                delegated,
+            },
         }),
     })
 }
@@ -965,19 +853,21 @@ fn parse_for_statement(
         ));
     }
     let expr_start = index;
-    let stmt_start = find_statement_start_after_expression(&snippet.text, expr_start).ok_or_else(|| {
-        snippet_error(
-            source,
-            filepath,
-            snippet.pos.start + expr_start,
-            snippet.pos.end,
-            "expected loop body",
-        )
-    })?;
-    let expr_snippet =
-        sub_snippet_preserve_end(source, filepath, snippet, expr_start, stmt_start)?;
+    let stmt_start =
+        find_statement_start_after_expression(&snippet.text, expr_start).ok_or_else(|| {
+            snippet_error(
+                source,
+                filepath,
+                snippet.pos.start + expr_start,
+                snippet.pos.end,
+                "expected loop body",
+            )
+        })?;
+    let expr_snippet = sub_snippet_preserve_end(source, filepath, snippet, expr_start, stmt_start)?;
     let expression = parse_list_expression_with_chumsky(source, &expr_snippet, filepath)?;
-    let statement = Box::new(parse_statement_or_fallback(source, filepath, snippet, stmt_start)?);
+    let statement = Box::new(parse_statement_from_offset(
+        source, filepath, snippet, stmt_start,
+    )?);
     let end = snippet.text.len();
     Ok(Node {
         pos: Pos::from_offsets(source, filepath, snippet.pos.start, snippet.pos.start + end),
@@ -1052,20 +942,46 @@ fn parse_run_statement(
     snippet: &SyntaxSnippet,
     filepath: &str,
 ) -> AlthreadResult<Node<Statement>> {
+    parse_semicolon_terminated_leaf_statement(
+        source,
+        snippet,
+        filepath,
+        "expected ';' after run statement",
+        |inner| {
+            Ok(Statement::Run(parse_run_call_with_chumsky(
+                source, inner, filepath,
+            )?))
+        },
+    )
+}
+
+fn parse_semicolon_terminated_leaf_statement(
+    source: &str,
+    snippet: &SyntaxSnippet,
+    filepath: &str,
+    missing_semicolon_message: &'static str,
+    build: impl FnOnce(&SyntaxSnippet) -> AlthreadResult<Statement>,
+) -> AlthreadResult<Node<Statement>> {
     let expr_end = find_statement_semicolon(&snippet.text, 0).ok_or_else(|| {
         snippet_error(
             source,
             filepath,
             snippet.pos.start,
             snippet.pos.end,
-            "expected ';' after run statement",
+            missing_semicolon_message,
         )
     })?;
-    let run_snippet = sub_snippet(source, filepath, snippet, 0, expr_end)?;
+    let inner_snippet = sub_snippet(source, filepath, snippet, 0, expr_end)?;
     let statement_end = expr_end + 1;
+
     Ok(Node {
-        pos: Pos::from_offsets(source, filepath, snippet.pos.start, snippet.pos.start + statement_end),
-        value: Statement::Run(parse_run_call_with_chumsky(source, &run_snippet, filepath)?),
+        pos: Pos::from_offsets(
+            source,
+            filepath,
+            snippet.pos.start,
+            snippet.pos.start + statement_end,
+        ),
+        value: build(&inner_snippet)?,
     })
 }
 
@@ -1074,21 +990,17 @@ fn parse_send_statement(
     snippet: &SyntaxSnippet,
     filepath: &str,
 ) -> AlthreadResult<Node<Statement>> {
-    let expr_end = find_statement_semicolon(&snippet.text, 0).ok_or_else(|| {
-        snippet_error(
-            source,
-            filepath,
-            snippet.pos.start,
-            snippet.pos.end,
-            "expected ';' after send statement",
-        )
-    })?;
-    let send_snippet = sub_snippet(source, filepath, snippet, 0, expr_end)?;
-    let statement_end = expr_end + 1;
-    Ok(Node {
-        pos: Pos::from_offsets(source, filepath, snippet.pos.start, snippet.pos.start + statement_end),
-        value: Statement::Send(parse_send_call_with_chumsky(source, &send_snippet, filepath)?),
-    })
+    parse_semicolon_terminated_leaf_statement(
+        source,
+        snippet,
+        filepath,
+        "expected ';' after send statement",
+        |inner| {
+            Ok(Statement::Send(parse_send_call_with_chumsky(
+                source, inner, filepath,
+            )?))
+        },
+    )
 }
 
 fn parse_fn_call_statement(
@@ -1096,21 +1008,17 @@ fn parse_fn_call_statement(
     snippet: &SyntaxSnippet,
     filepath: &str,
 ) -> AlthreadResult<Node<Statement>> {
-    let expr_end = find_statement_semicolon(&snippet.text, 0).ok_or_else(|| {
-        snippet_error(
-            source,
-            filepath,
-            snippet.pos.start,
-            snippet.pos.end,
-            "expected ';' after function call",
-        )
-    })?;
-    let fn_snippet = sub_snippet(source, filepath, snippet, 0, expr_end)?;
-    let statement_end = expr_end + 1;
-    Ok(Node {
-        pos: Pos::from_offsets(source, filepath, snippet.pos.start, snippet.pos.start + statement_end),
-        value: Statement::FnCall(parse_fn_call_with_chumsky(source, &fn_snippet, filepath)?),
-    })
+    parse_semicolon_terminated_leaf_statement(
+        source,
+        snippet,
+        filepath,
+        "expected ';' after function call",
+        |inner| {
+            Ok(Statement::FnCall(parse_fn_call_with_chumsky(
+                source, inner, filepath,
+            )?))
+        },
+    )
 }
 
 fn parse_assignment_statement(
@@ -1118,15 +1026,16 @@ fn parse_assignment_statement(
     snippet: &SyntaxSnippet,
     filepath: &str,
 ) -> AlthreadResult<Node<Statement>> {
-    let (op_start, op_len, operator) = find_assignment_operator(&snippet.text).ok_or_else(|| {
-        snippet_error(
-            source,
-            filepath,
-            snippet.pos.start,
-            snippet.pos.end,
-            "expected assignment operator",
-        )
-    })?;
+    let (op_start, op_len, operator) =
+        find_assignment_operator(&snippet.text).ok_or_else(|| {
+            snippet_error(
+                source,
+                filepath,
+                snippet.pos.start,
+                snippet.pos.end,
+                "expected assignment operator",
+            )
+        })?;
 
     let lhs_snippet = sub_snippet(source, filepath, snippet, 0, op_start)?;
     let mut identifier = parse_object_identifier_with_chumsky(source, &lhs_snippet, filepath)?;
@@ -1142,7 +1051,7 @@ fn parse_assignment_statement(
         )
     })?;
     let value_snippet = sub_snippet(source, filepath, snippet, value_start, value_end)?;
-    let value = parse_side_effect_expression_or_fallback(source, &value_snippet, filepath)?;
+    let value = parse_side_effect_expression_snippet(source, &value_snippet, filepath)?;
     let operator_node = Node {
         pos: Pos::from_offsets(
             source,
@@ -1155,11 +1064,26 @@ fn parse_assignment_statement(
     let assign_end = value_end;
     let statement_end = assign_end + 1;
     Ok(Node {
-        pos: Pos::from_offsets(source, filepath, snippet.pos.start, snippet.pos.start + statement_end),
+        pos: Pos::from_offsets(
+            source,
+            filepath,
+            snippet.pos.start,
+            snippet.pos.start + statement_end,
+        ),
         value: Statement::Assignment(Node {
-            pos: Pos::from_offsets(source, filepath, snippet.pos.start, snippet.pos.start + assign_end),
+            pos: Pos::from_offsets(
+                source,
+                filepath,
+                snippet.pos.start,
+                snippet.pos.start + assign_end,
+            ),
             value: Assignment::Binary(Node {
-                pos: Pos::from_offsets(source, filepath, snippet.pos.start, snippet.pos.start + assign_end),
+                pos: Pos::from_offsets(
+                    source,
+                    filepath,
+                    snippet.pos.start,
+                    snippet.pos.start + assign_end,
+                ),
                 value: BinaryAssignment {
                     identifier,
                     operator: operator_node,
@@ -1175,25 +1099,17 @@ fn parse_channel_declaration_statement(
     snippet: &SyntaxSnippet,
     filepath: &str,
 ) -> AlthreadResult<Node<Statement>> {
-    let expr_end = find_statement_semicolon(&snippet.text, 0).ok_or_else(|| {
-        snippet_error(
-            source,
-            filepath,
-            snippet.pos.start,
-            snippet.pos.end,
-            "expected ';' after channel declaration",
-        )
-    })?;
-    let decl_snippet = sub_snippet(source, filepath, snippet, 0, expr_end)?;
-    let statement_end = expr_end + 1;
-    Ok(Node {
-        pos: Pos::from_offsets(source, filepath, snippet.pos.start, snippet.pos.start + statement_end),
-        value: Statement::ChannelDeclaration(parse_channel_declaration_with_chumsky(
-            source,
-            &decl_snippet,
-            filepath,
-        )?),
-    })
+    parse_semicolon_terminated_leaf_statement(
+        source,
+        snippet,
+        filepath,
+        "expected ';' after channel declaration",
+        |inner| {
+            Ok(Statement::ChannelDeclaration(
+                parse_channel_declaration_with_chumsky(source, inner, filepath)?,
+            ))
+        },
+    )
 }
 
 fn parse_waiting_block_cases(
@@ -1242,21 +1158,22 @@ fn parse_waiting_case(
     start: usize,
     end: usize,
 ) -> AlthreadResult<(Node<WaitingBlockCase>, usize)> {
-    let (rule_end, separator) = find_wait_case_separator(&snippet.text, start, end).ok_or_else(|| {
-        snippet_error(
-            source,
-            filepath,
-            snippet.pos.start + start,
-            snippet.pos.start + end,
-            "expected ';' or '=>' in wait case",
-        )
-    })?;
+    let (rule_end, separator) =
+        find_wait_case_separator(&snippet.text, start, end).ok_or_else(|| {
+            snippet_error(
+                source,
+                filepath,
+                snippet.pos.start + start,
+                snippet.pos.start + end,
+                "expected ';' or '=>' in wait case",
+            )
+        })?;
 
     let rule_snippet = sub_snippet_preserve_end(source, filepath, snippet, start, rule_end)?;
     let rule = if starts_with_keyword(&rule_snippet.text, 0, "receive") {
         WaitingBlockCaseRule::Receive(parse_receive_expression(source, &rule_snippet, filepath)?)
     } else {
-        let mut expression = parse_expression_or_fallback(source, &rule_snippet, filepath)?;
+        let mut expression = parse_expression_snippet(source, &rule_snippet, filepath)?;
         expression.pos = rule_snippet.pos.clone();
         WaitingBlockCaseRule::Expression(expression)
     };
@@ -1264,8 +1181,8 @@ fn parse_waiting_case(
     let (statement, case_end) = if separator == WaitCaseSeparator::Arrow {
         let mut statement_start = rule_end + 2;
         skip_inline_ws(&snippet.text, &mut statement_start);
-        let statement_end =
-            find_statement_end_in_range(&snippet.text, statement_start, end).ok_or_else(|| {
+        let statement_end = find_statement_end_in_range(&snippet.text, statement_start, end)
+            .ok_or_else(|| {
                 snippet_error(
                     source,
                     filepath,
@@ -1286,7 +1203,14 @@ fn parse_waiting_case(
                 snippet.pos.start + statement_end,
             );
         }
-        let case_end = statement_end;
+        let mut case_end = statement_end;
+        if matches!(statement.value, Statement::Block(_)) {
+            let mut semicolon_index = case_end;
+            skip_inline_ws(&snippet.text, &mut semicolon_index);
+            if snippet.text.as_bytes().get(semicolon_index) == Some(&b';') {
+                case_end = semicolon_index + 1;
+            }
+        }
         (Some(statement), case_end)
     } else {
         (None, rule_end + 1)
@@ -1362,7 +1286,12 @@ fn parse_receive_expression(
         .collect::<Vec<_>>();
 
     Ok(Node {
-        pos: Pos::from_offsets(source, filepath, snippet.pos.start, snippet.pos.start + pattern_end),
+        pos: Pos::from_offsets(
+            source,
+            filepath,
+            snippet.pos.start,
+            snippet.pos.start + pattern_end,
+        ),
         value: ReceiveStatement { channel, variables },
     })
 }
@@ -1383,14 +1312,19 @@ fn parse_code_block_snippet(
         )
     })?;
     let block_snippet = SyntaxSnippet::new(
-        Pos::from_offsets(source, filepath, snippet.pos.start + start, snippet.pos.start + end),
+        Pos::from_offsets(
+            source,
+            filepath,
+            snippet.pos.start + start,
+            snippet.pos.start + end,
+        ),
         snippet.text[start..end].to_string(),
     );
     let (pos, body) = parse_statement_block_with_chumsky(source, &block_snippet, filepath)?;
     Ok((end, build_statement_block(source, &body, pos, filepath)?))
 }
 
-fn parse_statement_or_fallback(
+fn parse_statement_from_offset(
     source: &str,
     filepath: &str,
     snippet: &SyntaxSnippet,
@@ -1710,7 +1644,10 @@ fn find_statement_start_after_expression_in_range(
                     if seen_content {
                         let mut next = idx + ch.len_utf8();
                         while next < limit
-                            && text.as_bytes().get(next).is_some_and(|byte| byte.is_ascii_whitespace())
+                            && text
+                                .as_bytes()
+                                .get(next)
+                                .is_some_and(|byte| byte.is_ascii_whitespace())
                         {
                             next += 1;
                         }
@@ -1825,7 +1762,10 @@ fn find_statement_start_after_expression(text: &str, start: usize) -> Option<usi
                     if seen_content {
                         let mut next = idx + ch.len_utf8();
                         while next < text.len()
-                            && text.as_bytes().get(next).is_some_and(|byte| byte.is_ascii_whitespace())
+                            && text
+                                .as_bytes()
+                                .get(next)
+                                .is_some_and(|byte| byte.is_ascii_whitespace())
                         {
                             next += 1;
                         }
@@ -2016,11 +1956,7 @@ fn find_top_level_char(text: &str, start: usize, needles: &[char]) -> Option<usi
             continue;
         }
 
-        if depth_paren == 0
-            && depth_bracket == 0
-            && depth_brace == 0
-            && needles.contains(&ch)
-        {
+        if depth_paren == 0 && depth_bracket == 0 && depth_brace == 0 && needles.contains(&ch) {
             return Some(idx);
         }
 

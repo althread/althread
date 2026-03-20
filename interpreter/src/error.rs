@@ -1,5 +1,4 @@
 use ariadne::{Color, Label, Report, ReportKind, Source};
-use pest::Span;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt, rc::Rc};
 
@@ -25,18 +24,7 @@ impl Default for Pos {
     }
 }
 
-impl<'i> Pos {
-    pub fn from_span(span: Span<'i>, file_path: &str) -> Self {
-        let start_pos = span.start_pos().line_col();
-        Self {
-            line: start_pos.0,
-            col: start_pos.1,
-            start: span.start(),
-            end: span.end(),
-            file_path: file_path.to_string(),
-        }
-    }
-
+impl Pos {
     pub fn from_offsets(source: &str, file_path: &str, start: usize, end: usize) -> Self {
         let safe_start = start.min(source.len());
         let safe_end = end.min(source.len()).max(safe_start);

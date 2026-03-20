@@ -1,11 +1,9 @@
 use std::fmt::{self};
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
+        node::{InstructionBuilder, Node},
         statement::expression::SideEffectExpression,
         token::{
             binary_assignment_operator::BinaryAssignmentOperator,
@@ -14,7 +12,6 @@ use crate::{
     },
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
-    parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };
 
@@ -23,46 +20,6 @@ pub struct BinaryAssignment {
     pub identifier: Node<ObjectIdentifier>,
     pub operator: Node<BinaryAssignmentOperator>,
     pub value: Node<SideEffectExpression>,
-}
-impl NodeBuilder for BinaryAssignment {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let identifier: Node<ObjectIdentifier> = Node::build(pairs.next().unwrap(), filepath)?;
-        let operator = Node::build(pairs.next().unwrap(), filepath)?;
-        let value = Node::build(pairs.next().unwrap(), filepath)?;
-
-        // do not allow read-update assignment (e.g., a += 1) on global variables
-        if operator.value != BinaryAssignmentOperator::Assign {
-            //check if the identifier starts with an uppercase letter, which indicates a global variable
-            let first_ident = identifier
-                .value
-                .parts
-                .first()
-                .expect("identifier must have at least one part");
-            if first_ident
-                .value
-                .value
-                .chars()
-                .next()
-                .unwrap()
-                .is_uppercase()
-            {
-                return Err(AlthreadError::new(
-                    ErrorType::VariableError,
-                    Some(first_ident.pos.clone()),
-                    format!(
-                        "Read-update assignment (e.g., a += 1) is not allowed on global variable '{}'",
-                        first_ident.value.value
-                    ),
-                ));
-            }
-        }
-
-        Ok(Self {
-            identifier,
-            operator,
-            value,
-        })
-    }
 }
 
 impl InstructionBuilder for Node<BinaryAssignment> {

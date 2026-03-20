@@ -8,10 +8,6 @@ use std::{collections::HashSet, fmt};
 
 use binary_expression::{BinaryExpression, LocalBinaryExpressionNode};
 use list_expression::{LocalRangeListExpressionNode, RangeListExpression};
-use pest::{
-    iterators::{Pair, Pairs},
-    pratt_parser::PrattParser,
-};
 use primary_expression::{LocalPrimaryExpressionNode, LocalVarNode, PrimaryExpression};
 use tuple_expression::{LocalTupleExpressionNode, TupleExpression};
 use unary_expression::{LocalUnaryExpressionNode, UnaryExpression};
@@ -19,13 +15,11 @@ use unary_expression::{LocalUnaryExpressionNode, UnaryExpression};
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
+        node::{InstructionBuilder, Node},
         token::{datatype::DataType, identifier::Identifier, literal::Literal},
     },
     compiler::{stdlib::invoke_interface_method, CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
-    no_rule,
-    parser::Rule,
     vm::{
         instruction::{Instruction, InstructionType},
         Memory,
@@ -33,23 +27,6 @@ use crate::{
 };
 
 use super::{fn_call::FnCall, run_call::RunCall, waiting_case::WaitDependency};
-
-lazy_static::lazy_static! {
-    static ref PRATT_PARSER: PrattParser<Rule> = {
-        use pest::pratt_parser::{Assoc::*, Op};
-
-        PrattParser::new()
-            .op(Op::infix(Rule::or_operator, Left))
-            .op(Op::infix(Rule::and_operator, Left))
-            .op(Op::infix(Rule::bitwise_operator, Left))
-            .op(Op::infix(Rule::equality_operator, Left))
-            .op(Op::infix(Rule::shift_operator, Left))
-            .op(Op::infix(Rule::comparison_operator, Left))
-            .op(Op::infix(Rule::term_operator, Left))
-            .op(Op::infix(Rule::factor_operator, Left))
-            .op(Op::prefix(Rule::unary_operator))
-    };
-}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum SideEffectExpression {
@@ -68,43 +45,6 @@ pub struct BracketExpression {
 pub enum BracketContent {
     Range(Node<RangeListExpression>),
     ListLiteral(Vec<Node<SideEffectExpression>>),
-}
-
-impl NodeBuilder for SideEffectExpression {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let pair = pairs.next().unwrap();
-
-        match pair.as_rule() {
-            Rule::expression => Ok(Self::Expression(Node::build(pair, filepath)?)),
-            Rule::run_call => Ok(Self::RunCall(Node::build(pair, filepath)?)),
-            Rule::fn_call => Ok(Self::FnCall(Node::build(pair, filepath)?)),
-            Rule::bracket_expression => Ok(Self::Bracket(Node::build(pair, filepath)?)),
-            _ => Err(no_rule!(pair, "SideEffectExpression", filepath)),
-        }
-    }
-}
-
-impl NodeBuilder for BracketExpression {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let pair = pairs.next().unwrap();
-
-        let content = match pair.as_rule() {
-            Rule::range_expression => {
-                let range_node = Node::build(pair, filepath)?;
-                BracketContent::Range(range_node)
-            }
-            Rule::list_literal_inner => {
-                let expressions: Result<Vec<_>, _> = pair
-                    .into_inner()
-                    .map(|expr_pair| Node::build(expr_pair, filepath))
-                    .collect();
-                BracketContent::ListLiteral(expressions?)
-            }
-            _ => return Err(no_rule!(pair, "BracketExpression", filepath)),
-        };
-
-        Ok(BracketExpression { content })
-    }
 }
 
 impl InstructionBuilder for SideEffectExpression {
@@ -450,244 +390,7 @@ impl fmt::Display for LocalExpressionNode {
     }
 }
 
-fn build_postfix_expression(pair: Pair<Rule>, filepath: &str) -> AlthreadResult<Node<Expression>> {
-    let pos = Pos {
-        line: pair.line_col().0,
-        col: pair.line_col().1,
-        start: pair.as_span().start(),
-        end: pair.as_span().end(),
-        file_path: filepath.to_string(),
-    };
-
-    let mut inner = pair.into_inner();
-    let base_primary_pair = inner.next().unwrap();
-    let remaining: Vec<Pair<Rule>> = inner.collect();
-
-    let mut segments = Vec::new();
-    let base_expr = match base_primary_pair.as_rule() {
-        Rule::fn_call => {
-            let call_node: Node<FnCall> = Node::build(base_primary_pair, filepath)?;
-            let parts = call_node.value.fn_name.value.parts.clone();
-
-            if parts.len() > 1 && !remaining.is_empty() {
-                let base_parts = parts[..parts.len() - 1].to_vec();
-                let base_ident = Node {
-                    pos: call_node.value.fn_name.pos.clone(),
-                    value: crate::ast::token::object_identifier::ObjectIdentifier {
-                        parts: base_parts,
-                    },
-                };
-                let base_primary = Node {
-                    pos: base_ident.pos.clone(),
-                    value: PrimaryExpression::Identifier(base_ident),
-                };
-                let base_expr = Node {
-                    pos: base_primary.pos.clone(),
-                    value: Expression::Primary(base_primary),
-                };
-
-                let name = parts.last().unwrap().clone();
-                let args = (*call_node.value.values).clone();
-                segments.push(CallChainSegment::Call { name, args });
-                base_expr
-            } else {
-                Node {
-                    pos: call_node.pos.clone(),
-                    value: Expression::FnCall(call_node),
-                }
-            }
-        }
-        _ => {
-            let base_primary = PrimaryExpression::build(base_primary_pair, filepath)?;
-            Node {
-                pos: base_primary.pos.clone(),
-                value: Expression::Primary(base_primary),
-            }
-        }
-    };
-
-    for segment in remaining {
-        let seg = if segment.as_rule() == Rule::postfix_segment {
-            segment.into_inner().next().unwrap()
-        } else {
-            segment
-        };
-
-        match seg.as_rule() {
-            Rule::postfix_call => {
-                let mut call_inner = seg.into_inner();
-                let name_pair = call_inner.next().unwrap();
-                let name = Node {
-                    pos: Pos {
-                        line: name_pair.line_col().0,
-                        col: name_pair.line_col().1,
-                        start: name_pair.as_span().start(),
-                        end: name_pair.as_span().end(),
-                        file_path: filepath.to_string(),
-                    },
-                    value: Identifier {
-                        value: name_pair.as_str().to_string(),
-                    },
-                };
-                let args = Expression::build_top_level(call_inner.next().unwrap(), filepath)?;
-                segments.push(CallChainSegment::Call { name, args });
-            }
-            Rule::postfix_reaches => {
-                let mut reach_inner = seg.into_inner();
-                let label_pair = reach_inner
-                    .find(|p| p.as_rule() == Rule::identifier)
-                    .unwrap();
-                let label = Node {
-                    pos: Pos {
-                        line: label_pair.line_col().0,
-                        col: label_pair.line_col().1,
-                        start: label_pair.as_span().start(),
-                        end: label_pair.as_span().end(),
-                        file_path: filepath.to_string(),
-                    },
-                    value: Identifier {
-                        value: label_pair.as_str().to_string(),
-                    },
-                };
-                segments.push(CallChainSegment::Reaches { label });
-            }
-            _ => return Err(no_rule!(seg, "postfix_segment", filepath)),
-        }
-    }
-
-    if segments.is_empty() {
-        Ok(base_expr)
-    } else {
-        Ok(Node {
-            pos: pos.clone(),
-            value: Expression::CallChain(Node {
-                pos,
-                value: CallChainExpression {
-                    base: Box::new(base_expr),
-                    segments,
-                },
-            }),
-        })
-    }
-}
-
-pub fn parse_expr(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Node<Expression>> {
-    PRATT_PARSER
-        .map_primary(|primary| match primary.as_rule() {
-            Rule::fn_call => Ok(Node {
-                pos: Pos {
-                    line: primary.line_col().0,
-                    col: primary.line_col().1,
-                    start: primary.as_span().start(),
-                    end: primary.as_span().end(),
-                    file_path: filepath.to_string(),
-                },
-                value: Expression::FnCall(Node::build(primary, filepath)?),
-            }),
-            Rule::postfix_expression => build_postfix_expression(primary, filepath),
-            _ => Ok(Node {
-                pos: Pos {
-                    line: primary.line_col().0,
-                    col: primary.line_col().1,
-                    start: primary.as_span().start(),
-                    end: primary.as_span().end(),
-                    file_path: filepath.to_string(),
-                },
-                value: Expression::Primary(PrimaryExpression::build(primary, filepath)?),
-            }),
-        })
-        .map_infix(|left, op, right| {
-            Ok(Node {
-                pos: Pos {
-                    line: op.line_col().0,
-                    col: op.line_col().1,
-                    start: op.as_span().start(),
-                    end: op.as_span().end(),
-                    file_path: filepath.to_string(),
-                },
-                value: Expression::Binary(BinaryExpression::build(left?, op, right?, filepath)?),
-            })
-        })
-        .map_prefix(|op, right| {
-            Ok(Node {
-                pos: Pos {
-                    line: op.line_col().0,
-                    col: op.line_col().1,
-                    start: op.as_span().start(),
-                    end: op.as_span().end(),
-                    file_path: filepath.to_string(),
-                },
-                value: Expression::Unary(UnaryExpression::build(op, right?, filepath)?),
-            })
-        })
-        .parse(pairs)
-}
-
-impl NodeBuilder for Expression {
-    fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        parse_expr(pairs, filepath).map(|node| node.value)
-    }
-}
-impl Expression {
-    pub fn build_list_expression(pair: Pair<Rule>, filepath: &str) -> AlthreadResult<Node<Self>> {
-        let pos = Pos {
-            line: pair.line_col().0,
-            col: pair.line_col().1,
-            start: pair.as_span().start(),
-            end: pair.as_span().end(),
-            file_path: filepath.to_string(),
-        };
-        match pair.as_rule() {
-            Rule::range_expression => {
-                let mut pair = pair.into_inner();
-                let expression_start: Box<Node<Expression>> =
-                    Box::new(Node::build(pair.next().unwrap(), filepath)?);
-                let expression_end: Box<Node<Expression>> =
-                    Box::new(Node::build(pair.next().unwrap(), filepath)?);
-                Ok(Node {
-                    pos: pos.clone(),
-                    value: Expression::Range(Node {
-                        pos: pos,
-                        value: RangeListExpression {
-                            expression_start,
-                            expression_end,
-                        },
-                    }),
-                })
-            }
-            _ => Err(no_rule!(pair, "list_expression", filepath)),
-        }
-    }
-    pub fn build_top_level(pair: Pair<Rule>, filepath: &str) -> AlthreadResult<Node<Self>> {
-        let pos = Pos {
-            line: pair.line_col().0,
-            col: pair.line_col().1,
-            start: pair.as_span().start(),
-            end: pair.as_span().end(),
-            file_path: filepath.to_string(),
-        };
-        match pair.as_rule() {
-            Rule::expression => {
-                let expr = Self::build(pair.into_inner(), filepath)?;
-                Ok(Node { pos, value: expr })
-            }
-            Rule::tuple_expression => {
-                let mut values = Vec::new();
-                for pair in pair.into_inner() {
-                    values.push(Node::build(pair, filepath)?);
-                }
-                Ok(Node {
-                    pos: pos.clone(),
-                    value: Expression::Tuple(Node {
-                        pos,
-                        value: TupleExpression { values },
-                    }),
-                })
-            }
-            _ => Err(no_rule!(pair, "Expression::build_top_level", filepath)),
-        }
-    }
-}
+impl Expression {}
 
 impl LocalExpressionNode {
     pub fn from_expression(

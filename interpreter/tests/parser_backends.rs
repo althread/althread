@@ -1,9 +1,9 @@
 use std::fs;
 
-use althread::parser::{parse_ast, ParserBackend, ParserOptions};
+use althread::parser::parse_ast;
 
 #[test]
-fn pest_and_chumsky_match_on_basic_program() {
+fn chumsky_parses_basic_program() {
     let source = r#"
 import [github.com/example/demo as demo]
 
@@ -36,53 +36,11 @@ main {
 }
 "#;
 
-    let pest = parse_ast(
-        source,
-        "",
-        ParserOptions {
-            primary: ParserBackend::Pest,
-            compare_against: None,
-        },
-    )
-    .unwrap();
-    let chumsky = parse_ast(
-        source,
-        "",
-        ParserOptions {
-            primary: ParserBackend::Chumsky,
-            compare_against: None,
-        },
-    )
-    .unwrap();
-
-    assert_eq!(pest.ast.diff_summary(&chumsky.ast), None);
+    parse_ast(source, "").unwrap();
 }
 
 #[test]
-fn compare_mode_reports_match() {
-    let source = r#"
-main {
-    let x = 1;
-}
-"#;
-
-    let output = parse_ast(
-        source,
-        "",
-        ParserOptions {
-            primary: ParserBackend::Pest,
-            compare_against: Some(ParserBackend::Chumsky),
-        },
-    )
-    .unwrap();
-
-    let comparison = output.comparison.expect("comparison output missing");
-    assert!(comparison.matched);
-    assert_eq!(comparison.summary, None);
-}
-
-#[test]
-fn chumsky_matches_nested_header_types() {
+fn chumsky_parses_nested_header_types() {
     let source = r#"
 program Worker(items: list(tuple(int, list(proc(Node))))) {
     let ready = true;
@@ -95,30 +53,11 @@ fn project(items: list(tuple(int, list(proc(Node))))) -> list(proc(Node)) {
 main {}
 "#;
 
-    let pest = parse_ast(
-        source,
-        "",
-        ParserOptions {
-            primary: ParserBackend::Pest,
-            compare_against: None,
-        },
-    )
-    .unwrap();
-    let chumsky = parse_ast(
-        source,
-        "",
-        ParserOptions {
-            primary: ParserBackend::Chumsky,
-            compare_against: None,
-        },
-    )
-    .unwrap();
-
-    assert_eq!(pest.ast.diff_summary(&chumsky.ast), None);
+    parse_ast(source, "").unwrap();
 }
 
 #[test]
-fn chumsky_matches_nested_channel_types() {
+fn chumsky_parses_nested_channel_types() {
     let source = r#"
 program Sender() {
     channel self.Out<(list(proc(Node)), tuple(int, bool))> Receiver.In;
@@ -133,115 +72,38 @@ main {
 }
 "#;
 
-    let pest = parse_ast(
-        source,
-        "",
-        ParserOptions {
-            primary: ParserBackend::Pest,
-            compare_against: None,
-        },
-    )
-    .unwrap();
-    let chumsky = parse_ast(
-        source,
-        "",
-        ParserOptions {
-            primary: ParserBackend::Chumsky,
-            compare_against: None,
-        },
-    )
-    .unwrap();
-
-    assert_eq!(pest.ast.diff_summary(&chumsky.ast), None);
+    parse_ast(source, "").unwrap();
 }
 
 #[test]
-fn chumsky_matches_example_corpus() {
+fn chumsky_parses_example_corpus() {
     for entry in fs::read_dir("../examples").unwrap() {
         let path = entry.unwrap().path();
         if path.extension().and_then(|ext| ext.to_str()) != Some("alt") {
             continue;
         }
         if path.file_name().and_then(|name| name.to_str()) == Some("TP2-communication.alt") {
-            // This course example is intentionally excluded from strict parser parity for now.
             continue;
         }
 
         let source = fs::read_to_string(&path).unwrap();
-        let pest = match parse_ast(
-            &source,
-            &path.to_string_lossy(),
-            ParserOptions {
-                primary: ParserBackend::Pest,
-                compare_against: None,
-            },
-        ) {
-            Ok(output) => output,
-            Err(_) => continue,
-        };
-        let chumsky = parse_ast(
-            &source,
-            &path.to_string_lossy(),
-            ParserOptions {
-                primary: ParserBackend::Chumsky,
-                compare_against: None,
-            },
-        )
-        .unwrap();
+        if source.trim().is_empty() {
+            continue;
+        }
 
-        assert_eq!(
-            pest.ast.diff_summary(&chumsky.ast),
-            None,
-            "parser mismatch for {}",
-            path.display()
-        );
+        parse_ast(&source, &path.to_string_lossy()).unwrap();
     }
 }
 
 #[test]
-fn malformed_input_reports_same_primary_error_span() {
+fn malformed_input_reports_syntax_error() {
     let source = r#"
 main {
     let x = 1;
 "#;
 
-    let pest_err = parse_ast(
-        source,
-        "",
-        ParserOptions {
-            primary: ParserBackend::Pest,
-            compare_against: None,
-        },
-    )
-    .unwrap_err();
-    let chumsky_err = parse_ast(
-        source,
-        "",
-        ParserOptions {
-            primary: ParserBackend::Chumsky,
-            compare_against: None,
-        },
-    )
-    .unwrap_err();
+    let err = parse_ast(source, "").unwrap_err();
 
-    assert_eq!(pest_err.error_type.to_string(), "Syntax Error");
-    assert_eq!(chumsky_err.error_type.to_string(), "Syntax Error");
-    assert!(
-        pest_err
-            .pos
-            .as_ref()
-            .unwrap()
-            .line
-            .abs_diff(chumsky_err.pos.as_ref().unwrap().line)
-            <= 1
-    );
-    assert!(
-        pest_err
-            .pos
-            .as_ref()
-            .unwrap()
-            .start
-            .abs_diff(chumsky_err.pos.as_ref().unwrap().start)
-            <= 1
-    );
+    assert_eq!(err.error_type.to_string(), "Syntax Error");
+    assert!(err.pos.is_some());
 }

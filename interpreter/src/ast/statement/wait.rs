@@ -1,11 +1,9 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
+        node::{InstructionBuilder, Node},
         token::{
             binary_assignment_operator::BinaryAssignmentOperator, datatype::DataType,
             literal::Literal,
@@ -13,8 +11,6 @@ use crate::{
     },
     compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
-    no_rule,
-    parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };
 
@@ -31,43 +27,6 @@ pub struct Wait {
     pub block_kind: WaitingBlockKind,
     pub waiting_cases: Vec<Node<WaitingBlockCase>>,
     pub start_atomic: bool,
-}
-
-impl NodeBuilder for Wait {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let pair = pairs.next().unwrap();
-        let mut block_kind = WaitingBlockKind::First;
-
-        let waiting_cases = match pair.as_rule() {
-            Rule::waiting_block => {
-                let mut pair = pair.into_inner();
-                block_kind = match pair.next().unwrap().as_rule() {
-                    Rule::FIRST_KW => WaitingBlockKind::First,
-                    Rule::SEQ_KW => WaitingBlockKind::Seq,
-                    _ => unreachable!(),
-                };
-                let mut children = Vec::new();
-                for sub_pair in pair {
-                    let node: Node<WaitingBlockCase> = Node::build(sub_pair, filepath)?;
-                    children.push(node);
-                }
-                children
-            }
-            Rule::waiting_block_case => {
-                let node: Node<WaitingBlockCase> = Node::build(pair, filepath)?;
-                vec![node]
-            }
-            _ => {
-                return Err(no_rule!(pair, "Wait", filepath));
-            }
-        };
-
-        Ok(Self {
-            block_kind,
-            waiting_cases,
-            start_atomic: false,
-        })
-    }
 }
 
 impl InstructionBuilder for Node<Wait> {

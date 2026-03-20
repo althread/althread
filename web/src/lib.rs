@@ -8,7 +8,7 @@ use wasm_bindgen::prelude::*;
 use althread::ast::token::literal::Literal;
 use althread::module_resolver::VirtualFileSystem;
 use althread::vm::VM;
-use althread::{ast::Ast, checker, error::AlthreadError, vm::GlobalAction};
+use althread::{checker, error::AlthreadError, vm::GlobalAction};
 use console_error_panic_hook;
 
 mod types;
@@ -263,10 +263,7 @@ pub fn compile(source: &str, file_path: &str, virtual_fs: JsValue) -> Result<Str
     let mut input_map = HashMap::new();
     input_map.insert(file_path.to_string(), source.to_string());
 
-    // parse code with pest
-    let pairs = althread::parser::parse(&source, file_path).map_err(error_to_js)?;
-
-    let ast = Ast::build(pairs, file_path).map_err(error_to_js)?;
+    let ast = althread::parser::parse_ast(&source, file_path).map_err(error_to_js)?;
 
     println!("{}", &ast);
 
@@ -290,10 +287,7 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
     let mut input_map = HashMap::new();
     input_map.insert(filepath.to_string(), source.to_string());
 
-    // parse code with pest
-    let pairs = althread::parser::parse(&source, filepath).map_err(error_to_js)?;
-
-    let ast = Ast::build(pairs, filepath).map_err(error_to_js)?;
+    let ast = althread::parser::parse_ast(&source, filepath).map_err(error_to_js)?;
 
     println!("{}", &ast);
 
@@ -483,10 +477,7 @@ pub fn check(
     let mut input_map = HashMap::new();
     input_map.insert(filepath.to_string(), source.to_string());
 
-    // parse code with pest
-    let pairs = althread::parser::parse(&source, filepath).map_err(error_to_js)?;
-
-    let ast = Ast::build(pairs, filepath).map_err(error_to_js)?;
+    let ast = althread::parser::parse_ast(&source, filepath).map_err(error_to_js)?;
 
     println!("{}", &ast);
 
@@ -681,10 +672,7 @@ pub fn start_interactive_session(
     let mut input_map = HashMap::new();
     input_map.insert(filepath.to_string(), source.to_string());
 
-    // parse code with pest
-    let pairs = althread::parser::parse(&source, filepath).map_err(error_to_js)?;
-
-    let ast = Ast::build(pairs, filepath).map_err(error_to_js)?;
+    let ast = althread::parser::parse_ast(&source, filepath).map_err(error_to_js)?;
 
     let compiled_project = ast
         .compile(Path::new(filepath), virtual_filesystem, &mut input_map)
@@ -758,10 +746,7 @@ pub fn get_next_interactive_states(
     let mut input_map = HashMap::new();
     input_map.insert(filepath.to_string(), source.to_string());
 
-    // parse code with pest - web-safe error handling
-    let pairs = althread::parser::parse(&source, filepath).map_err(error_to_js)?;
-
-    let ast = Ast::build(pairs, filepath).map_err(error_to_js)?;
+    let ast = althread::parser::parse_ast(&source, filepath).map_err(error_to_js)?;
 
     let compiled_project = ast
         .compile(Path::new(filepath), virtual_filesystem, &mut input_map)
@@ -870,10 +855,7 @@ pub fn execute_interactive_step(
     let mut input_map = HashMap::new();
     input_map.insert(filepath.to_string(), source.to_string());
 
-    // parse code with pest - web-safe error handling
-    let pairs = althread::parser::parse(&source, filepath).map_err(error_to_js)?;
-
-    let ast = Ast::build(pairs, filepath).map_err(error_to_js)?;
+    let ast = althread::parser::parse_ast(&source, filepath).map_err(error_to_js)?;
 
     let compiled_project = ast
         .compile(Path::new(filepath), virtual_filesystem, &mut input_map)

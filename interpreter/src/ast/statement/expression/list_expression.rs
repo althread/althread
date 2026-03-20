@@ -1,17 +1,14 @@
 use std::{collections::HashSet, fmt};
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{Node, NodeBuilder},
+        node::Node,
         statement::waiting_case::WaitDependency,
         token::{datatype::DataType, literal::Literal},
     },
     compiler::{CompilerState, Variable},
     error::AlthreadResult,
-    parser::Rule,
     vm::Memory,
 };
 
@@ -40,41 +37,6 @@ pub struct LocalRangeListExpressionNode {
     pub expression_start: Box<LocalExpressionNode>,
     pub expression_end: Box<LocalExpressionNode>,
 }
-
-impl NodeBuilder for RangeListExpression {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let expression_start = Box::new(Node::build(pairs.next().unwrap(), filepath)?);
-        let expression_end = Box::new(Node::build(pairs.next().unwrap(), filepath)?);
-
-        Ok(Self {
-            expression_start,
-            expression_end,
-        })
-    }
-} /*
-  impl InstructionBuilder for ListExpression {
-      fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
-          match self {
-              Self::Variable(v) => {
-                  v.compile(state)
-              },
-              Self::Range(r) => {
-
-                  let start = r.expression_start.compile(state);
-                  let end
-                  return Ok(InstructionBuilderOk::from_instructions(vec![
-                      Instruction {
-                          pos: r.expression_start.pos,
-                          control: crate::vm::instruction::InstructionType::Push(
-                              LocalListExpressionNode::from_range_list
-                          )
-                      }
-                  ]))
-              }
-          }
-      }
-  }
-   */
 impl RangeListExpression {
     pub fn add_dependencies(&self, dependencies: &mut WaitDependency) {
         self.expression_start.value.add_dependencies(dependencies);

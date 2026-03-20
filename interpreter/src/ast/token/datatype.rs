@@ -1,8 +1,6 @@
 use std::fmt;
 
-use crate::{ast::node::NodeBuilder, error::AlthreadResult, no_rule, parser::Rule};
 use ordered_float::OrderedFloat;
-use pest::iterators::Pairs;
 use serde::{Deserialize, Serialize};
 
 use super::literal::Literal;
@@ -108,37 +106,6 @@ impl DataType {
         match self {
             Self::Tuple(v) => v.clone(),
             _ => panic!("Call tuple_unwrap on a type that is not a tuple"),
-        }
-    }
-}
-
-impl NodeBuilder for DataType {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let pair = pairs.next().unwrap();
-        match pair.as_rule() {
-            Rule::BOOL_TYPE => Ok(Self::Boolean),
-            Rule::INT_TYPE => Ok(Self::Integer),
-            Rule::FLOAT_TYPE => Ok(Self::Float),
-            Rule::STR_TYPE => Ok(Self::String),
-            Rule::VOID_TYPE => Ok(Self::Void),
-            Rule::PROCESS_TYPE => Ok(Self::Process(
-                pair.into_inner().next().unwrap().as_str().to_string(),
-            )),
-            Rule::TUPLE_TYPE => {
-                let inner_pairs = pair.into_inner();
-                let mut types = Vec::new();
-                for datatype_pair in inner_pairs {
-                    let datatype = DataType::build(datatype_pair.into_inner(), filepath)?;
-                    types.push(datatype);
-                }
-                Ok(Self::Tuple(types))
-            }
-            Rule::LIST_TYPE => {
-                let mut pairs = pair.into_inner();
-                let datatype = DataType::build(pairs.next().unwrap().into_inner(), filepath)?;
-                Ok(Self::List(Box::new(datatype)))
-            }
-            _ => Err(no_rule!(pair, "DataType", filepath)),
         }
     }
 }

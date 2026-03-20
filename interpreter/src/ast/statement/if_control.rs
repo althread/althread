@@ -1,19 +1,14 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         block::Block,
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
-        statement::Statement,
+        node::{InstructionBuilder, Node},
         token::datatype::DataType,
     },
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
-    no_rule,
-    parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };
 
@@ -24,47 +19,6 @@ pub struct IfControl {
     pub condition: Node<Expression>,
     pub then_block: Box<Node<Block>>,
     pub else_block: Option<Box<Node<Block>>>,
-}
-
-impl NodeBuilder for IfControl {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let condition = Node::build(pairs.next().unwrap(), filepath)?;
-        let then_block = Node::build(pairs.next().unwrap(), filepath)?;
-
-        // The else block is optional and could be
-        // a if statement, in this case we need to wrap it in a block node
-        let else_block = match pairs.next() {
-            Some(else_block_pair) => match else_block_pair.as_rule() {
-                Rule::if_control => {
-                    // wrape the if controle in a block node
-                    let if_statement: Node<IfControl> = Node::build(else_block_pair, filepath)?;
-                    let common_position = if_statement.pos.clone();
-                    let v = vec![Node {
-                        pos: common_position.clone(),
-                        value: Statement::If(if_statement),
-                    }];
-                    Some(Node {
-                        pos: common_position,
-                        value: Block { children: v },
-                    })
-                }
-                Rule::code_block => Some(Node::build(else_block_pair, filepath)?),
-                _ => return Err(no_rule!(else_block_pair, "For else expression", filepath)),
-            },
-            None => None,
-        };
-
-        let else_block = match else_block {
-            Some(else_block) => Some(Box::new(else_block)),
-            None => None,
-        };
-
-        Ok(Self {
-            condition,
-            then_block: Box::new(then_block),
-            else_block: else_block,
-        })
-    }
 }
 
 impl InstructionBuilder for IfControl {

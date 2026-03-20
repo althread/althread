@@ -6,6 +6,7 @@
 
 #[cfg(test)]
 mod tests {
+    use crate::module_resolver::StandardFileSystem;
     use crate::{
         checker::{
             check_program, ltl::automaton::BuchiAutomaton, ltl::compiled::CompiledLtlExpression,
@@ -13,7 +14,6 @@ mod tests {
         compiler::CompiledProject,
         error::AlthreadResult,
     };
-    use crate::{module_resolver::StandardFileSystem, parser::ParserOptions};
     use std::collections::HashMap;
     use std::path::Path;
 
@@ -21,9 +21,7 @@ mod tests {
         let mut input_map = HashMap::new();
         input_map.insert("".to_string(), source.to_string());
 
-        let ast = crate::parser::parse_ast(source, "", ParserOptions::default())
-            .unwrap()
-            .ast;
+        let ast = crate::parser::parse_ast(source, "").unwrap();
         ast.compile(Path::new(""), StandardFileSystem, &mut input_map)
             .unwrap()
     }

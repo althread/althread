@@ -1,16 +1,13 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
+        node::{InstructionBuilder, Node},
         token::datatype::DataType,
     },
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
-    parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };
 
@@ -22,42 +19,6 @@ pub struct ChannelDeclaration {
     pub ch_right_name: String,
     pub datatypes: Vec<DataType>,
     // todo: direction
-}
-
-impl NodeBuilder for ChannelDeclaration {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let mut left_pairs = pairs.next().unwrap().into_inner();
-        let left_prog = String::from(left_pairs.next().unwrap().as_str());
-        let mut left_parts = Vec::new();
-        while let Some(part) = left_pairs.next() {
-            left_parts.push(part.as_str());
-        }
-        let left_name = left_parts.join(".");
-
-        let mut datatypes: Vec<DataType> = Vec::new();
-
-        let types_pair = pairs.next();
-        for pair in types_pair.unwrap().into_inner() {
-            let datatype = Node::<DataType>::build(pair, filepath)?.value;
-            datatypes.push(datatype);
-        }
-
-        let mut right_pairs = pairs.next().unwrap().into_inner();
-        let right_prog = String::from(right_pairs.next().unwrap().as_str());
-        let mut right_parts = Vec::new();
-        while let Some(part) = right_pairs.next() {
-            right_parts.push(part.as_str());
-        }
-        let right_name = right_parts.join(".");
-
-        Ok(Self {
-            ch_left_prog: left_prog,
-            ch_left_name: left_name,
-            ch_right_prog: right_prog,
-            ch_right_name: right_name,
-            datatypes,
-        })
-    }
 }
 
 fn get_var_id(

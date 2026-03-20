@@ -1,15 +1,12 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
+        node::{InstructionBuilder, Node},
     },
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
-    parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };
 
@@ -19,48 +16,6 @@ use super::Statement;
 pub struct Atomic {
     pub statement: Box<Node<Statement>>,
     pub delegated: bool,
-}
-
-impl NodeBuilder for Atomic {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let mut statement: Box<Node<Statement>> =
-            Box::new(Node::build(pairs.next().unwrap(), filepath)?);
-        let mut delegated = false;
-
-        let mut first_statement = statement.as_mut();
-
-        let start_atomic_lambda = |s: &mut Statement| {
-            // if the statement is a await block then tell it so
-            match s {
-                Statement::Wait(wait) => {
-                    wait.value.start_atomic = true;
-                    true
-                }
-                _ => false,
-            }
-        };
-
-        if start_atomic_lambda(&mut first_statement.value) {
-            delegated = true;
-        } else {
-            while let Statement::Block(block) = &mut first_statement.value {
-                if let Some(child) = block.value.children.first_mut() {
-                    first_statement = child;
-                    if start_atomic_lambda(&mut first_statement.value) {
-                        delegated = true;
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
-        }
-
-        Ok(Self {
-            statement,
-            delegated,
-        })
-    }
 }
 
 impl InstructionBuilder for Node<Atomic> {

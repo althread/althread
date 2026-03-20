@@ -1,17 +1,13 @@
 use std::{collections::HashSet, fmt};
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
+        node::{InstructionBuilder, Node},
         token::identifier::Identifier,
     },
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
-    no_rule,
-    parser::Rule,
 };
 
 #[derive(Debug, Clone)]
@@ -37,28 +33,6 @@ impl ImportPath {
 
     pub fn last_segment(&self) -> &str {
         self.segments.last().map(|s| s.as_str()).unwrap_or("")
-    }
-}
-
-impl NodeBuilder for ImportBlock {
-    fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let mut imports = Vec::new();
-
-        for pair in pairs {
-            match pair.as_rule() {
-                Rule::import_list => {
-                    for import_item_pair in pair.into_inner() {
-                        let import_item = Node::build(import_item_pair, filepath)?;
-                        imports.push(import_item);
-                    }
-                }
-                _ => return Err(no_rule!(pair, "ImportBlock", filepath)),
-            }
-        }
-
-        Self::validate_import_names(&imports)?;
-
-        Ok(Self { imports })
     }
 }
 
@@ -90,62 +64,7 @@ impl ImportBlock {
     }
 }
 
-impl NodeBuilder for ImportItem {
-    fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let mut pairs = pairs;
-        let path_pair = pairs.next().unwrap();
-        let path = ImportPath::build(path_pair.into_inner(), filepath)?;
-
-        let alias = if let Some(next_pair) = pairs.next() {
-            match next_pair.as_rule() {
-                Rule::AS_KW => {
-                    // The identifier should be the next pair after "as"
-                    if let Some(identifier_pair) = pairs.next() {
-                        Some(Node::build(identifier_pair, filepath)?)
-                    } else {
-                        return Err(no_rule!(
-                            next_pair,
-                            "ImportItem - missing identifier after 'as'",
-                            filepath
-                        ));
-                    }
-                }
-                Rule::identifier => {
-                    // If we get an identifier directly
-                    Some(Node::build(next_pair, filepath)?)
-                }
-                _ => return Err(no_rule!(next_pair, "ImportItem", filepath)),
-            }
-        } else {
-            None
-        };
-
-        Ok(Self { path, alias })
-    }
-}
-
-impl ImportPath {
-    fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let mut segments = Vec::new();
-
-        for pair in pairs {
-            match pair.as_rule() {
-                Rule::import_segment => {
-                    segments.push(pair.as_str().to_string());
-                }
-                Rule::identifier => {
-                    segments.push(pair.as_str().to_string());
-                }
-                Rule::domain_identifier => {
-                    segments.push(pair.as_str().to_string());
-                }
-                _ => return Err(no_rule!(pair, "ImportPath", filepath)),
-            }
-        }
-
-        Ok(Self { segments })
-    }
-}
+impl ImportPath {}
 
 impl InstructionBuilder for ImportBlock {
     fn compile(&self, _state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {

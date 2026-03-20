@@ -1,11 +1,9 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
+        node::{InstructionBuilder, Node},
         token::{
             datatype::DataType, declaration_keyword::DeclarationKeyword,
             object_identifier::ObjectIdentifier,
@@ -13,8 +11,6 @@ use crate::{
     },
     compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
-    no_rule,
-    parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };
 
@@ -26,34 +22,6 @@ pub struct Declaration {
     pub identifier: Node<ObjectIdentifier>,
     pub datatype: Option<Node<DataType>>,
     pub value: Option<Node<SideEffectExpression>>,
-}
-
-impl NodeBuilder for Declaration {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let keyword = Node::build(pairs.next().unwrap(), filepath)?;
-        let identifier = Node::build(pairs.next().unwrap(), filepath)?;
-        let mut datatype = None;
-        let mut value = None;
-
-        for pair in pairs {
-            match pair.as_rule() {
-                Rule::datatype => {
-                    datatype = Some(Node::build(pair, filepath)?);
-                }
-                Rule::side_effect_expression => {
-                    value = Some(Node::build(pair, filepath)?);
-                }
-                _ => return Err(no_rule!(pair, "declaration", filepath)),
-            }
-        }
-
-        Ok(Self {
-            keyword,
-            identifier,
-            datatype,
-            value,
-        })
-    }
 }
 
 impl InstructionBuilder for Declaration {

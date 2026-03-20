@@ -1,9 +1,7 @@
 use std::{ffi::OsStr, path::PathBuf};
 
 use clap::builder::TypedValueParser;
-use clap::{Args, Parser, Subcommand, ValueEnum, ValueHint};
-
-use althread::parser::{ParserBackend, ParserOptions};
+use clap::{Args, Parser, Subcommand, ValueHint};
 
 /// An input that is either stdin or a real path.
 #[derive(Debug, Clone)]
@@ -221,37 +219,6 @@ pub struct SharedArgs {
     /// Path to input Typst file. Use `-` to read input from stdin
     #[clap(value_parser = make_input_value_parser(), value_hint = ValueHint::FilePath)]
     pub input: Input,
-
-    /// Parser backend to use
-    #[clap(long, value_enum, default_value_t = ParserCliBackend::Pest)]
-    pub parser: ParserCliBackend,
-
-    /// Compare the selected parser against the other parser and report mismatches
-    #[clap(long)]
-    pub compare_parser: bool,
-}
-
-#[derive(Debug, Clone, Copy, ValueEnum)]
-pub enum ParserCliBackend {
-    Pest,
-    Chumsky,
-}
-
-impl SharedArgs {
-    pub fn parser_options(&self) -> ParserOptions {
-        let primary = match self.parser {
-            ParserCliBackend::Pest => ParserBackend::Pest,
-            ParserCliBackend::Chumsky => ParserBackend::Chumsky,
-        };
-        let compare_against = self.compare_parser.then_some(match primary {
-            ParserBackend::Pest => ParserBackend::Chumsky,
-            ParserBackend::Chumsky => ParserBackend::Pest,
-        });
-        ParserOptions {
-            primary,
-            compare_against,
-        }
-    }
 }
 
 /// The clap value parser used by `SharedArgs.input`

@@ -1,10 +1,8 @@
 use std::fmt;
 
-use pest::iterators::{Pair, Pairs};
-
 use crate::compiler::InstructionBuilderOk;
 use crate::error::Pos;
-use crate::{compiler::CompilerState, error::AlthreadResult, parser::Rule};
+use crate::{compiler::CompilerState, error::AlthreadResult};
 
 use super::display::{AstDisplay, Prefix};
 
@@ -14,28 +12,8 @@ pub struct Node<T> {
     pub pos: Pos,
 }
 
-pub trait NodeBuilder: Sized {
-    fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self>;
-}
-
 pub trait InstructionBuilder: Sized {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk>;
-}
-
-impl<T: NodeBuilder> Node<T> {
-    pub fn build(pair: Pair<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let (line, col) = pair.line_col();
-        Ok(Node {
-            pos: Pos {
-                start: pair.as_span().start(),
-                end: pair.as_span().end(),
-                line,
-                col,
-                file_path: filepath.to_string(),
-            },
-            value: T::build(pair.into_inner(), filepath)?,
-        })
-    }
 }
 
 impl<T: AstDisplay> AstDisplay for Node<T> {

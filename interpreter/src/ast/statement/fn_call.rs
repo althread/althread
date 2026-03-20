@@ -1,16 +1,13 @@
 use std::{collections::HashSet, fmt};
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
+        node::{InstructionBuilder, Node},
         token::{datatype::DataType, object_identifier::ObjectIdentifier},
     },
     compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
-    parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };
 
@@ -64,18 +61,6 @@ impl FnCall {
 
     pub fn get_vars(&self, vars: &mut HashSet<String>) {
         self.values.value.get_vars(vars);
-    }
-}
-
-impl NodeBuilder for FnCall {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let fn_name = Node::<ObjectIdentifier>::build(pairs.next().unwrap(), filepath)?;
-        let values = Box::new(Expression::build_top_level(
-            pairs.next().unwrap(),
-            filepath,
-        )?);
-
-        Ok(Self { fn_name, values })
     }
 }
 

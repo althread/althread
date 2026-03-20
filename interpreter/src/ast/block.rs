@@ -1,15 +1,12 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
 use crate::compiler::{CompilerState, InstructionBuilderOk};
 use crate::error::AlthreadResult;
-use crate::parser::Rule;
 use crate::vm::instruction::{Instruction, InstructionType};
 
 use super::{
     display::{AstDisplay, Prefix},
-    node::{InstructionBuilder, Node, NodeBuilder},
+    node::{InstructionBuilder, Node},
     statement::Statement,
 };
 
@@ -23,19 +20,6 @@ impl Block {
         Self {
             children: Vec::new(),
         }
-    }
-}
-
-impl NodeBuilder for Block {
-    fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let mut block = Self::new();
-
-        for pair in pairs {
-            let node = Node::build(pair, filepath)?;
-            block.children.push(node);
-        }
-
-        Ok(block)
     }
 }
 

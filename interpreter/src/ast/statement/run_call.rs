@@ -1,16 +1,13 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
+        node::{InstructionBuilder, Node},
         token::{datatype::DataType, object_identifier::ObjectIdentifier},
     },
     compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
-    parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };
 
@@ -31,22 +28,6 @@ impl RunCall {
             .map(|part| part.value.value.as_str())
             .collect::<Vec<_>>()
             .join(".")
-    }
-}
-
-impl NodeBuilder for RunCall {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let identifier = Node::build(pairs.next().unwrap(), filepath)?;
-        let args: Node<Expression> = Expression::build_top_level(pairs.next().unwrap(), filepath)?;
-
-        if !args.value.is_tuple() {
-            return Err(AlthreadError::new(
-                ErrorType::TypeError,
-                Some(args.pos),
-                "Run statement expects a tuple of arguments (possibly empty)".to_string(),
-            ));
-        }
-        Ok(Self { identifier, args })
     }
 }
 

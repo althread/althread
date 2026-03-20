@@ -1,16 +1,13 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
-        token::{datatype::DataType, object_identifier::ObjectIdentifier},
+        node::{InstructionBuilder, Node},
+        token::datatype::DataType,
     },
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
-    parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };
 
@@ -21,50 +18,6 @@ pub struct SendStatement {
     pub channel: String,
     pub is_broadcast: bool,
     pub values: Node<Expression>,
-}
-
-impl NodeBuilder for SendStatement {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let pair = pairs.next().unwrap();
-
-        let channel = if pair.as_rule() == Rule::object_identifier {
-            // Parse the object_identifier and convert it to a string
-            let object_id = Node::<ObjectIdentifier>::build(pair, filepath)?;
-            object_id
-                .value
-                .parts
-                .iter()
-                .map(|p| p.value.value.as_str())
-                .collect::<Vec<_>>()
-                .join(".")
-        } else {
-            // Fallback for simple identifier (shouldn't happen with current grammar)
-            pair.as_str().to_string()
-        };
-
-        let mut next_pair = pairs.next().unwrap();
-        let mut is_broadcast = false;
-        if next_pair.as_rule() == Rule::wild_card_suffix {
-            is_broadcast = true;
-            next_pair = pairs.next().unwrap();
-        }
-
-        let values: Node<Expression> = Expression::build_top_level(next_pair, filepath)?;
-
-        if !values.value.is_tuple() {
-            return Err(AlthreadError::new(
-                ErrorType::TypeError,
-                Some(values.pos),
-                "Send statement expects a tuple of values".to_string(),
-            ));
-        }
-
-        Ok(Self {
-            channel,
-            is_broadcast,
-            values,
-        })
-    }
 }
 
 impl InstructionBuilder for Node<SendStatement> {

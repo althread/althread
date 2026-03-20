@@ -1,28 +1,15 @@
 use std::fmt;
 
-use pest::iterators::{Pair, Pairs};
-use pest::pratt_parser::PrattParser;
-
 use crate::{
     ast::{
-        node::{Node, NodeBuilder},
-        statement::expression::{list_expression::RangeListExpression, primary_expression::PrimaryExpression, Expression},
+        node::Node,
+        statement::expression::{primary_expression::PrimaryExpression, Expression},
     },
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
-    no_rule,
-    parser::{parse_expression_with_chumsky, parse_list_expression_with_chumsky, syntax::SyntaxSnippet, Rule},
+    parser::{
+        parse_expression_with_chumsky, parse_list_expression_with_chumsky, syntax::SyntaxSnippet,
+    },
 };
-
-lazy_static::lazy_static! {
-    static ref PRATT_PARSER: PrattParser<Rule> = {
-        use pest::pratt_parser::{Assoc::*, Op};
-
-        PrattParser::new()
-            .op(Op::infix(Rule::OR_OP, Left))
-            .op(Op::infix(Rule::AND_OP, Left))
-            .op(Op::infix(Rule::UNTIL_KW, Left))
-    };
-}
 
 /// Represents an LTL formula
 #[derive(Debug, Clone, PartialEq)]
@@ -48,155 +35,12 @@ pub enum LtlExpression {
 pub struct CheckBlock {
     pub formulas: Vec<LtlExpression>,
 }
-
-impl NodeBuilder for CheckBlock {
-    fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let mut formulas = Vec::new();
-
-        for pair in pairs {
-            match pair.as_rule() {
-                Rule::ltl_statement => {
-                    // formulas.push(build_ltl_statement(pair, filepath)?);
-                    let mut inner = pair.into_inner();
-                    let expr_pair = inner.next().unwrap();
-                    let formula = build_ltl_expression(expr_pair, filepath)?;
-                    formulas.push(formula);
-                }
-                _ => {}
-            }
-        }
-
-        Ok(Self { formulas })
-    }
-}
-/*
-fn build_ltl_statement(pair: Pair<Rule>, filepath: &str) -> AlthreadResult<LtlExpression> {
-    let inner = pair.into_inner().next().unwrap();
-    match inner.as_rule() {
-        Rule::ltl_for_loop => build_ltl_for_loop(inner, filepath),
-        Rule::ltl_expression => build_ltl_expression(inner, filepath),
-        _ => unreachable!("Invalid ltl statement"),
-    }
-}
-*/
-fn build_ltl_for_loop(pair: Pair<Rule>, filepath: &str) -> AlthreadResult<LtlExpression> {
-    let mut inner = pair.into_inner();
-    let ident_pair = inner.next().unwrap();
-    let var_name = ident_pair.as_str().to_string();
-
-    let list_pair = inner.next().unwrap();
-    let list_node = match list_pair.as_rule() {
-        Rule::range_expression => {
-            let range = Node::<RangeListExpression>::build(list_pair, filepath)?;
-            Node {
-                pos: range.pos.clone(),
-                value: Expression::Range(range),
-            }
-        }
-        Rule::expression => Node::<Expression>::build(list_pair, filepath)?,
-        _ => unreachable!("Invalid list expression"),
-    };
-
-    /*
-    let mut body = Vec::new();
-    for stmt_pair in inner {
-        if stmt_pair.as_rule() == Rule::ltl_statement {
-            body.push(build_ltl_statement(stmt_pair, filepath)?);
-        }
-    }
-    */
-    let expr_pair = inner.next().unwrap();
-    let body = build_ltl_expression(expr_pair, filepath)?;
-
-    Ok(LtlExpression::ForLoop {
-        var_name,
-        list: list_node,
-        body: Box::new(body),
-    })
-}
-
-fn build_ltl_expression(pair: Pair<Rule>, filepath: &str) -> AlthreadResult<LtlExpression> {
-    match pair.as_rule() {
-        Rule::ltl_expression => {
-            let pairs = pair.into_inner();
-            PRATT_PARSER
-                .map_primary(|primary| build_ltl_term(primary, filepath))
-                .map_infix(|lhs, op, rhs| {
-                    let lhs = lhs?;
-                    let rhs = rhs?;
-                    match op.as_rule() {
-                        Rule::OR_OP => Ok(LtlExpression::Or(Box::new(lhs), Box::new(rhs))),
-                        Rule::AND_OP => Ok(LtlExpression::And(Box::new(lhs), Box::new(rhs))),
-                        Rule::UNTIL_KW => Ok(LtlExpression::Until(Box::new(lhs), Box::new(rhs))),
-                        _ => unreachable!("Invalid binary operator"),
-                    }
-                })
-                .parse(pairs)
-        }
-        _ => Err(no_rule!(pair, "LtlExpression", filepath)),
-    }
-}
-
 pub(crate) fn parse_ltl_expression_with_chumsky(
     source: &str,
     snippet: &SyntaxSnippet,
     filepath: &str,
 ) -> AlthreadResult<LtlExpression> {
     LtlParser::new(source, snippet, filepath).parse_expression(0)
-}
-
-fn build_ltl_term(pair: Pair<Rule>, filepath: &str) -> AlthreadResult<LtlExpression> {
-    match pair.as_rule() {
-        Rule::ltl_term => build_ltl_term(pair.into_inner().next().unwrap(), filepath),
-        Rule::ltl_for_loop => build_ltl_for_loop(pair, filepath),
-        Rule::ltl_unary_expression => {
-            let mut inner = pair.into_inner();
-            let op = inner.next().unwrap();
-            let expr = inner.next().unwrap();
-            let built_expr = build_ltl_term(expr, filepath)?;
-
-            match op.as_rule() {
-                Rule::ALWAYS_KW => Ok(LtlExpression::Always(Box::new(built_expr))),
-                Rule::EVENTUALLY_KW => Ok(LtlExpression::Eventually(Box::new(built_expr))),
-                Rule::NOT_OP => Ok(LtlExpression::Not(Box::new(built_expr))),
-                _ => unreachable!("Invalid unary operator"),
-            }
-        }
-        Rule::ltl_if_expression => {
-            let mut inner = pair.into_inner();
-            let cond = build_ltl_expression(inner.next().unwrap(), filepath)?;
-            let then_branch = build_ltl_expression(inner.next().unwrap(), filepath)?;
-
-            if let Some(else_pair) = inner.next() {
-                let else_branch = build_ltl_expression(else_pair, filepath)?;
-                let cond_box = Box::new(cond);
-                // (cond -> then_branch) && (!cond -> else_branch)
-                let implies_then = LtlExpression::Implies(cond_box.clone(), Box::new(then_branch));
-                let not_cond = LtlExpression::Not(cond_box);
-                let implies_else =
-                    LtlExpression::Implies(Box::new(not_cond), Box::new(else_branch));
-                Ok(LtlExpression::And(
-                    Box::new(implies_then),
-                    Box::new(implies_else),
-                ))
-            } else {
-                Ok(LtlExpression::Implies(
-                    Box::new(cond),
-                    Box::new(then_branch),
-                ))
-            }
-        }
-        Rule::ltl_predicate => {
-            let expr_pair = pair.into_inner().next().unwrap(); // expression
-            let expr_node = Node::<Expression>::build(expr_pair, filepath)?;
-            Ok(LtlExpression::Predicate(expr_node))
-        }
-        Rule::ltl_expression => {
-            // Parenthesized expression
-            build_ltl_expression(pair, filepath)
-        }
-        _ => Err(no_rule!(pair, "LtlTerm", filepath)),
-    }
 }
 
 impl fmt::Display for LtlExpression {
@@ -335,15 +179,16 @@ impl<'a> LtlParser<'a> {
 
     fn parse_if_expression(&mut self) -> AlthreadResult<LtlExpression> {
         let cond_start = self.index;
-        let then_block_start = find_top_level_block_start(self.text, cond_start).ok_or_else(|| {
-            ltl_error(
-                self.source,
-                self.file_path,
-                self.snippet.pos.start + cond_start,
-                self.snippet.pos.end,
-                "expected '{' after if condition",
-            )
-        })?;
+        let then_block_start =
+            find_top_level_block_start(self.text, cond_start).ok_or_else(|| {
+                ltl_error(
+                    self.source,
+                    self.file_path,
+                    self.snippet.pos.start + cond_start,
+                    self.snippet.pos.end,
+                    "expected '{' after if condition",
+                )
+            })?;
         let cond_snippet = trimmed_snippet(
             self.source,
             self.file_path,
@@ -360,11 +205,16 @@ impl<'a> LtlParser<'a> {
                     && !cond_snippet.text.contains("||")
                 {
                     expr.pos.end = self.snippet.pos.start + then_block_start;
-                    expand_identifier_predicate_end(&mut expr, self.snippet.pos.start + then_block_start);
+                    expand_identifier_predicate_end(
+                        &mut expr,
+                        self.snippet.pos.start + then_block_start,
+                    );
                 }
                 LtlExpression::Predicate(expr)
             }
-            Err(_) => parse_ltl_expression_with_chumsky(self.source, &cond_snippet, self.file_path)?,
+            Err(_) => {
+                parse_ltl_expression_with_chumsky(self.source, &cond_snippet, self.file_path)?
+            }
         };
         let (then_expr, then_end) = parse_ltl_block_expression(
             self.source,
@@ -424,17 +274,23 @@ impl<'a> LtlParser<'a> {
         }
 
         let list_start = self.index;
-        let body_block_start = find_top_level_block_start(self.text, list_start).ok_or_else(|| {
-            ltl_error(
-                self.source,
-                self.file_path,
-                self.snippet.pos.start + list_start,
-                self.snippet.pos.end,
-                "expected '{' after LTL list expression",
-            )
-        })?;
-        let list_snippet =
-            trimmed_snippet(self.source, self.file_path, self.snippet, list_start, body_block_start);
+        let body_block_start =
+            find_top_level_block_start(self.text, list_start).ok_or_else(|| {
+                ltl_error(
+                    self.source,
+                    self.file_path,
+                    self.snippet.pos.start + list_start,
+                    self.snippet.pos.end,
+                    "expected '{' after LTL list expression",
+                )
+            })?;
+        let list_snippet = trimmed_snippet(
+            self.source,
+            self.file_path,
+            self.snippet,
+            list_start,
+            body_block_start,
+        );
         let mut list =
             parse_list_expression_with_chumsky(self.source, &list_snippet, self.file_path)?;
         list.pos = Pos::from_offsets(
@@ -734,7 +590,12 @@ fn trimmed_snippet(
         end -= 1;
     }
     SyntaxSnippet::new(
-        Pos::from_offsets(source, file_path, outer.pos.start + start, outer.pos.start + end),
+        Pos::from_offsets(
+            source,
+            file_path,
+            outer.pos.start + start,
+            outer.pos.start + end,
+        ),
         outer.text[start..end].to_string(),
     )
 }
@@ -750,7 +611,12 @@ fn start_trimmed_snippet(
         start += 1;
     }
     SyntaxSnippet::new(
-        Pos::from_offsets(source, file_path, outer.pos.start + start, outer.pos.start + end),
+        Pos::from_offsets(
+            source,
+            file_path,
+            outer.pos.start + start,
+            outer.pos.start + end,
+        ),
         outer.text[start..end].to_string(),
     )
 }
@@ -807,10 +673,21 @@ fn skip_ws(text: &str, index: &mut usize) {
     }
 }
 
-fn ltl_error(source: &str, file_path: &str, start: usize, end: usize, message: &str) -> AlthreadError {
+fn ltl_error(
+    source: &str,
+    file_path: &str,
+    start: usize,
+    end: usize,
+    message: &str,
+) -> AlthreadError {
     AlthreadError::new(
         ErrorType::SyntaxError,
-        Some(Pos::from_offsets(source, file_path, start, end.max(start + 1))),
+        Some(Pos::from_offsets(
+            source,
+            file_path,
+            start,
+            end.max(start + 1),
+        )),
         message.to_string(),
     )
 }

@@ -1,18 +1,9 @@
 use core::fmt;
 use ordered_float::OrderedFloat;
-use pest::iterators::{Pair, Pairs};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
-use std::{fmt::Formatter, hash::Hash, str::FromStr};
+use std::{fmt::Formatter, hash::Hash};
 
-use crate::{
-    ast::{
-        display::{AstDisplay, Prefix},
-        node::NodeBuilder,
-    },
-    error::{AlthreadError, AlthreadResult, ErrorType, Pos},
-    no_rule,
-    parser::Rule,
-};
+use crate::ast::display::{AstDisplay, Prefix};
 
 use super::datatype::DataType;
 
@@ -51,66 +42,6 @@ impl<'a> Serialize for Literal {
             }
         }
         state.end()
-    }
-}
-
-impl NodeBuilder for Literal {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let pair = pairs.next().unwrap();
-
-        fn safe_parse<T: FromStr>(pair: &Pair<Rule>, filepath: &str) -> Result<T, AlthreadError> {
-            pair.as_str().parse::<T>().map_err(|_| {
-                AlthreadError::new(
-                    ErrorType::SyntaxError,
-                    Some(Pos {
-                        start: pair.as_span().start(),
-                        end: pair.as_span().end(),
-                        line: pair.line_col().0,
-                        col: pair.line_col().1,
-                        file_path: filepath.to_string(),
-                    }),
-                    format!("Cannot parse {}", pair.as_str()),
-                )
-            })
-        }
-
-        fn parse_int(pair: &Pair<Rule>, filepath: &str) -> Result<i64, AlthreadError> {
-            // parse int with support for hex and binary
-            let s = pair.as_str();
-            let (s, radix) = if s.starts_with("0x") || s.starts_with("0X") {
-                (&s[2..], 16)
-            } else if s.starts_with("0b") || s.starts_with("0B") {
-                (&s[2..], 2)
-            } else {
-                (s, 10)
-            };
-            i64::from_str_radix(s, radix).map_err(|_| {
-                AlthreadError::new(
-                    ErrorType::SyntaxError,
-                    Some(Pos {
-                        start: pair.as_span().start(),
-                        end: pair.as_span().end(),
-                        line: pair.line_col().0,
-                        col: pair.line_col().1,
-                        file_path: filepath.to_string(),
-                    }),
-                    format!("Cannot parse {}", pair.as_str()),
-                )
-            })
-        }
-
-        Ok(match pair.as_rule() {
-            Rule::NULL => Self::Null,
-            Rule::BOOL => Self::Bool(safe_parse(&pair, filepath)?),
-            Rule::INT => Self::Int(parse_int(&pair, filepath)?),
-            Rule::FLOAT => Self::Float(safe_parse(&pair, filepath)?),
-            Rule::STR => {
-                let s = pair.as_str();
-                let unquoted = &s[1..s.len() - 1];
-                Self::String(unquoted.to_string())
-            }
-            _ => return Err(no_rule!(pair, "Literal", filepath)),
-        })
     }
 }
 

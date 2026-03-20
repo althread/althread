@@ -12,29 +12,24 @@ use crate::{
         statement::{
             channel_declaration::ChannelDeclaration,
             expression::{
-                binary_expression::BinaryExpression,
-                list_expression::RangeListExpression,
-                primary_expression::PrimaryExpression,
-                tuple_expression::TupleExpression,
-                unary_expression::UnaryExpression,
-                BracketContent, BracketExpression, CallChainExpression, CallChainSegment,
-                Expression, SideEffectExpression,
+                binary_expression::BinaryExpression, list_expression::RangeListExpression,
+                primary_expression::PrimaryExpression, tuple_expression::TupleExpression,
+                unary_expression::UnaryExpression, BracketContent, BracketExpression,
+                CallChainExpression, CallChainSegment, Expression, SideEffectExpression,
             },
             fn_call::FnCall,
             run_call::RunCall,
             send::SendStatement,
         },
         token::{
-            args_list::ArgsList,
-            binary_operator::BinaryOperator,
-            datatype::DataType,
-            identifier::Identifier,
-            literal::Literal,
-            unary_operator::UnaryOperator,
+            args_list::ArgsList, binary_operator::BinaryOperator, datatype::DataType,
+            identifier::Identifier, literal::Literal, unary_operator::UnaryOperator,
         },
     },
     error::{AlthreadError, ErrorType, Pos},
-    parser::syntax::{SyntaxBlock, SyntaxBlockDetail, SyntaxBlockKind, SyntaxProgram, SyntaxSnippet},
+    parser::syntax::{
+        SyntaxBlock, SyntaxBlockDetail, SyntaxBlockKind, SyntaxProgram, SyntaxSnippet,
+    },
 };
 use ordered_float::OrderedFloat;
 
@@ -61,7 +56,13 @@ pub(crate) fn parse_datatype(
     file_path: &str,
 ) -> Result<Node<DataType>, AlthreadError> {
     let mut index = 0;
-    let datatype = scan_datatype(snippet.text.as_str(), source, file_path, snippet.pos.start, &mut index)?;
+    let datatype = scan_datatype(
+        snippet.text.as_str(),
+        source,
+        file_path,
+        snippet.pos.start,
+        &mut index,
+    )?;
     skip_inline_ws_and_comments(snippet.text.as_str(), &mut index)?;
     if index != snippet.text.len() {
         return Err(scan_error(
@@ -106,7 +107,13 @@ pub(crate) fn parse_args_list(
             break;
         }
 
-        identifiers.push(scan_identifier(text, source, file_path, snippet.pos.start, &mut index)?);
+        identifiers.push(scan_identifier(
+            text,
+            source,
+            file_path,
+            snippet.pos.start,
+            &mut index,
+        )?);
         skip_inline_ws_and_comments(text, &mut index)?;
         expect_char(text, source, file_path, snippet.pos.start, &mut index, ':')?;
         datatypes.push(scan_datatype(
@@ -157,7 +164,12 @@ pub(crate) fn parse_args_list(
     }
 
     Ok(Node {
-        pos: Pos::from_offsets(source, file_path, snippet.pos.start + start, snippet.pos.start + index),
+        pos: Pos::from_offsets(
+            source,
+            file_path,
+            snippet.pos.start + start,
+            snippet.pos.start + index,
+        ),
         value: ArgsList {
             identifiers,
             datatypes,
@@ -198,10 +210,15 @@ pub(crate) fn parse_fn_call(
 ) -> Result<Node<FnCall>, AlthreadError> {
     let text = snippet.text.as_str();
     let mut index = 0;
-    let fn_name = scan_object_identifier_node(text, source, file_path, snippet.pos.start, &mut index)?;
+    let fn_name =
+        scan_object_identifier_node(text, source, file_path, snippet.pos.start, &mut index)?;
     let (tuple_snippet, tuple_end) =
         sub_snippet_from(text, source, file_path, snippet.pos.start, index)?;
-    let values = Box::new(parse_tuple_expression_node(source, &tuple_snippet, file_path)?);
+    let values = Box::new(parse_tuple_expression_node(
+        source,
+        &tuple_snippet,
+        file_path,
+    )?);
     let end = tuple_snippet.pos.end;
     index = tuple_end;
     skip_inline_ws_and_comments(text, &mut index)?;
@@ -237,7 +254,8 @@ pub(crate) fn parse_run_call(
             "expected 'run'",
         ));
     }
-    let identifier = scan_object_identifier_node(text, source, file_path, snippet.pos.start, &mut index)?;
+    let identifier =
+        scan_object_identifier_node(text, source, file_path, snippet.pos.start, &mut index)?;
     let (tuple_snippet, tuple_end) =
         sub_snippet_from(text, source, file_path, snippet.pos.start, index)?;
     let args = parse_tuple_expression_node(source, &tuple_snippet, file_path)?;
@@ -275,7 +293,8 @@ pub(crate) fn parse_send_call(
             "expected 'send'",
         ));
     }
-    let channel = scan_object_identifier_node(text, source, file_path, snippet.pos.start, &mut index)?;
+    let channel =
+        scan_object_identifier_node(text, source, file_path, snippet.pos.start, &mut index)?;
     skip_inline_ws_and_comments(text, &mut index)?;
     let is_broadcast = if text[index..].starts_with(".*") {
         index += 2;
@@ -367,7 +386,8 @@ pub(crate) fn parse_channel_declaration(
     if text.as_bytes().get(index) == Some(&b'>') {
         index += 1;
     }
-    let right = scan_object_identifier_node(text, source, file_path, snippet.pos.start, &mut index)?;
+    let right =
+        scan_object_identifier_node(text, source, file_path, snippet.pos.start, &mut index)?;
     skip_inline_ws_and_comments(text, &mut index)?;
     if index != text.len() {
         return Err(scan_error(
@@ -440,7 +460,13 @@ pub(crate) fn parse_import_block(
         }
         skip_inline_ws_and_comments(text, &mut index)?;
         let alias = if consume_word(text, &mut index, "as") {
-            Some(scan_identifier(text, source, file_path, snippet.pos.start, &mut index)?)
+            Some(scan_identifier(
+                text,
+                source,
+                file_path,
+                snippet.pos.start,
+                &mut index,
+            )?)
         } else {
             None
         };
@@ -876,7 +902,8 @@ impl<'a> ExprParser<'a> {
 
         loop {
             skip_inline_ws_and_comments(self.text, &mut self.index)?;
-            let Some((operator, op_start, op_len, precedence)) = self.peek_binary_operator()? else {
+            let Some((operator, op_start, op_len, precedence)) = self.peek_binary_operator()?
+            else {
                 break;
             };
             if precedence < min_prec {
@@ -1038,7 +1065,8 @@ impl<'a> ExprParser<'a> {
                     self.snippet.pos.start,
                     self.index,
                 )?;
-                let args = parse_tuple_expression_node(self.source, &tuple_snippet, self.file_path)?;
+                let args =
+                    parse_tuple_expression_node(self.source, &tuple_snippet, self.file_path)?;
                 self.index = tuple_end;
                 segments.push(CallChainSegment::Call { name, args });
             }
@@ -1224,15 +1252,16 @@ impl<'a> ExprParser<'a> {
             self.text[cond_start..then_start].to_string(),
         );
         let condition = parse_expression(self.source, &cond_snippet, self.file_path)?;
-        let then_end = consume_balanced_block(self.text, then_start, '{', '}').ok_or_else(|| {
-            scan_error(
-                self.source,
-                self.file_path,
-                self.snippet.pos.start + then_start,
-                self.snippet.pos.end,
-                "unterminated if-expression block",
-            )
-        })?;
+        let then_end =
+            consume_balanced_block(self.text, then_start, '{', '}').ok_or_else(|| {
+                scan_error(
+                    self.source,
+                    self.file_path,
+                    self.snippet.pos.start + then_start,
+                    self.snippet.pos.end,
+                    "unterminated if-expression block",
+                )
+            })?;
         let then_snippet = SyntaxSnippet::new(
             Pos::from_offsets(
                 self.source,
@@ -1240,7 +1269,10 @@ impl<'a> ExprParser<'a> {
                 self.snippet.pos.start + then_start + 1,
                 self.snippet.pos.start + then_end - 1,
             ),
-            self.text[then_start + 1..then_end - 1].trim().trim_end_matches(';').to_string(),
+            self.text[then_start + 1..then_end - 1]
+                .trim()
+                .trim_end_matches(';')
+                .to_string(),
         );
         let then_expr = parse_expression(self.source, &then_snippet, self.file_path)?;
         self.index = then_end;
@@ -1249,15 +1281,16 @@ impl<'a> ExprParser<'a> {
             self.index += 4;
             skip_inline_ws_and_comments(self.text, &mut self.index)?;
             let else_start = self.index;
-            let else_end = consume_balanced_block(self.text, else_start, '{', '}').ok_or_else(|| {
-                scan_error(
-                    self.source,
-                    self.file_path,
-                    self.snippet.pos.start + else_start,
-                    self.snippet.pos.end,
-                    "unterminated else-expression block",
-                )
-            })?;
+            let else_end =
+                consume_balanced_block(self.text, else_start, '{', '}').ok_or_else(|| {
+                    scan_error(
+                        self.source,
+                        self.file_path,
+                        self.snippet.pos.start + else_start,
+                        self.snippet.pos.end,
+                        "unterminated else-expression block",
+                    )
+                })?;
             let else_snippet = SyntaxSnippet::new(
                 Pos::from_offsets(
                     self.source,
@@ -1271,7 +1304,11 @@ impl<'a> ExprParser<'a> {
                     .to_string(),
             );
             self.index = else_end;
-            Some(Box::new(parse_expression(self.source, &else_snippet, self.file_path)?))
+            Some(Box::new(parse_expression(
+                self.source,
+                &else_snippet,
+                self.file_path,
+            )?))
         } else {
             None
         };
@@ -1337,15 +1374,16 @@ impl<'a> ExprParser<'a> {
             self.text[list_start..body_start].to_string(),
         );
         let list = parse_expression(self.source, &list_snippet, self.file_path)?;
-        let body_end = consume_balanced_block(self.text, body_start, '{', '}').ok_or_else(|| {
-            scan_error(
-                self.source,
-                self.file_path,
-                self.snippet.pos.start + body_start,
-                self.snippet.pos.end,
-                "unterminated quantified expression block",
-            )
-        })?;
+        let body_end =
+            consume_balanced_block(self.text, body_start, '{', '}').ok_or_else(|| {
+                scan_error(
+                    self.source,
+                    self.file_path,
+                    self.snippet.pos.start + body_start,
+                    self.snippet.pos.end,
+                    "unterminated quantified expression block",
+                )
+            })?;
         let body_snippet = SyntaxSnippet::new(
             Pos::from_offsets(
                 self.source,
@@ -1400,7 +1438,9 @@ impl<'a> ExprParser<'a> {
         }
     }
 
-    fn peek_binary_operator(&self) -> Result<Option<(BinaryOperator, usize, usize, u8)>, AlthreadError> {
+    fn peek_binary_operator(
+        &self,
+    ) -> Result<Option<(BinaryOperator, usize, usize, u8)>, AlthreadError> {
         let mut index = self.index;
         skip_inline_ws_and_comments(self.text, &mut index)?;
         let candidates = [
@@ -1474,7 +1514,12 @@ fn parse_bracket_expression(
         let left = parse_expression(source, &left_snippet, file_path)?;
         let right = parse_expression(source, &right_snippet, file_path)?;
         BracketContent::Range(Node {
-            pos: Pos::from_offsets(source, file_path, snippet.pos.start + 1, snippet.pos.end - 1),
+            pos: Pos::from_offsets(
+                source,
+                file_path,
+                snippet.pos.start + 1,
+                snippet.pos.end - 1,
+            ),
             value: RangeListExpression {
                 expression_start: Box::new(left),
                 expression_end: Box::new(right),
@@ -1495,7 +1540,11 @@ fn parse_bracket_expression(
                 ),
                 inner[seg_start..seg_end].to_string(),
             );
-            values.push(parse_side_effect_expression(source, &expr_snippet, file_path)?);
+            values.push(parse_side_effect_expression(
+                source,
+                &expr_snippet,
+                file_path,
+            )?);
         }
         BracketContent::ListLiteral(values)
     };
@@ -1518,7 +1567,8 @@ fn parse_literal_node(
     skip_inline_ws_and_comments(text, index)?;
     let start = *index;
     let value = if text.as_bytes().get(*index) == Some(&b'"') {
-        let end = consume_string(text, *index).map_err(|err| map_chumsky_errors(text, file_path, vec![err]))?;
+        let end = consume_string(text, *index)
+            .map_err(|err| map_chumsky_errors(text, file_path, vec![err]))?;
         let raw = &text[*index + 1..end - 1];
         *index = end;
         Literal::String(raw.to_string())
@@ -1545,19 +1595,43 @@ fn parse_literal_node(
         *index = end;
         if raw.contains('.') {
             Literal::Float(OrderedFloat(raw.parse::<f64>().map_err(|_| {
-                scan_error(source, file_path, base_offset + start, base_offset + end, "invalid float literal")
+                scan_error(
+                    source,
+                    file_path,
+                    base_offset + start,
+                    base_offset + end,
+                    "invalid float literal",
+                )
             })?))
         } else if raw.starts_with("0x") || raw.starts_with("0X") {
             Literal::Int(i64::from_str_radix(&raw[2..], 16).map_err(|_| {
-                scan_error(source, file_path, base_offset + start, base_offset + end, "invalid integer literal")
+                scan_error(
+                    source,
+                    file_path,
+                    base_offset + start,
+                    base_offset + end,
+                    "invalid integer literal",
+                )
             })?)
         } else if raw.starts_with("0b") || raw.starts_with("0B") {
             Literal::Int(i64::from_str_radix(&raw[2..], 2).map_err(|_| {
-                scan_error(source, file_path, base_offset + start, base_offset + end, "invalid integer literal")
+                scan_error(
+                    source,
+                    file_path,
+                    base_offset + start,
+                    base_offset + end,
+                    "invalid integer literal",
+                )
             })?)
         } else {
             Literal::Int(raw.parse::<i64>().map_err(|_| {
-                scan_error(source, file_path, base_offset + start, base_offset + end, "invalid integer literal")
+                scan_error(
+                    source,
+                    file_path,
+                    base_offset + start,
+                    base_offset + end,
+                    "invalid integer literal",
+                )
             })?)
         }
     };
@@ -1647,7 +1721,12 @@ fn scan_object_identifier_node(
             value
         };
         parts.push(Node {
-            pos: Pos::from_offsets(source, file_path, base_offset + part_start, base_offset + *index),
+            pos: Pos::from_offsets(
+                source,
+                file_path,
+                base_offset + part_start,
+                base_offset + *index,
+            ),
             value: Identifier { value },
         });
         skip_inline_ws_and_comments(text, index)?;
@@ -1695,7 +1774,11 @@ fn scan_object_identifier_text(
             break;
         }
         *index += 1;
-        parts.push(scan_identifier(text, source, file_path, base_offset, index)?.value.value);
+        parts.push(
+            scan_identifier(text, source, file_path, base_offset, index)?
+                .value
+                .value,
+        );
     }
 
     Ok(parts.join("."))
@@ -1711,9 +1794,8 @@ fn parse_tuple_expression_node(
     let start = index;
     expect_char(text, source, file_path, snippet.pos.start, &mut index, '(')?;
     let inner_start = index;
-    let end = consume_balanced(text, inner_start - 1, b'(', b')').map_err(|err| {
-        map_chumsky_errors(text, file_path, vec![err])
-    })?;
+    let end = consume_balanced(text, inner_start - 1, b'(', b')')
+        .map_err(|err| map_chumsky_errors(text, file_path, vec![err]))?;
     let close_index = end - 1;
     let mut values = Vec::new();
     for (seg_start, seg_end) in split_top_level_segments(text, inner_start, close_index)? {
@@ -1721,7 +1803,12 @@ fn parse_tuple_expression_node(
             continue;
         }
         let expr_snippet = SyntaxSnippet::new(
-            Pos::from_offsets(source, file_path, snippet.pos.start + seg_start, snippet.pos.start + seg_end),
+            Pos::from_offsets(
+                source,
+                file_path,
+                snippet.pos.start + seg_start,
+                snippet.pos.start + seg_end,
+            ),
             text[seg_start..seg_end].to_string(),
         );
         values.push(parse_expression(source, &expr_snippet, file_path)?);
@@ -1737,7 +1824,12 @@ fn parse_tuple_expression_node(
             "unexpected trailing input in tuple expression",
         ));
     }
-    let pos = Pos::from_offsets(source, file_path, snippet.pos.start + start, snippet.pos.start + close_index + 1);
+    let pos = Pos::from_offsets(
+        source,
+        file_path,
+        snippet.pos.start + start,
+        snippet.pos.start + close_index + 1,
+    );
     Ok(Node {
         pos: pos.clone(),
         value: Expression::Tuple(Node {
@@ -2031,7 +2123,10 @@ fn consume_statement<'src>(source: &'src str, start: usize) -> Result<usize, Sim
     consume_semicolon_terminated(source, index)
 }
 
-fn consume_if_statement<'src>(source: &'src str, start: usize) -> Result<usize, Simple<'src, char>> {
+fn consume_if_statement<'src>(
+    source: &'src str,
+    start: usize,
+) -> Result<usize, Simple<'src, char>> {
     let mut index = start + "if".len();
     skip_ws_and_comments(source, &mut index)?;
     index = consume_expression_until_block(source, index)?;
@@ -2062,7 +2157,10 @@ fn consume_while_statement<'src>(
     consume_balanced(source, index, b'{', b'}')
 }
 
-fn consume_for_statement<'src>(source: &'src str, start: usize) -> Result<usize, Simple<'src, char>> {
+fn consume_for_statement<'src>(
+    source: &'src str,
+    start: usize,
+) -> Result<usize, Simple<'src, char>> {
     let mut index = start + "for".len();
     skip_ws_and_comments(source, &mut index)?;
     index = consume_identifier(source, index)?;
@@ -2099,7 +2197,10 @@ fn consume_wait_statement<'src>(
     consume_waiting_case(source, index)
 }
 
-fn consume_waiting_block<'src>(source: &'src str, start: usize) -> Result<usize, Simple<'src, char>> {
+fn consume_waiting_block<'src>(
+    source: &'src str,
+    start: usize,
+) -> Result<usize, Simple<'src, char>> {
     if source.as_bytes().get(start) != Some(&b'{') {
         return Err(simple_error(start, source, "expected '{'"));
     }
@@ -2120,7 +2221,10 @@ fn consume_waiting_block<'src>(source: &'src str, start: usize) -> Result<usize,
     }
 }
 
-fn consume_waiting_case<'src>(source: &'src str, start: usize) -> Result<usize, Simple<'src, char>> {
+fn consume_waiting_case<'src>(
+    source: &'src str,
+    start: usize,
+) -> Result<usize, Simple<'src, char>> {
     let mut index = consume_wait_case_rule(source, start)?;
     skip_ws_and_comments(source, &mut index)?;
     if source.as_bytes().get(index) == Some(&b';') {
@@ -2129,7 +2233,13 @@ fn consume_waiting_case<'src>(source: &'src str, start: usize) -> Result<usize, 
     if source[index..].starts_with("=>") {
         index += 2;
         skip_ws_and_comments(source, &mut index)?;
-        return consume_statement(source, index);
+        let mut end = consume_statement(source, index)?;
+        let mut after = end;
+        skip_ws_and_comments(source, &mut after)?;
+        if source.as_bytes().get(after) == Some(&b';') {
+            end = after + 1;
+        }
+        return Ok(end);
     }
     Err(simple_error(index, source, "expected ';' or '=>'"))
 }
@@ -2721,7 +2831,11 @@ fn split_top_level_range(text: &str) -> Result<Option<(usize, usize)>, AlthreadE
                 bracket = bracket.saturating_sub(1);
                 index += 1;
             }
-            b'.' if paren == 0 && brace == 0 && bracket == 0 && text[index + 1..].starts_with('.') => {
+            b'.' if paren == 0
+                && brace == 0
+                && bracket == 0
+                && text[index + 1..].starts_with('.') =>
+            {
                 return Ok(Some((index, index + 2)));
             }
             _ => index += 1,

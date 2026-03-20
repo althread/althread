@@ -6,11 +6,8 @@ edition = "2021"
 [lints]
 workspace = true
 
-
 [dependencies]
 lazy_static = { workspace = true }
-pest = { workspace = true }
-pest_derive = { workspace = true }
 chumsky = { workspace = true }
 ariadne = { workspace = true }
 fastrand = { workspace = true }

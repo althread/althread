@@ -1,5 +1,4 @@
 use crate::error::Pos;
-use crate::parser::Rule;
 
 #[derive(Debug, Clone)]
 pub struct SyntaxProgram {
@@ -34,10 +33,6 @@ impl SyntaxBlock {
             text,
             detail: SyntaxBlockDetail::Opaque,
         }
-    }
-
-    pub fn rule(&self) -> Rule {
-        self.kind.rule()
     }
 }
 
@@ -87,18 +82,4 @@ pub enum SyntaxBlockKind {
     Check,
     Program,
     Function,
-}
-
-impl SyntaxBlockKind {
-    pub fn rule(self) -> Rule {
-        match self {
-            Self::Import => Rule::import_block,
-            Self::Main => Rule::main_block,
-            Self::Global => Rule::global_block,
-            Self::Always | Self::Never => Rule::condition_block,
-            Self::Check => Rule::check_block,
-            Self::Program => Rule::program_block,
-            Self::Function => Rule::function_block,
-        }
-    }
 }

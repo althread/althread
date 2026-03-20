@@ -1,15 +1,12 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
+        node::{InstructionBuilder, Node},
     },
     compiler::{CompilerState, InstructionBuilderOk},
     error::AlthreadResult,
-    parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };
 
@@ -18,14 +15,6 @@ use super::Statement;
 #[derive(Debug, Clone)]
 pub struct LoopControl {
     pub statement: Box<Node<Statement>>,
-}
-
-impl NodeBuilder for LoopControl {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let statement = Box::new(Node::build(pairs.next().unwrap(), filepath)?);
-
-        Ok(Self { statement })
-    }
 }
 
 impl InstructionBuilder for Node<LoopControl> {

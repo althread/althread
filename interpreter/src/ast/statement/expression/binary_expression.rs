@@ -1,7 +1,5 @@
 use std::{collections::HashSet, fmt};
 
-use pest::iterators::Pair;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
@@ -10,8 +8,7 @@ use crate::{
         token::{binary_operator::BinaryOperator, datatype::DataType, literal::Literal},
     },
     compiler::{CompilerState, Variable},
-    error::{AlthreadResult, Pos},
-    parser::Rule,
+    error::AlthreadResult,
     vm::Memory,
 };
 
@@ -36,29 +33,7 @@ impl fmt::Display for LocalBinaryExpressionNode {
     }
 }
 
-impl BinaryExpression {
-    pub fn build(
-        left: Node<Expression>,
-        operator: Pair<Rule>,
-        right: Node<Expression>,
-        filepath: &str,
-    ) -> AlthreadResult<Node<Self>> {
-        Ok(Node {
-            pos: Pos {
-                start: left.pos.start,
-                end: right.pos.end,
-                line: left.pos.line,
-                col: left.pos.col,
-                file_path: filepath.to_string(),
-            },
-            value: Self {
-                left: Box::new(left),
-                operator: Node::build(operator, filepath)?,
-                right: Box::new(right),
-            },
-        })
-    }
-}
+impl BinaryExpression {}
 
 impl LocalBinaryExpressionNode {
     pub fn from_binary(

@@ -1,16 +1,12 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, NodeBuilder},
+        node::InstructionBuilder,
     },
     compiler::{CompilerState, InstructionBuilderOk},
     error::AlthreadResult,
-    no_rule,
-    parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };
 
@@ -24,21 +20,6 @@ pub enum BreakLoopType {
 pub struct BreakLoopControl {
     pub kind: BreakLoopType,
     pub label: Option<String>,
-}
-
-impl NodeBuilder for BreakLoopControl {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let pair = pairs.next().unwrap();
-        let kind = match pair.as_rule() {
-            Rule::BREAK_KW => BreakLoopType::Break,
-            Rule::CONTINUE_KW => BreakLoopType::Continue,
-            _ => return Err(no_rule!(pair, "BreakLoopControl", filepath)),
-        };
-
-        let label = pairs.next().map(|pair| pair.as_str().to_string());
-
-        Ok(Self { kind, label })
-    }
 }
 
 impl InstructionBuilder for BreakLoopControl {
