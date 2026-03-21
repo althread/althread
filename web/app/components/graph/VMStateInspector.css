@@ -28,6 +28,7 @@
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid #1e1e1e;
+    flex-shrink: 0;
 }
 
 .header-title {
@@ -54,203 +55,29 @@
     background-color: #454545;
 }
 
+/* ── Main sections row ────────────────────────────────────────────────── */
+
 .inspector-sections {
     display: flex;
     flex-direction: row;
     overflow: hidden;
     height: 100%;
     padding: 8px;
-    gap: 12px;
+    gap: 8px;
     min-width: 0;
 }
 
-.inspector-left-column {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    flex: 1 1 0;
-    min-width: 0;
-    min-height: 0;
-    height: 100%;
-}
-
-.section {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    max-width: none;
-    border: 1px solid #333;
-    background-color: #1e1e1e;
-    border-radius: 4px;
-    /* Removed width: 100% so they can sit side-by-side */
-    min-height: 0;
-}
-
-.inspector-left-column .section {
-    flex: 1 1 0;
-}
-
-.globals-section {
-    flex: 0 0 auto;
-}
-
-.pending-section {
-    flex: 1 1 0;
-    min-height: 0;
-}
-
-.pending-section .section-body {
-    overflow-y: auto;
-}
+/* ── Processes panel: takes 2× the flex-grow so it gets more space ─────── */
 
 .programs-section {
-    flex: 1 1 0;
-    min-width: 0;
+    flex: 2 1 0;
 }
 
-.section-header {
-    background-color: #333;
-    padding: 2px 8px;
-    font-size: 10px;
-    font-weight: bold;
-    color: #bbb;
-    border-top-left-radius: 3px;
-    border-top-right-radius: 3px;
-}
+/* ── Empty / fallback states ──────────────────────────────────────────── */
 
-.section-body {
-    padding: 8px;
-    overflow-y: auto;
-    flex: 1;
-}
-
-.variables-grid {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 4px 12px;
-    font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
-    font-size: 12px;
-}
-
-.var-name {
-    color: #9cdcfe;
-}
-
-.var-value {
-    color: #ce9178;
-    word-break: break-all;
-}
-
-.process-card {
-    border-bottom: 1px solid #333;
-    padding-bottom: 8px;
-    margin-bottom: 8px;
-}
-
-.process-card:last-child {
-    border-bottom: none;
-}
-
-.process-card-header {
-    display: flex;
-    gap: 8px;
-    align-items: baseline;
-    margin-bottom: 4px;
-}
-
-.process-name {
-    color: #4ec9b0;
-    font-weight: bold;
-    font-size: 12px;
-}
-
-.process-id, .process-pc {
-    font-size: 10px;
-    color: #888;
-}
-
-.process-card-body {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.channels-row {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
-    font-size: 11px;
-    padding-top: 8px;
-    border-top: 1px solid #333;
-}
-
-.row-label {
-    min-width: 65px;
-    color: #888;
-    font-size: 10px;
-}
-
-.channels-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-}
-
-.channel-item {
-    display: flex;
-    gap: 4px;
-}
-
-.ch-name { color: #569cd6; }
-.ch-vals { color: #ce9178; }
-
-.empty-state, .empty-val {
+.empty-state,
+.empty-val {
     color: #666;
     font-style: italic;
     font-size: 11px;
-}
-
-/* Pending messages styles */
-.subsection-title {
-    font-size: 10px;
-    color: #888;
-    text-transform: uppercase;
-    margin-bottom: 6px;
-    margin-top: 4px;
-    border-bottom: 1px solid #333;
-}
-
-.message-card {
-    background-color: #2d2d2d;
-    border-left: 2px solid #569cd6;
-    margin-bottom: 6px;
-    padding: 4px 8px;
-    border-radius: 2px;
-}
-
-.message-card.waiting {
-    border-left-color: #d19a66;
-}
-
-.message-route {
-    font-size: 10px;
-    font-weight: bold;
-    color: #ccc;
-    margin-bottom: 2px;
-}
-
-.message-contents {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-}
-
-.msg-val {
-    font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
-    font-size: 11px;
-    color: #ce9178;
-    background-color: #1e1e1e;
-    padding: 0 4px;
-    border-radius: 2px;
 }

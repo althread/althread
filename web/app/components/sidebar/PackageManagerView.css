@@ -5,7 +5,7 @@
   height: 100%;
   background-color: #1e1e1e;
   color: #cccccc;
-  font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
   font-size: 13px;
   overflow: hidden;
 }
@@ -304,7 +304,6 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
 }
 
 .section-header h4 {
@@ -611,7 +610,7 @@
   .package-manager-content {
     padding: 4px 0;
   }
-  
+
   .init-project-section,
   .project-info,
   .add-dependency-section,

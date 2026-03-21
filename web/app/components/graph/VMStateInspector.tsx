@@ -1,4 +1,4 @@
-import { createMemo, For, Show } from "solid-js";
+import { createMemo, createSignal, For, Show } from "solid-js";
 import GlobalsDisplay from "../shared/GlobalsDisplay";
 import InFlightMessagesDisplay from "../shared/InFlightMessagesDisplay";
 import ProcessStateCard from "../shared/ProcessStateCard";
@@ -11,16 +11,53 @@ interface VMStateInspectorProps {
 }
 
 export default function VMStateInspector(props: VMStateInspectorProps) {
-    // Extract VM state
+    // All collapse state lives here so we can enforce "last open" guard
+    const [globalsCollapsed, setGlobalsCollapsed] = createSignal(false);
+    const [messagesCollapsed, setMessagesCollapsed] = createSignal(false);
+    const [processesCollapsed, setProcessesCollapsed] = createSignal(false);
+
     const state = createMemo((): VMState | null => {
         return props.node?.vm ?? null;
     });
 
-    // Helper to get channels for a specific process
     const getChannelsForProcess = (pid: number): ChannelState[] => {
         const s = state();
         if (!s) return [];
         return s.channels.filter((ch: ChannelState) => ch.pid === pid);
+    };
+
+    // True only when there are messages to show
+    const hasMessages = createMemo(() => {
+        const s = state();
+        return !!s && (s.pending_deliveries.length > 0 || s.waiting_send.length > 0);
+    });
+
+    // Count how many sections are currently visible AND expanded
+    const expandedCount = createMemo(() => {
+        let count = 0;
+        if (!globalsCollapsed()) count++;
+        if (hasMessages() && !messagesCollapsed()) count++;
+        if (!processesCollapsed()) count++;
+        return count;
+    });
+
+    // A section can collapse only if it is already collapsed (i.e. re-expanding)
+    // OR if there is more than one section open right now.
+    const canCollapse = () => expandedCount() > 1;
+
+    const toggleGlobals = () => {
+        if (!globalsCollapsed() && !canCollapse()) return;
+        setGlobalsCollapsed(c => !c);
+    };
+
+    const toggleMessages = () => {
+        if (!messagesCollapsed() && !canCollapse()) return;
+        setMessagesCollapsed(c => !c);
+    };
+
+    const toggleProcesses = () => {
+        if (!processesCollapsed() && !canCollapse()) return;
+        setProcessesCollapsed(c => !c);
     };
 
     return (
@@ -34,7 +71,7 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
                     <i class="codicon codicon-close"></i>
                 </button>
             </div>
-            
+
             <Show when={state()} fallback={
                 <div class="inspector-empty-state">
                     Select a node in the graph to inspect its state
@@ -42,24 +79,45 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
             }>
                 {(vmState) => (
                     <div class="inspector-sections">
-                        <div class="inspector-left-column">
-                            <GlobalsDisplay globals={vmState().globals} />
-                            <InFlightMessagesDisplay 
-                                pendingDeliveries={vmState().pending_deliveries}
-                                waitingSend={vmState().waiting_send}
-                            />
-                        </div>
+                        <GlobalsDisplay
+                            globals={vmState().globals}
+                            collapsed={globalsCollapsed()}
+                            canCollapse={canCollapse()}
+                            onToggle={toggleGlobals}
+                        />
+                        <InFlightMessagesDisplay
+                            pendingDeliveries={vmState().pending_deliveries}
+                            waitingSend={vmState().waiting_send}
+                            collapsed={messagesCollapsed()}
+                            canCollapse={canCollapse()}
+                            onToggle={toggleMessages}
+                        />
 
-                        <div class="section programs-section">
-                            <div class="section-header">Processes</div>
-                            <div class="section-body">
+                        <div class={`section programs-section${processesCollapsed() ? " section-collapsed" : ""}`}>
+                            <div
+                                class={`collapsible-header${!processesCollapsed() && !canCollapse() ? " header-locked" : ""}`}
+                                onClick={toggleProcesses}
+                                title={
+                                    !processesCollapsed() && !canCollapse()
+                                        ? "Cannot collapse — only section open"
+                                        : processesCollapsed()
+                                            ? "Expand Processes"
+                                            : "Collapse Processes"
+                                }
+                            >
+                                <i class={`codicon ${processesCollapsed() ? "codicon-chevron-left" : "codicon-chevron-right"} header-toggle-icon`}></i>
+                                <i class="codicon codicon-debug-all header-section-icon"></i>
+                                <span class="section-label">Processes</span>
+                                <span class="header-count">{vmState().locals.length}</span>
+                            </div>
+                            <div class={`section-body${processesCollapsed() ? " section-body-hidden" : ""}`}>
                                 <Show
                                     when={vmState().locals.length > 0}
                                     fallback={<div class="empty-state">No processes</div>}
                                 >
                                     <For each={vmState().locals}>
                                         {(prog) => (
-                                            <ProcessStateCard 
+                                            <ProcessStateCard
                                                 process={prog}
                                                 channels={getChannelsForProcess(prog.pid)}
                                             />

@@ -193,7 +193,7 @@ export default (props: GraphProps) => {
         class={`state-graph${maximized() ? " maximized" : ""}`}
       >
                 {isGraphTooLarge() ? (
-                        <div style="display: flex; height: 100%; width: 100%; align-items: center; justify-content: center; padding: 24px; color: #cccccc; text-align: center;">
+                        <div style="display: flex; height: 100%; align-items: center; justify-content: center; padding: 24px; color: #cccccc; text-align: center;">
                                 <div>
                                         <div style="font-weight: 600; margin-bottom: 8px;">Graph not displayed</div>
                             {props.tooLargeStatusMessage ? (
