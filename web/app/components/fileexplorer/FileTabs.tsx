@@ -1,4 +1,4 @@
-import { For } from "solid-js";
+import { createEffect, For, on } from "solid-js";
 import type { FileSystemEntry } from "./FileExplorer";
 import "./FileTabs.css";
 
@@ -11,6 +11,31 @@ type FileTabsProps = {
 };
 
 const FileTabs = (props: FileTabsProps) => {
+	let containerRef: HTMLDivElement | undefined;
+
+	// Scroll active tab into view whenever the active file changes
+	createEffect(
+		on(
+			() => props.activeFile,
+			(activeFile) => {
+				if (activeFile && containerRef) {
+					// Wait for Solid to update the DOM so the .active class is applied
+					requestAnimationFrame(() => {
+						const activeElement =
+							containerRef?.querySelector(".file-tab.active");
+						if (activeElement) {
+							activeElement.scrollIntoView({
+								behavior: "smooth",
+								block: "nearest",
+								inline: "nearest",
+							});
+						}
+					});
+				}
+			},
+		),
+	);
+
 	// Helper function to check if a file is in deps directory (read-only)
 	const isInDepsDirectory = (file: FileSystemEntry) => {
 		const path = props.getFilePath(file);
@@ -18,7 +43,7 @@ const FileTabs = (props: FileTabsProps) => {
 	};
 
 	return (
-		<div class="file-tabs-container">
+		<div class="file-tabs-container" ref={containerRef}>
 			<For each={props.openFiles}>
 				{(file) => {
 					return (
