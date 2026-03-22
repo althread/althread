@@ -39,7 +39,7 @@ export default function InFlightMessagesDisplay(
 					class={`codicon ${props.collapsed ? "codicon-chevron-left" : "codicon-chevron-right"} header-toggle-icon`}
 				></i>
 				<i class="codicon codicon-mail header-section-icon"></i>
-				<span class="section-label">Messages</span>
+				<span class="section-label">In-flight messages</span>
 				<div class={`header-count${props.hasChanged ? " changed" : ""}`}>
 					<Show when={props.hasChanged}>
 						<span class="change-indicator">!</span>
