@@ -275,31 +275,55 @@ impl Stdlib {
                 //         Ok(Literal::Null)
                 //     }),
                 // });
-                // new_interfaces.push(Interface {
-                //     name: "at".to_string(),
-                //     args: vec![DataType::Integer],
-                //     ret: t.as_ref().clone(),
-                //     f: Rc::new(|list, v, pos| {
-                //         let v = v.to_tuple().unwrap();
-                //         let v = v.first().unwrap().to_integer().unwrap();
-                //         if let Literal::List(_dtype, list) = list {
-                //             if v < 0 || v as usize >= list.len() {
-                //                 return Err(AlthreadError::new(
-                //                     ErrorType::RuntimeError,
-                //                     pos,
-                //                     format!("Index out of bounds: {}", v),
-                //                 ));
-                //             }
-                //             Ok(list[v as usize].clone())
-                //         } else {
-                //             return Err(AlthreadError::new(
-                //                 ErrorType::RuntimeError,
-                //                 pos,
-                //                 "Expected List".to_string(),
-                //             ));
-                //         }
-                //     }),
-                // });
+                 if t.len() > 0 { new_interfaces.push(Interface {
+                    name: "0".to_string(),
+                    args: vec![],
+                    ret: t.clone().pop().unwrap(),
+                    f: Rc::new(|tuple, _v, pos| {
+                        if let Literal::Tuple(vec ) = tuple {
+                            if vec.len() <=0  {
+                                return Err(AlthreadError::new(
+                                    ErrorType::RuntimeError,
+                                    pos,
+                                    format!(" First call on a empty Tuple"),
+                                ));
+                            }
+                            Ok(vec[0].clone())
+                        } else {
+                            return Err(AlthreadError::new(
+                                ErrorType::RuntimeError,
+                                pos,
+                                "Expected tuple".to_string(),
+                            ));
+                        }
+                    }),
+                });
+                }
+                new_interfaces.push(Interface {
+                    name: "at".to_string(),
+                    args: vec![DataType::Integer],
+                    ret: DataType::String,
+                    f: Rc::new(|tuple, v, pos| {
+                        let v = v.to_tuple().unwrap();
+                        let v = v.first().unwrap().to_integer().unwrap();
+                        if let Literal::Tuple(tuple) = tuple {
+                            if (v < 0 || v as usize >= tuple.len() ) && tuple[v as usize].get_datatype() == DataType::Integer  {
+                                return Err(AlthreadError::new(
+                                    ErrorType::RuntimeError,
+                                    pos,
+                                    format!("Index out of bounds: {}", v),
+                                ));
+                            }
+                            Ok(tuple[v as usize].clone())
+                        } else {
+                            return Err(AlthreadError::new(
+                                ErrorType::RuntimeError,
+                                pos,
+                                "Expected List".to_string(),
+                            ));
+                        }
+                    }),
+                });   
             }
             _ => {}
         }

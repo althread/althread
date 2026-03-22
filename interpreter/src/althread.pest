@@ -333,7 +333,7 @@ NULL    = @{ NULL_KW }
 /// ### Identifiers
 /// Identifiers are used for naming variables, functions, and other constructs.
 identifier        = { IDENT | IDENT_GROUP }
-object_identifier = { (IDENT | DOLLAR) ~ ("." ~ IDENT)* }
+object_identifier = { (IDENT | DOLLAR) ~ ("." ~ ( IDENT | INT ))* }
 
 reserved_keywords = { (KEYWORDS | datatype) ~ !IDENT_CHAR }
 
