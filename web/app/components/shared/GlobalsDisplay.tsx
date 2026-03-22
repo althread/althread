@@ -26,6 +26,14 @@ export default function GlobalsDisplay(props: GlobalsDisplayProps) {
 			<div
 				class={`collapsible-header${isLocked() ? " header-locked" : ""}`}
 				onClick={props.onToggle}
+				onKeyDown={(e) => {
+					if (e.key === "Enter" || e.key === " ") {
+						e.preventDefault();
+						props.onToggle();
+					}
+				}}
+				role="button"
+				tabIndex={isLocked() ? -1 : 0}
 				title={
 					isLocked()
 						? "Cannot collapse — only section open"

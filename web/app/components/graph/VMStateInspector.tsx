@@ -14,6 +14,26 @@ interface VMStateInspectorProps {
 	onClose: () => void;
 }
 
+/**
+ * Stable stringify for change detection.
+ * Sorts object keys to ensure deterministic output.
+ */
+function stableStringify(obj: any): string {
+	if (!obj) return "";
+	return JSON.stringify(obj, (_, value) => {
+		if (value && typeof value === "object" && !Array.isArray(value)) {
+			const sorted: any = {};
+			Object.keys(value)
+				.sort()
+				.forEach((k) => {
+					sorted[k] = value[k];
+				});
+			return sorted;
+		}
+		return value;
+	});
+}
+
 export default function VMStateInspector(props: VMStateInspectorProps) {
 	// All collapse state lives here so we can enforce "last open" guard
 	const [globalsCollapsed, setGlobalsCollapsed] = createSignal(false);
@@ -46,12 +66,6 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 		const node = props.node;
 		if (!s || !node) return;
 
-		const currentGlobalsRaw = JSON.stringify(s.globals);
-		const currentMessagesRaw = JSON.stringify({
-			p: s.pending_deliveries,
-			w: s.waiting_send,
-		});
-
 		const isGlobalsEmpty = Object.keys(s.globals).length === 0;
 		const isMessagesEmpty =
 			s.pending_deliveries.length === 0 && s.waiting_send.length === 0;
@@ -71,20 +85,34 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 
 		// Globals change tracking
 		if (!globalsCollapsed()) {
-			// Expanded: clear change indicator and update "last seen"
+			// Expanded: clear change indicator and update "last seen" with stable stringify
 			setGlobalsChanged(false);
-			lastSeenGlobalsRaw = currentGlobalsRaw;
-		} else if (currentGlobalsRaw !== lastSeenGlobalsRaw && !isGlobalsEmpty) {
-			// Collapsed and different from what we last saw expanded: mark as changed
-			setGlobalsChanged(true);
+			lastSeenGlobalsRaw = stableStringify(s.globals);
+		} else if (!isGlobalsEmpty) {
+			// Collapsed and not empty: check if it changed since last seen expanded
+			const currentGlobalsRaw = stableStringify(s.globals);
+			if (currentGlobalsRaw !== lastSeenGlobalsRaw) {
+				setGlobalsChanged(true);
+			}
 		}
 
 		// Messages change tracking
 		if (!messagesCollapsed()) {
+			// Expanded: clear indicator and update "last seen"
 			setMessagesChanged(false);
-			lastSeenMessagesRaw = currentMessagesRaw;
-		} else if (currentMessagesRaw !== lastSeenMessagesRaw && !isMessagesEmpty) {
-			setMessagesChanged(true);
+			lastSeenMessagesRaw = stableStringify({
+				p: s.pending_deliveries,
+				w: s.waiting_send,
+			});
+		} else if (!isMessagesEmpty) {
+			// Collapsed and not empty: check for changes
+			const currentMessagesRaw = stableStringify({
+				p: s.pending_deliveries,
+				w: s.waiting_send,
+			});
+			if (currentMessagesRaw !== lastSeenMessagesRaw) {
+				setMessagesChanged(true);
+			}
 		}
 	});
 
@@ -164,6 +192,14 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 							<div
 								class={`collapsible-header${!processesCollapsed() && !canCollapse() ? " header-locked" : ""}`}
 								onClick={toggleProcesses}
+								onKeyDown={(e) => {
+									if (e.key === "Enter" || e.key === " ") {
+										e.preventDefault();
+										toggleProcesses();
+									}
+								}}
+								role="button"
+								tabIndex={!processesCollapsed() && !canCollapse() ? -1 : 0}
 								title={
 									!processesCollapsed() && !canCollapse()
 										? "Cannot collapse — only section open"

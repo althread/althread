@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Show } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
 import "./FileExplorer.css";
 
 // Define a type for our file system entries
@@ -217,12 +217,12 @@ const FileEntry = (props: {
 		};
 		if (showContextMenu()) {
 			document.addEventListener("click", handleGlobalClick, { capture: true });
-			return () =>
+			onCleanup(() =>
 				document.removeEventListener("click", handleGlobalClick, {
 					capture: true,
-				});
+				}),
+			);
 		}
-		return undefined;
 	});
 
 	// Helper function to get range of files between two paths

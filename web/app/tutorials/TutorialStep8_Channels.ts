@@ -70,7 +70,7 @@ main {
 
 		// Helper function to escape strings for RegExp constructor
 		const escapeRegExp = (str: string) =>
-			str.replace(/[.*+?^${}()|[\]\\]/g, "$&");
+			str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 		// 1. Validate Sender program and capture its out-port name
 		const senderProgramRegex =

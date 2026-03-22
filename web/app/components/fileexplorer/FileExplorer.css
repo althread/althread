@@ -29,7 +29,8 @@
 	align-items: center;
 	min-height: 32px;
 	min-width: 0;
-	overflow: hidden;
+	position: relative;
+	z-index: 10;
 }
 
 .file-explorer-header h3 {
@@ -50,9 +51,9 @@
 .file-explorer-actions .header-action-btn:hover::after {
 	content: attr(title);
 	position: absolute;
-	left: 44px;
-	top: 50%;
-	transform: translate(-100%, 80%);
+	left: 50%;
+	top: calc(100% + 4px);
+	transform: translateX(-50%);
 	background: #2d2d2d;
 	color: #fff;
 	padding: 4px 8px;
@@ -60,8 +61,8 @@
 	font-size: 12px;
 	white-space: nowrap;
 	z-index: 1001;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-	border: 1px solid #333;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+	border: 1px solid #454545;
 	pointer-events: none;
 }
 

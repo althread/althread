@@ -30,7 +30,8 @@
 	align-items: center;
 	min-height: 32px;
 	min-width: 0;
-	overflow: hidden;
+	position: relative;
+	z-index: 10;
 }
 
 .package-manager-header h3 {

@@ -27,9 +27,7 @@ export default function ErrorDisplay(props: ErrorDisplayProps) {
 								<button
 									type="button"
 									class="file-link"
-									onClick={() =>
-										props.onFileClick && props.onFileClick(filePath)
-									}
+									onClick={() => props.onFileClick?.(filePath)}
 									title={`Click to open ${filePath}`}
 								>
 									{filePath}
@@ -49,9 +47,7 @@ export default function ErrorDisplay(props: ErrorDisplayProps) {
 								<button
 									type="button"
 									class="file-link"
-									onClick={() =>
-										props.onFileClick && props.onFileClick(filePath)
-									}
+									onClick={() => props.onFileClick?.(filePath)}
 									title={`Click to open ${filePath} at line ${lineNum}`}
 								>
 									{filePath}
