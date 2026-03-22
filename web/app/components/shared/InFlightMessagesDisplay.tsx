@@ -35,6 +35,8 @@ export default function InFlightMessagesDisplay(
 				}}
 				role="button"
 				tabIndex={isLocked() ? -1 : 0}
+				aria-expanded={!props.collapsed}
+				aria-controls="messages-section-body"
 				title={
 					isLocked()
 						? "Cannot collapse — only section open"
@@ -56,6 +58,7 @@ export default function InFlightMessagesDisplay(
 				</div>
 			</div>
 			<div
+				id="messages-section-body"
 				class={`section-body${props.collapsed ? " section-body-hidden" : ""}`}
 			>
 				<Show

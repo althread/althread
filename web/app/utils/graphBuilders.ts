@@ -27,7 +27,7 @@ interface GraphBuildOptions {
 	violationPathStates?: VMState[];
 }
 
-function stableStringify(value: unknown): string {
+export function stableStringify(value: unknown): string {
 	if (value === null || value === undefined) return JSON.stringify(value);
 
 	if (Array.isArray(value)) {
@@ -148,7 +148,8 @@ export function buildGraphFromNodes(
 			(needsViolationSignatures
 				? typeof nodeSignature === "string" &&
 					violationNodeSet.has(nodeSignature)
-				: fallbackViolationLabelSet.has(nodeLabel));
+				: typeof nodeLabel === "string" &&
+					fallbackViolationLabelSet.has(nodeLabel));
 
 		let backgroundColor, borderColor;
 		if (mode === "run") {

@@ -62,7 +62,10 @@ const FileTabs = (props: FileTabsProps) => {
 							onClick={() => props.onTabClick(file)}
 							onKeyDown={(e) => {
 								if (e.key === "Enter" || e.key === " ") {
-									props.onTabClick(file);
+									if (e.currentTarget === e.target) {
+										e.preventDefault();
+										props.onTabClick(file);
+									}
 								}
 							}}
 						>

@@ -4,6 +4,7 @@ import type {
 	VMState,
 	VMStateSelection,
 } from "../../types/vm-state";
+import { stableStringify } from "../../utils/graphBuilders";
 import GlobalsDisplay from "../shared/GlobalsDisplay";
 import InFlightMessagesDisplay from "../shared/InFlightMessagesDisplay";
 import ProcessStateCard from "../shared/ProcessStateCard";
@@ -12,26 +13,6 @@ import "./VMStateInspector.css";
 interface VMStateInspectorProps {
 	node: VMStateSelection | null;
 	onClose: () => void;
-}
-
-/**
- * Stable stringify for change detection.
- * Sorts object keys to ensure deterministic output.
- */
-function stableStringify(obj: any): string {
-	if (!obj) return "";
-	return JSON.stringify(obj, (_, value) => {
-		if (value && typeof value === "object" && !Array.isArray(value)) {
-			const sorted: any = {};
-			Object.keys(value)
-				.sort()
-				.forEach((k) => {
-					sorted[k] = value[k];
-				});
-			return sorted;
-		}
-		return value;
-	});
 }
 
 export default function VMStateInspector(props: VMStateInspectorProps) {
@@ -60,10 +41,15 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 	let lastNode: VMStateSelection | null = null;
 	let wasGlobalsEmpty = false;
 	let wasMessagesEmpty = false;
+	let wasGlobalsCollapsed = false;
+	let wasMessagesCollapsed = false;
 
 	createEffect(() => {
 		const s = state();
 		const node = props.node;
+		const currentGlobalsCollapsed = globalsCollapsed();
+		const currentMessagesCollapsed = messagesCollapsed();
+
 		if (!s || !node) return;
 
 		const isGlobalsEmpty = Object.keys(s.globals).length === 0;
@@ -84,36 +70,45 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 		wasMessagesEmpty = isMessagesEmpty;
 
 		// Globals change tracking
-		if (!globalsCollapsed()) {
-			// Expanded: clear change indicator and update "last seen" with stable stringify
+		if (!currentGlobalsCollapsed) {
+			// Expanded: clear change indicator
 			setGlobalsChanged(false);
-			lastSeenGlobalsRaw = stableStringify(s.globals);
-		} else if (!isGlobalsEmpty) {
-			// Collapsed and not empty: check if it changed since last seen expanded
-			const currentGlobalsRaw = stableStringify(s.globals);
-			if (currentGlobalsRaw !== lastSeenGlobalsRaw) {
-				setGlobalsChanged(true);
+		} else {
+			// Collapsed: If just collapsed, snapshot state. Otherwise check if it changed.
+			if (!wasGlobalsCollapsed) {
+				lastSeenGlobalsRaw = stableStringify(s.globals);
+			} else if (!isGlobalsEmpty) {
+				const currentGlobalsRaw = stableStringify(s.globals);
+				if (currentGlobalsRaw !== lastSeenGlobalsRaw) {
+					setGlobalsChanged(true);
+				}
 			}
 		}
 
 		// Messages change tracking
-		if (!messagesCollapsed()) {
-			// Expanded: clear indicator and update "last seen"
+		if (!currentMessagesCollapsed) {
+			// Expanded: clear indicator
 			setMessagesChanged(false);
-			lastSeenMessagesRaw = stableStringify({
-				p: s.pending_deliveries,
-				w: s.waiting_send,
-			});
-		} else if (!isMessagesEmpty) {
-			// Collapsed and not empty: check for changes
-			const currentMessagesRaw = stableStringify({
-				p: s.pending_deliveries,
-				w: s.waiting_send,
-			});
-			if (currentMessagesRaw !== lastSeenMessagesRaw) {
-				setMessagesChanged(true);
+		} else {
+			// Collapsed: If just collapsed, snapshot state. Otherwise check if it changed.
+			if (!wasMessagesCollapsed) {
+				lastSeenMessagesRaw = stableStringify({
+					p: s.pending_deliveries,
+					w: s.waiting_send,
+				});
+			} else if (!isMessagesEmpty) {
+				const currentMessagesRaw = stableStringify({
+					p: s.pending_deliveries,
+					w: s.waiting_send,
+				});
+				if (currentMessagesRaw !== lastSeenMessagesRaw) {
+					setMessagesChanged(true);
+				}
 			}
 		}
+
+		wasGlobalsCollapsed = currentGlobalsCollapsed;
+		wasMessagesCollapsed = currentMessagesCollapsed;
 	});
 
 	// Count how many sections are currently visible AND expanded
@@ -152,6 +147,7 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 					<span>State Details</span>
 				</div>
 				<button
+					type="button"
 					class="close-btn"
 					onClick={props.onClose}
 					title="Close Inspector"
@@ -200,6 +196,8 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 								}}
 								role="button"
 								tabIndex={!processesCollapsed() && !canCollapse() ? -1 : 0}
+								aria-expanded={!processesCollapsed()}
+								aria-controls="processes-section-body"
 								title={
 									!processesCollapsed() && !canCollapse()
 										? "Cannot collapse — only section open"
@@ -216,6 +214,7 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 								<span class="header-count">{vmState().locals.length}</span>
 							</div>
 							<div
+								id="processes-section-body"
 								class={`section-body${processesCollapsed() ? " section-body-hidden" : ""}`}
 							>
 								<Show

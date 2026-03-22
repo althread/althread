@@ -34,6 +34,8 @@ export default function GlobalsDisplay(props: GlobalsDisplayProps) {
 				}}
 				role="button"
 				tabIndex={isLocked() ? -1 : 0}
+				aria-expanded={!props.collapsed}
+				aria-controls="globals-section-body"
 				title={
 					isLocked()
 						? "Cannot collapse — only section open"
@@ -55,6 +57,7 @@ export default function GlobalsDisplay(props: GlobalsDisplayProps) {
 				</div>
 			</div>
 			<div
+				id="globals-section-body"
 				class={`section-body${props.collapsed ? " section-body-hidden" : ""}`}
 			>
 				<Show
