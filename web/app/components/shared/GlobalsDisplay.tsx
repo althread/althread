@@ -9,6 +9,7 @@ interface GlobalsDisplayProps {
 	collapsed: boolean;
 	canCollapse: boolean;
 	onToggle: () => void;
+	hasChanged?: boolean;
 }
 
 export default function GlobalsDisplay(props: GlobalsDisplayProps) {
@@ -38,7 +39,12 @@ export default function GlobalsDisplay(props: GlobalsDisplayProps) {
 				></i>
 				<i class="codicon codicon-symbol-variable header-section-icon"></i>
 				<span class="section-label">Globals</span>
-				<span class="header-count">{globalsEntries().length}</span>
+				<div class={`header-count${props.hasChanged ? " changed" : ""}`}>
+					<Show when={props.hasChanged}>
+						<span class="change-indicator">!</span>
+					</Show>
+					{globalsEntries().length}
+				</div>
 			</div>
 			<div
 				class={`section-body${props.collapsed ? " section-body-hidden" : ""}`}

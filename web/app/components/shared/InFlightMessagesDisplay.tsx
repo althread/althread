@@ -9,6 +9,7 @@ interface InFlightMessagesDisplayProps {
 	collapsed: boolean;
 	canCollapse: boolean;
 	onToggle: () => void;
+	hasChanged?: boolean;
 }
 
 export default function InFlightMessagesDisplay(
@@ -22,28 +23,36 @@ export default function InFlightMessagesDisplay(
 	const isLocked = () => !props.collapsed && !props.canCollapse;
 
 	return (
-		<Show when={hasMessages()}>
-			<div class={`section${props.collapsed ? " section-collapsed" : ""}`}>
-				<div
-					class={`collapsible-header${isLocked() ? " header-locked" : ""}`}
-					onClick={props.onToggle}
-					title={
-						isLocked()
-							? "Cannot collapse — only section open"
-							: props.collapsed
-								? "Expand Messages"
-								: "Collapse Messages"
-					}
-				>
-					<i
-						class={`codicon ${props.collapsed ? "codicon-chevron-left" : "codicon-chevron-right"} header-toggle-icon`}
-					></i>
-					<i class="codicon codicon-mail header-section-icon"></i>
-					<span class="section-label">Messages</span>
-					<span class="header-count">{totalCount()}</span>
+		<div class={`section${props.collapsed ? " section-collapsed" : ""}`}>
+			<div
+				class={`collapsible-header${isLocked() ? " header-locked" : ""}`}
+				onClick={props.onToggle}
+				title={
+					isLocked()
+						? "Cannot collapse — only section open"
+						: props.collapsed
+							? "Expand Messages"
+							: "Collapse Messages"
+				}
+			>
+				<i
+					class={`codicon ${props.collapsed ? "codicon-chevron-left" : "codicon-chevron-right"} header-toggle-icon`}
+				></i>
+				<i class="codicon codicon-mail header-section-icon"></i>
+				<span class="section-label">Messages</span>
+				<div class={`header-count${props.hasChanged ? " changed" : ""}`}>
+					<Show when={props.hasChanged}>
+						<span class="change-indicator">!</span>
+					</Show>
+					{totalCount()}
 				</div>
-				<div
-					class={`section-body${props.collapsed ? " section-body-hidden" : ""}`}
+			</div>
+			<div
+				class={`section-body${props.collapsed ? " section-body-hidden" : ""}`}
+			>
+				<Show
+					when={hasMessages()}
+					fallback={<div class="empty-state">No pending messages</div>}
 				>
 					<Show when={props.pendingDeliveries.length > 0}>
 						<div class="subsection">
@@ -105,8 +114,8 @@ export default function InFlightMessagesDisplay(
 							</div>
 						</div>
 					</Show>
-				</div>
+				</Show>
 			</div>
-		</Show>
+		</div>
 	);
 }

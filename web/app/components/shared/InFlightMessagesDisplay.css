@@ -66,12 +66,13 @@
 
 .section.section-collapsed .collapsible-header {
 	flex-direction: column;
-	padding: 10px 4px;
+	padding: 10px 1px;
 	gap: 8px;
 	height: 100%;
 	align-items: center;
 	justify-content: flex-start;
-	overflow: hidden;
+	/* Remove overflow hidden to allow pulse shadow to show */
+	overflow: visible;
 }
 
 /* Count badge moves below icons */
@@ -79,6 +80,16 @@
 	margin-left: 0;
 	margin-top: 0;
 	writing-mode: horizontal-tb;
+	padding: 1px 0;
+	min-width: 18px;
+	max-width: 22px;
+	font-size: 8px;
+	gap: 1px;
+	justify-content: center;
+	/* Move above the label when collapsed to prevent vertical clipping */
+	order: 2;
+	display: flex;
+	align-items: center;
 }
 
 /* Label rotates to read bottom-up */
@@ -91,6 +102,8 @@
 	letter-spacing: 1.5px;
 	overflow: hidden;
 	font-size: 10px;
+	/* Position below the icons and counter */
+	order: 3;
 }
 
 /* ── Header icons & text ───────────────────────────────────────────────── */
@@ -100,12 +113,14 @@
 	font-size: 13px;
 	flex-shrink: 0;
 	transition: transform 0.2s ease;
+	order: 0;
 }
 
 .header-section-icon {
 	color: #c5c5c5;
 	font-size: 13px;
 	flex-shrink: 0;
+	order: 1;
 }
 
 /* Unified section title — same font as Processes */
@@ -130,6 +145,38 @@
 	min-width: 16px;
 	text-align: center;
 	flex-shrink: 0;
+	display: inline-block;
+}
+
+.header-count.changed {
+	background-color: #ff9d00;
+	color: #000;
+	animation: pulse-orange 2s infinite;
+	/* Only use flex when the ! mark is present */
+	display: flex;
+	align-items: center;
+	padding: 1px 5px;
+	gap: 3px;
+}
+
+.change-indicator {
+	font-weight: 900;
+	font-size: 11px;
+	color: #000;
+}
+
+@keyframes pulse-orange {
+	0% {
+		box-shadow: 0 0 0 0 rgba(255, 157, 0, 0.9);
+	}
+
+	70% {
+		box-shadow: 0 0 0 4px rgba(255, 157, 0, 0);
+	}
+
+	100% {
+		box-shadow: 0 0 0 0 rgba(255, 157, 0, 0);
+	}
 }
 
 /* ── Section body ─────────────────────────────────────────────────────── */
