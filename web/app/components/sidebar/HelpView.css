@@ -15,6 +15,8 @@
   min-height: 32px;
   font-size: 10px;
   flex-shrink: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .help-view-header h3 {
@@ -62,6 +64,11 @@
   flex-shrink: 0;
   width: 16px;
   text-align: center;
+}
+
+/* Text content container inside help-link */
+.help-link>div {
+  flex: 1;
 }
 
 .help-link-title {

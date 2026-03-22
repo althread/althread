@@ -4,7 +4,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
   font-size: 13px;
   overflow: hidden;
 }
@@ -20,12 +20,14 @@
   justify-content: space-between;
   align-items: center;
   min-height: 32px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .file-explorer-header h3 {
-    margin: 0;
-    font-weight: normal;
-    flex-shrink: 0;
+  margin: 0;
+  font-weight: normal;
+  flex-shrink: 0;
 }
 
 .file-explorer-actions {
@@ -50,31 +52,31 @@
   font-size: 12px;
   white-space: nowrap;
   z-index: 1001;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
   border: 1px solid #333;
   pointer-events: none;
 }
 
 .file-explorer-actions button {
-    background: none;
-    border: none;
-    color: #cccccc;
-    cursor: pointer;
-    padding: 2px;
-    margin-left: 0;
-    font-size: 16px;
-    line-height: 1;
-    border-radius: 2px;
+  background: none;
+  border: none;
+  color: #cccccc;
+  cursor: pointer;
+  padding: 2px;
+  margin-left: 0;
+  font-size: 16px;
+  line-height: 1;
+  border-radius: 2px;
 }
 
 .file-explorer-actions button:hover {
-    background-color: #3c3c3c;
+  background-color: #3c3c3c;
 }
 
 .file-explorer-actions button:disabled {
-    opacity: 0.5;
-    cursor: default;
-    background-color: transparent;
+  opacity: 0.5;
+  cursor: default;
+  background-color: transparent;
 }
 
 .file-explorer-content {
@@ -106,20 +108,35 @@
   background: rgba(102, 102, 102, 0.8);
 }
 
-.file, .directory-header {
+.file,
+.directory-header {
   display: flex;
   align-items: center;
   padding: 4px 0px 4px 10px;
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
-  height: 26px; /* FIXED height to prevent ANY changes during rename */
+  height: 26px;
+  /* FIXED height to prevent ANY changes during rename */
   box-sizing: border-box;
   border: 1px solid transparent;
   border-left: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
-.file:hover, .directory-header:hover {
+/* File and directory name text — truncate with ellipsis */
+.file>span,
+.directory-header>span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.file:hover,
+.directory-header:hover {
   background-color: #2d2d2d;
 }
 
@@ -129,7 +146,8 @@
   border-left: 0;
 }
 
-.file .codicon, .directory-header .codicon {
+.file .codicon,
+.directory-header .codicon {
   margin-right: 6px;
 }
 
@@ -138,7 +156,7 @@
   --nesting-level: 1;
 }
 
-.directory-children .file, 
+.directory-children .file,
 .directory-children .directory-header {
   padding-left: calc(26px + (var(--nesting-level) * 16px));
 }
@@ -241,28 +259,28 @@
 
 /* Multi-select styles */
 .file.selected,
-.directory.selected > .directory-header {
+.directory.selected>.directory-header {
   background-color: #094771;
   border: 1px solid #3794ff;
   border-left: 0;
 }
 
 /* Keep transparent borders for consecutive selected items to prevent layout shift */
-.file.selected + .file.selected,
-.file.selected + .directory.selected > .directory-header,
-.directory.selected + .file.selected,
-.directory.selected + .directory.selected > .directory-header,
+.file.selected+.file.selected,
+.file.selected+.directory.selected>.directory-header,
+.directory.selected+.file.selected,
+.directory.selected+.directory.selected>.directory-header,
 .directory.selected .directory-children .file.selected:first-child,
-.directory.selected .directory-children .directory.selected:first-child > .directory-header,
-.directory:has(.directory-children .file.selected:last-child) + .file.selected,
-.directory:has(.directory-children .file.selected:last-child) + .directory.selected > .directory-header,
-.directory:has(.directory-children .directory.selected:last-child) + .file.selected,
-.directory:has(.directory-children .directory.selected:last-child) + .directory.selected > .directory-header {
+.directory.selected .directory-children .directory.selected:first-child>.directory-header,
+.directory:has(.directory-children .file.selected:last-child)+.file.selected,
+.directory:has(.directory-children .file.selected:last-child)+.directory.selected>.directory-header,
+.directory:has(.directory-children .directory.selected:last-child)+.file.selected,
+.directory:has(.directory-children .directory.selected:last-child)+.directory.selected>.directory-header {
   border-top: 1px solid transparent;
 }
 
 .file.selected:hover,
-.directory.selected > .directory-header:hover {
+.directory.selected>.directory-header:hover {
   background-color: #0e5a8a;
 }
 
@@ -288,23 +306,29 @@
   border: 1px solid #e22a19;
   padding: 4px 8px;
   font-size: 0.95em;
-  box-shadow: 0 2px 8px rgba(229,20,0,0.15);
+  box-shadow: 0 2px 8px rgba(229, 20, 0, 0.15);
   position: absolute;
-  top: 100%; /* Position below the input */
-  z-index: 1000; /* Ensure it's above other content */
-  word-wrap: break-word; /* Allow text to wrap */
-  white-space: normal; /* Allow text to wrap */
+  top: 100%;
+  /* Position below the input */
+  z-index: 1000;
+  /* Ensure it's above other content */
+  word-wrap: break-word;
+  /* Allow text to wrap */
+  white-space: normal;
+  /* Allow text to wrap */
 }
 
 /* Error positioning for creation inputs (with proper nesting) */
-.file-entry-input ~ .file-entry-error {
-  left: 32px; /* Align with creation input text (10px padding + 16px icon + 6px margin) */
+.file-entry-input~.file-entry-error {
+  left: 32px;
+  /* Align with creation input text (10px padding + 16px icon + 6px margin) */
   right: 0;
 }
 
 /* Error positioning for rename inputs (no nesting, in-place) */
-.file-entry-rename-input ~ .file-entry-error {
-  left: 22px; /* Align with rename input text (0px padding + 16px icon + 6px margin) */
+.file-entry-rename-input~.file-entry-error {
+  left: 22px;
+  /* Align with rename input text (0px padding + 16px icon + 6px margin) */
   right: 0;
 }
 
@@ -327,7 +351,7 @@
 }
 
 /* Only apply nesting to creation inputs, not rename inputs */
-.directory-children > .file-entry-input {
+.directory-children>.file-entry-input {
   padding-left: calc(26px + (var(--nesting-level) * 16px));
 }
 
@@ -372,7 +396,7 @@
   max-width: 500px;
   color: #cccccc;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
   overflow: hidden;
 }
 
@@ -498,12 +522,12 @@
     max-width: 90vw;
     margin: 0 16px;
   }
-  
+
   .confirmation-dialog-actions {
     flex-direction: column-reverse;
     gap: 8px;
   }
-  
+
   .confirmation-dialog-actions button {
     width: 100%;
     justify-content: center;
@@ -520,16 +544,22 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes slideUp {
-  from { 
+  from {
     opacity: 0;
     transform: translateY(10px);
   }
-  to { 
+
+  to {
     opacity: 1;
     transform: translateY(0);
   }
@@ -597,18 +627,18 @@
 }
 
 /* Read-only items in deps directory */
-.file.read-only, 
+.file.read-only,
 .directory-header.read-only {
   opacity: 0.7;
   cursor: default;
 }
 
-.file.read-only:hover, 
+.file.read-only:hover,
 .directory-header.read-only:hover {
   background-color: transparent;
 }
 
-.file.read-only .codicon, 
+.file.read-only .codicon,
 .directory-header.read-only .codicon {
   opacity: 0.6;
 }
