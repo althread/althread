@@ -6,266 +6,269 @@
 /* ── Base section card ─────────────────────────────────────────────────── */
 
 .section {
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 0;
-    min-width: 0;
-    border: 1px solid #3e3e42;
-    background-color: #252526;
-    border-radius: 4px;
-    overflow: hidden;
-    transition: flex 0.25s ease, min-width 0.25s ease, max-width 0.25s ease;
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 0;
+	min-width: 0;
+	border: 1px solid #3e3e42;
+	background-color: #252526;
+	border-radius: 4px;
+	overflow: hidden;
+	transition:
+		flex 0.25s ease,
+		min-width 0.25s ease,
+		max-width 0.25s ease;
 }
 
 /* ── Horizontally collapsed ────────────────────────────────────────────── */
 
 .section.section-collapsed {
-    flex: 0 0 26px;
-    min-width: 26px;
-    max-width: 26px;
+	flex: 0 0 26px;
+	min-width: 26px;
+	max-width: 26px;
 }
 
 /* ── Collapsible header ────────────────────────────────────────────────── */
 
 .collapsible-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 8px;
-    cursor: pointer;
-    user-select: none;
-    background-color: #2d2d30;
-    flex-shrink: 0;
-    transition: background-color 0.15s ease;
-    /* Disable text wrapping when switching to vertical layout */
-    white-space: nowrap;
-    overflow: hidden;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 8px;
+	cursor: pointer;
+	user-select: none;
+	background-color: #2d2d30;
+	flex-shrink: 0;
+	transition: background-color 0.15s ease;
+	/* Disable text wrapping when switching to vertical layout */
+	white-space: nowrap;
+	overflow: hidden;
 }
 
 .collapsible-header:hover {
-    background-color: #37373d;
+	background-color: #37373d;
 }
 
 .collapsible-header:active {
-    background-color: #454545;
+	background-color: #454545;
 }
 
 /* Last-open lock: mute the toggle icon, keep normal cursor */
 .collapsible-header.header-locked {
-    cursor: default;
+	cursor: default;
 }
 
 .collapsible-header.header-locked .header-toggle-icon {
-    opacity: 0.25;
+	opacity: 0.25;
 }
 
 /* ── Collapsed-state header: becomes a thin vertical strip ─────────────── */
 
 .section.section-collapsed .collapsible-header {
-    flex-direction: column;
-    padding: 10px 4px;
-    gap: 8px;
-    height: 100%;
-    align-items: center;
-    justify-content: flex-start;
-    overflow: hidden;
+	flex-direction: column;
+	padding: 10px 4px;
+	gap: 8px;
+	height: 100%;
+	align-items: center;
+	justify-content: flex-start;
+	overflow: hidden;
 }
 
 /* Count badge moves below icons */
 .section.section-collapsed .header-count {
-    margin-left: 0;
-    margin-top: 0;
-    writing-mode: horizontal-tb;
+	margin-left: 0;
+	margin-top: 0;
+	writing-mode: horizontal-tb;
 }
 
 /* Label rotates to read bottom-up */
 .section.section-collapsed .section-label {
-    writing-mode: vertical-rl;
-    text-orientation: mixed;
-    transform: rotate(180deg);
-    flex: 1;
-    text-align: center;
-    letter-spacing: 1.5px;
-    overflow: hidden;
-    font-size: 10px;
+	writing-mode: vertical-rl;
+	text-orientation: mixed;
+	transform: rotate(180deg);
+	flex: 1;
+	text-align: center;
+	letter-spacing: 1.5px;
+	overflow: hidden;
+	font-size: 10px;
 }
 
 /* ── Header icons & text ───────────────────────────────────────────────── */
 
 .header-toggle-icon {
-    color: #858585;
-    font-size: 13px;
-    flex-shrink: 0;
-    transition: transform 0.2s ease;
+	color: #858585;
+	font-size: 13px;
+	flex-shrink: 0;
+	transition: transform 0.2s ease;
 }
 
 .header-section-icon {
-    color: #c5c5c5;
-    font-size: 13px;
-    flex-shrink: 0;
+	color: #c5c5c5;
+	font-size: 13px;
+	flex-shrink: 0;
 }
 
 /* Unified section title — same font as Processes */
 .section-label {
-    font-size: 10px;
-    font-weight: bold;
-    text-transform: uppercase;
-    color: #bbb;
-    letter-spacing: 0.5px;
-    white-space: nowrap;
-    overflow: hidden;
+	font-size: 10px;
+	font-weight: bold;
+	text-transform: uppercase;
+	color: #bbb;
+	letter-spacing: 0.5px;
+	white-space: nowrap;
+	overflow: hidden;
 }
 
 .header-count {
-    margin-left: auto;
-    background: #37373d;
-    color: #858585;
-    font-size: 10px;
-    font-weight: 600;
-    padding: 1px 6px;
-    border-radius: 8px;
-    min-width: 16px;
-    text-align: center;
-    flex-shrink: 0;
+	margin-left: auto;
+	background: #37373d;
+	color: #858585;
+	font-size: 10px;
+	font-weight: 600;
+	padding: 1px 6px;
+	border-radius: 8px;
+	min-width: 16px;
+	text-align: center;
+	flex-shrink: 0;
 }
 
 /* ── Section body ─────────────────────────────────────────────────────── */
 
 .section-body {
-    padding: 8px;
-    overflow-y: auto;
-    flex: 1;
-    min-height: 0;
+	padding: 8px;
+	overflow-y: auto;
+	flex: 1;
+	min-height: 0;
 }
 
 .section-body-hidden {
-    display: none;
+	display: none;
 }
 
 /* ── Subsection ───────────────────────────────────────────────────────── */
 
 .subsection {
-    margin-bottom: 12px;
+	margin-bottom: 12px;
 }
 
 .subsection:last-child {
-    margin-bottom: 0;
+	margin-bottom: 0;
 }
 
 .subsection-title {
-    font-size: 10px;
-    font-weight: 600;
-    color: #858585;
-    margin-bottom: 8px;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    border-bottom: 1px solid #3e3e42;
-    padding-bottom: 4px;
+	font-size: 10px;
+	font-weight: 600;
+	color: #858585;
+	margin-bottom: 8px;
+	text-transform: uppercase;
+	letter-spacing: 0.4px;
+	border-bottom: 1px solid #3e3e42;
+	padding-bottom: 4px;
 }
 
 /* ── Message list ─────────────────────────────────────────────────────── */
 
 .message-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
 }
 
 .message-card {
-    background: #1e1e1e;
-    border: 1px solid #3e3e42;
-    border-left: 3px solid #007acc;
-    border-radius: 4px;
-    padding: 10px;
+	background: #1e1e1e;
+	border: 1px solid #3e3e42;
+	border-left: 3px solid #007acc;
+	border-radius: 4px;
+	padding: 10px;
 }
 
 .message-card.waiting {
-    border-left-color: #f48771;
+	border-left-color: #f48771;
 }
 
 .message-route {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 6px 8px;
-    margin-bottom: 6px;
-    font-size: 13px;
-    row-gap: 4px;
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px 8px;
+	margin-bottom: 6px;
+	font-size: 13px;
+	row-gap: 4px;
 }
 
 /* Keep the arrow icon glued to the endpoint before it */
 .route-arrow {
-    flex-shrink: 0;
-    color: #858585;
+	flex-shrink: 0;
+	color: #858585;
 }
 
 .message-endpoint {
-    font-family: 'Consolas', 'Monaco', monospace;
-    padding: 2px 6px;
-    border-radius: 3px;
+	font-family: "Consolas", "Monaco", monospace;
+	padding: 2px 6px;
+	border-radius: 3px;
 }
 
 .message-endpoint.from {
-    background: #0e639c;
-    color: #ffffff;
+	background: #0e639c;
+	color: #ffffff;
 }
 
 .message-endpoint.to {
-    background: #16825d;
-    color: #ffffff;
+	background: #16825d;
+	color: #ffffff;
 }
 
 .message-status {
-    color: #f48771;
-    font-size: 12px;
-    font-style: italic;
+	color: #f48771;
+	font-size: 12px;
+	font-style: italic;
 }
 
 .message-payload {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-family: 'Consolas', 'Monaco', monospace;
-    font-size: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-family: "Consolas", "Monaco", monospace;
+	font-size: 12px;
 }
 
 .payload-item {
-    padding: 4px 8px;
-    background: #2d2d30;
-    border-radius: 3px;
-    color: #ce9178;
+	padding: 4px 8px;
+	background: #2d2d30;
+	border-radius: 3px;
+	color: #ce9178;
 }
 
 /* ── Variables grid (Globals) ─────────────────────────────────────────── */
 
 .variables-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
 }
 
 .variable-item {
-    font-family: 'Consolas', 'Monaco', monospace;
-    font-size: 13px;
-    padding: 4px 8px;
-    background: #1e1e1e;
-    border-radius: 3px;
-    border-left: 3px solid #007acc;
+	font-family: "Consolas", "Monaco", monospace;
+	font-size: 13px;
+	padding: 4px 8px;
+	background: #1e1e1e;
+	border-radius: 3px;
+	border-left: 3px solid #007acc;
 }
 
 .var-name {
-    color: #9cdcfe;
-    font-weight: 500;
+	color: #9cdcfe;
+	font-weight: 500;
 }
 
 .var-value {
-    color: #ce9178;
+	color: #ce9178;
 }
 
 .empty-state {
-    color: #858585;
-    font-style: italic;
-    font-size: 11px;
-    text-align: center;
-    padding: 12px;
+	color: #858585;
+	font-style: italic;
+	font-size: 11px;
+	text-align: center;
+	padding: 12px;
 }

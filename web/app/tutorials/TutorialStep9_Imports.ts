@@ -1,9 +1,9 @@
-import { type TutorialStep } from '@components/tutorial/Tutorial';
+import type { TutorialStep } from "@components/tutorial/Tutorial";
 
 export const tutorial: TutorialStep = {
-  name: "imports",
-  displayName: "9. Imports",
-  content: `
+	name: "imports",
+	displayName: "9. Imports",
+	content: `
 # 9. Imports
 
 As your Althread projects grow, you'll want to organize code into multiple files. The \`import\` statement lets you bring definitions from other files, even those in subdirectories, into your current file.
@@ -92,89 +92,130 @@ main {
 6.  Finally, run the \`Hello()\` program from the \`display\` module.
 
   `,
-  defaultCode: `import [
+	defaultCode: `import [
     // Import modules here
 ]
 
 main {
     // Call imported functions and run programs
 }`,
-  validate: (code: string) => {
-    // 1. Validate the import statement
-    const importMatch = code.match(/import\s*\[([\s\S]*?)\]/s);
-    let isImportCorrect = false;
-    if (importMatch) {
-        const importList = importMatch[1];
-        const hasMath = /\bmath\b/.test(importList);
-        const hasCoolFib = /cool\/fib/.test(importList);
-        const hasDisplay = /\bdisplay\b/.test(importList);
-        if (hasMath && hasCoolFib && hasDisplay) {
-            isImportCorrect = true;
-        }
-    }
+	validate: (code: string) => {
+		// 1. Validate the import statement
+		const importMatch = code.match(/import\s*\[([\s\S]*?)\]/s);
+		let isImportCorrect = false;
+		if (importMatch) {
+			const importList = importMatch[1];
+			const hasMath = /\bmath\b/.test(importList);
+			const hasCoolFib = /cool\/fib/.test(importList);
+			const hasDisplay = /\bdisplay\b/.test(importList);
+			if (hasMath && hasCoolFib && hasDisplay) {
+				isImportCorrect = true;
+			}
+		}
 
-    // 2. Validate the main block content
-    const mainMatch = code.match(/main\s*\{([\s\S]*?)\}/s);
-    let missingSteps: string[] = [];
-    let forbiddenUsage = false;
+		// 2. Validate the main block content
+		const mainMatch = code.match(/main\s*\{([\s\S]*?)\}/s);
+		const missingSteps: string[] = [];
+		let forbiddenUsage = false;
 
-    if (mainMatch) {
-        const mainContent = mainMatch[1];
+		if (mainMatch) {
+			const mainContent = mainMatch[1];
 
-        // Step 2: math.max(7, 3) and print
-        const mathVar = mainContent.match(/let\s+(\w+)\s*=\s*math\.max\(\s*7\s*,\s*3\s*\)\s*;/);
-        const mathDirectPrint = /print\([\s\S]*math\.max\(\s*7\s*,\s*3\s*\)[\s\S]*\)/.test(mainContent);
-        const mathVarPrint = mathVar && new RegExp(`print\\([\\s\\S]*${mathVar[1]}[\\s\\S]*\\)`).test(mainContent);
-        if (!(mathDirectPrint || mathVarPrint)) missingSteps.push("printing the result of math.max(7, 3)");
+			// Step 2: math.max(7, 3) and print
+			const mathVar = mainContent.match(
+				/let\s+(\w+)\s*=\s*math\.max\(\s*7\s*,\s*3\s*\)\s*;/,
+			);
+			const mathDirectPrint =
+				/print\([\s\S]*math\.max\(\s*7\s*,\s*3\s*\)[\s\S]*\)/.test(mainContent);
+			const mathVarPrint =
+				mathVar &&
+				new RegExp(`print\\([\\s\\S]*${mathVar[1]}[\\s\\S]*\\)`).test(
+					mainContent,
+				);
+			if (!(mathDirectPrint || mathVarPrint))
+				missingSteps.push("printing the result of math.max(7, 3)");
 
-        // Step 3: fib.fibonacci_iterative_8() and print
-        const fibVar = mainContent.match(/let\s+(\w+)\s*=\s*fib\.fibonacci_iterative_N\(\s*\)\s*;/);
-        const fibDirectPrint = /print\([\s\S]*fib\.fibonacci_iterative_N\(\s*\)[\s\S]*\)/.test(mainContent);
-        const fibVarPrint = fibVar && new RegExp(`print\\([\\s\\S]*${fibVar[1]}[\\s\\S]*\\)`).test(mainContent);
-        if (!(fibDirectPrint || fibVarPrint)) missingSteps.push("printing the result of fib.fibonacci_iterative_N()");
+			// Step 3: fib.fibonacci_iterative_8() and print
+			const fibVar = mainContent.match(
+				/let\s+(\w+)\s*=\s*fib\.fibonacci_iterative_N\(\s*\)\s*;/,
+			);
+			const fibDirectPrint =
+				/print\([\s\S]*fib\.fibonacci_iterative_N\(\s*\)[\s\S]*\)/.test(
+					mainContent,
+				);
+			const fibVarPrint =
+				fibVar &&
+				new RegExp(`print\\([\\s\\S]*${fibVar[1]}[\\s\\S]*\\)`).test(
+					mainContent,
+				);
+			if (!(fibDirectPrint || fibVarPrint))
+				missingSteps.push("printing the result of fib.fibonacci_iterative_N()");
 
-        // Step 3b: print fib.N
-        if (!/print\([\s\S]*fib\.N[\s\S]*\)/.test(mainContent)) missingSteps.push("printing fib.N");
+			// Step 3b: print fib.N
+			if (!/print\([\s\S]*fib\.N[\s\S]*\)/.test(mainContent))
+				missingSteps.push("printing fib.N");
 
-        // Step 4: assign fib.N = 10 and print new fib.fibonacci_iterative_8()
-        const nAssign = /fib\.N\s*=\s*10\s*;/.test(mainContent);
-        if (!nAssign) missingSteps.push("assigning fib.N = 10");
-        else {
-            // Only check for second fib print after assignment
-            const afterAssign = mainContent.split(/fib\.N\s*=\s*10\s*;/)[1] || "";
-            const fibVarAfter = afterAssign.match(/let\s+(\w+)\s*=\s*fib\.fibonacci_iterative_N\(\s*\)\s*;/);
-            const fibDirectPrintAfter = /print\([\s\S]*fib\.fibonacci_iterative_N\(\s*\)[\s\S]*\)/.test(afterAssign);
-            const fibVarPrintAfter = fibVarAfter && new RegExp(`print\\([\\s\\S]*${fibVarAfter[1]}[\\s\\S]*\\)`).test(afterAssign);
-            if (!(fibDirectPrintAfter || fibVarPrintAfter)) missingSteps.push("printing the result of fib.fibonacci_iterative_N() after changing fib.N");
-        }
+			// Step 4: assign fib.N = 10 and print new fib.fibonacci_iterative_8()
+			const nAssign = /fib\.N\s*=\s*10\s*;/.test(mainContent);
+			if (!nAssign) missingSteps.push("assigning fib.N = 10");
+			else {
+				// Only check for second fib print after assignment
+				const afterAssign = mainContent.split(/fib\.N\s*=\s*10\s*;/)[1] || "";
+				const fibVarAfter = afterAssign.match(
+					/let\s+(\w+)\s*=\s*fib\.fibonacci_iterative_N\(\s*\)\s*;/,
+				);
+				const fibDirectPrintAfter =
+					/print\([\s\S]*fib\.fibonacci_iterative_N\(\s*\)[\s\S]*\)/.test(
+						afterAssign,
+					);
+				const fibVarPrintAfter =
+					fibVarAfter &&
+					new RegExp(`print\\([\\s\\S]*${fibVarAfter[1]}[\\s\\S]*\\)`).test(
+						afterAssign,
+					);
+				if (!(fibDirectPrintAfter || fibVarPrintAfter))
+					missingSteps.push(
+						"printing the result of fib.fibonacci_iterative_N() after changing fib.N",
+					);
+			}
 
-        // Step 6: run display.Hello()
-        if (!/run\s+display\.Hello\(\s*\)\s*;/.test(mainContent)) missingSteps.push("running display.Hello()");
+			// Step 6: run display.Hello()
+			if (!/run\s+display\.Hello\(\s*\)\s*;/.test(mainContent))
+				missingSteps.push("running display.Hello()");
 
-        // Check for forbidden usage of fib.fibonacci_iterative(8, 0, 1)
-        if (/fib\.fibonacci_iterative\s*\(\s*8\s*,\s*0\s*,\s*1\s*\)/.test(mainContent)) {
-            forbiddenUsage = true;
-        }
-    } else {
-        missingSteps.push("main block");
-    }
+			// Check for forbidden usage of fib.fibonacci_iterative(8, 0, 1)
+			if (
+				/fib\.fibonacci_iterative\s*\(\s*8\s*,\s*0\s*,\s*1\s*\)/.test(
+					mainContent,
+				)
+			) {
+				forbiddenUsage = true;
+			}
+		} else {
+			missingSteps.push("main block");
+		}
 
-    if (!isImportCorrect) missingSteps.unshift("importing 'math', 'cool/fib', and 'display'");
+		if (!isImportCorrect)
+			missingSteps.unshift("importing 'math', 'cool/fib', and 'display'");
 
-    if (forbiddenUsage) {
-        return {
-            success: false,
-            message: "You tried to call fib.fibonacci_iterative(8, 0, 1) directly. This function is private and cannot be used outside the module. Please use fib.fibonacci_iterative_N() instead."
-        };
-    }
+		if (forbiddenUsage) {
+			return {
+				success: false,
+				message:
+					"You tried to call fib.fibonacci_iterative(8, 0, 1) directly. This function is private and cannot be used outside the module. Please use fib.fibonacci_iterative_N() instead.",
+			};
+		}
 
-    if (missingSteps.length === 0) {
-        return { success: true, message: "Fantastic! You've completed all the tasks for this tutorial." };
-    }
+		if (missingSteps.length === 0) {
+			return {
+				success: true,
+				message: "Fantastic! You've completed all the tasks for this tutorial.",
+			};
+		}
 
-    return {
-        success: false,
-        message: `Please check the following: ${missingSteps.join('; ')}.`
-    };
-  }
+		return {
+			success: false,
+			message: `Please check the following: ${missingSteps.join("; ")}.`,
+		};
+	},
 };

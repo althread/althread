@@ -1,83 +1,83 @@
 .vm-state-inspector {
-    background-color: #252526;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    width: 100%;
-    overflow: hidden;
-    flex-shrink: 0;
-    min-width: 0;
+	background-color: #252526;
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	width: 100%;
+	overflow: hidden;
+	flex-shrink: 0;
+	min-width: 0;
 }
 
 .inspector-empty-state {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #888;
-    font-style: italic;
-    font-size: 0.9em;
-    padding: 20px;
-    text-align: center;
+	flex: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #888;
+	font-style: italic;
+	font-size: 0.9em;
+	padding: 20px;
+	text-align: center;
 }
 
 .inspector-header {
-    background-color: #2d2d2d;
-    padding: 4px 12px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid #1e1e1e;
-    flex-shrink: 0;
+	background-color: #2d2d2d;
+	padding: 4px 12px;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	border-bottom: 1px solid #1e1e1e;
+	flex-shrink: 0;
 }
 
 .header-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 11px;
-    font-weight: bold;
-    text-transform: uppercase;
-    color: #969696;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 11px;
+	font-weight: bold;
+	text-transform: uppercase;
+	color: #969696;
 }
 
 .close-btn {
-    background: none;
-    border: none;
-    color: #cccccc;
-    cursor: pointer;
-    padding: 2px;
-    display: flex;
+	background: none;
+	border: none;
+	color: #cccccc;
+	cursor: pointer;
+	padding: 2px;
+	display: flex;
 }
 
 .close-btn:hover {
-    color: white;
-    background-color: #454545;
+	color: white;
+	background-color: #454545;
 }
 
 /* ── Main sections row ────────────────────────────────────────────────── */
 
 .inspector-sections {
-    display: flex;
-    flex-direction: row;
-    overflow: hidden;
-    height: 100%;
-    padding: 8px;
-    gap: 8px;
-    min-width: 0;
+	display: flex;
+	flex-direction: row;
+	overflow: hidden;
+	height: 100%;
+	padding: 8px;
+	gap: 8px;
+	min-width: 0;
 }
 
 /* ── Processes panel: takes 2× the flex-grow so it gets more space ─────── */
 
 .programs-section {
-    flex: 2 1 0;
+	flex: 2 1 0;
 }
 
 /* ── Empty / fallback states ──────────────────────────────────────────── */
 
 .empty-state,
 .empty-val {
-    color: #666;
-    font-style: italic;
-    font-size: 11px;
+	color: #666;
+	font-style: italic;
+	font-size: 11px;
 }
