@@ -241,39 +241,41 @@ impl Stdlib {
                         name: func_name.clone(),
                         args: vec![t[size].clone()],
                         ret: DataType::Void,
-                        f: Rc::new(move |list, v, pos| {
+                        f: Rc::new(move |tuple, v, pos| {
                             let v = v.to_tuple().unwrap();
-                            let message : String = func_name.clone() + &String::from("expects one arguments: l.")  + &func_name.clone() + &String::from("(value);");
                             if v.len() != 1 {
+                                let message : String = func_name.clone() + &String::from("expects one arguments: l.")  + &func_name.clone() + &String::from("(value);");
                                 return Err(AlthreadError::new(
                                     ErrorType::RuntimeError,
                                     pos,
                                     message
                                 ));
                             }
-                            let idx = v[0].to_integer().unwrap() as usize;
-                            if let Literal::List(dtype, list) = list {
-                                if idx >= list.len() {
+                            if let Literal::Tuple(tuple) = tuple {
+                                if tuple.len() <= 0 {
                                     return Err(AlthreadError::new(
                                         ErrorType::RuntimeError,
                                         pos,
-                                        format!("Index out of bounds: {}", idx)
+                                        format!("Set on an empty tuple")
                                     ));
                                 }
-                                if dtype != &v[1].get_datatype() {
+                                let value = v[0].clone();
+                                let dtype_of_value = value.clone().get_datatype();
+                                let dtype_of_element = tuple[size].get_datatype();
+                                if tuple[size].get_datatype() != dtype_of_value {
                                     return Err(AlthreadError::new(
                                         ErrorType::RuntimeError,
                                         pos,
-                                        format!("List of type {:?} can only accept values of the same type ({} given)", dtype, v[1].get_datatype())
+                                        format!("Element of tuple {:?} can only accept values of the same type ({} given, expect {})", tuple[size], dtype_of_value,dtype_of_element)
                                     ));
                                 }
-                                list[idx] = v[1].clone();
+                                tuple[size] = value;
                             }
                             else {
                                 return Err(AlthreadError::new(
                                     ErrorType::RuntimeError,
                                     pos,
-                                    "Expected List".to_string()
+                                    "Expected Tuple".to_string()
                                 ));
                             }
                             Ok(Literal::Null)
