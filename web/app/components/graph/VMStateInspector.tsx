@@ -1,4 +1,11 @@
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import {
+	createEffect,
+	createMemo,
+	createSignal,
+	createUniqueId,
+	For,
+	Show,
+} from "solid-js";
 import type {
 	ChannelState,
 	VMState,
@@ -8,6 +15,7 @@ import { stableStringify } from "../../utils/graphBuilders";
 import GlobalsDisplay from "../shared/GlobalsDisplay";
 import InFlightMessagesDisplay from "../shared/InFlightMessagesDisplay";
 import ProcessStateCard from "../shared/ProcessStateCard";
+import "../shared/Section.css";
 import "./VMStateInspector.css";
 
 interface VMStateInspectorProps {
@@ -15,7 +23,29 @@ interface VMStateInspectorProps {
 	onClose: () => void;
 }
 
+const signatureCache = new WeakMap<
+	VMState,
+	{ globals: string; messages: string }
+>();
+
+function getSignaturesFor(vm: VMState) {
+	let sigs = signatureCache.get(vm);
+	if (!sigs) {
+		sigs = {
+			globals: stableStringify(vm.globals),
+			messages: stableStringify({
+				p: vm.pending_deliveries,
+				w: vm.waiting_send,
+			}),
+		};
+		signatureCache.set(vm, sigs);
+	}
+	return sigs;
+}
+
 export default function VMStateInspector(props: VMStateInspectorProps) {
+	const processesId = `processes-${createUniqueId()}`;
+
 	// All collapse state lives here so we can enforce "last open" guard
 	const [globalsCollapsed, setGlobalsCollapsed] = createSignal(false);
 	const [messagesCollapsed, setMessagesCollapsed] = createSignal(false);
@@ -44,11 +74,10 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 	let wasGlobalsCollapsed = false;
 	let wasMessagesCollapsed = false;
 
+	// Auto-collapse decisions effect
 	createEffect(() => {
 		const s = state();
 		const node = props.node;
-		const currentGlobalsCollapsed = globalsCollapsed();
-		const currentMessagesCollapsed = messagesCollapsed();
 
 		if (!s || !node) return;
 
@@ -56,18 +85,28 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 		const isMessagesEmpty =
 			s.pending_deliveries.length === 0 && s.waiting_send.length === 0;
 
-		// Default collapse purely on NEW selection OR when content BECOMES empty
-		if (node !== lastNode) {
-			lastNode = node;
+		// Default collapse purely on first selection. Preserve user choices afterwards.
+		if (lastNode === null) {
 			if (isGlobalsEmpty) setGlobalsCollapsed(true);
 			if (isMessagesEmpty) setMessagesCollapsed(true);
-		} else {
-			if (isGlobalsEmpty && !wasGlobalsEmpty) setGlobalsCollapsed(true);
-			if (isMessagesEmpty && !wasMessagesEmpty) setMessagesCollapsed(true);
 		}
 
+		lastNode = node;
 		wasGlobalsEmpty = isGlobalsEmpty;
 		wasMessagesEmpty = isMessagesEmpty;
+	});
+
+	// Change tracking effect
+	createEffect(() => {
+		const s = state();
+		if (!s) return;
+
+		const currentGlobalsCollapsed = globalsCollapsed();
+		const currentMessagesCollapsed = messagesCollapsed();
+
+		const isGlobalsEmpty = Object.keys(s.globals).length === 0;
+		const isMessagesEmpty =
+			s.pending_deliveries.length === 0 && s.waiting_send.length === 0;
 
 		// Globals change tracking
 		if (!currentGlobalsCollapsed) {
@@ -76,9 +115,9 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 		} else {
 			// Collapsed: If just collapsed, snapshot state. Otherwise check if it changed.
 			if (!wasGlobalsCollapsed) {
-				lastSeenGlobalsRaw = stableStringify(s.globals);
+				lastSeenGlobalsRaw = getSignaturesFor(s).globals;
 			} else if (!isGlobalsEmpty) {
-				const currentGlobalsRaw = stableStringify(s.globals);
+				const currentGlobalsRaw = getSignaturesFor(s).globals;
 				if (currentGlobalsRaw !== lastSeenGlobalsRaw) {
 					setGlobalsChanged(true);
 				}
@@ -92,15 +131,9 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 		} else {
 			// Collapsed: If just collapsed, snapshot state. Otherwise check if it changed.
 			if (!wasMessagesCollapsed) {
-				lastSeenMessagesRaw = stableStringify({
-					p: s.pending_deliveries,
-					w: s.waiting_send,
-				});
+				lastSeenMessagesRaw = getSignaturesFor(s).messages;
 			} else if (!isMessagesEmpty) {
-				const currentMessagesRaw = stableStringify({
-					p: s.pending_deliveries,
-					w: s.waiting_send,
-				});
+				const currentMessagesRaw = getSignaturesFor(s).messages;
 				if (currentMessagesRaw !== lastSeenMessagesRaw) {
 					setMessagesChanged(true);
 				}
@@ -197,7 +230,7 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 								role="button"
 								tabIndex={!processesCollapsed() && !canCollapse() ? -1 : 0}
 								aria-expanded={!processesCollapsed()}
-								aria-controls="processes-section-body"
+								aria-controls={processesId}
 								title={
 									!processesCollapsed() && !canCollapse()
 										? "Cannot collapse — only section open"
@@ -214,7 +247,7 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 								<span class="header-count">{vmState().locals.length}</span>
 							</div>
 							<div
-								id="processes-section-body"
+								id={processesId}
 								class={`section-body${processesCollapsed() ? " section-body-hidden" : ""}`}
 							>
 								<Show

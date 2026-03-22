@@ -1,4 +1,25 @@
-/* Minimal overrides – shared section/collapsible styles live in InFlightMessagesDisplay.css */
+/* ── Variables grid (Globals) ─────────────────────────────────────────── */
 
-/* GlobalsDisplay uses the shared .section, .collapsible-header, .collapsible-body, .variables-grid etc. */
-/* No extra overrides needed at the moment */
+.variables-grid {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.variable-item {
+	font-family: "Consolas", "Monaco", monospace;
+	font-size: 13px;
+	padding: 4px 8px;
+	background: #1e1e1e;
+	border-radius: 3px;
+	border-left: 3px solid #007acc;
+}
+
+.var-name {
+	color: #9cdcfe;
+	font-weight: 500;
+}
+
+.var-value {
+	color: #ce9178;
+}

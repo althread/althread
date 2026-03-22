@@ -1,5 +1,6 @@
-import { For, Show } from "solid-js";
+import { createUniqueId, For, Show } from "solid-js";
 import type { PendingDelivery, WaitingSend } from "../../types/vm-state";
+import "./Section.css";
 import "./InFlightMessagesDisplay.css";
 import { LiteralDisplay } from "./Literal";
 
@@ -15,6 +16,8 @@ interface InFlightMessagesDisplayProps {
 export default function InFlightMessagesDisplay(
 	props: InFlightMessagesDisplayProps,
 ) {
+	const bodyId = `messages-${createUniqueId()}`;
+
 	const hasMessages = () =>
 		props.pendingDeliveries.length > 0 || props.waitingSend.length > 0;
 	const totalCount = () =>
@@ -36,7 +39,7 @@ export default function InFlightMessagesDisplay(
 				role="button"
 				tabIndex={isLocked() ? -1 : 0}
 				aria-expanded={!props.collapsed}
-				aria-controls="messages-section-body"
+				aria-controls={bodyId}
 				title={
 					isLocked()
 						? "Cannot collapse — only section open"
@@ -58,7 +61,7 @@ export default function InFlightMessagesDisplay(
 				</div>
 			</div>
 			<div
-				id="messages-section-body"
+				id={bodyId}
 				class={`section-body${props.collapsed ? " section-body-hidden" : ""}`}
 			>
 				<Show

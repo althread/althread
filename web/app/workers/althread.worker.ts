@@ -40,9 +40,9 @@ self.onmessage = async (event) => {
 	} catch (error: any) {
 		self.postMessage({
 			id,
-			error: error.message || error.toString(),
+			error: error?.message || String(error),
 			rawError:
-				typeof error === "object"
+				error !== null && typeof error === "object"
 					? {
 							message: error.message,
 							pos: error.pos,

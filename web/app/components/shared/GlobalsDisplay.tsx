@@ -1,6 +1,6 @@
-import { createMemo, For, Show } from "solid-js";
+import { createMemo, createUniqueId, For, Show } from "solid-js";
 import "./GlobalsDisplay.css";
-import "./InFlightMessagesDisplay.css";
+import "./Section.css";
 import type { Literal } from "../../types/vm-state";
 import { LiteralDisplay } from "./Literal";
 
@@ -13,6 +13,8 @@ interface GlobalsDisplayProps {
 }
 
 export default function GlobalsDisplay(props: GlobalsDisplayProps) {
+	const bodyId = `globals-${createUniqueId()}`;
+
 	const globalsEntries = createMemo(() => {
 		return Object.entries(props.globals).sort((a, b) =>
 			a[0].localeCompare(b[0]),
@@ -35,7 +37,7 @@ export default function GlobalsDisplay(props: GlobalsDisplayProps) {
 				role="button"
 				tabIndex={isLocked() ? -1 : 0}
 				aria-expanded={!props.collapsed}
-				aria-controls="globals-section-body"
+				aria-controls={bodyId}
 				title={
 					isLocked()
 						? "Cannot collapse — only section open"
@@ -57,7 +59,7 @@ export default function GlobalsDisplay(props: GlobalsDisplayProps) {
 				</div>
 			</div>
 			<div
-				id="globals-section-body"
+				id={bodyId}
 				class={`section-body${props.collapsed ? " section-body-hidden" : ""}`}
 			>
 				<Show
