@@ -1,4 +1,5 @@
 import { createEffect, createSignal, Show } from "solid-js";
+import type { JSX } from "solid-js";
 import Resizable from '@corvu/resizable'
 import { renderMessageFlowGraph } from "@components/graph/CommGraph";
 import { rendervmStates } from "@components/graph/vmStatesDisplay";
@@ -33,10 +34,10 @@ export default function InteractivePanel(props: InteractivePanelProps) {
   const [isMinimized, setIsMinimized] = createSignal(false);
   const [activeTab, setActiveTab] = createSignal<'choices' | 'state'>('choices');
   const [rightPanelTab, setRightPanelTab] = createSignal<'console' | 'execution' | 'msg_flow' | 'vm_states'>('console');
-  
+
   // Ref for execution console to enable auto-scrolling
   let executionConsoleRef: HTMLDivElement | undefined;
-  
+
   // Auto-scroll execution console to bottom when content changes
   createEffect(() => {
     if (rightPanelTab() === "execution" && executionConsoleRef && props.executionOutput) {
@@ -63,7 +64,7 @@ export default function InteractivePanel(props: InteractivePanelProps) {
     if (!props.editor || !lines || lines.length === 0) {
       return [];
     }
-    
+
     try {
       const doc = props.editor.editorView().state.doc;
       const sourceLines = lines.map(lineNum => {
@@ -72,7 +73,7 @@ export default function InteractivePanel(props: InteractivePanelProps) {
         }
         return "";
       }).filter(line => line !== "");
-      
+
       // Remove duplicates while preserving order
       return [...new Set(sourceLines)];
     } catch (e) {
@@ -83,12 +84,12 @@ export default function InteractivePanel(props: InteractivePanelProps) {
   // Helper to format instructions with message delivery info
   const formatInstructions = (state: NextStateOption): JSX.Element => {
     const lines = getSourceLines(state.lines);
-    
+
     // Check if this is a message operation
-    const hasMessageOp = state.instructions.some(inst => 
+    const hasMessageOp = state.instructions.some(inst =>
       inst.includes('SEND') || inst.includes('RECEIVE') || inst.includes('DELIVER')
     );
-    
+
     if (lines.length > 0) {
       return (
         <>
@@ -102,7 +103,7 @@ export default function InteractivePanel(props: InteractivePanelProps) {
             <>
               <br />
               <span class="message-operation">
-                {state.instructions.filter(inst => 
+                {state.instructions.filter(inst =>
                   inst.includes('SEND') || inst.includes('RECEIVE') || inst.includes('DELIVER')
                 ).map((inst, i) => (
                   <>
@@ -116,7 +117,7 @@ export default function InteractivePanel(props: InteractivePanelProps) {
         </>
       );
     }
-    
+
     return <code>{state.instructions.join('; ')}</code>;
   };
 
@@ -159,7 +160,7 @@ export default function InteractivePanel(props: InteractivePanelProps) {
         </div>
         <div class="interactive-choices-list">
           {props.interactiveStates.map((state: NextStateOption, index: number) => (
-            <button 
+            <button
               class="interactive-choice-item"
               onClick={() => props.onExecuteStep(index)}
             >
@@ -190,12 +191,12 @@ export default function InteractivePanel(props: InteractivePanelProps) {
     }
 
     const state = props.currentVMState;
-    
+
     return (
       <div class="vm-state-container" style="height: 100%; display: flex; flex-direction: column;">
-        <VMStateInspector node={state} onClose={() => {}} />
+        <VMStateInspector node={state} onClose={() => { }} />
         <div class="interactive-empty-state" style="flex: 1; justify-content: flex-start; padding-top: 20px;">
-           <p style="font-size: 11px; opacity: 0.7;">Interactive state view. Use the choices tab to progress.</p>
+          <p style="font-size: 11px; opacity: 0.7;">Interactive state view. Use the choices tab to progress.</p>
         </div>
       </div>
     );
@@ -247,8 +248,8 @@ export default function InteractivePanel(props: InteractivePanelProps) {
       );
     }
     return null;
-  };  
-  
+  };
+
   return (
     <Show when={props.isVisible}>
       <div class={`interactive-panel ${isMinimized() ? 'minimized' : ''}`}>
@@ -257,7 +258,7 @@ export default function InteractivePanel(props: InteractivePanelProps) {
             <i class="codicon codicon-debug-step-over panel-icon"></i>
             <h3>Interactive Run</h3>
           </div>
-          
+
           <div class="panel-controls">
             <button
               class="control-button reset-button"
@@ -267,7 +268,7 @@ export default function InteractivePanel(props: InteractivePanelProps) {
               <i class="codicon codicon-refresh"></i>
               Restart
             </button>
-            <button 
+            <button
               class="control-button minimize-button"
               onClick={() => toggleMinimize()}
               title={isMinimized() ? "Expand Panel" : "Minimize Panel"}
@@ -275,7 +276,7 @@ export default function InteractivePanel(props: InteractivePanelProps) {
               <i class={`codicon ${isMinimized() ? 'codicon-chevron-up' : 'codicon-chevron-down'}`}></i>
               {isMinimized() ? "Expand" : "Minimize"}
             </button>
-            <button 
+            <button
               class="control-button close-button"
               onClick={props.onClose}
               title="Close Interactive Mode"
@@ -289,26 +290,26 @@ export default function InteractivePanel(props: InteractivePanelProps) {
           <div class="interactive-main-content">
             <Resizable id="interactive-content">
               {/* Left Panel - Interactive Choices */}
-              <Resizable.Panel 
+              <Resizable.Panel
                 class="interactive-left-panel"
                 initialSize={0.68}
                 minSize={0.3}
               >
                 <div class="panel-tabs">
-                  <button 
+                  <button
                     class={`tab-button ${activeTab() === 'choices' ? 'active' : ''}`}
                     onClick={() => setActiveTab('choices')}
                   >
                     <i class="codicon codicon-list-ordered"></i> Instructions
                   </button>
-                  <button 
+                  <button
                     class={`tab-button ${activeTab() === 'state' ? 'active' : ''}`}
                     onClick={() => setActiveTab('state')}
                   >
                     <i class="codicon codicon-debug-console"></i> Current State
                   </button>
                 </div>
-                
+
                 <div class="panel-content">
                   <div class="panel-body">
                     <Show when={activeTab() === 'choices'} fallback={renderVMState()}>
@@ -318,43 +319,47 @@ export default function InteractivePanel(props: InteractivePanelProps) {
                 </div>
               </Resizable.Panel>
 
-              <Resizable.Handle class="Resizable-handle"/>
+              <Resizable.Handle class="Resizable-handle" />
 
               {/* Right Panel - Execution Details */}
-              <Resizable.Panel 
+              <Resizable.Panel
                 class="interactive-right-panel"
                 initialSize={0.32}
                 minSize={0.2}
               >
                 <div class="right-panel-tabs">
-                  <button 
+                  <button
                     class={`right-tab-button ${rightPanelTab() === 'console' ? 'active' : ''}`}
                     onClick={() => handleExecutionTabClick('console')}
                     disabled={props.isRun === false}
+                    title="Console"
                   >
-                    <i class="codicon codicon-terminal"></i> Console
+                    <i class="codicon codicon-terminal"></i> <span>Console</span>
                   </button>
-                  <button 
+                  <button
                     class={`right-tab-button ${rightPanelTab() === 'execution' ? 'active' : ''} ${props.executionError ? 'execution-error' : ''}`}
                     onClick={() => handleExecutionTabClick('execution')}
+                    title="Execution"
                   >
-                    <i class="codicon codicon-play"></i> Execution
+                    <i class="codicon codicon-play"></i> <span>Execution</span>
                   </button>
-                  <button 
+                  <button
                     class={`right-tab-button ${rightPanelTab() === 'msg_flow' ? 'active' : ''}`}
                     onClick={() => handleExecutionTabClick('msg_flow')}
                     disabled={props.isRun === false}
+                    title="Message flow"
                   >
-                    <i class="codicon codicon-send"></i> Message flow
+                    <i class="codicon codicon-send"></i> <span>Message flow</span>
                   </button>
-                  <button 
+                  <button
                     class={`right-tab-button ${rightPanelTab() === 'vm_states' ? 'active' : ''}`}
                     onClick={() => handleExecutionTabClick('vm_states')}
+                    title="VM states"
                   >
-                    <i class="codicon codicon-type-hierarchy-sub"></i> VM states
+                    <i class="codicon codicon-type-hierarchy-sub"></i> <span>VM states</span>
                   </button>
                 </div>
-                
+
                 <div class="right-panel-content">
                   {renderRightPanelContent()}
                 </div>

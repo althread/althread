@@ -141,6 +141,8 @@ body {
   padding: 0;
   min-width: 0;
   overflow: hidden;
+  container-type: inline-size;
+  container-name: right-panel;
 }
 
 .execution-content {
@@ -380,7 +382,7 @@ body {
   gap: 0;
   justify-content: flex-start;
   margin-bottom: 0;
-  padding: 0;
+  padding: 0 1rem 0 1rem;
   background: #1e1e1e;
   min-width: 0;
   overflow-x: auto;
@@ -392,6 +394,8 @@ body {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  justify-content: center;
+  flex: 1 1 0%;
   background-color: #1e1e1e;
   color: #cccccc;
   border: 0px solid #222;
@@ -407,6 +411,12 @@ body {
   white-space: nowrap;
   border-radius: 0;
   position: relative;
+}
+
+.tab_button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tab_button:not(.active):hover {
@@ -669,4 +679,10 @@ body {
   overflow: auto;
   flex: 1 1 0%;
   min-height: 0;
+}
+
+@container right-panel (max-width: 450px) {
+  .tab_button span {
+    display: none;
+  }
 }

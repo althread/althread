@@ -1317,27 +1317,31 @@ export default function App() {
                 <button class={`tab_button ${activeTab() === "console" ? "active" : ""}`}
                   onclick={() => handleExecutionTabClick("console")}
                   disabled={!isRun()}
+                  title="Console"
                 >
-                  <i class="codicon codicon-terminal"></i> Console
+                  <i class="codicon codicon-terminal"></i> <span>Console</span>
                 </button>
                 <button
                   class={`tab_button 
                            ${activeTab() === "execution" ? "active" : ""} 
                            ${executionError() ? "execution-error" : ""}`}
                   onclick={() => handleExecutionTabClick("execution")}
+                  title="Execution"
                 >
-                  <i class="codicon codicon-play"></i> Execution
+                  <i class="codicon codicon-play"></i> <span>Execution</span>
                 </button>
                 <button class={`tab_button ${activeTab() === "msg_flow" ? "active" : ""}`}
                   onclick={() => handleExecutionTabClick("msg_flow")}
                   disabled={!isRun()}
+                  title="Message flow"
                 >
-                  <i class="codicon codicon-send"></i> Message flow
+                  <i class="codicon codicon-send"></i> <span>Message flow</span>
                 </button>
                 <button class={`tab_button ${activeTab() === "vm_states" ? "active" : ""}`}
                   onclick={() => handleExecutionTabClick("vm_states")}
+                  title="VM states"
                 >
-                  <i class="codicon codicon-type-hierarchy-sub"></i> VM states
+                  <i class="codicon codicon-type-hierarchy-sub"></i> <span>VM states</span>
                 </button>
               </div>
               <div class="tab-content">
