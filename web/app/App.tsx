@@ -35,6 +35,7 @@ init().then(() => {
 
 const animationTimeOut = 100; //ms
 const DEFAULT_WEB_CHECK_MAX_STATES = 10_000;
+const WEB_RUN_MAX_STEPS = 1_000;
 
 export default function App() {
   // Load file system from localStorage
@@ -339,6 +340,7 @@ export default function App() {
   let [isRun, setIsRun] = createSignal(true);
 
   let [stdout, setStdout] = createSignal("The console output will appear here.");
+  let [stdoutWarning, setStdoutWarning] = createSignal<string | null>(null);
   let [out, setOut] = createSignal("The execution output will appear here.");
   let [commgraphout, setCommGraphOut] = createSignal<any[]>([]); //messageflow graph
   let [runGraphNodes, setRunGraphNodes] = createSignal<GraphNode[]>([]); // For run mode - stores graph nodes
@@ -440,6 +442,10 @@ export default function App() {
   const resetSetOut = () => {
     setOut("The execution output will appear here.");
   }
+
+  const resetStdoutWarning = () => {
+    setStdoutWarning(null);
+  };
 
   const isDeadlockError = (error: any) =>
     typeof error?.message === "string" && error.message.toLowerCase().includes("deadlock");
@@ -734,6 +740,7 @@ export default function App() {
     setIsInteractiveMode(false);
     resetSetOut();
     setStdout("The console output will appear here.");
+    resetStdoutWarning();
     setCommGraphOut([]);
     setNodes([]);
     setEdges([]);
@@ -779,6 +786,11 @@ export default function App() {
       <Match when={isRun() && activeTab() === "console"}>
         <div class="console">
           <pre>{stdout()}</pre>
+          <Show when={stdoutWarning()}>
+            {(warning) => (
+              <pre style="color: #f14c4c; margin-top: 12px;">{warning()}</pre>
+            )}
+          </Show>
         </div>
       </Match>
 
@@ -927,6 +939,7 @@ export default function App() {
                 if (!isRun()) setIsRun(true);
                 setExecutionError(false);
                 resetSetOut();
+                resetStdoutWarning();
                 if (activeAction() !== "run") setActiveAction("run");
                 if (loadingAction() !== "run") setLoadingAction("run");
                 setSelectedVM(null);
@@ -955,6 +968,11 @@ export default function App() {
 
                   const plainStdout = res.stdout.join('\n');
                   setStdout(plainStdout);
+                  setStdoutWarning(
+                    res.max_steps_reached
+                      ? `Maximum number of steps reached (${WEB_RUN_MAX_STEPS}). Execution was stopped.`
+                      : null
+                  );
 
                   if (runtimeError) {
                     const runtimeInfo = formatAlthreadError(
@@ -989,6 +1007,7 @@ export default function App() {
                   setActiveTab("execution");
                   // reset other tabs to initial state
                   setStdout("The console output will appear here.");
+                  resetStdoutWarning();
                   setCommGraphOut([]);
                   setRunGraphNodes([]);
                   setRunBuiltGraph({ nodes: [], edges: [] });
@@ -1080,6 +1099,7 @@ export default function App() {
                   setCounterexampleReplayStepLines([]);
                   // reset other tabs to initial state
                   setStdout("The console output will appear here.");
+                  resetStdoutWarning();
                   setCommGraphOut([]);
                   setRunGraphNodes([]);
                   setRunBuiltGraph({ nodes: [], edges: [] });
