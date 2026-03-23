@@ -86,10 +86,10 @@ impl LocalUnaryExpressionNode {
                 }
             }
             UnaryOperator::Not => {
-                if operand_type.is_boolean() {
+                if operand_type.is_boolean() || operand_type.is_integer() {
                     Ok(operand_type)
                 } else {
-                    Err("Can only apply operator '!' on a boolean".to_string())
+                    Err("Can only apply operator '!' on a boolean or integer".to_string())
                 }
             }
         }
