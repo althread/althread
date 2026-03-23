@@ -184,6 +184,7 @@ impl Literal {
     pub fn not(&self) -> Result<Self, String> {
         match self {
             Self::Bool(b) => Ok(Self::Bool(!b)),
+            Self::Int(i) => Ok(Self::Int(!i)),
             i => Err(format!("Cannot negate {}", i.get_datatype())),
         }
     }
