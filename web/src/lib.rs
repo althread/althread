@@ -16,6 +16,7 @@ use types::*;
 
 const SEND: u8 = b's';
 const RECV: u8 = b'r';
+const WEB_RUN_MAX_STEPS: usize = 1_000;
 
 /// Helper to serialize with json_compatible mode (no Maps, plain objects)
 fn to_js<T: Serialize>(value: &T) -> JsValue {
@@ -292,8 +293,9 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
     let mut vm_history = vec![vm.clone()]; // For tracking channel states
     let mut i = 0; //index for nodes
     let mut runtime_error = None;
+    let mut max_steps_reached = false;
 
-    for _ in 0..100000 {
+    for _ in 0..WEB_RUN_MAX_STEPS {
         if vm.is_finished() {
             break;
         }
@@ -415,6 +417,10 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
         i += 1;
     }
 
+    if !vm.is_finished() && runtime_error.is_none() {
+        max_steps_reached = true;
+    }
+
     // Collect step_lines from nodes
     let step_lines: Vec<Vec<usize>> = nodes
         .iter()
@@ -427,6 +433,7 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
         message_flow_events: message_flow_graph,
         nodes,
         step_lines,
+        max_steps_reached,
         runtime_error,
     };
 
