@@ -27,6 +27,8 @@ import ErrorDisplay from '@components/error/ErrorDisplay';
 import { workerClient } from '@utils/workerClient';
 import { buildGraphFromNodes, vmStateSignature } from '@utils/graphBuilders';
 import type { GraphNode, RunResult, CheckResult, VMStateSelection } from './types/vm-state';
+import { loadEditorTheme, saveEditorTheme, type EditorTheme } from '@utils/storage';
+import './theme-overrides.css';
 
 init().then(() => {
   console.log('loaded');
@@ -45,6 +47,7 @@ export default function App() {
   const [selectedFiles, setSelectedFiles] = createSignal<string[]>([]);
   const [creationError, setCreationError] = createSignal<string | null>(null);
   const [didAutoOpenDefault, setDidAutoOpenDefault] = createSignal(false);
+  const [theme, setTheme] = createSignal<EditorTheme>(loadEditorTheme());
   
   // Global file creation state - shared between FileExplorer and EmptyEditor
   const [globalFileCreation, setGlobalFileCreation] = createSignal<{ type: 'file' | 'folder', parentPath: string } | null>(null);
@@ -55,6 +58,10 @@ export default function App() {
 
   const toggleSidebarCollapse = () => {
     setSidebarCollapsed(prev => !prev);
+  };
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   };
 
   // Initialize editor (no default file content)
@@ -68,6 +75,7 @@ export default function App() {
     }, 
     defaultValue: '// Welcome to Althread\n',
     filePath: 'untitled.alt',
+    theme: theme(),
     onValueChange: (value) => {
       // Save current file content when editor changes
       // Use a delayed check since editorManager might not be initialized yet
@@ -302,6 +310,14 @@ export default function App() {
   // Save file system whenever it changes
   createEffect(() => {
     saveFileSystem(mockFileSystem());
+  });
+
+  createEffect(() => {
+    const currentTheme = theme();
+    saveEditorTheme(currentTheme);
+    document.documentElement.dataset.theme = currentTheme;
+    document.body.dataset.theme = currentTheme;
+    editor.updateTheme?.(currentTheme);
   });
 
   // Reload active file content when sidebar state changes to preserve editor content
@@ -812,7 +828,7 @@ export default function App() {
                 nodes={runBuiltGraph().nodes}
                 edges={runBuiltGraph().edges}
                 setLoadingAction={setLoadingAction}
-                theme="dark"
+                theme={theme()}
                 onEdgeClick={(_edgeId: string, edgeData: any) => {
                   if (edgeData && edgeData.lines && editor.highlightLines) {
                     editor.highlightLines(edgeData.lines);
@@ -838,7 +854,7 @@ export default function App() {
                 nodes={nodes()} 
                 edges={edges()} 
                 setLoadingAction={setLoadingAction} 
-                theme="dark" 
+                theme={theme()} 
                 tooLargeStatusMessage={checkTooLargeStatus() ?? undefined}
                 onEdgeClick={(_edgeId: string, edgeData: any) => {
                     if (edgeData && edgeData.lines && editor.highlightLines) {
@@ -857,12 +873,20 @@ export default function App() {
 
   return (
     <>
+      <div class="app-shell" data-theme={theme()}>
       <div id="header">
           <div class="brand">
             <Logo />
             <h3>Althread</h3>
           </div>
           <div class="actions">
+            <button
+              class="vscode-button theme-toggle-button"
+              title={`Switch to ${theme() === 'dark' ? 'light' : 'dark'} theme`}
+              onClick={toggleTheme}
+            >
+              Theme: {theme() === 'dark' ? 'Dark' : 'Light'}
+            </button>
             <button
               class={`vscode-button${activeAction() === "interactive" ? " active" : ""}`}
               disabled={loadingAction() === "interactive" || !editorManager.activeFile() || !isAltFile()}
@@ -1413,6 +1437,7 @@ export default function App() {
         interactiveStepLines={interactiveStepLines()}
         editor={editor}
       />
+      </div>
     </>
   );
 }

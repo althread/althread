@@ -2,8 +2,11 @@ import type { FileSystemEntry } from '@components/fileexplorer/FileExplorer';
 
 export const STORAGE_KEYS = {
   FILE_SYSTEM: 'althread-file-system',
-  FILE_CONTENT_PREFIX: 'althread-file-content-'
+  FILE_CONTENT_PREFIX: 'althread-file-content-',
+  EDITOR_THEME: 'althread-editor-theme'
 };
+
+export type EditorTheme = 'dark' | 'light';
 
 export const saveFileSystem = (fileSystem: FileSystemEntry[]) => {
   localStorage.setItem(STORAGE_KEYS.FILE_SYSTEM, JSON.stringify(fileSystem));
@@ -75,4 +78,13 @@ export const getDefaultContentForFile = (fileName: string): string => {
     default:
       return '// New file\n';
   }
+};
+
+export const saveEditorTheme = (theme: EditorTheme) => {
+  localStorage.setItem(STORAGE_KEYS.EDITOR_THEME, theme);
+};
+
+export const loadEditorTheme = (): EditorTheme => {
+  const stored = localStorage.getItem(STORAGE_KEYS.EDITOR_THEME);
+  return stored === 'light' ? 'light' : 'dark';
 };
