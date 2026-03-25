@@ -31,30 +31,51 @@ const baseOptions = {
 const lightTheme = {
   layout: {
     hierarchical: {
-      direction: "UD",
+      direction: "LR",
       sortMethod: "directed",
+      levelSeparation: 100,
+      nodeSpacing: 100,
     },
   },
   nodes: {
+    shape: "box",
+    shapeProperties: {
+      borderRadius: 4,
+    },
+    margin: 5,
     color: {
+      background: '#fffaf2',
+      border: '#d9c8b3',
       highlight: {
+        background: '#fff2dc',
         border: THEME_PRIMARY // was "#6FA6F9"
       },
       hover: {
+        background: '#fff2dc',
         border: THEME_PRIMARY // was "#228be6"
       }
     },
     borderWidth: 2,
     borderWidthSelected: 4,
-    shadow: true,
+    shadow: {
+      enabled: true,
+      color: 'rgba(121, 89, 46, 0.14)',
+      size: 12,
+      x: 0,
+      y: 4,
+    },
     font: {
-      color: "#222",
-      size: 16,
-      face: "sans-serif",
+      color: '#3d3228',
+      face: 'Menlo, Monaco, "Courier New", monospace',
+      size: 12,
+      align: 'left',
+      multi: 'markdown',
       bold: {
-        color: "#222",
-        size: 18,
-        mod: "bold"
+        color: THEME_PRIMARY,
+      },
+      ital: {
+        color: '#8b7f72',
+        size: 11,
       }
     }
   }

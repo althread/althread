@@ -203,6 +203,24 @@ export const renderMessageFlowGraph = (commGraphData, vm_states, editor?: any) =
   let [popupPosition, setPopupPosition] = createSignal({ x: 0, y: 0 });
   const [finalPopupPosition, setFinalPopupPosition] = createSignal({ x: 0, y: 0 });
   const [isPopupReady, setIsPopupReady] = createSignal(false);
+  const currentTheme = () => document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+  const palette = () => currentTheme() === 'light'
+    ? {
+        line: '#7f6e5b',
+        node: '#6c5949',
+        active: '#0f6bbd',
+        popupBg: '#fffaf2',
+        popupText: '#332c26',
+        popupBorder: '#d8c9b3',
+      }
+    : {
+        line: 'white',
+        node: '#cccccc',
+        active: '#0080ff',
+        popupBg: '#232323',
+        popupText: '#cccccc',
+        popupBorder: '#444',
+      };
 
   // Add this state to remember alignment
   const [popupAlignment, setPopupAlignment] = createSignal<{vertical: 'top'|'bottom', horizontal: 'left'|'right'}>({ vertical: 'bottom', horizontal: 'right' });
@@ -255,10 +273,10 @@ export const renderMessageFlowGraph = (commGraphData, vm_states, editor?: any) =
     processes.forEach((processName, index) => {
 
       // define two nodes for each process (start and end of the line)
-      let startNode = { id: `p${index}_start`, y: index * ySpacing, x: xStart, shape: "dot", size: 1, color: "white" };
-      let endNode = { id: `p${index}_end`, y: index * ySpacing, x: xEnd, shape: "dot", size: 1, color: "white" };
+      let startNode = { id: `p${index}_start`, y: index * ySpacing, x: xStart, shape: "dot", size: 1, color: palette().line };
+      let endNode = { id: `p${index}_end`, y: index * ySpacing, x: xEnd, shape: "dot", size: 1, color: palette().line };
       nodes.add([startNode, endNode]);
-      edges.add({ from: startNode.id, to: endNode.id, color: "white", width: 2 }); // line for each process
+      edges.add({ from: startNode.id, to: endNode.id, color: palette().line, width: 2 }); // line for each process
       
       let processNumberNode = {
         id: `p${index}_number`,
@@ -267,10 +285,10 @@ export const renderMessageFlowGraph = (commGraphData, vm_states, editor?: any) =
         label: `P${index} \n(${processName})`,
         shape: "text",
         size : 0,
-        color: "white",
+        color: palette().line,
         font: { 
           size: 18,
-          color: "white",
+          color: palette().line,
         },
       };
     
@@ -301,7 +319,7 @@ export const renderMessageFlowGraph = (commGraphData, vm_states, editor?: any) =
       }
 
       let msgNode = { id: nodeId, y: yposLine * ySpacing, x: xStart+20+i*50, 
-                      shape: "dot", size: 5, color: "#cccccc", event: event, broadcast: isBroadcast };
+                      shape: "dot", size: 5, color: palette().node, event: event, broadcast: isBroadcast };
       nodes.add(msgNode);
       i++;
     });
@@ -322,7 +340,7 @@ export const renderMessageFlowGraph = (commGraphData, vm_states, editor?: any) =
             lines: node.event?.lines,
             font:{
               size: 20,
-              color: "white",
+              color: palette().line,
               align: "middle",
               background: "none",
               strokeWidth: 0,
@@ -376,7 +394,7 @@ export const renderMessageFlowGraph = (commGraphData, vm_states, editor?: any) =
           setPopupVisible(true);
           previous_node_id = node_id;
           previous_node_colour = node.color;
-          nodes.update({id: node_id, color: "#0080ff"});
+          nodes.update({id: node_id, color: palette().active});
           
           // Also highlight lines if available
           if (node.event && node.event.lines && editor && editor.highlightLines) {
@@ -504,6 +522,9 @@ export const renderMessageFlowGraph = (commGraphData, vm_states, editor?: any) =
             top: `${finalPopupPosition().y}px`,
             left: `${finalPopupPosition().x}px`,
             visibility: isPopupReady() ? 'visible' : 'hidden',
+            background: palette().popupBg,
+            color: palette().popupText,
+            border: `1px solid ${palette().popupBorder}`,
           }}
         >
           <VmStatePopup event={popupContent()!} />

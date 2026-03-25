@@ -1,23 +1,18 @@
 import { createCodeMirror } from "solid-codemirror";
-import { createSignal, onMount } from "solid-js";
 import editor_lang from "./editor-lang";
-import {tags} from "@lezer/highlight"
-import {HighlightStyle} from "@codemirror/language"
-import { Tag } from "@lezer/highlight";
 import {keymap, highlightSpecialChars, drawSelection, highlightActiveLine, dropCursor,
     rectangularSelection, crosshairCursor,
     lineNumbers, highlightActiveLineGutter, EditorView, Decoration, DecorationSet, WidgetType} from "@codemirror/view"
 import {Extension, EditorState, Compartment, StateField, StateEffect} from "@codemirror/state"
-import {defaultHighlightStyle, syntaxHighlighting, indentOnInput, bracketMatching,
+import {indentOnInput, bracketMatching,
     foldGutter, foldKeymap} from "@codemirror/language"
 import {defaultKeymap, history, historyKeymap, toggleComment} from "@codemirror/commands"
 import {searchKeymap, highlightSelectionMatches} from "@codemirror/search"
 import {autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap} from "@codemirror/autocomplete"
 import {lintKeymap, lintGutter} from "@codemirror/lint"
 import {indentWithTab} from "@codemirror/commands"
-import { tags as t } from '@lezer/highlight';
 import {linter, Diagnostic} from "@codemirror/lint"
-import { customSyntaxHighlighting } from "./custom-style";
+import { createCustomSyntaxHighlighting, type CodeEditorTheme } from "./custom-style";
 
 // Import additional language supports
 import { javascript } from "@codemirror/lang-javascript";
@@ -166,16 +161,101 @@ const basicSetup: Extension = (() => [
     ])
 ])()
 
+const createEditorTheme = (theme: CodeEditorTheme) => {
+  const isDark = theme === 'dark';
+
+  return EditorView.theme({
+    '&': {
+      color: isDark ? '#abb2bf' : '#2f3441',
+      backgroundColor: isDark ? '#1e1e1e' : '#f7f1e7',
+    },
+    '.cm-content': {
+      caretColor: isDark ? '#528bff' : '#0f6bbd',
+    },
+    '.cm-cursor, .cm-dropCursor': {
+      borderLeft: `2px solid ${isDark ? '#528bff' : '#0f6bbd'}`
+    },
+    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
+      backgroundColor: isDark ? 'rgba(38, 79, 120, 0.70) !important' : 'rgba(245, 184, 96, 0.38) !important'
+    },
+    '.cm-selectionLayer': {
+      mixBlendMode: 'normal'
+    },
+    '.cm-selectionLayer .cm-selectionBackground': {
+      mixBlendMode: 'normal'
+    },
+    '.cm-content ::selection': {
+      backgroundColor: isDark ? 'rgba(38, 79, 120, 1.00)' : 'rgba(245, 184, 96, 0.52)'
+    },
+    '.cm-gutters': {
+      backgroundColor: isDark ? '#1e1e1e' : '#efe5d6',
+      color: isDark ? '#5c6370' : '#8b7f72',
+      borderRight: `1px solid ${isDark ? '#333' : '#dccfbf'}`,
+      minWidth: '60px'
+    },
+    '.cm-lineNumbers': {
+      minWidth: '40px',
+      paddingRight: '8px',
+      textAlign: 'right'
+    },
+    '.cm-lineNumbers .cm-gutterElement': {
+      minWidth: '32px',
+      textAlign: 'right'
+    },
+    '.cm-activeLineGutter': {
+      backgroundColor: isDark ? '#3a3f4b' : '#e5d9c5'
+    },
+    '.cm-activeLine': {
+      backgroundColor: isDark ? 'rgba(58, 63, 75, 0.35)' : 'rgba(196, 148, 88, 0.10)',
+      boxShadow: isDark
+        ? 'inset 0 0 0 1px rgba(255, 255, 255, 0.06)'
+        : 'inset 0 0 0 1px rgba(163, 118, 63, 0.14)'
+    },
+    '.cm-selectionMatch': {
+      backgroundColor: isDark ? 'rgba(255, 217, 102, 0.15)' : 'rgba(209, 136, 38, 0.16)',
+      borderRadius: '2px'
+    },
+    '.cm-selectionMatch.cm-selectionMatch-main': {
+      backgroundColor: isDark ? 'rgba(38, 79, 120, 0.30)' : 'rgba(214, 156, 75, 0.22)'
+    },
+    '.cm-foldGutter': {
+      width: '16px',
+      paddingLeft: '2px'
+    },
+    '.cm-lintGutter': {
+      width: '16px'
+    },
+    '.cm-scroller': {
+        fontFamily: "'Menlo', 'Monaco', 'Courier New', monospace",
+        fontSize: '13px',
+        lineHeight: '1.5'
+    },
+    '.cm-process-badge': {
+      backgroundColor: isDark ? 'orange' : '#c96f1a',
+      color: isDark ? 'black' : '#fffaf2',
+      borderRadius: '4px',
+      padding: '0 4px',
+      fontSize: '10px',
+      fontWeight: 'bold',
+      marginLeft: '10px',
+      verticalAlign: 'middle',
+      display: 'inline-block'
+    }
+  }, {dark: isDark});
+};
+
 const createEditor = ({
     compile, 
     defaultValue,
     onValueChange,
     filePath = 'main.alt',
+    theme = 'dark',
   }: {
     compile: (code: string) => Promise<any>,
     defaultValue: string | undefined, 
     onValueChange: undefined | ((value:string) => void),
     filePath?: string,
+    theme?: CodeEditorTheme,
   }) => {
   const editor = createCodeMirror({
     value: defaultValue,
@@ -189,88 +269,8 @@ const createEditor = ({
   const languageCompartment = new Compartment();
   const linterCompartment = new Compartment();
   const readOnlyCompartment = new Compartment();
-
-  // Theme definitions with consistent line number width
-  const uiTheme = EditorView.theme({
-    '&': {
-      color: '#abb2bf',
-      backgroundColor: '#1e1e1e',
-    },
-    '.cm-content': {
-      caretColor: '#528bff',
-    },
-    '.cm-cursor, .cm-dropCursor': {
-      borderLeft: '2px solid #528bff'
-    },
-    // Selection: force visible highlight (some browsers + mix-blend-mode can make it look invisible).
-    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
-      backgroundColor: 'rgba(38, 79, 120, 0.70) !important'
-    },
-    '.cm-selectionLayer': {
-      mixBlendMode: 'normal'
-    },
-    '.cm-selectionLayer .cm-selectionBackground': {
-      mixBlendMode: 'normal'
-    },
-    '.cm-content ::selection': {
-      backgroundColor: 'rgba(38, 79, 120, 1.00)'
-    },
-    '.cm-gutters': {
-      backgroundColor: '#1e1e1e',
-      color: '#5c6370',
-      borderRight: '1px solid #333',
-      minWidth: '60px' // Ensure minimum width for gutters
-    },
-    '.cm-lineNumbers': {
-      minWidth: '40px', // Reserve space for up to 4 digits (9999 lines)
-      paddingRight: '8px',
-      textAlign: 'right'
-    },
-    '.cm-lineNumbers .cm-gutterElement': {
-      minWidth: '32px', // Consistent width for line numbers
-      textAlign: 'right'
-    },
-    '.cm-activeLineGutter': {
-      backgroundColor: '#3a3f4b' // More noticeable active line gutter
-    },
-    '.cm-activeLine': {
-      // Avoid obscuring text selections on the active line.
-      backgroundColor: 'rgba(58, 63, 75, 0.35)',
-      boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.06)'
-    },
-    // highlightSelectionMatches(): make "other occurrences" subtle.
-    '.cm-selectionMatch': {
-      backgroundColor: 'rgba(255, 217, 102, 0.15)',
-      borderRadius: '2px'
-    },
-    // The match currently under the cursor (if any) can be slightly stronger.
-    '.cm-selectionMatch.cm-selectionMatch-main': {
-      backgroundColor: 'rgba(38, 79, 120, 0.30)'
-    },
-    '.cm-foldGutter': {
-      width: '16px', // Fixed width for fold gutter
-      paddingLeft: '2px'
-    },
-    '.cm-lintGutter': {
-      width: '16px' // Fixed width for lint gutter when present
-    },
-    '.cm-scroller': {
-        fontFamily: "'Menlo', 'Monaco', 'Courier New', monospace",
-        fontSize: '13px',
-        lineHeight: '1.5'
-    },
-    '.cm-process-badge': {
-      backgroundColor: 'orange',
-      color: 'black',
-      borderRadius: '4px',
-      padding: '0 4px',
-      fontSize: '10px',
-      fontWeight: 'bold',
-      marginLeft: '10px',
-      verticalAlign: 'middle',
-      display: 'inline-block'
-    }
-  }, {dark: true});
+  const themeCompartment = new Compartment();
+  const syntaxCompartment = new Compartment();
 
   // Create linter only for .alt files, but always include lintGutter for consistent spacing
   const createLinterExtension = (filePath: string): Extension => {
@@ -349,10 +349,8 @@ const createEditor = ({
   ]));
 
   // Add theme and syntax highlighting
-  editor.createExtension(uiTheme);
-  // This is the crucial line we are adding back.
-  // It tells the editor to use our custom color palette for syntax highlighting.
-  editor.createExtension(customSyntaxHighlighting);
+  editor.createExtension(themeCompartment.of(createEditorTheme(theme)));
+  editor.createExtension(syntaxCompartment.of(createCustomSyntaxHighlighting(theme)));
 
   // Add compartments for dynamic extensions
   editor.createExtension(languageCompartment.of(getLanguageExtension(filePath)));
@@ -445,10 +443,30 @@ const createEditor = ({
     return false;
   };
 
+  const updateTheme = (nextTheme: CodeEditorTheme) => {
+    const view = safeEditorView();
+    if (view) {
+      try {
+        view.dispatch({
+          effects: [
+            themeCompartment.reconfigure(createEditorTheme(nextTheme)),
+            syntaxCompartment.reconfigure(createCustomSyntaxHighlighting(nextTheme))
+          ]
+        });
+        return true;
+      } catch (e) {
+        console.warn('Failed to update editor theme:', e);
+        return false;
+      }
+    }
+    return false;
+  };
+
   // Return editor with updateLanguage method and safe wrappers
   return {
     ...editor,
     updateLanguage,
+    updateTheme,
     getCurrentFileName: () => currentFileName,
     safeEditorView,
     safeUpdateContent,
