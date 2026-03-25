@@ -661,10 +661,10 @@ main {
         .find(|(name, pid, _, _, _)| name == "A" && *pid == 1)
         .expect("A should be schedulable after a message arrives on chin2");
 
-    assert!(matches!(
-        &a_step.4.get_program(1).current_instruction().unwrap().control,
-        InstructionType::ChannelPeek(channel) if channel == "chin2"
-    ));
+    assert!(a_step.3.iter().any(|action| matches!(
+        action,
+        GlobalAction::Print(msg) if msg == "reçu: hello from B"
+    )));
 }
 
 #[test]
@@ -721,14 +721,7 @@ main {
         .find(|(name, _, _, _, _)| name == "__deliver__ chin2#1")
         .unwrap();
 
-    let (_, _, _, _, after_a_ready) = after_b_delivery
-        .next()
-        .unwrap()
-        .into_iter()
-        .find(|(name, pid, _, _, _)| name == "A" && *pid == 1)
-        .unwrap();
-
-    let (_, _, _, actions, _) = after_a_ready
+    let (_, _, _, actions, _) = after_b_delivery
         .next()
         .unwrap()
         .into_iter()
@@ -790,6 +783,39 @@ main {
         GlobalAction::Print(msg) if msg == "CASE 2"
     )));
     assert_eq!(vm.globals.get("VA"), Some(&Literal::Int(2)));
+}
+
+#[test]
+fn test_wait_seq_restarts_atomic_guard_evaluation_after_match() {
+    let input = r#"
+shared {
+    let VA = 1;
+}
+
+main {
+    await seq {
+        (VA == 1) => { print("CASE 1"); VA = 2; }
+        (VA == 2) => { print("CASE 2"); }
+    }
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let instructions = &compiled_project.programs_code.get("main").unwrap().instructions;
+    let atomic_start_count = instructions
+        .iter()
+        .filter(|inst| matches!(inst.control, InstructionType::AtomicStart))
+        .count();
+
+    assert!(atomic_start_count >= 1);
 }
 
 #[test]

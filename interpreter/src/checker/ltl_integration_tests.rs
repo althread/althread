@@ -385,6 +385,105 @@ check {
         Ok(())
     }
 
+    #[test]
+    fn test_await_first_later_receive_case_is_deadlock_free() -> AlthreadResult<()> {
+        let source = r#"
+program Receiver() {
+    await first {
+        receive left(msg) => {
+            print("left", msg);
+        }
+        receive right(msg) => {
+            print("right", msg);
+        }
+    }
+}
+
+program Sender() {
+    send out("ok");
+}
+
+main {
+    let receiver = run Receiver();
+    let sender = run Sender();
+
+    channel self.left_unused (string)> receiver.left;
+    channel sender.out (string)> receiver.right;
+}
+
+check {
+    for p in $.procs.Receiver { eventually p.reaches(end) };
+}
+
+check {
+    for p in $.procs.Sender { eventually p.reaches(end) };
+}
+"#;
+
+        let project = compile_from_source(source);
+        let (violations, _graph) = check_program(&project, Some(1000))?;
+        assert!(
+            violations.is_empty(),
+            "Expected no violation: await first should eventually consume the later receive case on every schedule"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_await_seq_with_blocking_first_case_is_deadlock_free() -> AlthreadResult<()> {
+        let source = r#"
+program Receiver() {
+    await seq {
+        (true) => {
+            await receive block(msg) => {
+                print("block", msg);
+            }
+        }
+        receive tail(msg) => {
+            print("tail", msg);
+        }
+    }
+}
+
+program BlockSender() {
+    send out("go");
+}
+
+program TailSender() {
+    send out("tail");
+}
+
+main {
+    let receiver = run Receiver();
+    let block_sender = run BlockSender();
+    let tail_sender = run TailSender();
+
+    channel block_sender.out (string)> receiver.block;
+    channel tail_sender.out (string)> receiver.tail;
+}
+
+check {
+    for p in $.procs.Receiver { eventually p.reaches(end) };
+}
+
+check {
+    for p in $.procs.BlockSender { eventually p.reaches(end) };
+}
+
+check {
+    for p in $.procs.TailSender { eventually p.reaches(end) };
+}
+"#;
+
+        let project = compile_from_source(source);
+        let (violations, _graph) = check_program(&project, Some(5000))?;
+        assert!(
+            violations.is_empty(),
+            "Expected no violation: await seq should not deadlock regardless of whether tail or block message is delivered first"
+        );
+        Ok(())
+    }
+
     // ============================================================
     // Multiple Formula Tests
     // ============================================================

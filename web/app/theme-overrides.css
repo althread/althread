@@ -10,6 +10,7 @@
 .app-shell[data-theme="light"] .interactive-panel,
 .app-shell[data-theme="light"] .interactive-right-panel,
 .app-shell[data-theme="light"] .panel-header,
+.app-shell[data-theme="light"] .inspector-header,
 .app-shell[data-theme="light"] .right-panel-tabs,
 .app-shell[data-theme="light"] .vm-state-inspector,
 .app-shell[data-theme="light"] .section,
@@ -93,11 +94,19 @@
 
 .app-shell[data-theme="light"] .file.active,
 .app-shell[data-theme="light"] .section,
+.app-shell[data-theme="light"] .section-body,
 .app-shell[data-theme="light"] .metadata-display,
 .app-shell[data-theme="light"] .control-button,
 .app-shell[data-theme="light"] .search-clear-btn,
 .app-shell[data-theme="light"] .search-input,
 .app-shell[data-theme="light"] .message-card,
+.app-shell[data-theme="light"] .process-card,
+.app-shell[data-theme="light"] .process-card-header,
+.app-shell[data-theme="light"] .channel-pill,
+.app-shell[data-theme="light"] .channel-values,
+.app-shell[data-theme="light"] .channel-value-item,
+.app-shell[data-theme="light"] .variable-item,
+.app-shell[data-theme="light"] .payload-item,
 .app-shell[data-theme="light"] .msg-val {
   border-color: var(--app-border) !important;
 }
@@ -105,11 +114,26 @@
 .app-shell[data-theme="light"] .search-input,
 .app-shell[data-theme="light"] .search-tips code,
 .app-shell[data-theme="light"] .message-card,
+.app-shell[data-theme="light"] .section-body,
+.app-shell[data-theme="light"] .process-card,
+.app-shell[data-theme="light"] .channel-values,
 .app-shell[data-theme="light"] .close-btn:hover,
 .app-shell[data-theme="light"] .right-panel-tabs .right-tab-button:not(.active):hover,
 .app-shell[data-theme="light"] .file-tab.read-only,
 .app-shell[data-theme="light"] .section-header {
   background-color: var(--app-surface-muted) !important;
+}
+
+.app-shell[data-theme="light"] .process-card-header,
+.app-shell[data-theme="light"] .variable-item,
+.app-shell[data-theme="light"] .channel-pill,
+.app-shell[data-theme="light"] .channel-value-item,
+.app-shell[data-theme="light"] .payload-item,
+.app-shell[data-theme="light"] .msg-val,
+.app-shell[data-theme="light"] .process-id,
+.app-shell[data-theme="light"] .process-pc,
+.app-shell[data-theme="light"] .process-line {
+  background-color: var(--app-surface-elevated) !important;
 }
 
 .app-shell[data-theme="light"] .section-header,
@@ -159,6 +183,20 @@
 
 .app-shell[data-theme="light"] .process-name {
   color: #18796a !important;
+}
+
+.app-shell[data-theme="light"] .message-endpoint.from {
+  background: #cfe8fb !important;
+  color: #0f6bbd !important;
+}
+
+.app-shell[data-theme="light"] .message-endpoint.to {
+  background: #d8efe7 !important;
+  color: #18796a !important;
+}
+
+.app-shell[data-theme="light"] .channel-name {
+  color: #8f6500 !important;
 }
 
 .app-shell[data-theme="light"] .search-highlight {
