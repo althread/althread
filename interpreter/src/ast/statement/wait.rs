@@ -231,6 +231,7 @@ impl InstructionBuilder for Node<Wait> {
             };
 
             if !self.value.start_atomic {
+                case_statement.shift_instruction_indexes(1);
                 case_statement.instructions.insert(
                     0,
                     Instruction {
