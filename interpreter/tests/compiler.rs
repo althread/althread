@@ -819,6 +819,69 @@ main {
 }
 
 #[test]
+fn test_wait_seq_break_inside_loop_compiles_and_runs() {
+    let input = r#"
+program A() {
+    send out(0);
+    send out(0);
+    send out(0);
+}
+
+main {
+    let a = run A();
+
+    channel a.out (int)> self.in;
+
+    let n = 0;
+    loop await seq {
+        receive in(v) => {
+            print(v);
+            n += 1;
+        }
+        n == 2 => {
+            print("n", n);
+            break;
+        }
+    }
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let mut vm = VM::new(&compiled_project);
+    vm.start(0);
+
+    let mut actions = Vec::new();
+    loop {
+        let next_states = vm.next().unwrap();
+        if next_states.is_empty() {
+            break;
+        }
+
+        let (_, _, _, step_actions, next_vm) = next_states.into_iter().next().unwrap();
+        actions.extend(step_actions);
+        vm = next_vm;
+    }
+
+    let printed: Vec<&str> = actions
+        .iter()
+        .filter_map(|action| match action {
+            GlobalAction::Print(msg) => Some(msg.as_str()),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(printed, vec!["0", "0", "n 2"]);
+}
+
+#[test]
 fn test_compiler_while() {
     let input = r#"
 main {
