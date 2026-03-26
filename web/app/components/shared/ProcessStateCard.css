@@ -1,117 +1,119 @@
 .process-card {
-    background: #252526;
-    border: 1px solid #3e3e42;
-    border-radius: 6px;
-    margin-bottom: 16px;
-    overflow: hidden;
+	background: #252526;
+	border: 1px solid #3e3e42;
+	border-radius: 6px;
+	margin-bottom: 16px;
+	overflow: hidden;
 }
 
 .process-card-header {
-    background: #2d2d30;
-    padding: 4px 8px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    border-bottom: 1px solid #3e3e42;
+	background: #2d2d30;
+	padding: 4px 8px;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	border-bottom: 1px solid #3e3e42;
 }
 
 .process-name {
-    font-weight: 600;
-    font-size: 14px;
-    color: #4fc3f7;
-    flex: 1;
+	font-weight: 600;
+	font-size: 14px;
+	color: #4fc3f7;
+	flex: 1;
 }
 
-.process-id, .process-pc, .process-line {
-    font-family: 'Consolas', 'Monaco', monospace;
-    font-size: 12px;
-    padding: 4px 8px;
-    background: #1e1e1e;
-    border-radius: 3px;
-    color: #cccccc;
+.process-id,
+.process-pc,
+.process-line {
+	font-family: "Consolas", "Monaco", monospace;
+	font-size: 12px;
+	padding: 4px 8px;
+	background: #1e1e1e;
+	border-radius: 3px;
+	color: #cccccc;
 }
 
 .process-pc {
-    color: #ce9178;
+	color: #ce9178;
 }
 
 .process-line {
-    color: #4ec9b0;
+	color: #4ec9b0;
 }
 
 .process-card-body {
-    padding: 0px;
+	padding: 0px;
 }
 
 .channels-row {
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid #3e3e42;
+	margin-top: 12px;
+	padding-top: 12px;
+	border-top: 1px solid #3e3e42;
 }
 
 .row-label {
-    display: block;
-    font-size: 12px;
-    font-weight: 600;
-    color: #858585;
-    margin-bottom: 8px;
-    text-transform: uppercase;
+	display: block;
+	font-size: 12px;
+	font-weight: 600;
+	color: #858585;
+	margin-bottom: 8px;
+	text-transform: uppercase;
 }
 
 .channels-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
 }
 
 .channel-pill {
-    background: #1e1e1e;
-    border: 1px solid #3e3e42;
-    border-radius: 4px;
-    padding: 6px 10px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
+	background: #1e1e1e;
+	border: 1px solid #3e3e42;
+	border-radius: 4px;
+	padding: 6px 10px;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 13px;
 }
 
 .channel-name {
-    font-family: 'Consolas', 'Monaco', monospace;
-    color: #dcdcaa;
-    font-weight: 500;
+	font-family: "Consolas", "Monaco", monospace;
+	color: #dcdcaa;
+	font-weight: 500;
 }
 
 .channel-count {
-    color: #858585;
-    font-size: 11px;
+	color: #858585;
+	font-size: 11px;
 }
 
 .channel-values {
-    display: none;
-    position: absolute;
-    background: #252526;
-    border: 1px solid #3e3e42;
-    border-radius: 4px;
-    padding: 8px;
-    margin-top: 4px;
-    z-index: 1000;
-    max-width: 300px;
+	display: none;
+	position: absolute;
+	background: #252526;
+	border: 1px solid #3e3e42;
+	border-radius: 4px;
+	padding: 8px;
+	margin-top: 4px;
+	z-index: 1000;
+	max-width: 300px;
 }
 
 .channel-pill:hover .channel-values {
-    display: block;
+	display: block;
 }
 
 .channel-value-item {
-    font-family: 'Consolas', 'Monaco', monospace;
-    font-size: 12px;
-    padding: 4px 6px;
-    background: #1e1e1e;
-    border-radius: 3px;
-    margin-bottom: 4px;
-    color: #ce9178;
+	font-family: "Consolas", "Monaco", monospace;
+	font-size: 12px;
+	padding: 4px 6px;
+	background: #1e1e1e;
+	border-radius: 3px;
+	margin-bottom: 4px;
+	color: #ce9178;
 }
 
 .channel-value-item:last-child {
-    margin-bottom: 0;
+	margin-bottom: 0;
 }

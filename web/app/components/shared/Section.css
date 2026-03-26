@@ -1,0 +1,201 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Shared Section System — used by GlobalsDisplay, InFlightMessagesDisplay
+   and (as a base) VMStateInspector's Processes panel.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Base section card ─────────────────────────────────────────────────── */
+
+.section {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 0;
+	min-width: 0;
+	border: 1px solid #3e3e42;
+	background-color: #252526;
+	border-radius: 4px;
+	overflow: hidden;
+	transition:
+		flex 0.25s ease,
+		min-width 0.25s ease,
+		max-width 0.25s ease;
+}
+
+/* ── Horizontally collapsed ────────────────────────────────────────────── */
+
+.section.section-collapsed {
+	flex: 0 0 26px;
+	min-width: 26px;
+	max-width: 26px;
+}
+
+/* ── Collapsible header ────────────────────────────────────────────────── */
+
+.collapsible-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 8px;
+	cursor: pointer;
+	user-select: none;
+	background-color: #2d2d30;
+	flex-shrink: 0;
+	transition: background-color 0.15s ease;
+	/* Disable text wrapping when switching to vertical layout */
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.collapsible-header:hover {
+	background-color: #37373d;
+}
+
+.collapsible-header:active {
+	background-color: #454545;
+}
+
+/* Last-open lock: mute the toggle icon, keep normal cursor */
+.collapsible-header.header-locked {
+	cursor: default;
+}
+
+.collapsible-header.header-locked .header-toggle-icon {
+	opacity: 0.25;
+}
+
+/* ── Collapsed-state header: becomes a thin vertical strip ─────────────── */
+
+.section.section-collapsed .collapsible-header {
+	flex-direction: column;
+	padding: 10px 1px;
+	gap: 8px;
+	height: 100%;
+	align-items: center;
+	justify-content: flex-start;
+	/* Remove overflow hidden to allow pulse shadow to show */
+	overflow: visible;
+}
+
+/* Count badge moves below icons */
+.section.section-collapsed .header-count {
+	margin-left: 0;
+	margin-top: 0;
+	writing-mode: horizontal-tb;
+	padding: 1px 0;
+	min-width: 18px;
+	max-width: 22px;
+	font-size: 8px;
+	gap: 1px;
+	justify-content: center;
+	/* Move above the label when collapsed to prevent vertical clipping */
+	order: 2;
+	display: flex;
+	align-items: center;
+}
+
+/* Label rotates to read bottom-up */
+.section.section-collapsed .section-label {
+	writing-mode: vertical-rl;
+	text-orientation: mixed;
+	transform: rotate(180deg);
+	flex: 1;
+	text-align: center;
+	letter-spacing: 1.5px;
+	overflow: hidden;
+	font-size: 10px;
+	/* Position below the icons and counter */
+	order: 3;
+}
+
+/* ── Header icons & text ───────────────────────────────────────────────── */
+
+.header-toggle-icon {
+	color: #858585;
+	font-size: 13px;
+	flex-shrink: 0;
+	transition: transform 0.2s ease;
+	order: 0;
+}
+
+.header-section-icon {
+	color: #c5c5c5;
+	font-size: 13px;
+	flex-shrink: 0;
+	order: 1;
+}
+
+/* Unified section title — same font as Processes */
+.section-label {
+	font-size: 10px;
+	font-weight: bold;
+	text-transform: uppercase;
+	color: #bbb;
+	letter-spacing: 0.5px;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.header-count {
+	margin-left: auto;
+	background: #37373d;
+	color: #858585;
+	font-size: 10px;
+	font-weight: 600;
+	padding: 1px 6px;
+	border-radius: 8px;
+	min-width: 16px;
+	text-align: center;
+	flex-shrink: 0;
+	display: inline-block;
+}
+
+.header-count.changed {
+	background-color: #ff9d00;
+	color: #000;
+	animation: pulse-orange 2s infinite;
+	/* Only use flex when the ! mark is present */
+	display: flex;
+	align-items: center;
+	padding: 1px 5px;
+	gap: 3px;
+}
+
+.change-indicator {
+	font-weight: 900;
+	font-size: 11px;
+	color: #000;
+}
+
+@keyframes pulse-orange {
+	0% {
+		box-shadow: 0 0 0 0 rgba(255, 157, 0, 0.9);
+	}
+
+	70% {
+		box-shadow: 0 0 0 4px rgba(255, 157, 0, 0);
+	}
+
+	100% {
+		box-shadow: 0 0 0 0 rgba(255, 157, 0, 0);
+	}
+}
+
+/* ── Section body ─────────────────────────────────────────────────────── */
+
+.section-body {
+	padding: 8px;
+	overflow-y: auto;
+	flex: 1;
+	min-height: 0;
+}
+
+.section-body-hidden {
+	display: none;
+}
+
+.empty-state {
+	color: #858585;
+	font-style: italic;
+	font-size: 11px;
+	text-align: center;
+	padding: 12px;
+}

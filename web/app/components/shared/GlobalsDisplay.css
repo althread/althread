@@ -1,51 +1,25 @@
-.globals-section {
-    margin-bottom: 16px;
-}
-
-.section-header {
-    font-weight: 600;
-    font-size: 14px;
-    margin-bottom: 8px;
-    color: #cccccc;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.section-body {
-    background: #252526;
-    border: 1px solid #3e3e42;
-    border-radius: 4px;
-    padding: 12px;
-}
+/* ── Variables grid (Globals) ─────────────────────────────────────────── */
 
 .variables-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
 }
 
 .variable-item {
-    font-family: 'Consolas', 'Monaco', monospace;
-    font-size: 13px;
-    padding: 4px 8px;
-    background: #1e1e1e;
-    border-radius: 3px;
-    border-left: 3px solid #007acc;
+	font-family: "Consolas", "Monaco", monospace;
+	font-size: 13px;
+	padding: 4px 8px;
+	background: #1e1e1e;
+	border-radius: 3px;
+	border-left: 3px solid #007acc;
 }
 
 .var-name {
-    color: #9cdcfe;
-    font-weight: 500;
+	color: #9cdcfe;
+	font-weight: 500;
 }
 
 .var-value {
-    color: #ce9178;
-}
-
-.empty-state {
-    color: #858585;
-    font-style: italic;
-    font-size: 13px;
-    text-align: center;
-    padding: 12px;
+	color: #ce9178;
 }

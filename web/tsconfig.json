@@ -1,28 +1,28 @@
 {
-  "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "lib": ["ESNext", "DOM"],
-    "moduleResolution": "Node",
-    "strict": true,
-    "sourceMap": true,
-    "resolveJsonModule": true,
-    "esModuleInterop": true,
-    "noEmit": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noImplicitReturns": true,
-    "jsx": "preserve",
-    "jsxImportSource": "solid-js",
-    "baseUrl": "./app",
-    "paths": {
-      "@components/*": ["./components/*"],
-      "@hooks/*": ["./hooks/*"],
-      "@utils/*": ["./utils/*"],
-      "@assets/*": ["./assets/*"],
-      "@tutorials/*": ["./tutorials/*"],
-      "@examples/*": ["./examples/*"]
-    }
-  },
-  "include": ["./app", "./vis-network-esm.d.ts"]
+	"compilerOptions": {
+		"target": "ESNext",
+		"module": "ESNext",
+		"lib": ["ESNext", "DOM"],
+		"moduleResolution": "Node",
+		"strict": true,
+		"sourceMap": true,
+		"resolveJsonModule": true,
+		"esModuleInterop": true,
+		"noEmit": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"noImplicitReturns": true,
+		"jsx": "preserve",
+		"jsxImportSource": "solid-js",
+		"baseUrl": "./app",
+		"paths": {
+			"@components/*": ["./components/*"],
+			"@hooks/*": ["./hooks/*"],
+			"@utils/*": ["./utils/*"],
+			"@assets/*": ["./assets/*"],
+			"@tutorials/*": ["./tutorials/*"],
+			"@examples/*": ["./examples/*"]
+		}
+	},
+	"include": ["./app", "./vis-network-esm.d.ts"]
 }
