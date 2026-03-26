@@ -264,6 +264,26 @@ export const renderMessageFlowGraph = (
 		y: 0,
 	});
 	const [isPopupReady, setIsPopupReady] = createSignal(false);
+	const currentTheme = () =>
+		document.documentElement.dataset.theme === "light" ? "light" : "dark";
+	const palette = () =>
+		currentTheme() === "light"
+			? {
+					line: "#7f6e5b",
+					node: "#6c5949",
+					active: "#0f6bbd",
+					popupBg: "#fffaf2",
+					popupText: "#332c26",
+					popupBorder: "#d8c9b3",
+				}
+			: {
+					line: "white",
+					node: "#cccccc",
+					active: "#0080ff",
+					popupBg: "#232323",
+					popupText: "#cccccc",
+					popupBorder: "#444",
+				};
 
 	// Add this state to remember alignment
 	const [popupAlignment, setPopupAlignment] = createSignal<{
@@ -328,7 +348,7 @@ export const renderMessageFlowGraph = (
 				x: xStart,
 				shape: "dot",
 				size: 1,
-				color: "white",
+				color: palette().line,
 			};
 			const endNode = {
 				id: `p${index}_end`,
@@ -336,13 +356,13 @@ export const renderMessageFlowGraph = (
 				x: xEnd,
 				shape: "dot",
 				size: 1,
-				color: "white",
+				color: palette().line,
 			};
 			nodes.add([startNode, endNode]);
 			edges.add({
 				from: startNode.id,
 				to: endNode.id,
-				color: "white",
+				color: palette().line,
 				width: 2,
 			}); // line for each process
 
@@ -353,10 +373,10 @@ export const renderMessageFlowGraph = (
 				label: `P${index} \n(${processName})`,
 				shape: "text",
 				size: 0,
-				color: "white",
+				color: palette().line,
 				font: {
 					size: 18,
-					color: "white",
+					color: palette().line,
 				},
 			};
 
@@ -394,7 +414,7 @@ export const renderMessageFlowGraph = (
 				x: xStart + 20 + i * 50,
 				shape: "dot",
 				size: 5,
-				color: "#cccccc",
+				color: palette().node,
 				event: event,
 				broadcast: isBroadcast,
 			};
@@ -420,7 +440,7 @@ export const renderMessageFlowGraph = (
 						lines: node.event?.lines,
 						font: {
 							size: 20,
-							color: "white",
+							color: palette().line,
 							align: "middle",
 							background: "none",
 							strokeWidth: 0,
@@ -481,7 +501,7 @@ export const renderMessageFlowGraph = (
 					setPopupVisible(true);
 					previous_node_id = node_id;
 					previous_node_colour = node.color;
-					nodes.update({ id: node_id, color: "#0080ff" });
+					nodes.update({ id: node_id, color: palette().active });
 
 					// Also highlight lines if available
 					if (
@@ -598,7 +618,7 @@ export const renderMessageFlowGraph = (
 	return (
 		<>
 			<div class={`state-graph${maximized() ? " maximized" : ""}`}>
-				<div ref={container} style="width: 100%; height: 100%;" />
+				<div ref={container} style="height: 100%;" />
 				<GraphToolbar
 					onFullscreen={handleMaximize}
 					onRecenter={handleRecenter}
@@ -615,6 +635,9 @@ export const renderMessageFlowGraph = (
 							top: `${finalPopupPosition().y}px`,
 							left: `${finalPopupPosition().x}px`,
 							visibility: isPopupReady() ? "visible" : "hidden",
+							background: palette().popupBg,
+							color: palette().popupText,
+							border: `1px solid ${palette().popupBorder}`,
 						}}
 					>
 						<VmStatePopup event={popupContent()!} />

@@ -167,7 +167,7 @@ export const rendervmStates = (
 
 	return (
 		<div class={`state-graph${maximized() ? " maximized" : ""}`}>
-			<div ref={container} style="width: 100%; height: 100%;" />
+			<div ref={container} style="height: 100%;" />
 			{showDetails() ? <MetadataDisplay nodes={data.nodes} /> : null}
 			<GraphToolbar
 				onFullscreen={handleMaximize}

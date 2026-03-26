@@ -119,25 +119,23 @@ impl InstructionBuilder for Node<Wait> {
 
             let unstack_len = state.program_stack.len() - stack_size_before;
 
+            // If the condition is true, leave the atomic guard-evaluation phase.
+            builder.instructions.push(Instruction {
+                pos: Some(case.pos.clone()),
+                control: InstructionType::JumpIf { 
+                    jump_false: if self.value.start_atomic { 1 } else { 2 },
+                    unstack_len: 0, // leave the boolean
+                }
+            });
             if !self.value.start_atomic {
-                // if the entire wait block is not atomic, stop the atomicity here
                 builder.instructions.push(Instruction {
                     pos: Some(case.pos.clone()),
                     control: InstructionType::AtomicEnd,
                 });
             }
-
-            // jump over the unstacking if the wait is not over
             builder.instructions.push(Instruction {
                 pos: Some(case.pos.clone()),
-                control: InstructionType::JumpIf { 
-                    jump_false: 2, // jump over the jump instruction
-                    unstack_len: 0, // leave the boolean
-                }
-            });
-            builder.instructions.push(Instruction {
-                pos: Some(case.pos.clone()),
-                control: InstructionType::Jump(3) // jump over the unstacking instruction and the push false
+                control: InstructionType::Jump(if self.value.start_atomic { 3 } else { 4 })
             });
 
             builder.instructions.push(Instruction {
@@ -151,6 +149,13 @@ impl InstructionBuilder for Node<Wait> {
                 pos: Some(case.pos.clone()),
                 control: InstructionType::Push(Literal::Bool(false)),
             });
+
+            if !self.value.start_atomic {
+                builder.instructions.push(Instruction {
+                    pos: Some(case.pos.clone()),
+                    control: InstructionType::AtomicEnd,
+                });
+            }
 
             builder.instructions.push(Instruction {
                 pos: Some(case.pos.clone()),
@@ -170,9 +175,9 @@ impl InstructionBuilder for Node<Wait> {
         we push a false boolean at the beginning, start atomicity if needed,
         then for each case:
         - condition instructions (adding a boolean and possibly other variables to the stack)
-        - stop atomicity instruction (if needed)
         - jump over the statement if the condition is false (and remove the boolean from the stack)
-          - statement instructions (possibly adding other variables to the stack)
+                    - stop atomicity instruction (if needed)
+                    - statement instructions (possibly adding other variables to the stack)
           - unstack the instructions from the statement and condition variables
           - push true
           - jump over the unstacking of the condition variables
@@ -209,13 +214,6 @@ impl InstructionBuilder for Node<Wait> {
             let case_condition = case.value.rule.compile(state)?;
 
             builder.extend(case_condition);
-            if !self.value.start_atomic {
-                // if the entire wait block is not atomic, stop the atomicity here
-                builder.instructions.push(Instruction {
-                    pos: Some(case.pos.clone()),
-                    control: InstructionType::AtomicEnd,
-                });
-            }
             
             // Remove the boolean from the compiler stack (it will be unstacked at runtime before the statement)
             let boolean_var = state.program_stack.pop();
@@ -231,6 +229,17 @@ impl InstructionBuilder for Node<Wait> {
                 Some(s) => s.compile(state)?,
                 None => InstructionBuilderOk::new(),
             };
+
+            if !self.value.start_atomic {
+                case_statement.shift_instruction_indexes(1);
+                case_statement.instructions.insert(
+                    0,
+                    Instruction {
+                        pos: Some(case.pos.clone()),
+                        control: InstructionType::AtomicEnd,
+                    },
+                );
+            }
 
             // now we know hwo many variables were stacked the case condition and the statement
             let unstack_len_statement = state.unstack_current_depth();
@@ -256,6 +265,15 @@ impl InstructionBuilder for Node<Wait> {
                     unstack_len: 1,
                 },
             });
+
+            if self.value.block_kind == WaitingBlockKind::Seq && !self.value.start_atomic {
+                // Re-enter atomic mode so the remaining seq cases are evaluated
+                // as one uninterrupted guard-evaluation phase.
+                case_statement.instructions.push(Instruction {
+                    pos: Some(case.pos.clone()),
+                    control: InstructionType::AtomicStart,
+                });
+            }
 
             case_statement.instructions.push(Instruction {
                 pos: Some(case.pos.clone()),
@@ -311,6 +329,12 @@ impl InstructionBuilder for Node<Wait> {
         }
 
         let wait_index = builder.instructions.len();
+        if !self.value.start_atomic {
+            builder.instructions.push(Instruction {
+                pos: Some(self.pos.clone()),
+                control: InstructionType::AtomicEnd,
+            });
+        }
         builder.instructions.push(Instruction {
             pos: Some(self.pos.clone()),
             control: InstructionType::Wait {

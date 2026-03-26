@@ -1,48 +1,65 @@
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags as t } from "@lezer/highlight";
 
-// This creates the "color palette" that maps the tags from your parser to actual CSS colors.
-export const uiHighlightStyle = HighlightStyle.define([
-	// Default text color
-	{ tag: t.content, color: "#abb2bf" },
+export type CodeEditorTheme = "dark" | "light";
 
-	// Keywords
-	{
-		tag: [
-			t.keyword,
-			t.controlKeyword,
-			t.definitionKeyword,
-			t.operatorKeyword,
-			t.modifier,
-		],
-		color: "#c678dd",
+const palette = {
+	dark: {
+		text: "#abb2bf",
+		keyword: "#c678dd",
+		string: "#98c379",
+		number: "#d19a66",
+		comment: "#5c6370",
+		typeName: "#e5c07b",
+		functionName: "#61afef",
+		property: "#e06c75",
+		namespace: "#61afef",
 	},
-	{ tag: [t.moduleKeyword], color: "#c678dd", fontWeight: "bold" },
-	{ tag: [t.special(t.keyword)], color: "#c678dd", fontStyle: "italic" },
+	light: {
+		text: "#2f3441",
+		keyword: "#8b38c9",
+		string: "#2f7d32",
+		number: "#b65c1b",
+		comment: "#8b94a7",
+		typeName: "#9f6a00",
+		functionName: "#0f6bbd",
+		property: "#bc4b63",
+		namespace: "#0f6bbd",
+	},
+} as const;
 
-	// Literals: strings, numbers, booleans
-	{ tag: [t.string, t.special(t.string)], color: "#98c379" },
-	{ tag: [t.number, t.bool, t.null], color: "#d19a66" },
+export const createUiHighlightStyle = (theme: CodeEditorTheme) => {
+	const colors = palette[theme];
 
-	// Comments - use lower specificity to avoid overriding function names
-	{ tag: t.lineComment, color: "#5c6370", fontStyle: "italic" },
-	{ tag: t.blockComment, color: "#5c6370", fontStyle: "italic" },
+	return HighlightStyle.define([
+		{ tag: t.content, color: colors.text },
+		{
+			tag: [
+				t.keyword,
+				t.controlKeyword,
+				t.definitionKeyword,
+				t.operatorKeyword,
+				t.modifier,
+			],
+			color: colors.keyword,
+		},
+		{ tag: [t.moduleKeyword], color: colors.keyword, fontWeight: "bold" },
+		{ tag: [t.special(t.keyword)], color: colors.keyword, fontStyle: "italic" },
+		{ tag: [t.string, t.special(t.string)], color: colors.string },
+		{ tag: [t.number, t.bool, t.null], color: colors.number },
+		{ tag: t.lineComment, color: colors.comment, fontStyle: "italic" },
+		{ tag: t.blockComment, color: colors.comment, fontStyle: "italic" },
+		{ tag: [t.className, t.typeName], color: colors.typeName },
+		{ tag: t.variableName, color: colors.text },
+		{ tag: t.function(t.variableName), color: colors.functionName },
+		{ tag: t.propertyName, color: colors.property },
+		{ tag: t.namespace, color: colors.namespace },
+		{ tag: [t.separator, t.punctuation], color: colors.text },
+		{ tag: t.derefOperator, color: colors.text },
+	]);
+};
 
-	// Names: variables, functions, classes
-	{ tag: [t.className, t.typeName], color: "#e5c07b" },
-	{ tag: t.variableName, color: "#abb2bf" }, // Default variable color
-	{ tag: t.function(t.variableName), color: "#61afef" }, // Functions should be blue
-	{ tag: t.propertyName, color: "#e06c75" }, // Properties (like in `obj.prop`) in red
+export const createCustomSyntaxHighlighting = (theme: CodeEditorTheme) =>
+	syntaxHighlighting(createUiHighlightStyle(theme), { fallback: true });
 
-	// Special highlighting for your language
-	{ tag: t.namespace, color: "#61afef" }, // For module names like `math` in `math.add`
-
-	// Punctuation and Operators
-	{ tag: [t.separator, t.punctuation], color: "#abb2bf" },
-	{ tag: t.derefOperator, color: "#abb2bf" }, // The '.' in `math.add`
-]);
-
-// This exports the HighlightStyle as a ready-to-use CodeMirror extension.
-export const customSyntaxHighlighting = syntaxHighlighting(uiHighlightStyle, {
-	fallback: true,
-});
+export const customSyntaxHighlighting = createCustomSyntaxHighlighting("dark");

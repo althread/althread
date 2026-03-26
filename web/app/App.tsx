@@ -45,8 +45,11 @@ import {
 import { buildGraphFromNodes, vmStateSignature } from "@utils/graphBuilders";
 // Import our new modules
 import {
+	type EditorTheme,
+	loadEditorTheme,
 	loadFileContent,
 	loadFileSystem,
+	saveEditorTheme,
 	saveFileContent,
 	saveFileSystem,
 } from "@utils/storage";
@@ -57,6 +60,7 @@ import type {
 	RunResult,
 	VMStateSelection,
 } from "./types/vm-state";
+import "./theme-overrides.css";
 
 init().then(() => {
 	console.log("loaded");
@@ -76,6 +80,7 @@ export default function App() {
 	const [selectedFiles, setSelectedFiles] = createSignal<string[]>([]);
 	const [creationError, setCreationError] = createSignal<string | null>(null);
 	const [didAutoOpenDefault, setDidAutoOpenDefault] = createSignal(false);
+	const [theme, setTheme] = createSignal<EditorTheme>(loadEditorTheme());
 
 	// Global file creation state - shared between FileExplorer and EmptyEditor
 	const [globalFileCreation, setGlobalFileCreation] = createSignal<{
@@ -152,6 +157,10 @@ export default function App() {
 		setSidebarCollapsed(next);
 	};
 
+	const toggleTheme = () => {
+		setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+	};
+
 	// Initialize editor (no default file content)
 	const editor = createEditor({
 		compile: async (source: string) => {
@@ -164,6 +173,7 @@ export default function App() {
 		},
 		defaultValue: "// Welcome to Althread\n",
 		filePath: "untitled.alt",
+		theme: theme(),
 		onValueChange: (value) => {
 			// Save current file content when editor changes
 			// Use a delayed check since editorManager might not be initialized yet
@@ -447,6 +457,14 @@ export default function App() {
 	// Save file system whenever it changes
 	createEffect(() => {
 		saveFileSystem(mockFileSystem());
+	});
+
+	createEffect(() => {
+		const currentTheme = theme();
+		saveEditorTheme(currentTheme);
+		document.documentElement.dataset.theme = currentTheme;
+		document.body.dataset.theme = currentTheme;
+		editor.updateTheme?.(currentTheme);
 	});
 
 	// Reload active file content when sidebar state changes to preserve editor content
@@ -1069,7 +1087,7 @@ export default function App() {
 								nodes={runBuiltGraph().nodes}
 								edges={runBuiltGraph().edges}
 								setLoadingAction={setLoadingAction}
-								theme="dark"
+								theme={theme()}
 								onEdgeClick={(_edgeId: string, edgeData: any) => {
 									if (edgeData && edgeData.lines && editor.highlightLines) {
 										editor.highlightLines(edgeData.lines);
@@ -1123,7 +1141,7 @@ export default function App() {
 								nodes={nodes()}
 								edges={edges()}
 								setLoadingAction={setLoadingAction}
-								theme="dark"
+								theme={theme()}
 								tooLargeStatusMessage={checkTooLargeStatus() ?? undefined}
 								onEdgeClick={(_edgeId: string, edgeData: any) => {
 									if (edgeData && edgeData.lines && editor.highlightLines) {
@@ -1142,490 +1160,441 @@ export default function App() {
 
 	return (
 		<>
-			<div id="header">
-				<div class="brand">
-					<Logo />
-					<h3>Althread</h3>
-				</div>
-				<div class="actions">
-					<button
-						class={`vscode-button${activeAction() === "interactive" ? " active" : ""}`}
-						disabled={
-							loadingAction() === "interactive" ||
-							!editorManager.activeFile() ||
-							!isAltFile()
-						}
-						onClick={async () => {
-							if (!editorManager.activeFile()) return;
-							if (activeAction() !== "interactive")
-								setActiveAction("interactive");
-							if (loadingAction() !== "interactive")
-								setLoadingAction("interactive");
+			<div class="app-shell" data-theme={theme()}>
+				<div id="header">
+					<div class="brand">
+						<Logo />
+						<h3>Althread</h3>
+					</div>
+					<div class="actions">
+						<button
+							class="vscode-button theme-toggle-button"
+							title={`Switch to ${theme() === "dark" ? "light" : "dark"} theme`}
+							onClick={toggleTheme}
+						>
+							Theme: {theme() === "dark" ? "Dark" : "Light"}
+						</button>
+						<button
+							class={`vscode-button${activeAction() === "interactive" ? " active" : ""}`}
+							disabled={
+								loadingAction() === "interactive" ||
+								!editorManager.activeFile() ||
+								!isAltFile()
+							}
+							onClick={async () => {
+								if (!editorManager.activeFile()) return;
+								if (activeAction() !== "interactive")
+									setActiveAction("interactive");
+								if (loadingAction() !== "interactive")
+									setLoadingAction("interactive");
 
-							try {
-								setIsInteractiveMode(true);
-								setExecutionError(false);
-								resetSetOut();
-								setInteractiveDeadlock(false);
-								// Reset accumulated output for new session
-								setAccumulatedOutput("");
-								// Go to console by default, execution only if there are errors
-								setActiveTab("console");
-
-								const virtualFS = buildVirtualFileSystem(mockFileSystem());
-								let filePath = getPathFromId(
-									mockFileSystem(),
-									editorManager.activeFile()!.id,
-									"",
-								);
-								if (!filePath) {
-									filePath = editorManager.activeFile()!.name;
-								}
-
-								const res = start_interactive_session(
-									editor.editorView().state.doc.toString(),
-									filePath,
-									virtualFS,
-								);
-								setInteractiveStates(res.next_states || []);
-								setCurrentVMState(res.current_state);
-								setInteractiveFinished(
-									!res.next_states || res.next_states.length === 0,
-								);
-								setExecutionHistory([]);
-
-								if (!res.next_states || res.next_states.length === 0) {
-									setOut("Program execution completed.");
-								} else if (res.next_states.length === 0) {
-									setOut("No interactive choices available.");
-								} else {
-									setOut(
-										"Interactive mode started. Select the next instruction to execute.",
-									);
-								}
-							} catch (e: any) {
-								console.error("Interactive mode error:", e);
-								if (isDeadlockError(e)) {
-									setInteractiveStates([]);
-									setCurrentVMState(null);
-									setInteractiveFinished(true);
-									setInteractiveDeadlock(true);
-									setAccumulatedOutput("Deadlock detected.");
-									setAccumulatedExecutionOutput(getDeadlockExecutionOutput(e));
-									setOut(getDeadlockExecutionOutput(e));
+								try {
+									setIsInteractiveMode(true);
 									setExecutionError(false);
-									return;
-								}
-
-								const errorInfo = formatAlthreadError(
-									e,
-									getFileContentFromVirtualFS(
-										buildVirtualFileSystem(mockFileSystem()),
-										e.pos?.file_path || "",
-									),
-								);
-								setStructuredError(errorInfo);
-								setOut(errorInfo.message);
-								setExecutionError(true);
-								setIsInteractiveMode(false);
-								// Switch to execution tab to show the error
-								setActiveTab("execution");
-							} finally {
-								setTimeout(() => {
-									setLoadingAction(null);
-								}, animationTimeOut);
-							}
-						}}
-					>
-						<i
-							class={
-								loadingAction() === "interactive"
-									? "codicon codicon-loading codicon-modifier-spin"
-									: "codicon codicon-debug-step-over"
-							}
-						></i>
-						Interactive
-					</button>
-
-					<button
-						class={`vscode-button${activeAction() === "run" ? " active" : ""}`}
-						disabled={
-							loadingAction() === "run" ||
-							!editorManager.activeFile() ||
-							!isAltFile()
-						}
-						onClick={async () => {
-							if (!editorManager.activeFile()) return;
-							if (!isRun()) setIsRun(true);
-							setExecutionError(false);
-							resetSetOut();
-							resetStdoutWarning();
-							if (activeAction() !== "run") setActiveAction("run");
-							if (loadingAction() !== "run") setLoadingAction("run");
-							setSelectedVM(null);
-							try {
-								const virtualFS = buildVirtualFileSystem(mockFileSystem());
-								let filePath = getPathFromId(
-									mockFileSystem(),
-									editorManager.activeFile()!.id,
-									"",
-								);
-								if (!filePath) {
-									filePath = editorManager.activeFile()!.name; // Fallback to name if ID not found
-								}
-								const res: RunResult = await workerClient.run(
-									editor.editorView().state.doc.toString(),
-									filePath,
-									virtualFS,
-								);
-								const runtimeError = (res as any).runtime_error;
-
-								if (res.debug.length === 0) {
 									resetSetOut();
-								} else {
-									setOut(res.debug);
-								}
-								setCommGraphOut(res.message_flow_events);
-								setRunGraphNodes(res.nodes);
-								setStepLines(res.step_lines || []);
+									setInteractiveDeadlock(false);
+									// Reset accumulated output for new session
+									setAccumulatedOutput("");
+									// Go to console by default, execution only if there are errors
+									setActiveTab("console");
 
-								// Build the graph for visualization
-								const builtGraph = buildGraphFromNodes(res.nodes, {
-									mode: "run",
-									stepLines: res.step_lines || [],
-								});
-								setRunBuiltGraph(builtGraph);
+									const virtualFS = buildVirtualFileSystem(mockFileSystem());
+									let filePath = getPathFromId(
+										mockFileSystem(),
+										editorManager.activeFile()!.id,
+										"",
+									);
+									if (!filePath) {
+										filePath = editorManager.activeFile()!.name;
+									}
 
-								const plainStdout = res.stdout.join("\n");
-								setStdout(plainStdout);
-								setStdoutWarning(
-									(res as any).max_steps_reached
-										? `Maximum number of steps reached (${WEB_RUN_MAX_STEPS}). Execution was stopped.`
-										: null,
-								);
+									const res = start_interactive_session(
+										editor.editorView().state.doc.toString(),
+										filePath,
+										virtualFS,
+									);
+									setInteractiveStates(res.next_states || []);
+									setCurrentVMState(res.current_state);
+									setInteractiveFinished(
+										!res.next_states || res.next_states.length === 0,
+									);
+									setExecutionHistory([]);
 
-								if (runtimeError) {
-									const runtimeInfo = formatAlthreadError(
-										runtimeError,
+									if (!res.next_states || res.next_states.length === 0) {
+										setOut("Program execution completed.");
+									} else if (res.next_states.length === 0) {
+										setOut("No interactive choices available.");
+									} else {
+										setOut(
+											"Interactive mode started. Select the next instruction to execute.",
+										);
+									}
+								} catch (e: any) {
+									console.error("Interactive mode error:", e);
+									if (isDeadlockError(e)) {
+										setInteractiveStates([]);
+										setCurrentVMState(null);
+										setInteractiveFinished(true);
+										setInteractiveDeadlock(true);
+										setAccumulatedOutput("Deadlock detected.");
+										setAccumulatedExecutionOutput(
+											getDeadlockExecutionOutput(e),
+										);
+										setOut(getDeadlockExecutionOutput(e));
+										setExecutionError(false);
+										return;
+									}
+
+									const errorInfo = formatAlthreadError(
+										e,
 										getFileContentFromVirtualFS(
-											virtualFS,
-											runtimeError.pos?.file_path || filePath,
+											buildVirtualFileSystem(mockFileSystem()),
+											e.pos?.file_path || "",
 										),
 									);
-									const executionOutput =
-										res.debug.length > 0
-											? `${res.debug}\n${runtimeInfo.message}`
-											: runtimeInfo.message;
+									setStructuredError(errorInfo);
+									setOut(errorInfo.message);
+									setExecutionError(true);
+									setIsInteractiveMode(false);
+									// Switch to execution tab to show the error
+									setActiveTab("execution");
+								} finally {
+									setTimeout(() => {
+										setLoadingAction(null);
+									}, animationTimeOut);
+								}
+							}}
+						>
+							<i
+								class={
+									loadingAction() === "interactive"
+										? "codicon codicon-loading codicon-modifier-spin"
+										: "codicon codicon-debug-step-over"
+								}
+							></i>
+							Interactive
+						</button>
 
-									setStructuredError(null);
-									setOut(executionOutput);
-									if (isDeadlockError(runtimeError)) {
-										setStdout(
-											appendStatusNotice(plainStdout, "Deadlock detected."),
+						<button
+							class={`vscode-button${activeAction() === "run" ? " active" : ""}`}
+							disabled={
+								loadingAction() === "run" ||
+								!editorManager.activeFile() ||
+								!isAltFile()
+							}
+							onClick={async () => {
+								if (!editorManager.activeFile()) return;
+								if (!isRun()) setIsRun(true);
+								setExecutionError(false);
+								resetSetOut();
+								resetStdoutWarning();
+								if (activeAction() !== "run") setActiveAction("run");
+								if (loadingAction() !== "run") setLoadingAction("run");
+								setSelectedVM(null);
+								try {
+									const virtualFS = buildVirtualFileSystem(mockFileSystem());
+									let filePath = getPathFromId(
+										mockFileSystem(),
+										editorManager.activeFile()!.id,
+										"",
+									);
+									if (!filePath) {
+										filePath = editorManager.activeFile()!.name; // Fallback to name if ID not found
+									}
+									const res: RunResult = await workerClient.run(
+										editor.editorView().state.doc.toString(),
+										filePath,
+										virtualFS,
+									);
+									const runtimeError = (res as any).runtime_error;
+
+									if (res.debug.length === 0) {
+										resetSetOut();
+									} else {
+										setOut(res.debug);
+									}
+									setCommGraphOut(res.message_flow_events);
+									setRunGraphNodes(res.nodes);
+									setStepLines(res.step_lines || []);
+
+									// Build the graph for visualization
+									const builtGraph = buildGraphFromNodes(res.nodes, {
+										mode: "run",
+										stepLines: res.step_lines || [],
+									});
+									setRunBuiltGraph(builtGraph);
+
+									const plainStdout = res.stdout.join("\n");
+									setStdout(plainStdout);
+									setStdoutWarning(
+										(res as any).max_steps_reached
+											? `Maximum number of steps reached (${WEB_RUN_MAX_STEPS}). Execution was stopped.`
+											: null,
+									);
+
+									if (runtimeError) {
+										const runtimeInfo = formatAlthreadError(
+											runtimeError,
+											getFileContentFromVirtualFS(
+												virtualFS,
+												runtimeError.pos?.file_path || filePath,
+											),
 										);
+										const executionOutput =
+											res.debug.length > 0
+												? `${res.debug}\n${runtimeInfo.message}`
+												: runtimeInfo.message;
+
+										setStructuredError(null);
+										setOut(executionOutput);
+										if (isDeadlockError(runtimeError)) {
+											setStdout(
+												appendStatusNotice(plainStdout, "Deadlock detected."),
+											);
+											setExecutionError(false);
+											setActiveTab("console");
+										} else {
+											setExecutionError(true);
+											setActiveTab("execution");
+										}
+									} else {
+										setStructuredError(null);
 										setExecutionError(false);
 										setActiveTab("console");
-									} else {
-										setExecutionError(true);
-										setActiveTab("execution");
 									}
-								} else {
-									setStructuredError(null);
-									setExecutionError(false);
-									setActiveTab("console");
-								}
-							} catch (e: any) {
-								console.error("Execution error:", e);
-								// show error in execution tab
-								const errorInfo = formatAlthreadError(
-									e,
-									getFileContentFromVirtualFS(
-										buildVirtualFileSystem(mockFileSystem()),
-										e.pos?.file_path || "",
-									),
-								);
-								setStructuredError(errorInfo);
-								setOut(errorInfo.message);
-								setActiveTab("execution");
-								// reset other tabs to initial state
-								setStdout("The console output will appear here.");
-								resetStdoutWarning();
-								setCommGraphOut([]);
-								setRunGraphNodes([]);
-								setRunBuiltGraph({ nodes: [], edges: [] });
-								setExecutionError(true);
-							} finally {
-								setTimeout(() => {
-									setLoadingAction(null);
-								}, animationTimeOut);
-							}
-						}}
-					>
-						<i
-							class={
-								loadingAction() === "run"
-									? "codicon codicon-loading codicon-modifier-spin"
-									: "codicon codicon-play"
-							}
-						></i>
-						Run
-					</button>
-
-					<button
-						class={`vscode-button${activeAction() === "check" ? " active" : ""}`}
-						disabled={!editorManager.activeFile() || !isAltFile()}
-						onClick={async () => {
-							if (loadingAction() !== "check") setLoadingAction("check");
-							if (activeAction() !== "check") setActiveAction("check");
-							setSelectedVM(null);
-							setActiveTab("vm_states");
-							if (executionError()) setExecutionError(false);
-							setCheckTooLargeStatus(null);
-							if (!editorManager.activeFile()) return;
-
-							try {
-								const virtualFS = buildVirtualFileSystem(mockFileSystem());
-
-								let filePath = getPathFromId(
-									mockFileSystem(),
-									editorManager.activeFile()!.id,
-									"",
-								);
-								if (!filePath) {
-									filePath = editorManager.activeFile()!.name; // Fallback to name if ID not found
-								}
-
-								const res: CheckResult = await workerClient.check(
-									editor.editorView().state.doc.toString(),
-									filePath,
-									virtualFS,
-									DEFAULT_WEB_CHECK_MAX_STATES,
-								);
-
-								if (res.path.length > 0) {
-									if (res.exhaustive) {
-										setOut(
-											"Violation found! See the highlighted path in the VM states graph.",
-										);
-									} else {
-										setOut(
-											"Violation found before exploration completed. The counterexample is valid, but the explored graph is partial. See the highlighted path in the VM states graph.",
-										);
-									}
-								} else if (res.exhaustive) {
-									setOut("Verification complete: No execution errors found.");
-								} else {
-									setOut(
-										"Warning: Exploration limit reached. The state space was not fully explored. No violation found in the explored part.",
+								} catch (e: any) {
+									console.error("Execution error:", e);
+									// show error in execution tab
+									const errorInfo = formatAlthreadError(
+										e,
+										getFileContentFromVirtualFS(
+											buildVirtualFileSystem(mockFileSystem()),
+											e.pos?.file_path || "",
+										),
 									);
+									setStructuredError(errorInfo);
+									setOut(errorInfo.message);
+									setActiveTab("execution");
+									// reset other tabs to initial state
+									setStdout("The console output will appear here.");
+									resetStdoutWarning();
+									setCommGraphOut([]);
+									setRunGraphNodes([]);
+									setRunBuiltGraph({ nodes: [], edges: [] });
+									setExecutionError(true);
+								} finally {
+									setTimeout(() => {
+										setLoadingAction(null);
+									}, animationTimeOut);
 								}
-								setCheckTooLargeStatus(getCheckTooLargeStatus(res));
+							}}
+						>
+							<i
+								class={
+									loadingAction() === "run"
+										? "codicon codicon-loading codicon-modifier-spin"
+										: "codicon codicon-play"
+								}
+							></i>
+							Run
+						</button>
 
-								if (res.path.length > 0) {
-									const replay = buildCounterexampleReplay(res.path, res.nodes);
-									setCounterexampleReplayNodes(replay.replayNodes);
-									setCounterexampleReplayStepLines(replay.replayStepLines);
-								} else {
+						<button
+							class={`vscode-button${activeAction() === "check" ? " active" : ""}`}
+							disabled={!editorManager.activeFile() || !isAltFile()}
+							onClick={async () => {
+								if (loadingAction() !== "check") setLoadingAction("check");
+								if (activeAction() !== "check") setActiveAction("check");
+								setSelectedVM(null);
+								setActiveTab("vm_states");
+								if (executionError()) setExecutionError(false);
+								setCheckTooLargeStatus(null);
+								if (!editorManager.activeFile()) return;
+
+								try {
+									const virtualFS = buildVirtualFileSystem(mockFileSystem());
+
+									let filePath = getPathFromId(
+										mockFileSystem(),
+										editorManager.activeFile()!.id,
+										"",
+									);
+									if (!filePath) {
+										filePath = editorManager.activeFile()!.name; // Fallback to name if ID not found
+									}
+
+									const res: CheckResult = await workerClient.check(
+										editor.editorView().state.doc.toString(),
+										filePath,
+										virtualFS,
+										DEFAULT_WEB_CHECK_MAX_STATES,
+									);
+
+									if (res.path.length > 0) {
+										if (res.exhaustive) {
+											setOut(
+												"Violation found! See the highlighted path in the VM states graph.",
+											);
+										} else {
+											setOut(
+												"Violation found before exploration completed. The counterexample is valid, but the explored graph is partial. See the highlighted path in the VM states graph.",
+											);
+										}
+									} else if (res.exhaustive) {
+										setOut("Verification complete: No execution errors found.");
+									} else {
+										setOut(
+											"Warning: Exploration limit reached. The state space was not fully explored. No violation found in the explored part.",
+										);
+									}
+									setCheckTooLargeStatus(getCheckTooLargeStatus(res));
+
+									if (res.path.length > 0) {
+										const replay = buildCounterexampleReplay(
+											res.path,
+											res.nodes,
+										);
+										setCounterexampleReplayNodes(replay.replayNodes);
+										setCounterexampleReplayStepLines(replay.replayStepLines);
+									} else {
+										setCounterexampleReplayNodes([]);
+										setCounterexampleReplayStepLines([]);
+									}
+
+									const violationPathStates = res.path.map(
+										(pathItem) => pathItem.vm,
+									);
+
+									if (res.nodes.length > MAX_VISIBLE_GRAPH_NODES) {
+										setNodes(buildHiddenGraphPlaceholders(res.nodes.length));
+										setEdges([]);
+									} else {
+										const builtGraph = buildGraphFromNodes(res.nodes, {
+											mode: "check",
+											violationPathStates,
+										});
+
+										setNodes(builtGraph.nodes);
+										setEdges(builtGraph.edges);
+									}
+									setIsRun(false);
+								} catch (e: any) {
+									// show error in execution tab
+									const errorInfo = formatAlthreadError(
+										e,
+										getFileContentFromVirtualFS(
+											buildVirtualFileSystem(mockFileSystem()),
+											e.pos?.file_path || "",
+										),
+									);
+									setStructuredError(errorInfo);
+									setOut(errorInfo.message);
+									setActiveTab("execution");
+									setLoadingAction(null);
+									setCheckTooLargeStatus(null);
 									setCounterexampleReplayNodes([]);
 									setCounterexampleReplayStepLines([]);
+									// reset other tabs to initial state
+									setStdout("The console output will appear here.");
+									resetStdoutWarning();
+									setCommGraphOut([]);
+									setRunGraphNodes([]);
+									setRunBuiltGraph({ nodes: [], edges: [] });
+									setExecutionError(true);
 								}
+							}}
+						>
+							<i
+								class={
+									loadingAction() === "check"
+										? "codicon codicon-loading codicon-modifier-spin"
+										: "codicon codicon-check"
+								}
+							></i>
+							Check
+						</button>
 
-								const violationPathStates = res.path.map(
-									(pathItem) => pathItem.vm,
-								);
+						<button
+							class={`vscode-button${activeAction() === "run-counterexample" ? " active" : ""}`}
+							disabled={
+								loadingAction() === "run-counterexample" ||
+								counterexampleReplayNodes().length === 0
+							}
+							onClick={async () => {
+								const replayNodes = counterexampleReplayNodes();
+								if (replayNodes.length === 0) return;
 
-								if (res.nodes.length > MAX_VISIBLE_GRAPH_NODES) {
-									setNodes(buildHiddenGraphPlaceholders(res.nodes.length));
-									setEdges([]);
-								} else {
-									const builtGraph = buildGraphFromNodes(res.nodes, {
-										mode: "check",
-										violationPathStates,
+								if (!isRun()) setIsRun(true);
+								setExecutionError(false);
+								setStructuredError(null);
+								if (activeAction() !== "run-counterexample")
+									setActiveAction("run-counterexample");
+								if (loadingAction() !== "run-counterexample")
+									setLoadingAction("run-counterexample");
+								setSelectedVM(null);
+
+								try {
+									const replayStepLines = counterexampleReplayStepLines();
+									setRunGraphNodes(replayNodes);
+									setStepLines(replayStepLines);
+
+									const builtGraph = buildGraphFromNodes(replayNodes, {
+										mode: "run",
+										stepLines: replayStepLines,
 									});
 
-									setNodes(builtGraph.nodes);
-									setEdges(builtGraph.edges);
+									setRunBuiltGraph(builtGraph);
+									setCommGraphOut([]);
+									setStdout("Counter-example replay loaded from checker path.");
+									setOut(
+										"Counter-example replay loaded. Open VM states to walk through the violating trace.",
+									);
+									setActiveTab("vm_states");
+								} finally {
+									setTimeout(() => {
+										setLoadingAction(null);
+									}, animationTimeOut);
 								}
-								setIsRun(false);
-							} catch (e: any) {
-								// show error in execution tab
-								const errorInfo = formatAlthreadError(
-									e,
-									getFileContentFromVirtualFS(
-										buildVirtualFileSystem(mockFileSystem()),
-										e.pos?.file_path || "",
-									),
-								);
-								setStructuredError(errorInfo);
-								setOut(errorInfo.message);
-								setActiveTab("execution");
-								setLoadingAction(null);
-								setCheckTooLargeStatus(null);
-								setCounterexampleReplayNodes([]);
-								setCounterexampleReplayStepLines([]);
-								// reset other tabs to initial state
-								setStdout("The console output will appear here.");
-								resetStdoutWarning();
-								setCommGraphOut([]);
-								setRunGraphNodes([]);
-								setRunBuiltGraph({ nodes: [], edges: [] });
-								setExecutionError(true);
-							}
-						}}
-					>
-						<i
-							class={
-								loadingAction() === "check"
-									? "codicon codicon-loading codicon-modifier-spin"
-									: "codicon codicon-check"
-							}
-						></i>
-						Check
-					</button>
+							}}
+						>
+							<i
+								class={
+									loadingAction() === "run-counterexample"
+										? "codicon codicon-loading codicon-modifier-spin"
+										: "codicon codicon-debug-start"
+								}
+							></i>
+							Run CE
+						</button>
 
-					<button
-						class={`vscode-button${activeAction() === "run-counterexample" ? " active" : ""}`}
-						disabled={
-							loadingAction() === "run-counterexample" ||
-							counterexampleReplayNodes().length === 0
-						}
-						onClick={async () => {
-							const replayNodes = counterexampleReplayNodes();
-							if (replayNodes.length === 0) return;
-
-							if (!isRun()) setIsRun(true);
-							setExecutionError(false);
-							setStructuredError(null);
-							if (activeAction() !== "run-counterexample")
-								setActiveAction("run-counterexample");
-							if (loadingAction() !== "run-counterexample")
-								setLoadingAction("run-counterexample");
-							setSelectedVM(null);
-
-							try {
-								const replayStepLines = counterexampleReplayStepLines();
-								setRunGraphNodes(replayNodes);
-								setStepLines(replayStepLines);
-
-								const builtGraph = buildGraphFromNodes(replayNodes, {
-									mode: "run",
-									stepLines: replayStepLines,
-								});
-
-								setRunBuiltGraph(builtGraph);
-								setCommGraphOut([]);
-								setStdout("Counter-example replay loaded from checker path.");
-								setOut(
-									"Counter-example replay loaded. Open VM states to walk through the violating trace.",
-								);
-								setActiveTab("vm_states");
-							} finally {
-								setTimeout(() => {
-									setLoadingAction(null);
-								}, animationTimeOut);
-							}
-						}}
-					>
-						<i
-							class={
-								loadingAction() === "run-counterexample"
-									? "codicon codicon-loading codicon-modifier-spin"
-									: "codicon codicon-debug-start"
-							}
-						></i>
-						Run CE
-					</button>
-
-					<button
-						class={`vscode-button${loadingAction() === "reset" ? " active" : ""}`}
-						onClick={async () => {
-							setLoadingAction("reset");
-							try {
-								await resetAllState();
-							} finally {
-								setTimeout(() => {
-									setLoadingAction(null);
-								}, 100);
-							}
-						}}
-					>
-						<i
-							class={
-								loadingAction() === "reset"
-									? "codicon codicon-loading codicon-modifier-spin"
-									: "codicon codicon-clear-all"
-							}
-						></i>
-						Reset
-					</button>
+						<button
+							class={`vscode-button${loadingAction() === "reset" ? " active" : ""}`}
+							onClick={async () => {
+								setLoadingAction("reset");
+								try {
+									await resetAllState();
+								} finally {
+									setTimeout(() => {
+										setLoadingAction(null);
+									}, 100);
+								}
+							}}
+						>
+							<i
+								class={
+									loadingAction() === "reset"
+										? "codicon codicon-loading codicon-modifier-spin"
+										: "codicon codicon-clear-all"
+								}
+							></i>
+							Reset
+						</button>
+					</div>
 				</div>
-			</div>
 
-			{/* Collapsed sidebar icon strip — absolutely positioned so it overlays when sidebar panel is at 0 */}
-			<Show when={sidebarCollapsed()}>
-				<div class="collapsed-sidebar-container">
-					<Sidebar
-						files={mockFileSystem()}
-						onFileSelect={(path) =>
-							editorManager.handleFileSelect(path, mockFileSystem())
-						}
-						onNewFile={fileOperations.handleNewFile}
-						onNewFolder={fileOperations.handleNewFolder}
-						onMoveEntry={fileOperations.handleMoveEntry}
-						onRenameEntry={fileOperations.handleRenameEntry}
-						onDeleteEntry={fileOperations.handleDeleteEntry}
-						onCopyEntry={fileOperations.handleCopyEntry}
-						onFileUpload={fileOperations.handleFileUpload}
-						activeFile={editorManager.activeFile()}
-						getFilePath={(entry) =>
-							getPathFromId(mockFileSystem(), entry.id) || entry.name
-						}
-						selectedFiles={selectedFiles()}
-						onSelectionChange={setSelectedFiles}
-						creationError={creationError()}
-						setCreationError={setCreationError}
-						checkNameConflict={checkNameConflict}
-						showConfirmDialog={showMoveConfirmDialog}
-						showDeleteConfirmDialog={showDeleteConfirmDialog}
-						globalFileCreation={globalFileCreation()}
-						setGlobalFileCreation={setGlobalFileCreation}
-						setFileSystem={setMockFileSystem}
-						onLoadExample={handleLoadExample}
-						activeView={sidebarView()}
-						onViewChange={setSidebarView}
-						isCollapsed={sidebarCollapsed()}
-						onToggleCollapse={toggleSidebarCollapse}
-					/>
-				</div>
-			</Show>
-
-			<div
-				class={`content-wrapper ${sidebarCollapsed() ? "sidebar-collapsed" : ""}`}
-			>
-				<Resizable
-					id="content"
-					as={(props: JSX.HTMLAttributes<HTMLDivElement>) => {
-						// Access corvu context here so we can wire exact size logic
-						const ctx = Resizable.useContext();
-						getResizableSizes = ctx.sizes;
-						setResizableSizes = ctx.setSizes;
-						return <div {...props} />;
-					}}
-				>
-					{/* Sidebar panel — collapsible, hidden when sidebarCollapsed */}
-					<Resizable.Panel
-						initialSize={0.2}
-						minSize={0.15}
-						collapsible
-						collapsedSize={0}
-						onCollapse={() => {
-							if (!sidebarCollapsed()) setSidebarCollapsed(true);
-						}}
-						onExpand={() => {
-							if (sidebarCollapsed()) setSidebarCollapsed(false);
-						}}
-						style={{ overflow: "hidden" }}
-					>
+				{/* Collapsed sidebar icon strip — absolutely positioned so it overlays when sidebar panel is at 0 */}
+				<Show when={sidebarCollapsed()}>
+					<div class="collapsed-sidebar-container">
 						<Sidebar
 							files={mockFileSystem()}
 							onFileSelect={(path) =>
@@ -1658,123 +1627,196 @@ export default function App() {
 							isCollapsed={sidebarCollapsed()}
 							onToggleCollapse={toggleSidebarCollapse}
 						/>
-					</Resizable.Panel>
+					</div>
+				</Show>
 
-					<Resizable.Handle class="Resizable-handle" />
+				<div
+					class={`content-wrapper ${sidebarCollapsed() ? "sidebar-collapsed" : ""}`}
+				>
+					<Resizable
+						id="content"
+						as={(props: JSX.HTMLAttributes<HTMLDivElement>) => {
+							// Access corvu context here so we can wire exact size logic
+							const ctx = Resizable.useContext();
+							getResizableSizes = ctx.sizes;
+							setResizableSizes = ctx.setSizes;
+							return <div {...props} />;
+						}}
+					>
+						{/* Sidebar panel — collapsible, hidden when sidebarCollapsed */}
+						<Resizable.Panel
+							initialSize={0.2}
+							minSize={0.15}
+							collapsible
+							collapsedSize={0}
+							onCollapse={() => {
+								if (!sidebarCollapsed()) setSidebarCollapsed(true);
+							}}
+							onExpand={() => {
+								if (sidebarCollapsed()) setSidebarCollapsed(false);
+							}}
+							style={{ overflow: "hidden" }}
+						>
+							<Sidebar
+								files={mockFileSystem()}
+								onFileSelect={(path) =>
+									editorManager.handleFileSelect(path, mockFileSystem())
+								}
+								onNewFile={fileOperations.handleNewFile}
+								onNewFolder={fileOperations.handleNewFolder}
+								onMoveEntry={fileOperations.handleMoveEntry}
+								onRenameEntry={fileOperations.handleRenameEntry}
+								onDeleteEntry={fileOperations.handleDeleteEntry}
+								onCopyEntry={fileOperations.handleCopyEntry}
+								onFileUpload={fileOperations.handleFileUpload}
+								activeFile={editorManager.activeFile()}
+								getFilePath={(entry) =>
+									getPathFromId(mockFileSystem(), entry.id) || entry.name
+								}
+								selectedFiles={selectedFiles()}
+								onSelectionChange={setSelectedFiles}
+								creationError={creationError()}
+								setCreationError={setCreationError}
+								checkNameConflict={checkNameConflict}
+								showConfirmDialog={showMoveConfirmDialog}
+								showDeleteConfirmDialog={showDeleteConfirmDialog}
+								globalFileCreation={globalFileCreation()}
+								setGlobalFileCreation={setGlobalFileCreation}
+								setFileSystem={setMockFileSystem}
+								onLoadExample={handleLoadExample}
+								activeView={sidebarView()}
+								onViewChange={setSidebarView}
+								isCollapsed={sidebarCollapsed()}
+								onToggleCollapse={toggleSidebarCollapse}
+							/>
+						</Resizable.Panel>
 
-					<Resizable.Panel class="editor-panel" initialSize={0.5} minSize={0.2}>
-						<FileTabs
-							openFiles={editorManager.openFiles()}
-							activeFile={editorManager.activeFile()}
-							getFilePath={(entry) =>
-								getPathFromId(mockFileSystem(), entry.id) || entry.name
-							}
-							onTabClick={(file) =>
-								editorManager.handleFileTabClick(file, mockFileSystem())
-							}
-							onTabClose={(file) =>
-								editorManager.handleTabClose(file, mockFileSystem())
-							}
-						/>
-						{editorManager.activeFile() ? (
-							<div class="editor-instance-wrapper" ref={editor.ref} />
-						) : (
-							<EmptyEditor onNewFile={handleNewFileClick} />
-						)}
-					</Resizable.Panel>
+						<Resizable.Handle class="Resizable-handle" />
 
-					<Resizable.Handle class="Resizable-handle" />
+						<Resizable.Panel
+							class="editor-panel"
+							initialSize={0.5}
+							minSize={0.2}
+						>
+							<FileTabs
+								openFiles={editorManager.openFiles()}
+								activeFile={editorManager.activeFile()}
+								getFilePath={(entry) =>
+									getPathFromId(mockFileSystem(), entry.id) || entry.name
+								}
+								onTabClick={(file) =>
+									editorManager.handleFileTabClick(file, mockFileSystem())
+								}
+								onTabClose={(file) =>
+									editorManager.handleTabClose(file, mockFileSystem())
+								}
+							/>
+							{editorManager.activeFile() ? (
+								<div class="editor-instance-wrapper" ref={editor.ref} />
+							) : (
+								<EmptyEditor onNewFile={handleNewFileClick} />
+							)}
+						</Resizable.Panel>
 
-					<Resizable.Panel class="right-panel" initialSize={0.3} minSize={0.1}>
-						<div class="execution-content">
-							<div class="tab">
-								<button
-									class={`tab_button ${activeTab() === "console" ? "active" : ""}`}
-									onclick={() => handleExecutionTabClick("console")}
-									disabled={!isRun()}
-									title="Console"
-								>
-									<i class="codicon codicon-terminal"></i> <span>Console</span>
-								</button>
-								<button
-									class={`tab_button 
+						<Resizable.Handle class="Resizable-handle" />
+
+						<Resizable.Panel
+							class="right-panel"
+							initialSize={0.3}
+							minSize={0.1}
+						>
+							<div class="execution-content">
+								<div class="tab">
+									<button
+										class={`tab_button ${activeTab() === "console" ? "active" : ""}`}
+										onclick={() => handleExecutionTabClick("console")}
+										disabled={!isRun()}
+										title="Console"
+									>
+										<i class="codicon codicon-terminal"></i>{" "}
+										<span>Console</span>
+									</button>
+									<button
+										class={`tab_button 
                            ${activeTab() === "execution" ? "active" : ""} 
                            ${executionError() ? "execution-error" : ""}`}
-									onclick={() => handleExecutionTabClick("execution")}
-									title="Execution"
-								>
-									<i class="codicon codicon-play"></i> <span>Execution</span>
-								</button>
-								<button
-									class={`tab_button ${activeTab() === "msg_flow" ? "active" : ""}`}
-									onclick={() => handleExecutionTabClick("msg_flow")}
-									disabled={!isRun()}
-									title="Message flow"
-								>
-									<i class="codicon codicon-send"></i> <span>Message flow</span>
-								</button>
-								<button
-									class={`tab_button ${activeTab() === "vm_states" ? "active" : ""}`}
-									onclick={() => handleExecutionTabClick("vm_states")}
-									title="VM states"
-								>
-									<i class="codicon codicon-type-hierarchy-sub"></i>{" "}
-									<span>VM states</span>
-								</button>
+										onclick={() => handleExecutionTabClick("execution")}
+										title="Execution"
+									>
+										<i class="codicon codicon-play"></i> <span>Execution</span>
+									</button>
+									<button
+										class={`tab_button ${activeTab() === "msg_flow" ? "active" : ""}`}
+										onclick={() => handleExecutionTabClick("msg_flow")}
+										disabled={!isRun()}
+										title="Message flow"
+									>
+										<i class="codicon codicon-send"></i>{" "}
+										<span>Message flow</span>
+									</button>
+									<button
+										class={`tab_button ${activeTab() === "vm_states" ? "active" : ""}`}
+										onclick={() => handleExecutionTabClick("vm_states")}
+										title="VM states"
+									>
+										<i class="codicon codicon-type-hierarchy-sub"></i>{" "}
+										<span>VM states</span>
+									</button>
+								</div>
+								<div class="tab-content">{renderExecContent()}</div>
 							</div>
-							<div class="tab-content">{renderExecContent()}</div>
-						</div>
-					</Resizable.Panel>
-				</Resizable>
+						</Resizable.Panel>
+					</Resizable>
+				</div>
+
+				{/* Move Confirmation Dialog */}
+				<MoveConfirmationDialog
+					isOpen={moveConfirmation().isOpen}
+					title="Replace Existing Item"
+					message="An item with this name already exists in the destination folder. Do you want to replace it?"
+					fileName={moveConfirmation().conflictingName}
+					onConfirm={handleConfirmedMove}
+					onCancel={handleCanceledMove}
+				/>
+
+				{/* Delete Confirmation Dialog */}
+				<DeleteConfirmationDialog
+					isOpen={deleteConfirmation().isOpen}
+					paths={deleteConfirmation().paths}
+					onConfirm={handleConfirmedDelete}
+					onCancel={handleCanceledDelete}
+				/>
+
+				{/* Load Example Dialog */}
+				<LoadExampleDialog
+					isOpen={loadExampleDialog().isOpen}
+					onLoadInCurrent={handleLoadInCurrentFile}
+					onLoadInNew={handleLoadInNewFile}
+					onCancel={handleCancelLoadExample}
+				/>
+
+				{/* Interactive Panel */}
+				<InteractivePanel
+					isVisible={isInteractiveMode()}
+					interactiveStates={interactiveStates()}
+					currentVMState={currentVMState()}
+					isFinished={interactiveFinished()}
+					deadlockDetected={interactiveDeadlock()}
+					executionOutput={out()}
+					executionError={executionError()}
+					onExecuteStep={executeInteractiveStep}
+					onClose={closeInteractiveMode}
+					onReset={resetInteractiveMode}
+					stdout={accumulatedOutput()}
+					commGraphOut={commgraphout()}
+					vmStates={[]}
+					isRun={isRun()}
+					interactiveMessageFlow={interactiveMessageFlow()}
+					interactiveVmStates={interactiveVmStates()}
+					interactiveStepLines={interactiveStepLines()}
+					editor={editor}
+				/>
 			</div>
-
-			{/* Move Confirmation Dialog */}
-			<MoveConfirmationDialog
-				isOpen={moveConfirmation().isOpen}
-				title="Replace Existing Item"
-				message="An item with this name already exists in the destination folder. Do you want to replace it?"
-				fileName={moveConfirmation().conflictingName}
-				onConfirm={handleConfirmedMove}
-				onCancel={handleCanceledMove}
-			/>
-
-			{/* Delete Confirmation Dialog */}
-			<DeleteConfirmationDialog
-				isOpen={deleteConfirmation().isOpen}
-				paths={deleteConfirmation().paths}
-				onConfirm={handleConfirmedDelete}
-				onCancel={handleCanceledDelete}
-			/>
-
-			{/* Load Example Dialog */}
-			<LoadExampleDialog
-				isOpen={loadExampleDialog().isOpen}
-				onLoadInCurrent={handleLoadInCurrentFile}
-				onLoadInNew={handleLoadInNewFile}
-				onCancel={handleCancelLoadExample}
-			/>
-
-			{/* Interactive Panel */}
-			<InteractivePanel
-				isVisible={isInteractiveMode()}
-				interactiveStates={interactiveStates()}
-				currentVMState={currentVMState()}
-				isFinished={interactiveFinished()}
-				deadlockDetected={interactiveDeadlock()}
-				executionOutput={out()}
-				executionError={executionError()}
-				onExecuteStep={executeInteractiveStep}
-				onClose={closeInteractiveMode}
-				onReset={resetInteractiveMode}
-				stdout={accumulatedOutput()}
-				commGraphOut={commgraphout()}
-				vmStates={[]}
-				isRun={isRun()}
-				interactiveMessageFlow={interactiveMessageFlow()}
-				interactiveVmStates={interactiveVmStates()}
-				interactiveStepLines={interactiveStepLines()}
-				editor={editor}
-			/>
 		</>
 	);
 }

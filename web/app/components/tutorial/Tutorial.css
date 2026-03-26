@@ -26,12 +26,14 @@
 
 #tutorial-content-area {
 	flex-grow: 1;
-	height: calc(100vh - 30px - 2rem); /* Adjust based on header height */
+	height: calc(100vh - 62px - 2rem); /* Adjust based on header height */
 }
 
 .tutorial-header {
 	margin: 0;
-	height: 30px;
+	/* Matches the padded height used for the main header layout math. */
+	height: 62px;
+	box-sizing: border-box;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;

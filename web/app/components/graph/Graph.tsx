@@ -51,6 +51,14 @@ export default (props: GraphProps) => {
 			null
 		);
 	};
+	const isDarkTheme = () => props.theme !== "light";
+	const graphOverlayStyles = () => ({
+		background: isDarkTheme() ? "#1e1e1e" : "#fffaf2",
+		color: isDarkTheme() ? "#ffffff" : "#332c26",
+		border: isDarkTheme() ? "#454545" : "#d8c9b3",
+		shadow: isDarkTheme() ? "rgba(0,0,0,0.3)" : "rgba(121, 89, 46, 0.18)",
+		buttonColor: isDarkTheme() ? "#cccccc" : "#6f5b46",
+	});
 
 	createEffect(() => {
 		if (isGraphTooLarge()) {
@@ -131,10 +139,12 @@ export default (props: GraphProps) => {
 						id: edgeId,
 						font: {
 							size: 12,
-							color: "#cccccc",
-							background: "rgba(30, 30, 30, 0.8)",
+							color: isDarkTheme() ? "#cccccc" : "#544639",
+							background: isDarkTheme()
+								? "rgba(30, 30, 30, 0.8)"
+								: "rgba(255, 248, 239, 0.92)",
 							strokeWidth: 2,
-							strokeColor: "#000",
+							strokeColor: isDarkTheme() ? "#000" : "#e7d8c3",
 						},
 					});
 					// Call the onEdgeClick callback if provided
@@ -203,7 +213,9 @@ export default (props: GraphProps) => {
 	return (
 		<div class={`state-graph${maximized() ? " maximized" : ""}`}>
 			{isGraphTooLarge() ? (
-				<div style="display: flex; height: 100%; align-items: center; justify-content: center; padding: 24px; color: #cccccc; text-align: center;">
+				<div
+					style={`display: flex; height: 100%; align-items: center; justify-content: center; padding: 24px; color: ${isDarkTheme() ? "#cccccc" : "#5c4d3d"}; text-align: center;`}
+				>
 					<div>
 						<div style="font-weight: 600; margin-bottom: 8px;">
 							Graph not displayed
@@ -226,12 +238,12 @@ export default (props: GraphProps) => {
 			{!props.onNodeSelect && selectedNodeContent() && (
 				<div
 					class="node-details-overlay"
-					style="position: absolute; top: 10px; right: 10px; background: #1e1e1e; color: #ffffff; padding: 10px; border: 1px solid #454545; border-radius: 5px; max-width: 400px; max-height: 80%; overflow: auto; white-space: pre-wrap; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.3);"
+					style={`position: absolute; top: 10px; right: 10px; background: ${graphOverlayStyles().background}; color: ${graphOverlayStyles().color}; padding: 10px; border: 1px solid ${graphOverlayStyles().border}; border-radius: 5px; max-width: 400px; max-height: 80%; overflow: auto; white-space: pre-wrap; z-index: 1000; box-shadow: 0 4px 6px ${graphOverlayStyles().shadow};`}
 				>
 					<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
 						<h3 style="margin: 0;">Node State</h3>
 						<button
-							style="background: none; border: none; color: #cccccc; cursor: pointer;"
+							style={`background: none; border: none; color: ${graphOverlayStyles().buttonColor}; cursor: pointer;`}
 							onClick={() => setSelectedNodeContent(null)}
 						>
 							<i class="codicon codicon-close"></i>
