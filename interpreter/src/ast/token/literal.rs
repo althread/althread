@@ -238,6 +238,8 @@ impl Literal {
             (Self::Float(i), Self::Float(j)) => Ok(Self::Bool(i == j)),
             (Self::Bool(i), Self::Bool(j)) => Ok(Self::Bool(i == j)),
             (Self::String(i), Self::String(j)) => Ok(Self::Bool(i == j)),
+            (Self::Tuple(i),Self::Tuple(j)) => Ok(Self::Bool(i == j)),
+            (Self::List(_t1, i),Self::List(_t2, j)) => Ok(Self::Bool(i == j)),
             (i, j) => Err(format!(
                 "Cannot compare {} and {}",
                 i.get_datatype(),
