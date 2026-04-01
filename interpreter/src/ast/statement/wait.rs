@@ -18,7 +18,7 @@ use crate::{
     vm::instruction::{Instruction, InstructionType},
 };
 
-use super::waiting_case::{WaitDependency, WaitingBlockCase};
+use super::waiting_case::{WaitDependency, WaitingBlockCase, WaitingBlockCaseRule};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum WaitingBlockKind {
@@ -104,6 +104,7 @@ impl InstructionBuilder for Node<Wait> {
 
         if self.value.waiting_cases.len() == 1 && self.value.waiting_cases[0].value.statement.is_none() {
             let case = &self.value.waiting_cases[0];
+            let keeps_condition_values = matches!(case.value.rule, WaitingBlockCaseRule::Receive(_));
 
             // Here it is partucular, we only unstack these variables if the wait is not over
             // and we leave the stack unchanged if the wait is over
@@ -118,12 +119,18 @@ impl InstructionBuilder for Node<Wait> {
             debug_assert!(boolean_var.is_some() && boolean_var.as_ref().unwrap().datatype == DataType::Boolean);
 
             let unstack_len = state.program_stack.len() - stack_size_before;
+            let success_unstack_len = if keeps_condition_values {
+                1
+            } else {
+                unstack_len + 1
+            };
 
-            // If the condition is true, leave the atomic guard-evaluation phase.
+            // On success, leave the guard-evaluation phase and drop only temporary values.
+            // On failure, clean up and loop back through the wait instruction.
             builder.instructions.push(Instruction {
                 pos: Some(case.pos.clone()),
                 control: InstructionType::JumpIf { 
-                    jump_false: if self.value.start_atomic { 1 } else { 2 },
+                    jump_false: if self.value.start_atomic { 3 } else { 4 },
                     unstack_len: 0, // leave the boolean
                 }
             });
@@ -135,7 +142,13 @@ impl InstructionBuilder for Node<Wait> {
             }
             builder.instructions.push(Instruction {
                 pos: Some(case.pos.clone()),
-                control: InstructionType::Jump(if self.value.start_atomic { 3 } else { 4 })
+                control: InstructionType::Unstack {
+                    unstack_len: success_unstack_len,
+                },
+            });
+            builder.instructions.push(Instruction {
+                pos: Some(case.pos.clone()),
+                control: InstructionType::Jump(if self.value.start_atomic { 4 } else { 5 })
             });
 
             builder.instructions.push(Instruction {
@@ -164,6 +177,11 @@ impl InstructionBuilder for Node<Wait> {
                     unstack_len: 1,
                 },
             });
+            if !keeps_condition_values {
+                for _ in 0..unstack_len {
+                    state.program_stack.pop();
+                }
+            }
             // when the wait is over the variables declared in case are still on the stack and will be removed when the current scope ends
             // if the wait is not over, since there is only one case, we know that the variables declared will be eventually there.
             return Ok(builder)

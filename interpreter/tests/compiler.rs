@@ -388,6 +388,72 @@ main {
 }
 
 #[test]
+fn test_await_expression_rechecks_with_clean_stack() {
+    let input = r#"
+shared {
+    let REQUEST = false;
+    let VALUE = 0;
+}
+
+program worker(next:int) {
+    loop {
+        atomic {
+            await REQUEST;
+            REQUEST = false;
+            VALUE = next;
+        }
+    }
+}
+
+main {
+    run worker(1);
+    let seen = 0;
+    @ REQUEST = true;
+    await VALUE > 0;
+    seen = VALUE;
+    print(seen);
+}
+    "#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let mut initial_vm = VM::new(&compiled_project);
+    initial_vm.start(0);
+
+    let mut frontier = vec![(initial_vm, Vec::<String>::new())];
+    let mut terminal_states = 0;
+
+    while let Some((vm, prints)) = frontier.pop() {
+        let next_states = vm.next().unwrap();
+        if next_states.is_empty() {
+            terminal_states += 1;
+            assert_eq!(vm.globals.get("VALUE"), Some(&Literal::Int(1)));
+            assert!(prints.iter().any(|message| message == "1"));
+            continue;
+        }
+
+        for (_, _, _, step_actions, next_vm) in next_states {
+            let mut next_prints = prints.clone();
+            for action in step_actions {
+                if let GlobalAction::Print(message) = action {
+                    next_prints.push(message);
+                }
+            }
+            frontier.push((next_vm, next_prints));
+        }
+    }
+
+    assert!(terminal_states > 0);
+}
+
+#[test]
 fn test_mutating_shared_method_call_updates_global_memory() {
     let input = r#"
 shared {
