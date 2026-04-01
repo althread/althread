@@ -1,5 +1,5 @@
 .app-shell[data-theme="light"] {
-  color: var(--app-text);
+	color: var(--app-text);
 }
 
 .app-shell[data-theme="light"] .sidebar,
@@ -15,8 +15,8 @@
 .app-shell[data-theme="light"] .vm-state-inspector,
 .app-shell[data-theme="light"] .section,
 .app-shell[data-theme="light"] .metadata-display {
-  background-color: var(--app-surface) !important;
-  color: var(--app-text-muted) !important;
+	background-color: var(--app-surface) !important;
+	color: var(--app-text-muted) !important;
 }
 
 .app-shell[data-theme="light"] .sidebar-tabs,
@@ -32,7 +32,7 @@
 .app-shell[data-theme="light"] .right-panel-tabs,
 .app-shell[data-theme="light"] .inspector-header,
 .app-shell[data-theme="light"] .popup-tabs {
-  border-color: var(--app-border) !important;
+	border-color: var(--app-border) !important;
 }
 
 .app-shell[data-theme="light"] .sidebar-tab,
@@ -54,15 +54,17 @@
 .app-shell[data-theme="light"] .control-button,
 .app-shell[data-theme="light"] .package-manager-actions button,
 .app-shell[data-theme="light"] .file-explorer-actions button {
-  color: var(--app-text-muted) !important;
+	color: var(--app-text-muted) !important;
 }
 
 .app-shell[data-theme="light"] .sidebar.collapsed .sidebar-tab:hover::after,
-.app-shell[data-theme="light"] .file-explorer-actions .header-action-btn:hover::after {
-  background: var(--app-surface-elevated) !important;
-  color: var(--app-text) !important;
-  border-color: var(--app-border) !important;
-  box-shadow: 0 10px 24px rgba(121, 89, 46, 0.16) !important;
+.app-shell[data-theme="light"]
+	.file-explorer-actions
+	.header-action-btn:hover::after {
+	background: var(--app-surface-elevated) !important;
+	color: var(--app-text) !important;
+	border-color: var(--app-border) !important;
+	box-shadow: 0 10px 24px rgba(121, 89, 46, 0.16) !important;
 }
 
 .app-shell[data-theme="light"] .sidebar-tab:hover,
@@ -78,9 +80,9 @@
 .app-shell[data-theme="light"] .file-explorer-actions button:hover,
 .app-shell[data-theme="light"] .control-button:hover,
 .app-shell[data-theme="light"] .search-clear-btn:hover {
-  background-color: var(--app-surface-hover) !important;
-  color: var(--app-text) !important;
-  border-color: var(--app-border-strong) !important;
+	background-color: var(--app-surface-hover) !important;
+	color: var(--app-text) !important;
+	border-color: var(--app-border-strong) !important;
 }
 
 .app-shell[data-theme="light"] .sidebar-tab.active,
@@ -88,8 +90,8 @@
 .app-shell[data-theme="light"] .file-tab.active,
 .app-shell[data-theme="light"] .right-panel-tabs .right-tab-button.active,
 .app-shell[data-theme="light"] .tab_button.active {
-  background-color: var(--app-surface-muted) !important;
-  color: var(--app-text) !important;
+	background-color: var(--app-surface-muted) !important;
+	color: var(--app-text) !important;
 }
 
 .app-shell[data-theme="light"] .file.active,
@@ -108,7 +110,7 @@
 .app-shell[data-theme="light"] .variable-item,
 .app-shell[data-theme="light"] .payload-item,
 .app-shell[data-theme="light"] .msg-val {
-  border-color: var(--app-border) !important;
+	border-color: var(--app-border) !important;
 }
 
 .app-shell[data-theme="light"] .search-input,
@@ -118,10 +120,12 @@
 .app-shell[data-theme="light"] .process-card,
 .app-shell[data-theme="light"] .channel-values,
 .app-shell[data-theme="light"] .close-btn:hover,
-.app-shell[data-theme="light"] .right-panel-tabs .right-tab-button:not(.active):hover,
+.app-shell[data-theme="light"]
+	.right-panel-tabs
+	.right-tab-button:not(.active):hover,
 .app-shell[data-theme="light"] .file-tab.read-only,
 .app-shell[data-theme="light"] .section-header {
-  background-color: var(--app-surface-muted) !important;
+	background-color: var(--app-surface-muted) !important;
 }
 
 .app-shell[data-theme="light"] .process-card-header,
@@ -133,7 +137,7 @@
 .app-shell[data-theme="light"] .process-id,
 .app-shell[data-theme="light"] .process-pc,
 .app-shell[data-theme="light"] .process-line {
-  background-color: var(--app-surface-elevated) !important;
+	background-color: var(--app-surface-elevated) !important;
 }
 
 .app-shell[data-theme="light"] .section-header,
@@ -153,57 +157,57 @@
 .app-shell[data-theme="light"] .init-project-section p,
 .app-shell[data-theme="light"] .search-result-description,
 .app-shell[data-theme="light"] .metadata-display > div > span {
-  color: var(--app-text-soft) !important;
+	color: var(--app-text-soft) !important;
 }
 
 .app-shell[data-theme="light"] .search-input,
 .app-shell[data-theme="light"] .file-entry-input input,
 .app-shell[data-theme="light"] .rename-input {
-  background-color: var(--app-surface-elevated) !important;
-  color: var(--app-text) !important;
+	background-color: var(--app-surface-elevated) !important;
+	color: var(--app-text) !important;
 }
 
 .app-shell[data-theme="light"] .file-entry-input input,
 .app-shell[data-theme="light"] .rename-input {
-  border-color: var(--ifm-color-primary) !important;
+	border-color: var(--ifm-color-primary) !important;
 }
 
 .app-shell[data-theme="light"] .var-name,
 .app-shell[data-theme="light"] .ch-name,
 .app-shell[data-theme="light"] .error-display .file-link {
-  color: #0f6bbd !important;
+	color: #0f6bbd !important;
 }
 
 .app-shell[data-theme="light"] .var-value,
 .app-shell[data-theme="light"] .ch-vals,
 .app-shell[data-theme="light"] .msg-val,
 .app-shell[data-theme="light"] .project-version {
-  color: #b65c1b !important;
+	color: #b65c1b !important;
 }
 
 .app-shell[data-theme="light"] .process-name {
-  color: #18796a !important;
+	color: #18796a !important;
 }
 
 .app-shell[data-theme="light"] .message-endpoint.from {
-  background: #cfe8fb !important;
-  color: #0f6bbd !important;
+	background: #cfe8fb !important;
+	color: #0f6bbd !important;
 }
 
 .app-shell[data-theme="light"] .message-endpoint.to {
-  background: #d8efe7 !important;
-  color: #18796a !important;
+	background: #d8efe7 !important;
+	color: #18796a !important;
 }
 
 .app-shell[data-theme="light"] .channel-name {
-  color: #8f6500 !important;
+	color: #8f6500 !important;
 }
 
 .app-shell[data-theme="light"] .search-highlight {
-  color: #2c2115 !important;
+	color: #2c2115 !important;
 }
 
 .app-shell[data-theme="light"] .graph-toolbar button,
 .app-shell[data-theme="light"] .theme-toggle-button {
-  box-shadow: 0 8px 22px rgba(121, 89, 46, 0.10);
+	box-shadow: 0 8px 22px rgba(121, 89, 46, 0.1);
 }

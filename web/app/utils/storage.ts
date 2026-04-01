@@ -1,90 +1,93 @@
-import type { FileSystemEntry } from '@components/fileexplorer/FileExplorer';
+import type { FileSystemEntry } from "@components/fileexplorer/FileExplorer";
 
 export const STORAGE_KEYS = {
-  FILE_SYSTEM: 'althread-file-system',
-  FILE_CONTENT_PREFIX: 'althread-file-content-',
-  EDITOR_THEME: 'althread-editor-theme'
+	FILE_SYSTEM: "althread-file-system",
+	FILE_CONTENT_PREFIX: "althread-file-content-",
+	EDITOR_THEME: "althread-editor-theme",
 };
 
-export type EditorTheme = 'dark' | 'light';
+export type EditorTheme = "dark" | "light";
 
 export const saveFileSystem = (fileSystem: FileSystemEntry[]) => {
-  localStorage.setItem(STORAGE_KEYS.FILE_SYSTEM, JSON.stringify(fileSystem));
+	localStorage.setItem(STORAGE_KEYS.FILE_SYSTEM, JSON.stringify(fileSystem));
 };
 
 export const loadFileSystem = (): FileSystemEntry[] => {
-  const stored = localStorage.getItem(STORAGE_KEYS.FILE_SYSTEM);
-  
-  // Helper to add unique IDs to entries if they don't have them
-  const addIds = (entries: any[]): FileSystemEntry[] => {
-    return entries.map(entry => ({
-      ...entry,
-      id: entry.id || crypto.randomUUID(),
-      children: entry.children ? addIds(entry.children) : undefined
-    }));
-  };
+	const stored = localStorage.getItem(STORAGE_KEYS.FILE_SYSTEM);
 
-  if (stored) {
-    return addIds(JSON.parse(stored));
-  }
-  // Default file system if nothing stored
-  return addIds([
-    { name: 'main.alt', type: 'file' }
-  ]);
+	// Helper to add unique IDs to entries if they don't have them
+	const addIds = (entries: any[]): FileSystemEntry[] => {
+		return entries.map((entry) => ({
+			...entry,
+			id: entry.id || crypto.randomUUID(),
+			children: entry.children ? addIds(entry.children) : undefined,
+		}));
+	};
+
+	if (stored) {
+		return addIds(JSON.parse(stored));
+	}
+	// Default file system if nothing stored
+	return addIds([{ name: "main.alt", type: "file" }]);
 };
 
 export const saveFileContent = (fileName: string, content: string) => {
-  localStorage.setItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + fileName, content);
+	localStorage.setItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + fileName, content);
 };
 
 export const loadFileContent = (fileName: string): string => {
-  const content = localStorage.getItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + fileName);
-  if (content !== null) {
-    return content;
-  }
-  
-  // Default content for main entrypoint
-  if (fileName === 'main.alt') {
-    const defaultMain = `// Althread program\n\nmain {\n    // write your code here\n}\n`;
-    localStorage.setItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + 'main.alt', defaultMain);
-    return defaultMain;
-  }
-  
-  return '// New file\n';
+	const content = localStorage.getItem(
+		STORAGE_KEYS.FILE_CONTENT_PREFIX + fileName,
+	);
+	if (content !== null) {
+		return content;
+	}
+
+	// Default content for main entrypoint
+	if (fileName === "main.alt") {
+		const defaultMain = `// Althread program\n\nmain {\n    // write your code here\n}\n`;
+		localStorage.setItem(
+			STORAGE_KEYS.FILE_CONTENT_PREFIX + "main.alt",
+			defaultMain,
+		);
+		return defaultMain;
+	}
+
+	return "// New file\n";
 };
 
 export const getDefaultContentForFile = (fileName: string): string => {
-  const extension = fileName.split('.').pop()?.toLowerCase();
-  
-  switch (extension) {
-    case 'js':
-    case 'jsx':
-      return '// JavaScript file\nconsole.log("Hello, World!");';
-    case 'ts':
-    case 'tsx':
-      return '// TypeScript file\nconsole.log("Hello, World!");';
-    case 'py':
-      return '# Python file\nprint("Hello, World!")';
-    case 'html':
-      return '<!DOCTYPE html>\n<html>\n<head>\n    <title>Document</title>\n</head>\n<body>\n    \n</body>\n</html>';
-    case 'css':
-      return '/* CSS file */\nbody {\n    margin: 0;\n    padding: 0;\n}';
-    case 'json':
-      return '{\n    "name": "example",\n    "version": "1.0.0"\n}';
-    case 'md':
-      return '# Markdown File\n\nThis is a markdown document.';
-    case 'alt':
-      return '// Althread file\n\nmain {\n\n}\n';
-    default:
-      return '// New file\n';
-  }
+	const extension = fileName.split(".").pop()?.toLowerCase();
+
+	switch (extension) {
+		case "js":
+		case "jsx":
+			return '// JavaScript file\nconsole.log("Hello, World!");';
+		case "ts":
+		case "tsx":
+			return '// TypeScript file\nconsole.log("Hello, World!");';
+		case "py":
+			return '# Python file\nprint("Hello, World!")';
+		case "html":
+			return "<!DOCTYPE html>\n<html>\n<head>\n    <title>Document</title>\n</head>\n<body>\n    \n</body>\n</html>";
+		case "css":
+			return "/* CSS file */\nbody {\n    margin: 0;\n    padding: 0;\n}";
+		case "json":
+			return '{\n    "name": "example",\n    "version": "1.0.0"\n}';
+		case "md":
+			return "# Markdown File\n\nThis is a markdown document.";
+		case "alt":
+			return "// Althread file\n\nmain {\n\n}\n";
+		default:
+			return "// New file\n";
+	}
 };
 
 export const saveEditorTheme = (theme: EditorTheme) => {
-  localStorage.setItem(STORAGE_KEYS.EDITOR_THEME, theme);
+	localStorage.setItem(STORAGE_KEYS.EDITOR_THEME, theme);
 };
 
 export const loadEditorTheme = (): EditorTheme => {
-  const stored = localStorage.getItem(STORAGE_KEYS.EDITOR_THEME);
-  return stored === 'light' ? 'light' : 'dark';
+	const stored = localStorage.getItem(STORAGE_KEYS.EDITOR_THEME);
+	return stored === "light" ? "light" : "dark";
 };

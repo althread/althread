@@ -1,9 +1,9 @@
-import { type TutorialStep } from '@components/tutorial/Tutorial';
+import type { TutorialStep } from "@components/tutorial/Tutorial";
 
 export const tutorial: TutorialStep = {
-  name: "variables",
-  displayName: "1. Variables",
-  content: `
+	name: "variables",
+	displayName: "1. Variables",
+	content: `
 # 1. Variables in Althread
 
 Althread supports two main types of variables: local and shared.
@@ -38,7 +38,7 @@ main {
 
 Try declaring one local variable \`count\` initialized to \`5\` and one shared variable \`STATUS_MESSAGE\` of type \`string\` initialized to \`"Pending"\`.
   `,
-  defaultCode: `
+	defaultCode: `
 // Declare a shared block with a STATUS_MESSAGE variable
 
 main {
@@ -47,16 +47,29 @@ main {
     // print(count);
     // print(STATUS_MESSAGE);
 }`,
-  validate: (code: string) => {
-    const hasLocalVar = /(let|const)\s+count\s*=\s*5;/.test(code);
-    const hasSharedVarInBlock = /shared\s*{[^}]*(let|const)\s+STATUS_MESSAGE\s*(:\s*string\s*)?=\s*"Pending";[^}]*}/s.test(code);
+	validate: (code: string) => {
+		const hasLocalVar = /(let|const)\s+count\s*=\s*5;/.test(code);
+		const hasSharedVarInBlock =
+			/shared\s*{[^}]*(let|const)\s+STATUS_MESSAGE\s*(:\s*string\s*)?=\s*"Pending";[^}]*}/s.test(
+				code,
+			);
 
-    if (hasLocalVar && hasSharedVarInBlock) {
-        return { success: true, message: "Excellent! Both local and shared variables declared correctly." };
-    }
-    let missing = [];
-    if (!hasLocalVar) missing.push("local variable 'count = 5'");
-    if (!hasSharedVarInBlock) missing.push("shared variable 'STATUS_MESSAGE: string = \"Pending\"' inside a shared block");
-    return { success: false, message: `Looks like you're missing: ${missing.join(', ')}.` };
-  }
+		if (hasLocalVar && hasSharedVarInBlock) {
+			return {
+				success: true,
+				message:
+					"Excellent! Both local and shared variables declared correctly.",
+			};
+		}
+		const missing = [];
+		if (!hasLocalVar) missing.push("local variable 'count = 5'");
+		if (!hasSharedVarInBlock)
+			missing.push(
+				"shared variable 'STATUS_MESSAGE: string = \"Pending\"' inside a shared block",
+			);
+		return {
+			success: false,
+			message: `Looks like you're missing: ${missing.join(", ")}.`,
+		};
+	},
 };

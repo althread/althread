@@ -1,9 +1,9 @@
-import { type TutorialStep } from '@components/tutorial/Tutorial';
+import type { TutorialStep } from "@components/tutorial/Tutorial";
 
 export const tutorial: TutorialStep = {
-  name: "programs",
-  displayName: "6. Programs (Creation & Execution)",
-  content: `
+	name: "programs",
+	displayName: "6. Programs (Creation & Execution)",
+	content: `
 # 6. Programs: Creation and Execution
 
 In Althread, concurrent units of execution are called **programs**. You define a program using the \`program\` keyword, followed by its name, its arguments, and a block of code.
@@ -28,24 +28,39 @@ The \`main\` block itself is the entry point of your Althread application and ca
 
 Define a program named \`Greeter\` that prints "Hello from Greeter program!". Then, in the \`main\` block, run this \`Greeter\` program twice.
   `,
-  defaultCode: `// Define the Greeter program here
+	defaultCode: `// Define the Greeter program here
 
 main {
     // Run the Greeter program twice
 }`,
-  validate: (code: string) => {
-    const definesGreeter = /program\s+Greeter\s*\(\s*\)\s*{[\s\S]*print\("Hello from Greeter program!"\);[\s\S]*}/s.test(code);
-    const runCount = (code.match(/run\s+Greeter\s*\(\s*\);/g) || []).length;
-    const runsGreeterTwice = runCount >= 2;
-    const runInMain = /main\s*{[\s\S]*(run\s+Greeter\s*\(\s*\)\s*;[\s\S]*run\s+Greeter\s*\(\s*\);|run\s+Greeter\s*\(\s*\);[^}]*run\s+Greeter\s*\(\s*\)\s*;)[\s\S]*}/s.test(code);
+	validate: (code: string) => {
+		const definesGreeter =
+			/program\s+Greeter\s*\(\s*\)\s*{[\s\S]*print\("Hello from Greeter program!"\);[\s\S]*}/s.test(
+				code,
+			);
+		const runCount = (code.match(/run\s+Greeter\s*\(\s*\);/g) || []).length;
+		const runsGreeterTwice = runCount >= 2;
+		const runInMain =
+			/main\s*{[\s\S]*(run\s+Greeter\s*\(\s*\)\s*;[\s\S]*run\s+Greeter\s*\(\s*\);|run\s+Greeter\s*\(\s*\);[^}]*run\s+Greeter\s*\(\s*\)\s*;)[\s\S]*}/s.test(
+				code,
+			);
 
-    if (definesGreeter && runsGreeterTwice && runInMain) {
-        return { success: true, message: "Program defined and run correctly!" };
-    }
-    let issues = [];
-    if (!definesGreeter) issues.push("definition of 'Greeter' program that prints the message 'Hello from Greeter program!'");
-    if (!runsGreeterTwice) issues.push(`running 'Greeter' program at least twice (found ${runCount} runs)`);
-    else if (!runInMain) issues.push("ensuring both 'run Greeter();' commands are within the main block");
-    return { success: false, message: `Please check: ${issues.join(', ')}.` };
-  }
+		if (definesGreeter && runsGreeterTwice && runInMain) {
+			return { success: true, message: "Program defined and run correctly!" };
+		}
+		const issues = [];
+		if (!definesGreeter)
+			issues.push(
+				"definition of 'Greeter' program that prints the message 'Hello from Greeter program!'",
+			);
+		if (!runsGreeterTwice)
+			issues.push(
+				`running 'Greeter' program at least twice (found ${runCount} runs)`,
+			);
+		else if (!runInMain)
+			issues.push(
+				"ensuring both 'run Greeter();' commands are within the main block",
+			);
+		return { success: false, message: `Please check: ${issues.join(", ")}.` };
+	},
 };
