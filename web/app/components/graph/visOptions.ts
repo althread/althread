@@ -78,11 +78,6 @@ const lightTheme = {
 			},
 		},
 	},
-	edges: {
-		font: {
-			color: "#3d3228",
-		},
-	},
 };
 
 const darkTheme = {
@@ -120,11 +115,6 @@ const darkTheme = {
 			multi: "markdown",
 			bold: { color: THEME_PRIMARY },
 			ital: { color: "#a0a0a0", size: 11 },
-		},
-	},
-	edges: {
-		font: {
-			color: "#cccccc",
 		},
 	},
 };

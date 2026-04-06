@@ -273,13 +273,6 @@
 	color: var(--app-text-muted);
 }
 
-.validation-message.error {
-	padding: 1rem;
-	background-color: var(--app-accent-red-bg);
-	border: 1px solid var(--app-accent-red-border);
-	color: var(--app-text-muted);
-}
-
 .console pre {
 	padding: 1rem;
 	margin: 0;

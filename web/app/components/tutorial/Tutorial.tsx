@@ -213,14 +213,6 @@ const Tutorial: Component = () => {
 		}
 	});
 
-	// Effect to update editor theme when theme changes
-	createEffect(() => {
-		const currentTheme = theme();
-		if (editorInstance && editorInstance.updateTheme) {
-			editorInstance.updateTheme(currentTheme);
-		}
-	});
-
 	// Track read-only editors for theme updates
 	const readOnlyEditors: any[] = [];
 
@@ -318,6 +310,14 @@ const Tutorial: Component = () => {
 			view.dispatch({
 				changes: { from: 0, to: view.state.doc.length, insert: signalCode },
 			});
+		}
+	});
+
+	// Effect to update editor theme when theme changes
+	createEffect(() => {
+		const currentTheme = theme();
+		if (editorInstance && editorInstance.updateTheme) {
+			editorInstance.updateTheme(currentTheme);
 		}
 	});
 
