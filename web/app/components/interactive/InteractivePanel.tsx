@@ -18,16 +18,15 @@ interface InteractivePanelProps {
 	onExecuteStep: (index: number) => void;
 	onClose: () => void;
 	onReset: () => void;
-	// Add the same props that the main app uses
 	stdout?: string;
 	commGraphOut?: any[];
 	vmStates?: any[];
 	isRun?: boolean;
-	// Interactive-specific data
 	interactiveMessageFlow?: any[];
 	interactiveVmStates?: any[];
 	interactiveStepLines?: number[][];
 	editor?: any;
+	theme?: "dark" | "light";
 }
 
 export default function InteractivePanel(props: InteractivePanelProps) {
@@ -280,6 +279,7 @@ export default function InteractivePanel(props: InteractivePanelProps) {
 							props.interactiveVmStates || [],
 							props.editor,
 							props.interactiveStepLines,
+							props.theme || "dark",
 						)}
 					</div>
 				);

@@ -1,12 +1,11 @@
 import createEditor from "@components/editor/Editor";
 import { marked } from "marked";
 import type { Component } from "solid-js";
-import { createEffect, createSignal, For } from "solid-js";
+import { createEffect, createSignal, For, onMount } from "solid-js";
 import "./Tutorial.css";
 import { Logo } from "@assets/images/Logo";
 import Resizable from "@corvu/resizable";
 import { useNavigate, useParams } from "@solidjs/router";
-
 // Import all tutorials
 import { tutorial as tutorialStep1 } from "@tutorials/TutorialStep1_Variables";
 import { tutorial as tutorialStep2 } from "@tutorials/TutorialStep2_IfElse";
@@ -19,6 +18,7 @@ import { tutorial as tutorialStep8 } from "@tutorials/TutorialStep8_Channels";
 import { tutorial as tutorialStep9 } from "@tutorials/TutorialStep9_Imports";
 import { tutorial as tutorialStep10 } from "@tutorials/TutorialStep10_WaitFirst";
 import { formatAlthreadError } from "@utils/error";
+import { loadEditorTheme, saveEditorTheme } from "@utils/storage";
 import { workerClient } from "@utils/workerClient";
 
 // Helper function to create the virtual filesystem for the tutorial
@@ -96,6 +96,15 @@ const Tutorial: Component = () => {
 	const params = useParams();
 	const navigate = useNavigate();
 
+	const [theme, setTheme] = createSignal<"dark" | "light">(loadEditorTheme());
+
+	onMount(() => {
+		const currentTheme = loadEditorTheme();
+		setTheme(currentTheme);
+		document.documentElement.dataset.theme = currentTheme;
+		document.body.dataset.theme = currentTheme;
+	});
+
 	const findIndexFromParam = (param: string | undefined): number => {
 		if (!param) return 0; // Default to first tutorial
 		const index = tutorialOrder.findIndex(
@@ -152,6 +161,20 @@ const Tutorial: Component = () => {
 		}
 	});
 
+	createEffect(() => {
+		const currentTheme = theme();
+		document.documentElement.dataset.theme = currentTheme;
+		document.body.dataset.theme = currentTheme;
+	});
+
+	const toggleTheme = () => {
+		setTheme((prev) => {
+			const next = prev === "dark" ? "light" : "dark";
+			saveEditorTheme(next);
+			return next;
+		});
+	};
+
 	// Effect to update content and code when currentTutorialIndex changes
 	createEffect(() => {
 		const tutorialKey = tutorialOrder[currentTutorialIndex()];
@@ -179,8 +202,6 @@ const Tutorial: Component = () => {
 	// Effect to save code to LocalStorage when it changes
 	createEffect(() => {
 		const currentCode = code();
-		// Ensure tutorialOrder[currentTutorialIndex()] is valid before saving
-		// and currentCode is not undefined (initial state might be)
 		if (
 			tutorialOrder[currentTutorialIndex()] &&
 			typeof currentCode === "string"
@@ -192,14 +213,15 @@ const Tutorial: Component = () => {
 		}
 	});
 
+	// Track read-only editors for theme updates
+	const readOnlyEditors: any[] = [];
+
 	// Function to create and render tutorial content with embedded read-only CodeMirror editors
 	const renderTutorialContent = (markdownContent: string): string => {
-		// First, process the markdown to find code blocks
 		const codeBlockRegex = /```althread\n([\s\S]*?)\n```/g;
 		let processedContent = markdownContent;
 		const codeBlocks: { id: string; code: string }[] = [];
 
-		// Extract code blocks and replace with placeholders
 		let match;
 		let blockIndex = 0;
 		while ((match = codeBlockRegex.exec(markdownContent)) !== null) {
@@ -207,7 +229,6 @@ const Tutorial: Component = () => {
 			const code = match[1];
 			codeBlocks.push({ id: blockId, code });
 
-			// Replace the code block with a placeholder div
 			processedContent = processedContent.replace(
 				match[0],
 				`<div id="${blockId}" class="tutorial-code-block"></div>`,
@@ -215,50 +236,63 @@ const Tutorial: Component = () => {
 			blockIndex++;
 		}
 
-		// Convert markdown to HTML
 		const htmlContent = marked(processedContent) as string;
 
-		// After the HTML is rendered to the DOM, create CodeMirror editors
 		setTimeout(() => {
+			// Destroy previous editors to prevent memory leaks
+			readOnlyEditors.forEach((editor) => {
+				const view = editor.safeEditorView();
+				if (view) {
+					view.destroy();
+				}
+			});
+			readOnlyEditors.length = 0;
 			codeBlocks.forEach(({ id, code }) => {
 				const container = document.getElementById(id);
 				if (container) {
-					// Clear any existing content
 					container.innerHTML = "";
 
-					// Create a read-only editor instance
 					const readOnlyEditor = createEditor({
 						defaultValue: code,
-						onValueChange: undefined, // No change handler for read-only
-						compile: () => {}, // No compilation needed for read-only examples
+						onValueChange: undefined,
+						compile: () => Promise.resolve(),
 						filePath: "example.alt",
+						theme: theme(),
 					});
 
-					// Create a wrapper div to mount the editor
 					const editorWrapper = document.createElement("div");
 					container.appendChild(editorWrapper);
 
-					// Use the ref setter to mount the editor
 					readOnlyEditor.ref(editorWrapper);
 
-					// Set to read-only mode AFTER mounting
+					readOnlyEditors.push(readOnlyEditor);
+
 					setTimeout(() => {
 						readOnlyEditor.setReadOnly(true);
 
-						// Clear any selection that might occur on initialization
 						const view = readOnlyEditor.safeEditorView();
 						if (view) {
 							view.dispatch({
 								selection: { anchor: 0, head: 0 },
 							});
 						}
-					}, 50); // Increased delay to ensure editor is fully mounted
+					}, 50);
 				}
 			});
-		}, 10); // Small delay to ensure DOM is updated
+		}, 10);
 
 		return htmlContent;
 	};
+
+	// Effect to update read-only editors when theme changes
+	createEffect(() => {
+		const currentTheme = theme();
+		readOnlyEditors.forEach((editor) => {
+			if (editor.updateTheme) {
+				editor.updateTheme(currentTheme);
+			}
+		});
+	});
 
 	const compileFromEditor = async (currentEditorCode: string) => {
 		const virtualFS = getTutorialVirtualFS(currentEditorCode);
@@ -266,11 +300,12 @@ const Tutorial: Component = () => {
 	};
 
 	const editorInstance = createEditor({
-		defaultValue: code(), // Initialize with current code signal
+		defaultValue: code(),
 		onValueChange: (newCode) => {
-			setCode(newCode); // Update signal, which triggers save effect
+			setCode(newCode);
 		},
 		compile: compileFromEditor,
+		theme: theme(),
 	});
 
 	// Effect to synchronize the editor view if the code signal changes programmatically
@@ -282,6 +317,14 @@ const Tutorial: Component = () => {
 			view.dispatch({
 				changes: { from: 0, to: view.state.doc.length, insert: signalCode },
 			});
+		}
+	});
+
+	// Effect to update editor theme when theme changes
+	createEffect(() => {
+		const currentTheme = theme();
+		if (editorInstance && editorInstance.updateTheme) {
+			editorInstance.updateTheme(currentTheme);
 		}
 	});
 
@@ -382,6 +425,13 @@ const Tutorial: Component = () => {
 				</div>
 				{/* Placeholder for right-aligned actions if needed */}
 				<div class="actions-placeholder">
+					<button
+						class="vscode-button theme-toggle-button"
+						title={`Switch to ${theme() === "dark" ? "light" : "dark"} theme`}
+						onClick={toggleTheme}
+					>
+						Theme: {theme() === "dark" ? "Dark" : "Light"}
+					</button>
 					<button
 						onClick={() => {
 							navigate("/");

@@ -1,6 +1,6 @@
 .file-explorer {
-	background-color: #1e1e1e;
-	color: #cccccc;
+	background-color: var(--app-surface);
+	color: var(--app-text-muted);
 	height: 100%;
 	display: flex;
 	flex-direction: column;
@@ -21,9 +21,9 @@
 	padding: 8px 12px;
 	text-transform: uppercase;
 	font-size: 10px;
-	color: #cccccc;
+	color: var(--app-text-muted);
 	flex-shrink: 0;
-	border-bottom: 1px solid #333333;
+	border-bottom: 1px solid var(--app-border);
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
@@ -44,6 +44,28 @@
 	gap: 4px;
 }
 
+.header-action-btn {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 6px;
+	font-size: 11px;
+	transition: background-color 0.2s;
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+.header-action-btn span {
+	font-size: 10px;
+	font-weight: normal;
+	white-space: nowrap;
+}
+
+.header-action-btn i {
+	font-size: 12px;
+	flex-shrink: 0;
+}
+
 .file-explorer-actions .header-action-btn {
 	position: relative;
 }
@@ -54,22 +76,22 @@
 	left: 50%;
 	top: calc(100% + 4px);
 	transform: translateX(-50%);
-	background: #2d2d2d;
-	color: #fff;
+	background: var(--app-tooltip-bg);
+	color: var(--app-tooltip-text);
 	padding: 4px 8px;
 	border-radius: 4px;
 	font-size: 12px;
 	white-space: nowrap;
 	z-index: 1001;
-	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
-	border: 1px solid #454545;
+	box-shadow: 0 4px 12px var(--app-shadow-xl);
+	border: 1px solid var(--app-border-strong);
 	pointer-events: none;
 }
 
 .file-explorer-actions button {
 	background: none;
 	border: none;
-	color: #cccccc;
+	color: var(--app-text-muted);
 	cursor: pointer;
 	padding: 2px;
 	margin-left: 0;
@@ -79,7 +101,7 @@
 }
 
 .file-explorer-actions button:hover {
-	background-color: #3c3c3c;
+	background-color: var(--app-surface-hover);
 }
 
 .file-explorer-actions button:disabled {
@@ -110,11 +132,11 @@
 }
 
 .file-explorer-content:hover::-webkit-scrollbar-thumb {
-	background: rgba(85, 85, 85, 0.6);
+	background: var(--app-scrollbar);
 }
 
 .file-explorer-content::-webkit-scrollbar-thumb:hover {
-	background: rgba(102, 102, 102, 0.8);
+	background: var(--app-scrollbar-hover);
 }
 
 .file,
@@ -126,7 +148,6 @@
 	user-select: none;
 	white-space: nowrap;
 	height: 26px;
-	/* FIXED height to prevent ANY changes during rename */
 	box-sizing: border-box;
 	border: 1px solid transparent;
 	border-left: 0;
@@ -146,13 +167,22 @@
 
 .file:hover,
 .directory-header:hover {
-	background-color: #2d2d2d;
+	background-color: var(--app-surface-hover);
 }
 
 .file.active {
-	background-color: #232323;
-	border: 1px solid #3c3c3c;
+	background-color: var(--app-surface-muted);
+	border: 1px solid var(--app-surface-hover);
 	border-left: 0;
+}
+
+.file.has-context-menu,
+.file.active.has-context-menu {
+	background-color: var(--app-context-menu-hover);
+}
+
+.file.has-context-menu:hover {
+	background-color: var(--app-surface-hover);
 }
 
 .file .codicon,
@@ -252,7 +282,6 @@
 .file-entry-input {
 	display: flex;
 	align-items: center;
-	/* Use same padding as files and directory headers */
 	padding: 4px 0 4px 10px;
 }
 
@@ -266,8 +295,8 @@
 }
 
 .file-entry-input input {
-	background-color: #1e1e1e;
-	color: #cccccc;
+	background-color: var(--app-surface-elevated);
+	color: var(--app-text-muted);
 	border: 1px solid var(--ifm-color-primary);
 	outline: none;
 	width: 100%;
@@ -278,8 +307,8 @@
 
 /* Rename input styling - use same as creation input */
 .rename-input {
-	background-color: #1e1e1e;
-	color: #cccccc;
+	background-color: var(--app-surface-elevated);
+	color: var(--app-text-muted);
 	border: 1px solid var(--ifm-color-primary);
 	outline: none;
 	width: 100%;
@@ -294,13 +323,13 @@
 
 /* Drag and drop styles */
 .file-explorer.drag-over {
-	outline: 2px dashed #3794ff;
+	outline: 2px dashed var(--app-accent-blue-selection);
 	outline-offset: -2px;
 }
 
 .directory.drag-over {
-	background-color: #2a2d2e;
-	border-left: 3px solid #3794ff;
+	background-color: var(--app-surface-elevated);
+	border-left: 3px solid var(--app-accent-blue-selection);
 }
 
 .file.dragging,
@@ -311,8 +340,8 @@
 /* Multi-select styles */
 .file.selected,
 .directory.selected > .directory-header {
-	background-color: #094771;
-	border: 1px solid #3794ff;
+	background-color: var(--app-accent-blue-deep);
+	border: 1px solid var(--app-accent-blue-selection);
 	border-left: 0;
 }
 
@@ -340,7 +369,7 @@
 
 .file.selected:hover,
 .directory.selected > .directory-header:hover {
-	background-color: #0e5a8a;
+	background-color: var(--app-accent-blue-hover);
 }
 
 /* Improve chevron click area */
@@ -354,57 +383,46 @@
 
 .directory-header .codicon-chevron-down:hover,
 .directory-header .codicon-chevron-right:hover {
-	background-color: #3c3c3c;
+	background-color: var(--app-surface-hover);
 }
 
 .file-entry-error {
-	color: #d8d7d7;
-	background: #821910;
-	border: 1px solid #e22a19;
+	color: var(--app-text);
+	background: var(--app-accent-red-deep);
+	border: 1px solid var(--app-accent-red);
 	padding: 4px 8px;
 	font-size: 0.95em;
 	box-shadow: 0 2px 8px rgba(229, 20, 0, 0.15);
 	position: absolute;
 	top: 100%;
-	/* Position below the input */
 	z-index: 1000;
-	/* Ensure it's above other content */
 	word-wrap: break-word;
-	/* Allow text to wrap */
 	white-space: normal;
-	/* Allow text to wrap */
 }
 
 /* Error positioning for creation inputs (with proper nesting) */
 .file-entry-input ~ .file-entry-error {
 	left: 32px;
-	/* Align with creation input text (10px padding + 16px icon + 6px margin) */
 	right: 0;
 }
 
 /* Error positioning for rename inputs (no nesting, in-place) */
 .file-entry-rename-input ~ .file-entry-error {
 	left: 22px;
-	/* Align with rename input text (0px padding + 16px icon + 6px margin) */
 	right: 0;
 }
 
 .file-entry-input-wrapper:has(.file-entry-error) input {
-	border: 1px solid #e22a19;
+	border: 1px solid var(--app-accent-red);
 }
 
 /* File entry input wrapper (needed for error positioning) */
 .file-entry-input-wrapper {
 	position: relative;
-	/* Reset any padding that might be inherited from directory nesting */
 	padding: 0;
-	/* Take full width when renaming */
 	flex: 1;
 	display: flex;
 	flex-direction: column;
-	/* Don't inherit directory nesting - rename in place */
-	margin-left: 0 !important;
-	padding-left: 0 !important;
 }
 
 /* Only apply nesting to creation inputs, not rename inputs */
@@ -416,7 +434,6 @@
 .file-entry-rename-input {
 	display: flex;
 	align-items: center;
-	/* Use same padding as files and directory headers but no nesting */
 	padding: 4px 0 4px 0;
 }
 
@@ -426,8 +443,7 @@
 
 /* Override nesting for rename inputs specifically */
 .directory-children .file-entry-input-wrapper .file-entry-rename-input {
-	padding-left: 0 !important;
-	padding: 4px 0 4px 0 !important;
+	padding: 4px 0 4px 0;
 }
 
 /* Confirmation Dialog Styles */
@@ -437,7 +453,7 @@
 	left: 0;
 	right: 0;
 	bottom: 0;
-	background-color: rgba(0, 0, 0, 0.6);
+	background-color: var(--app-overlay-bg);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -446,13 +462,13 @@
 }
 
 .confirmation-dialog {
-	background-color: #1e1e1e;
-	border: 1px solid #333333;
+	background-color: var(--app-surface);
+	border: 1px solid var(--app-border);
 	border-radius: 3px;
 	min-width: 400px;
 	max-width: 500px;
-	color: #cccccc;
-	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+	color: var(--app-text-muted);
+	box-shadow: 0 8px 32px var(--app-shadow-lg);
 	font-family:
 		system-ui,
 		-apple-system,
@@ -471,33 +487,33 @@
 	padding: 16px;
 	font-size: 14px;
 	font-weight: normal;
-	color: #ffffff;
-	border-bottom: 1px solid #333333;
+	color: var(--app-text);
+	border-bottom: 1px solid var(--app-border);
 	margin-bottom: 0;
 }
 
 .confirmation-dialog-header .codicon {
 	margin-right: 10px;
 	font-size: 16px;
-	color: #cccccc;
+	color: var(--app-text-muted);
 }
 
 .confirmation-dialog-body {
 	padding: 16px;
 	line-height: 1.5;
 	font-size: 13px;
-	color: #cccccc;
+	color: var(--app-text-muted);
 }
 
 .confirmation-dialog-file-name {
 	font-family:
 		"SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New",
 		monospace;
-	background-color: #252526;
+	background-color: var(--app-surface-muted);
 	padding: 2px 6px;
 	border-radius: 3px;
 	color: var(--ifm-color-primary);
-	border: 1px solid #3c3c3c;
+	border: 1px solid var(--app-surface-hover);
 }
 
 .confirmation-dialog-actions {
@@ -505,8 +521,8 @@
 	gap: 16px;
 	justify-content: center;
 	padding: 16px 16px 16px 16px;
-	border-top: 1px solid #333333;
-	background-color: #252526;
+	border-top: 1px solid var(--app-border);
+	background-color: var(--app-surface-muted);
 }
 
 .confirmation-dialog-actions button {
@@ -514,7 +530,7 @@
 	align-items: center;
 	justify-content: center;
 	padding: 6px 14px;
-	border: 1px solid #3c3c3c;
+	border: 1px solid var(--app-surface-hover);
 	border-radius: 3px;
 	cursor: pointer;
 	font-size: 13px;
@@ -529,7 +545,7 @@
 
 .confirmation-dialog-actions .button-primary {
 	background-color: var(--ifm-color-primary);
-	color: #ffffff;
+	color: var(--app-tooltip-text);
 	border-color: var(--ifm-color-primary-darker);
 }
 
@@ -540,40 +556,40 @@
 
 .confirmation-dialog-actions .button-primary:focus {
 	outline: none;
-	box-shadow: 0 0 0 1px rgba(14, 99, 156, 0.3);
+	box-shadow: 0 0 0 1px var(--app-focus-border);
 }
 
 .confirmation-dialog-actions .button-secondary {
-	background-color: #2d2d2d;
-	color: #cccccc;
-	border-color: #3c3c3c;
+	background-color: var(--app-surface-hover);
+	color: var(--app-text-muted);
+	border-color: var(--app-surface-hover);
 }
 
 .confirmation-dialog-actions .button-secondary:hover {
-	background-color: #3d3d3d;
-	border-color: #464647;
+	background-color: var(--app-surface-elevated);
+	border-color: var(--app-border-strong);
 }
 
 .confirmation-dialog-actions .button-secondary:focus {
 	outline: none;
-	box-shadow: 0 0 0 1px rgba(14, 99, 156, 0.3);
+	box-shadow: 0 0 0 1px var(--app-focus-border);
 }
 
 /* Special styling for destructive actions */
 .confirmation-dialog-actions .button-destructive {
-	background-color: #c74e39;
-	color: #ffffff;
-	border-color: #c74e39;
+	background-color: var(--app-accent-red-deep);
+	color: var(--app-destructive-text);
+	border-color: var(--app-accent-red-deep);
 }
 
 .confirmation-dialog-actions .button-destructive:hover {
-	background-color: #d73527;
-	border-color: #d73527;
+	background-color: var(--app-accent-red-hover);
+	border-color: var(--app-accent-red-hover);
 }
 
 .confirmation-dialog-actions .button-destructive:focus {
 	outline: none;
-	box-shadow: 0 0 0 1px rgba(199, 78, 57, 0.3);
+	box-shadow: 0 0 0 1px var(--app-accent-red);
 }
 
 /* Button icons in dialogs */
@@ -634,10 +650,10 @@
 
 /* Context Menu Styles */
 .context-menu {
-	background-color: #252526;
-	border: 1px solid #454545;
+	background-color: var(--app-context-menu-bg);
+	border: 1px solid var(--app-border-strong);
 	border-radius: 4px;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	box-shadow: 0 2px 8px var(--app-shadow-md);
 	min-width: 120px;
 	padding: 4px 0;
 	font-size: 13px;
@@ -650,14 +666,15 @@
 	padding: 6px 12px;
 	background: none;
 	border: none;
-	color: #cccccc;
+	color: var(--app-text-muted);
 	cursor: pointer;
 	font-size: 13px;
 	text-align: left;
 }
 
 .context-menu button:hover {
-	background-color: #094771;
+	background-color: var(--app-context-menu-hover);
+	color: var(--app-text);
 }
 
 .context-menu button i {
@@ -665,32 +682,19 @@
 	font-size: 14px;
 }
 
+.context-menu .context-menu-delete-btn {
+	color: var(--app-accent-red);
+}
+
+.context-menu .context-menu-delete-btn:hover {
+	background-color: var(--app-accent-red-bg);
+	color: var(--app-accent-red-deep);
+}
+
 .context-menu-separator {
 	height: 1px;
-	background-color: #454545;
+	background-color: var(--app-border-strong);
 	margin: 4px 0;
-}
-
-.header-action-btn {
-	display: flex;
-	align-items: center;
-	gap: 4px;
-	padding: 4px 6px !important;
-	font-size: 11px !important;
-	transition: background-color 0.2s;
-	white-space: nowrap;
-	flex-shrink: 0;
-}
-
-.header-action-btn span {
-	font-size: 10px;
-	font-weight: normal;
-	white-space: nowrap;
-}
-
-.header-action-btn i {
-	font-size: 12px;
-	flex-shrink: 0;
 }
 
 /* Read-only items in deps directory */
