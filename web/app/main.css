@@ -20,6 +20,63 @@
 	--app-editor-readonly: #1a1a1a;
 	--app-scrollbar: rgba(85, 85, 85, 0.6);
 	--app-scrollbar-hover: rgba(102, 102, 102, 0.8);
+	--app-accent-blue: #007acc;
+	--app-accent-blue-light: #0e639c;
+	--app-accent-blue-deep: #094771;
+	--app-accent-blue-hover: #0e5a8a;
+	--app-accent-blue-selection: #3794ff;
+	--app-accent-green: #16825d;
+	--app-accent-green-light: #4caf50;
+	--app-accent-green-soft: #388a34;
+	--app-accent-red: #f44747;
+	--app-accent-red-border: #ec9999;
+	--app-accent-red-bg: #2a1a1a;
+	--app-accent-red-deep: #c74e39;
+	--app-accent-red-hover: #d73527;
+	--app-destructive-text: #ffffff;
+	--app-accent-orange: #ff9d00;
+	--app-accent-orange-glow: rgba(255, 157, 0, 0.9);
+	--app-syntax-string: #ce9178;
+	--app-syntax-number: #b5cea8;
+	--app-syntax-keyword: #569cd6;
+	--app-syntax-function: #dcdcaa;
+	--app-syntax-variable: #9cdcfe;
+	--app-syntax-type: #4ec9b0;
+	--app-syntax-comment: #6a9955;
+	--app-syntax-parameter: #c586c0;
+	--app-overlay-bg: rgba(0, 0, 0, 0.6);
+	--app-shadow-sm: rgba(0, 0, 0, 0.25);
+	--app-shadow-md: rgba(0, 0, 0, 0.3);
+	--app-shadow-lg: rgba(0, 0, 0, 0.5);
+	--app-shadow-xl: rgba(0, 0, 0, 0.6);
+	--app-tooltip-bg: #2d2d2d;
+	--app-tooltip-text: #ffffff;
+	--app-tooltip-border: #333;
+	--app-context-menu-bg: #252526;
+	--app-context-menu-hover: #094771;
+	--app-input-bg: #3c3c3c;
+	--app-input-border: #464647;
+	--app-input-focus-border: #0e639c;
+	--app-input-focus-glow: rgba(14, 99, 156, 0.3);
+	--app-code-bg: #2d2d30;
+	--app-info-bg: #1a2332;
+	--app-info-border: #2e4057;
+	--app-info-text: #9cdcfe;
+	--app-warn-bg: rgba(244, 71, 71, 0.15);
+	--app-warn-border: rgba(244, 71, 71, 0.3);
+	--app-success-bg: rgba(115, 200, 115, 0.15);
+	--app-success-border: rgba(115, 200, 115, 0.3);
+	--app-success-text: #73c873;
+	--app-hint-bg: rgba(14, 99, 156, 0.1);
+	--app-hint-border: rgba(14, 99, 156, 0.3);
+	--app-hint-text: #0e639c;
+	--app-tag-local-bg: rgba(99, 179, 237, 0.2);
+	--app-tag-local-text: #63b3ed;
+	--app-tag-remote-bg: rgba(104, 211, 145, 0.2);
+	--app-tag-remote-text: #68d391;
+	--app-icon-color: #c5c5c5;
+	--app-icon-muted: #858585;
+	--app-focus-border: rgba(14, 99, 156, 0.3);
 	background-color: var(--background-graphics);
 	color: var(--app-text);
 	font-family:
@@ -30,7 +87,6 @@
 		Ubuntu,
 		Cantarell,
 		Noto Sans,
-		sans-serif,
 		BlinkMacSystemFont,
 		"Segoe UI",
 		Helvetica,
@@ -50,12 +106,69 @@
 	--app-surface-elevated: #fffaf2;
 	--app-border: #d8c9b3;
 	--app-border-strong: #c9b69b;
-	--app-text: #312820;
-	--app-text-muted: #5f5142;
-	--app-text-soft: #8b7f72;
+	--app-text: #2a1f14;
+	--app-text-muted: #4a3d2f;
+	--app-text-soft: #6b5d4e;
 	--app-editor-readonly: #ede1cf;
-	--app-scrollbar: rgba(160, 132, 95, 0.42);
-	--app-scrollbar-hover: rgba(145, 113, 72, 0.58);
+	--app-scrollbar: rgba(140, 112, 75, 0.5);
+	--app-scrollbar-hover: rgba(120, 93, 56, 0.7);
+	--app-accent-blue: #0f6bbd;
+	--app-accent-blue-light: #0d5ca3;
+	--app-accent-blue-deep: #0a4d8a;
+	--app-accent-blue-hover: #0b5e9e;
+	--app-accent-blue-selection: #cfe8fb;
+	--app-accent-green: #18796a;
+	--app-accent-green-light: #1a8f7d;
+	--app-accent-green-soft: #156b5e;
+	--app-accent-red: #d73527;
+	--app-accent-red-border: #c73025;
+	--app-accent-red-bg: #fde8e6;
+	--app-accent-red-deep: #b82e22;
+	--app-accent-red-hover: #a8281d;
+	--app-destructive-text: #ffffff;
+	--app-accent-orange: #cc7d00;
+	--app-accent-orange-glow: rgba(204, 125, 0, 0.7);
+	--app-syntax-string: #8a4a0a;
+	--app-syntax-number: #6b5228;
+	--app-syntax-keyword: #0f6bbd;
+	--app-syntax-function: #6b4c00;
+	--app-syntax-variable: #0f6bbd;
+	--app-syntax-type: #18796a;
+	--app-syntax-comment: #4a7a38;
+	--app-syntax-parameter: #6b3d60;
+	--app-overlay-bg: rgba(0, 0, 0, 0.35);
+	--app-shadow-sm: rgba(121, 89, 46, 0.1);
+	--app-shadow-md: rgba(121, 89, 46, 0.16);
+	--app-shadow-lg: rgba(121, 89, 46, 0.2);
+	--app-shadow-xl: rgba(121, 89, 46, 0.25);
+	--app-tooltip-bg: #fffaf2;
+	--app-tooltip-text: #2a1f14;
+	--app-tooltip-border: #d8c9b3;
+	--app-context-menu-bg: #fffaf2;
+	--app-context-menu-hover: #cfe8fb;
+	--app-input-bg: #fffaf2;
+	--app-input-border: #c9b69b;
+	--app-input-focus-border: #0f6bbd;
+	--app-input-focus-glow: rgba(15, 107, 189, 0.2);
+	--app-code-bg: #f2e7d8;
+	--app-info-bg: #e8f0f7;
+	--app-info-border: #b3cde0;
+	--app-info-text: #0d5ca3;
+	--app-warn-bg: rgba(215, 53, 39, 0.1);
+	--app-warn-border: rgba(215, 53, 39, 0.25);
+	--app-success-bg: rgba(76, 175, 80, 0.1);
+	--app-success-border: rgba(76, 175, 80, 0.25);
+	--app-success-text: #2e7d32;
+	--app-hint-bg: rgba(15, 107, 189, 0.08);
+	--app-hint-border: rgba(15, 107, 189, 0.2);
+	--app-hint-text: #0d5ca3;
+	--app-tag-local-bg: rgba(15, 107, 189, 0.1);
+	--app-tag-local-text: #0f6bbd;
+	--app-tag-remote-bg: rgba(24, 121, 106, 0.1);
+	--app-tag-remote-text: #18796a;
+	--app-icon-color: #4a3d2f;
+	--app-icon-muted: #6b5d4e;
+	--app-focus-border: rgba(15, 107, 189, 0.2);
 }
 
 body {
@@ -222,11 +335,11 @@ body {
 }
 
 .state-graph.maximized {
-	position: fixed !important;
+	position: fixed;
 	top: 0;
 	left: 0;
-	width: 100vw !important;
-	height: 100vh !important;
+	width: 100vw;
+	height: 100vh;
 	z-index: 9999;
 	background: var(--app-surface);
 	border: none;
@@ -310,6 +423,10 @@ body {
 	/* Prevent any interaction */
 }
 
+.vscode-button .codicon {
+	font-size: 14px;
+}
+
 .vscode-button:disabled:hover {
 	background-color: var(--app-surface);
 	border-color: var(--app-border);
@@ -320,10 +437,6 @@ body {
 
 .vscode-button:disabled .codicon {
 	opacity: 0.8;
-}
-
-.vscode-button .codicon {
-	font-size: 14px;
 }
 
 .vscode-button.active {
@@ -357,6 +470,20 @@ body {
 }
 
 /* Horizontal Layout (Vertical Handle) - Default */
+
+.Resizable-handle::before {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	width: 4px;
+	height: 60px;
+	background: rgba(127, 127, 127, 0.1);
+	border-radius: 2px;
+	opacity: 0;
+}
+
 :not([data-orientation="vertical"]) > .Resizable-handle {
 	width: 0;
 	cursor: col-resize;
@@ -399,19 +526,6 @@ body {
 	height: 1px;
 	background: rgba(127, 127, 127, 0.2);
 	transform: translateY(-50%);
-}
-
-.Resizable-handle::before {
-	content: "";
-	position: absolute;
-	top: 50%;
-	left: 50%;
-	transform: translate(-50%, -50%);
-	width: 4px;
-	height: 60px;
-	background: rgba(127, 127, 127, 0.1);
-	border-radius: 2px;
-	opacity: 0;
 }
 
 .Resizable-handle:hover::before {
@@ -475,6 +589,12 @@ body {
 	white-space: nowrap;
 }
 
+.tab_button h3 {
+	margin: 0;
+	font-size: 13px;
+	font-weight: normal;
+}
+
 .tab_button:not(.active):hover {
 	background-color: var(--app-surface-hover);
 }
@@ -487,17 +607,11 @@ body {
 }
 
 .tab_button.execution-error {
-	border-bottom: 2px solid #ec9999 !important;
+	border-bottom: 2px solid #ec9999;
 }
 
 .tab_button.execution-error h3 {
-	color: #ec9999 !important;
-}
-
-.tab_button h3 {
-	margin: 0;
-	font-size: 13px;
-	font-weight: normal;
+	color: #ec9999;
 }
 
 .tab_button:disabled {
@@ -506,7 +620,7 @@ body {
 }
 
 .tab_button:disabled:hover {
-	background: #1e1e1e;
+	background: var(--app-surface);
 }
 
 .tab:last-child {
@@ -657,11 +771,6 @@ body {
 	background-color: var(--app-surface);
 }
 
-.empty-editor-content {
-	padding: 2rem;
-	color: var(--app-text-muted);
-}
-
 .empty-editor-icon {
 	margin-bottom: 1rem;
 }
@@ -669,6 +778,11 @@ body {
 .empty-editor-icon .codicon {
 	font-size: 3rem;
 	color: var(--app-text-soft);
+}
+
+.empty-editor-content {
+	padding: 2rem;
+	color: var(--app-text-muted);
 }
 
 .empty-editor-content h3 {

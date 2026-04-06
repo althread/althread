@@ -1,6 +1,6 @@
 .file-tabs-container {
 	display: flex;
-	background-color: #1e1e1e;
+	background-color: var(--app-surface);
 	height: 40px;
 	flex-shrink: 0;
 	overflow-x: auto;
@@ -39,30 +39,30 @@
 	display: flex;
 	align-items: center;
 	padding: 0 4px 0 10px;
-	background-color: #1e1e1e;
-	color: #cccccc;
+	background-color: var(--app-surface);
+	color: var(--app-text-muted);
 	cursor: pointer;
 	font-size: 13px;
 	white-space: nowrap;
 	flex-shrink: 0;
-	border-bottom: 2px solid transparent; /* Reserve space for bottom border */
+	border-bottom: 2px solid transparent;
 	transition:
 		background-color 0.2s,
 		border-color 0.2s,
 		color 0.2s;
 	position: relative;
-	height: 37px; /* Adjust height to accommodate scrollbar */
+	height: 37px;
 	box-sizing: border-box;
 }
 
 .file-tab:not(.active):hover {
-	background-color: #2d2d2d;
+	background-color: var(--app-surface-hover);
 }
 
 .file-tab.active {
-	background-color: #232323;
-	color: #ffffff;
-	border-bottom: 2px solid var(--ifm-color-primary); /* Orange top border for active tab */
+	background-color: var(--app-surface-muted);
+	color: var(--app-text);
+	border-bottom: 2px solid var(--ifm-color-primary);
 	z-index: 1;
 }
 
@@ -104,23 +104,23 @@
 
 /* Read-only file tab styling */
 .file-tab.read-only {
-	background-color: #2d2d2d;
+	background-color: var(--app-surface-hover);
 	opacity: 0.9;
 }
 
 .file-tab.read-only .tab-label {
 	font-style: italic;
-	color: #b0b0b0;
+	color: var(--app-text-soft);
 }
 
 .file-tab.read-only.active {
-	background-color: #333333;
-	border-bottom-color: #858585;
+	background-color: var(--app-surface-elevated);
+	border-bottom-color: var(--app-icon-muted);
 }
 
 .read-only-icon {
 	font-size: 11px;
-	color: #858585;
+	color: var(--app-icon-muted);
 	margin-left: 4px;
 	margin-right: 2px;
 }

@@ -11,14 +11,14 @@
 }
 
 .init-project-section {
-	background: #f8f9fa;
+	background: var(--app-tooltip-bg);
 	padding: 1rem;
 	border-radius: 4px;
 	margin-bottom: 1rem;
 }
 
 .project-info {
-	background: #e8f4f8;
+	background: var(--app-bg);
 	padding: 1rem;
 	border-radius: 4px;
 	margin-bottom: 1rem;
@@ -190,12 +190,12 @@
 }
 
 .btn-danger {
-	background: #e74c3c;
+	background: var(--app-accent-red-deep);
 	color: white;
 }
 
 .btn-danger:hover:not(:disabled) {
-	background: #c0392b;
+	background: var(--app-accent-red-hover);
 }
 
 .btn-warning {

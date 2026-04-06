@@ -630,6 +630,7 @@ const FileEntry = (props: {
 				selected: isSelected() && !isRenaming(),
 				dragging: isDragging(),
 				"read-only": isInDepsDirectory(currentPath),
+				"has-context-menu": showContextMenu(),
 			}}
 			onClick={handleClick}
 		>
@@ -700,7 +701,7 @@ const FileEntry = (props: {
 						<i class="codicon codicon-edit"></i>
 						Rename
 					</button>
-					<button onClick={handleDelete}>
+					<button class="context-menu-delete-btn" onClick={handleDelete}>
 						<i class="codicon codicon-trash"></i>
 						Delete
 					</button>

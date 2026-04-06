@@ -1321,6 +1321,7 @@ export default function App() {
 									const builtGraph = buildGraphFromNodes(res.nodes, {
 										mode: "run",
 										stepLines: res.step_lines || [],
+										theme: theme(),
 									});
 									setRunBuiltGraph(builtGraph);
 
@@ -1472,6 +1473,7 @@ export default function App() {
 										const builtGraph = buildGraphFromNodes(res.nodes, {
 											mode: "check",
 											violationPathStates,
+											theme: theme(),
 										});
 
 										setNodes(builtGraph.nodes);
@@ -1541,6 +1543,7 @@ export default function App() {
 									const builtGraph = buildGraphFromNodes(replayNodes, {
 										mode: "run",
 										stepLines: replayStepLines,
+										theme: theme(),
 									});
 
 									setRunBuiltGraph(builtGraph);
@@ -1815,6 +1818,7 @@ export default function App() {
 					interactiveVmStates={interactiveVmStates()}
 					interactiveStepLines={interactiveStepLines()}
 					editor={editor}
+					theme={theme()}
 				/>
 			</div>
 		</>

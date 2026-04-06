@@ -1,7 +1,9 @@
+/* Light Theme Overrides - simplified with CSS variables */
 .app-shell[data-theme="light"] {
 	color: var(--app-text);
 }
 
+/* Base surface colors */
 .app-shell[data-theme="light"] .sidebar,
 .app-shell[data-theme="light"] .sidebar-tabs,
 .app-shell[data-theme="light"] .file-explorer,
@@ -15,10 +17,11 @@
 .app-shell[data-theme="light"] .vm-state-inspector,
 .app-shell[data-theme="light"] .section,
 .app-shell[data-theme="light"] .metadata-display {
-	background-color: var(--app-surface) !important;
-	color: var(--app-text-muted) !important;
+	background-color: var(--app-surface);
+	color: var(--app-text-muted);
 }
 
+/* Borders */
 .app-shell[data-theme="light"] .sidebar-tabs,
 .app-shell[data-theme="light"] .file-tabs-container,
 .app-shell[data-theme="light"] .file-explorer-header,
@@ -32,9 +35,10 @@
 .app-shell[data-theme="light"] .right-panel-tabs,
 .app-shell[data-theme="light"] .inspector-header,
 .app-shell[data-theme="light"] .popup-tabs {
-	border-color: var(--app-border) !important;
+	border-color: var(--app-border);
 }
 
+/* Text elements */
 .app-shell[data-theme="light"] .sidebar-tab,
 .app-shell[data-theme="light"] .file-explorer-header,
 .app-shell[data-theme="light"] .package-manager-header,
@@ -54,19 +58,21 @@
 .app-shell[data-theme="light"] .control-button,
 .app-shell[data-theme="light"] .package-manager-actions button,
 .app-shell[data-theme="light"] .file-explorer-actions button {
-	color: var(--app-text-muted) !important;
+	color: var(--app-text-muted);
 }
 
+/* Hover states for collapsible elements */
 .app-shell[data-theme="light"] .sidebar.collapsed .sidebar-tab:hover::after,
 .app-shell[data-theme="light"]
 	.file-explorer-actions
 	.header-action-btn:hover::after {
-	background: var(--app-surface-elevated) !important;
-	color: var(--app-text) !important;
-	border-color: var(--app-border) !important;
-	box-shadow: 0 10px 24px rgba(121, 89, 46, 0.16) !important;
+	background: var(--app-tooltip-bg);
+	color: var(--app-tooltip-text);
+	border-color: var(--app-tooltip-border);
+	box-shadow: 0 2px 8px var(--app-shadow-lg);
 }
 
+/* General hover states */
 .app-shell[data-theme="light"] .sidebar-tab:hover,
 .app-shell[data-theme="light"] .help-link:hover,
 .app-shell[data-theme="light"] .back-button:hover,
@@ -80,20 +86,43 @@
 .app-shell[data-theme="light"] .file-explorer-actions button:hover,
 .app-shell[data-theme="light"] .control-button:hover,
 .app-shell[data-theme="light"] .search-clear-btn:hover {
-	background-color: var(--app-surface-hover) !important;
-	color: var(--app-text) !important;
-	border-color: var(--app-border-strong) !important;
+	background-color: var(--app-surface-hover);
+	color: var(--app-text);
+	border-color: var(--app-border-strong);
 }
 
+/* Hover override for files with context menu open */
+.app-shell[data-theme="light"] .file.has-context-menu {
+	background-color: var(--app-context-menu-hover);
+}
+
+.app-shell[data-theme="light"] .file.has-context-menu:hover {
+	background-color: var(--app-surface-hover);
+}
+
+/* Selected file background for light theme */
+.app-shell[data-theme="light"] .file.selected,
+.app-shell[data-theme="light"] .directory.selected > .directory-header {
+	background-color: var(--app-accent-blue-selection);
+	border-color: var(--app-accent-blue);
+}
+
+.app-shell[data-theme="light"] .file.selected:hover,
+.app-shell[data-theme="light"] .directory.selected > .directory-header:hover {
+	background-color: var(--app-accent-blue-selection);
+}
+
+/* Active states */
 .app-shell[data-theme="light"] .sidebar-tab.active,
 .app-shell[data-theme="light"] .file.active,
 .app-shell[data-theme="light"] .file-tab.active,
 .app-shell[data-theme="light"] .right-panel-tabs .right-tab-button.active,
 .app-shell[data-theme="light"] .tab_button.active {
-	background-color: var(--app-surface-muted) !important;
-	color: var(--app-text) !important;
+	background-color: var(--app-surface-muted);
+	color: var(--app-text);
 }
 
+/* Borders for interactive elements */
 .app-shell[data-theme="light"] .file.active,
 .app-shell[data-theme="light"] .section,
 .app-shell[data-theme="light"] .section-body,
@@ -110,9 +139,10 @@
 .app-shell[data-theme="light"] .variable-item,
 .app-shell[data-theme="light"] .payload-item,
 .app-shell[data-theme="light"] .msg-val {
-	border-color: var(--app-border) !important;
+	border-color: var(--app-border);
 }
 
+/* Text colors */
 .app-shell[data-theme="light"] .search-input,
 .app-shell[data-theme="light"] .search-tips code,
 .app-shell[data-theme="light"] .message-card,
@@ -125,19 +155,7 @@
 	.right-tab-button:not(.active):hover,
 .app-shell[data-theme="light"] .file-tab.read-only,
 .app-shell[data-theme="light"] .section-header {
-	background-color: var(--app-surface-muted) !important;
-}
-
-.app-shell[data-theme="light"] .process-card-header,
-.app-shell[data-theme="light"] .variable-item,
-.app-shell[data-theme="light"] .channel-pill,
-.app-shell[data-theme="light"] .channel-value-item,
-.app-shell[data-theme="light"] .payload-item,
-.app-shell[data-theme="light"] .msg-val,
-.app-shell[data-theme="light"] .process-id,
-.app-shell[data-theme="light"] .process-pc,
-.app-shell[data-theme="light"] .process-line {
-	background-color: var(--app-surface-elevated) !important;
+	background-color: var(--app-surface-muted);
 }
 
 .app-shell[data-theme="light"] .section-header,
@@ -157,56 +175,61 @@
 .app-shell[data-theme="light"] .init-project-section p,
 .app-shell[data-theme="light"] .search-result-description,
 .app-shell[data-theme="light"] .metadata-display > div > span {
-	color: var(--app-text-soft) !important;
+	color: var(--app-text-soft);
 }
 
+/* Input states */
 .app-shell[data-theme="light"] .search-input,
 .app-shell[data-theme="light"] .file-entry-input input,
 .app-shell[data-theme="light"] .rename-input {
-	background-color: var(--app-surface-elevated) !important;
-	color: var(--app-text) !important;
+	background-color: var(--app-surface-elevated);
+	color: var(--app-text);
 }
 
 .app-shell[data-theme="light"] .file-entry-input input,
 .app-shell[data-theme="light"] .rename-input {
-	border-color: var(--ifm-color-primary) !important;
+	border-color: var(--ifm-color-primary);
 }
 
+/* Syntax highlighting colors */
 .app-shell[data-theme="light"] .var-name,
 .app-shell[data-theme="light"] .ch-name,
 .app-shell[data-theme="light"] .error-display .file-link {
-	color: #0f6bbd !important;
+	color: var(--app-accent-blue-light);
 }
 
 .app-shell[data-theme="light"] .var-value,
 .app-shell[data-theme="light"] .ch-vals,
 .app-shell[data-theme="light"] .msg-val,
 .app-shell[data-theme="light"] .project-version {
-	color: #b65c1b !important;
+	color: var(--app-syntax-string);
 }
 
 .app-shell[data-theme="light"] .process-name {
-	color: #18796a !important;
+	color: var(--app-accent-green);
 }
 
+/* Message endpoint colors */
 .app-shell[data-theme="light"] .message-endpoint.from {
-	background: #cfe8fb !important;
-	color: #0f6bbd !important;
+	background: var(--app-accent-blue-selection);
+	color: var(--app-accent-blue-light);
 }
 
 .app-shell[data-theme="light"] .message-endpoint.to {
-	background: #d8efe7 !important;
-	color: #18796a !important;
+	background: var(--app-accent-green-selection);
+	color: var(--app-accent-green);
 }
 
+/* Special colors */
 .app-shell[data-theme="light"] .channel-name {
-	color: #8f6500 !important;
+	color: var(--app-syntax-number);
 }
 
 .app-shell[data-theme="light"] .search-highlight {
-	color: #2c2115 !important;
+	color: var(--app-syntax-keyword);
 }
 
+/* Graph toolbar */
 .app-shell[data-theme="light"] .graph-toolbar button,
 .app-shell[data-theme="light"] .theme-toggle-button {
 	box-shadow: 0 8px 22px rgba(121, 89, 46, 0.1);

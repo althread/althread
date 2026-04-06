@@ -2,9 +2,53 @@
 .sidebar {
 	display: flex;
 	height: 100%;
-	background-color: #1e1e1e;
-	color: #cccccc;
-	/* border-right: 1px solid #333; */
+	background-color: var(--app-surface);
+	color: var(--app-text-muted);
+}
+
+.sidebar-tabs {
+	display: flex;
+	flex-direction: column;
+	background-color: var(--app-surface);
+	border-right: 1px solid var(--app-border);
+	width: 48px;
+	flex-shrink: 0;
+}
+
+.sidebar-tab {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 48px;
+	height: 48px;
+	background: none;
+	border: none;
+	color: var(--app-text-muted);
+	cursor: pointer;
+	font-size: 16px;
+	position: relative;
+}
+
+.sidebar-tab:hover {
+	background-color: var(--app-surface-hover);
+	color: var(--app-text);
+	transform: translateX(1px);
+}
+
+.sidebar-tab.active {
+	background-color: var(--app-surface-muted);
+	color: var(--app-text);
+}
+
+.sidebar-tab.active::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	top: 8px;
+	bottom: 8px;
+	width: 2px;
+	background-color: var(--ifm-color-primary);
+	border-radius: 0 1px 1px 0;
 }
 
 .sidebar.collapsed {
@@ -22,60 +66,15 @@
 	left: 48px;
 	top: 50%;
 	transform: translateY(-50%);
-	background: #2d2d2d;
-	color: #ffffff;
+	background: var(--app-tooltip-bg);
+	color: var(--app-tooltip-text);
 	padding: 4px 8px;
 	border-radius: 4px;
 	font-size: 12px;
 	white-space: nowrap;
 	z-index: 1001;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-	border: 1px solid #333;
-}
-
-.sidebar-tabs {
-	display: flex;
-	flex-direction: column;
-	background-color: #1e1e1e;
-	border-right: 1px solid #333;
-	width: 48px;
-	flex-shrink: 0;
-}
-
-.sidebar-tab {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 48px;
-	height: 48px;
-	background: none;
-	border: none;
-	color: #cccccc;
-	cursor: pointer;
-	font-size: 16px;
-	position: relative;
-}
-
-.sidebar-tab:hover {
-	background-color: #2d2d2d;
-	color: #ffffff;
-	transform: translateX(1px);
-}
-
-.sidebar-tab.active {
-	background-color: #232323;
-	color: #ffffff;
-}
-
-.sidebar-tab.active::before {
-	content: "";
-	position: absolute;
-	left: 0;
-	top: 8px;
-	bottom: 8px;
-	width: 2px;
-	background-color: var(--ifm-color-primary);
-	border-radius: 0 1px 1px 0;
+	box-shadow: 0 2px 8px var(--app-shadow-lg);
+	border: 1px solid var(--app-tooltip-border);
 }
 
 .sidebar-content {

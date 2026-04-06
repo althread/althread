@@ -1,24 +1,24 @@
 .process-card {
-	background: #252526;
-	border: 1px solid #3e3e42;
+	background: var(--app-surface-muted);
+	border: 1px solid var(--app-border-strong);
 	border-radius: 6px;
 	margin-bottom: 16px;
-	overflow: hidden;
+	overflow: visible;
 }
 
 .process-card-header {
-	background: #2d2d30;
+	background: var(--app-code-bg);
 	padding: 4px 8px;
 	display: flex;
 	align-items: center;
 	gap: 12px;
-	border-bottom: 1px solid #3e3e42;
+	border-bottom: 1px solid var(--app-border-strong);
 }
 
 .process-name {
 	font-weight: 600;
 	font-size: 14px;
-	color: #4fc3f7;
+	color: var(--app-syntax-variable);
 	flex: 1;
 }
 
@@ -28,17 +28,17 @@
 	font-family: "Consolas", "Monaco", monospace;
 	font-size: 12px;
 	padding: 4px 8px;
-	background: #1e1e1e;
+	background: var(--app-surface);
 	border-radius: 3px;
-	color: #cccccc;
+	color: var(--app-text-muted);
 }
 
 .process-pc {
-	color: #ce9178;
+	color: var(--app-syntax-string);
 }
 
 .process-line {
-	color: #4ec9b0;
+	color: var(--app-syntax-type);
 }
 
 .process-card-body {
@@ -46,16 +46,15 @@
 }
 
 .channels-row {
-	margin-top: 12px;
-	padding-top: 12px;
-	border-top: 1px solid #3e3e42;
+	padding: 12px;
+	border-top: 1px solid var(--app-border-strong);
 }
 
 .row-label {
 	display: block;
 	font-size: 12px;
 	font-weight: 600;
-	color: #858585;
+	color: var(--app-icon-muted);
 	margin-bottom: 8px;
 	text-transform: uppercase;
 }
@@ -67,8 +66,9 @@
 }
 
 .channel-pill {
-	background: #1e1e1e;
-	border: 1px solid #3e3e42;
+	position: relative;
+	background: var(--app-surface);
+	border: 1px solid var(--app-border-strong);
 	border-radius: 4px;
 	padding: 6px 10px;
 	display: flex;
@@ -79,24 +79,26 @@
 
 .channel-name {
 	font-family: "Consolas", "Monaco", monospace;
-	color: #dcdcaa;
+	color: var(--app-syntax-function);
 	font-weight: 500;
 }
 
 .channel-count {
-	color: #858585;
+	color: var(--app-icon-muted);
 	font-size: 11px;
 }
 
 .channel-values {
 	display: none;
 	position: absolute;
-	background: #252526;
-	border: 1px solid #3e3e42;
+	bottom: calc(100% + 4px);
+	left: 0;
+	background: var(--app-surface-muted);
+	border: 1px solid var(--app-border-strong);
 	border-radius: 4px;
 	padding: 8px;
-	margin-top: 4px;
 	z-index: 1000;
+	min-width: 100%;
 	max-width: 300px;
 }
 
@@ -108,10 +110,10 @@
 	font-family: "Consolas", "Monaco", monospace;
 	font-size: 12px;
 	padding: 4px 6px;
-	background: #1e1e1e;
+	background: var(--app-surface);
 	border-radius: 3px;
 	margin-bottom: 4px;
-	color: #ce9178;
+	color: var(--app-syntax-string);
 }
 
 .channel-value-item:last-child {
