@@ -239,6 +239,13 @@ const Tutorial: Component = () => {
 		const htmlContent = marked(processedContent) as string;
 
 		setTimeout(() => {
+			// Destroy previous editors to prevent memory leaks
+			readOnlyEditors.forEach((editor) => {
+				const view = editor.safeEditorView();
+				if (view) {
+					view.destroy();
+				}
+			});
 			readOnlyEditors.length = 0;
 			codeBlocks.forEach(({ id, code }) => {
 				const container = document.getElementById(id);
