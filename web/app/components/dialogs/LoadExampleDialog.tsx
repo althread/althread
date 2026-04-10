@@ -5,6 +5,11 @@ export interface LoadExampleDialogProps {
 	onLoadInCurrent: () => void;
 	onLoadInNew: () => void;
 	onCancel: () => void;
+	title?: string;
+	message?: string;
+	detail?: string;
+	currentLabel?: string;
+	newLabel?: string;
 }
 
 export const LoadExampleDialog = (props: LoadExampleDialogProps) => {
@@ -35,15 +40,15 @@ export const LoadExampleDialog = (props: LoadExampleDialogProps) => {
 				<div class="confirmation-dialog" role="dialog" aria-modal="true">
 					<div class="confirmation-dialog-header">
 						<i class="codicon codicon-file-code"></i>
-						Load Example
+						{props.title || "Load Example"}
 					</div>
 					<div class="confirmation-dialog-body">
-						Where would you like to load the example code?
+						{props.message || "Where would you like to load the example code?"}
 						<br />
 						<br />
 						<div style="font-size: 12px; color: #858585;">
-							Choose to replace the current file content or create a new file
-							tab.
+							{props.detail ||
+								"Choose to replace the current file content or create a new file tab."}
 						</div>
 					</div>
 					<div class="confirmation-dialog-actions">
@@ -61,7 +66,7 @@ export const LoadExampleDialog = (props: LoadExampleDialogProps) => {
 							onClick={props.onLoadInCurrent}
 						>
 							<i class="codicon codicon-file"></i>
-							Current File
+							{props.currentLabel || "Current File"}
 						</button>
 						<button
 							type="button"
@@ -69,7 +74,7 @@ export const LoadExampleDialog = (props: LoadExampleDialogProps) => {
 							onClick={props.onLoadInNew}
 						>
 							<i class="codicon codicon-new-file"></i>
-							New File
+							{props.newLabel || "New File"}
 						</button>
 					</div>
 				</div>

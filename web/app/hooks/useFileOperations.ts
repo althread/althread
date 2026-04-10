@@ -26,7 +26,11 @@ export const createFileOperationsHandlers = (
 	editor: any,
 	loadFileContent: (path: string) => string,
 ) => {
-	const handleNewFile = (name: string, targetPath?: string) => {
+	const handleNewFile = (
+		name: string,
+		targetPath?: string,
+		initialContent?: string,
+	) => {
 		const newFile: FileSystemEntry = {
 			id: crypto.randomUUID(),
 			name,
@@ -62,8 +66,8 @@ export const createFileOperationsHandlers = (
 
 		// Save empty content for new file with full path
 		const fullPath = createInPath === "" ? name : `${createInPath}/${name}`;
-		const defaultContent = getDefaultContentForFile(name);
-		saveFileContent(fullPath, defaultContent);
+		const fileContent = initialContent ?? getDefaultContentForFile(name);
+		saveFileContent(fullPath, fileContent);
 
 		// Automatically open the new file
 		setOpenFiles([...openFiles(), newFile]);
@@ -71,7 +75,7 @@ export const createFileOperationsHandlers = (
 
 		// Load content using safe method
 		if (editor && editor.safeUpdateContent) {
-			editor.safeUpdateContent(defaultContent);
+			editor.safeUpdateContent(fileContent);
 
 			// Then update language
 			setTimeout(() => {

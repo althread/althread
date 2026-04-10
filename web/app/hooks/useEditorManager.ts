@@ -118,31 +118,13 @@ export const createEditorManager = (editor: any) => {
 			fileName = fileName + ".alt";
 		}
 
-		// Create the file using file operations
-		onFileOperations.handleNewFile(fileName);
+		// Create the file directly with the requested content so the editor and
+		// storage stay in sync without relying on delayed follow-up updates.
+		onFileOperations.handleNewFile(fileName, undefined, content);
 
-		// Wait a bit for the file to be created and opened, then update content
-		setTimeout(() => {
-			if (editor && editor.safeUpdateContent) {
-				editor.safeUpdateContent(content);
-
-				// Also save the content to localStorage immediately after a small delay
-				// to ensure the file system has been updated
-				setTimeout(() => {
-					const currentFile = activeFile();
-					if (currentFile && mockFileSystem) {
-						// Get the proper file path using the file system
-						const filePath =
-							getPathFromId(mockFileSystem(), currentFile.id) ||
-							currentFile.name;
-						saveFileContent(filePath, content);
-					} else {
-						// Fallback to just the filename (for root directory files)
-						saveFileContent(fileName, content);
-					}
-				}, 10);
-			}
-		}, 50);
+		if (!mockFileSystem) {
+			saveFileContent(fileName, content);
+		}
 	};
 
 	return {

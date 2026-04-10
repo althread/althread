@@ -10,8 +10,8 @@
 	flex-direction: column;
 	flex: 1 1 0;
 	min-width: 0;
-	border: 1px solid #3e3e42;
-	background-color: #252526;
+	border: 1px solid var(--app-border-strong);
+	background-color: var(--app-surface-muted);
 	border-radius: 4px;
 	overflow: hidden;
 	transition:
@@ -37,20 +37,61 @@
 	padding: 4px 8px;
 	cursor: pointer;
 	user-select: none;
-	background-color: #2d2d30;
+	background-color: var(--app-surface-hover);
 	flex-shrink: 0;
 	transition: background-color 0.15s ease;
-	/* Disable text wrapping when switching to vertical layout */
 	white-space: nowrap;
 	overflow: hidden;
 }
 
 .collapsible-header:hover {
-	background-color: #37373d;
+	background-color: var(--app-border-strong);
 }
 
 .collapsible-header:active {
-	background-color: #454545;
+	background-color: var(--app-border-strong);
+}
+
+/* ── Header icons & text ───────────────────────────────────────────────── */
+
+.header-toggle-icon {
+	color: var(--app-icon-muted);
+	font-size: 13px;
+	flex-shrink: 0;
+	transition: transform 0.2s ease;
+	order: 0;
+}
+
+.header-section-icon {
+	color: var(--app-icon-color);
+	font-size: 13px;
+	flex-shrink: 0;
+	order: 1;
+}
+
+/* Unified section title — same font as Processes */
+.section-label {
+	font-size: 10px;
+	font-weight: bold;
+	text-transform: uppercase;
+	color: var(--app-text-soft);
+	letter-spacing: 0.5px;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.header-count {
+	margin-left: auto;
+	background: var(--app-surface-hover);
+	color: var(--app-icon-muted);
+	font-size: 10px;
+	font-weight: 600;
+	padding: 1px 6px;
+	border-radius: 8px;
+	min-width: 16px;
+	text-align: center;
+	flex-shrink: 0;
+	display: inline-block;
 }
 
 /* Last-open lock: mute the toggle icon, keep normal cursor */
@@ -71,7 +112,6 @@
 	height: 100%;
 	align-items: center;
 	justify-content: flex-start;
-	/* Remove overflow hidden to allow pulse shadow to show */
 	overflow: visible;
 }
 
@@ -86,7 +126,6 @@
 	font-size: 8px;
 	gap: 1px;
 	justify-content: center;
-	/* Move above the label when collapsed to prevent vertical clipping */
 	order: 2;
 	display: flex;
 	align-items: center;
@@ -102,57 +141,13 @@
 	letter-spacing: 1.5px;
 	overflow: hidden;
 	font-size: 10px;
-	/* Position below the icons and counter */
 	order: 3;
 }
 
-/* ── Header icons & text ───────────────────────────────────────────────── */
-
-.header-toggle-icon {
-	color: #858585;
-	font-size: 13px;
-	flex-shrink: 0;
-	transition: transform 0.2s ease;
-	order: 0;
-}
-
-.header-section-icon {
-	color: #c5c5c5;
-	font-size: 13px;
-	flex-shrink: 0;
-	order: 1;
-}
-
-/* Unified section title — same font as Processes */
-.section-label {
-	font-size: 10px;
-	font-weight: bold;
-	text-transform: uppercase;
-	color: #bbb;
-	letter-spacing: 0.5px;
-	white-space: nowrap;
-	overflow: hidden;
-}
-
-.header-count {
-	margin-left: auto;
-	background: #37373d;
-	color: #858585;
-	font-size: 10px;
-	font-weight: 600;
-	padding: 1px 6px;
-	border-radius: 8px;
-	min-width: 16px;
-	text-align: center;
-	flex-shrink: 0;
-	display: inline-block;
-}
-
 .header-count.changed {
-	background-color: #ff9d00;
-	color: #000;
+	background-color: var(--app-accent-orange);
+	color: var(--app-text);
 	animation: pulse-orange 2s infinite;
-	/* Only use flex when the ! mark is present */
 	display: flex;
 	align-items: center;
 	padding: 1px 5px;
@@ -162,12 +157,12 @@
 .change-indicator {
 	font-weight: 900;
 	font-size: 11px;
-	color: #000;
+	color: var(--app-text);
 }
 
 @keyframes pulse-orange {
 	0% {
-		box-shadow: 0 0 0 0 rgba(255, 157, 0, 0.9);
+		box-shadow: 0 0 0 0 var(--app-accent-orange-glow);
 	}
 
 	70% {
@@ -193,7 +188,7 @@
 }
 
 .empty-state {
-	color: #858585;
+	color: var(--app-icon-muted);
 	font-style: italic;
 	font-size: 11px;
 	text-align: center;
