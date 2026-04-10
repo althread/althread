@@ -11,6 +11,7 @@ import {
 	createEffect,
 	createSignal,
 	Match,
+	onMount,
 	onCleanup,
 	Show,
 	Switch,
@@ -53,6 +54,10 @@ import {
 	saveFileContent,
 	saveFileSystem,
 } from "@utils/storage";
+import {
+	clearSharedEditorFileFromUrl,
+	loadSharedEditorFileFromUrl,
+} from "@utils/share";
 import { workerClient } from "@utils/workerClient";
 import type {
 	CheckResult,
@@ -71,15 +76,36 @@ const animationTimeOut = 100; //ms
 const DEFAULT_WEB_CHECK_MAX_STATES = 10_000;
 const WEB_RUN_MAX_STEPS = 1_000;
 
+const createUniqueSharedFileName = (
+	fileSystem: FileSystemEntry[],
+	fileName: string,
+): string => {
+	const extensionIndex = fileName.lastIndexOf(".");
+	const baseName =
+		extensionIndex >= 0 ? fileName.slice(0, extensionIndex) : fileName;
+	const extension = extensionIndex >= 0 ? fileName.slice(extensionIndex) : "";
+	let candidate = `${baseName}-${Date.now()}${extension}`;
+
+	while (findFileByPath(fileSystem, candidate)) {
+		candidate = `${baseName}-${Date.now()}-${Math.floor(Math.random() * 1000)}${extension}`;
+	}
+
+	return candidate;
+};
+
 export default function App() {
 	// Load file system from localStorage
-	const initialFileSystem = loadFileSystem();
+	const sharedEditorFile = loadSharedEditorFileFromUrl();
+	const storedFileSystem = loadFileSystem();
+	const initialFileSystem = storedFileSystem;
 
 	const [mockFileSystem, setMockFileSystem] =
 		createSignal<FileSystemEntry[]>(initialFileSystem);
 	const [selectedFiles, setSelectedFiles] = createSignal<string[]>([]);
 	const [creationError, setCreationError] = createSignal<string | null>(null);
-	const [didAutoOpenDefault, setDidAutoOpenDefault] = createSignal(false);
+	const [didAutoOpenDefault, setDidAutoOpenDefault] = createSignal(
+		Boolean(sharedEditorFile),
+	);
 	const [theme, setTheme] = createSignal<EditorTheme>(loadEditorTheme());
 
 	// Global file creation state - shared between FileExplorer and EmptyEditor
@@ -210,6 +236,34 @@ export default function App() {
 		loadFileContent,
 	);
 
+	onMount(() => {
+		if (!sharedEditorFile) {
+			return;
+		}
+
+		clearSharedEditorFileFromUrl();
+
+		const existingFile = findFileByPath(
+			mockFileSystem(),
+			sharedEditorFile.fileName,
+		);
+		if (existingFile?.type === "file") {
+			setSharedImportDialog({
+				isOpen: true,
+				content: sharedEditorFile.content,
+				fileName: sharedEditorFile.fileName,
+			});
+			return;
+		}
+
+		editorManager.createNewFileWithContent(
+			sharedEditorFile.fileName,
+			sharedEditorFile.content,
+			fileOperations,
+			mockFileSystem,
+		);
+	});
+
 	// Auto-open main.alt by default (once), so the editor isn't empty on load.
 	createEffect(() => {
 		if (didAutoOpenDefault()) return;
@@ -300,6 +354,15 @@ export default function App() {
 
 	// Load example dialog state
 	const [loadExampleDialog, setLoadExampleDialog] = createSignal<{
+		isOpen: boolean;
+		content: string;
+		fileName: string;
+	}>({
+		isOpen: false,
+		content: "",
+		fileName: "",
+	});
+	const [sharedImportDialog, setSharedImportDialog] = createSignal<{
 		isOpen: boolean;
 		content: string;
 		fileName: string;
@@ -434,6 +497,35 @@ export default function App() {
 
 	const handleCancelLoadExample = () => {
 		setLoadExampleDialog({ isOpen: false, content: "", fileName: "" });
+	};
+
+	const handleReplaceSharedImport = () => {
+		const dialog = sharedImportDialog();
+		setSharedImportDialog({ isOpen: false, content: "", fileName: "" });
+		saveFileContent(dialog.fileName, dialog.content);
+		editorManager.handleFileSelect(dialog.fileName, mockFileSystem());
+	};
+
+	const handleSharedImportInNewFile = () => {
+		const dialog = sharedImportDialog();
+		setSharedImportDialog({ isOpen: false, content: "", fileName: "" });
+		const fileName = createUniqueSharedFileName(
+			mockFileSystem(),
+			dialog.fileName,
+		);
+		editorManager.createNewFileWithContent(
+			fileName,
+			dialog.content,
+			fileOperations,
+			mockFileSystem,
+		);
+	};
+
+	const handleCancelSharedImport = () => {
+		setSharedImportDialog({ isOpen: false, content: "", fileName: "" });
+		if (!editorManager.activeFile()) {
+			setDidAutoOpenDefault(false);
+		}
 	};
 
 	// New file prompt handlers
@@ -1796,6 +1888,18 @@ export default function App() {
 					onLoadInCurrent={handleLoadInCurrentFile}
 					onLoadInNew={handleLoadInNewFile}
 					onCancel={handleCancelLoadExample}
+				/>
+
+				<LoadExampleDialog
+					isOpen={sharedImportDialog().isOpen}
+					onLoadInCurrent={handleReplaceSharedImport}
+					onLoadInNew={handleSharedImportInNewFile}
+					onCancel={handleCancelSharedImport}
+					title="Shared Link Import"
+					message="A file with the same name already exists. What should the editor do with the shared content?"
+					detail={`Replace ${sharedImportDialog().fileName} or create a new file with a unique name.`}
+					currentLabel="Replace File"
+					newLabel="Create Copy"
 				/>
 
 				{/* Interactive Panel */}

@@ -6,6 +6,10 @@ sidebar_position: 1
 ## Browser Usage
 
 The easiest way to start using Althread is to use the online editor available at [althread.github.io/editor](https://althread.github.io/editor). This will allow you to test the language without having to install anything on your machine.
+
+The editor also accepts file content through the URL. You can share a program with a URL like `https://althread.github.io/editor?fileName=main.alt&data=${encodeURIComponent(content)}`.
+
+For more compact payloads and safer handling of special characters, you can also use `data64` with base64url: `https://althread.github.io/editor?fileName=main.alt&data64=<base64url-content>`.
 ## Local Installation
 
 To use Althread on your machine, you must install the Althread compiler.
