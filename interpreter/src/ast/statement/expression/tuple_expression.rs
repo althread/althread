@@ -132,14 +132,23 @@ impl TupleExpression {
         }
 
         for (i, variable) in variable_names.iter().enumerate() {
+            print!("variable : ({:?}) {:?}\n",types[i],variable);
             state.program_stack.push(Variable {
                 mutable: true,
                 name: variable.clone(),
                 datatype: types[i].clone(),
                 depth: state.current_stack_depth,
                 declare_pos: Some(pos.clone()),
+
             })
+
         }
+        // Err(AlthreadError::new(
+        //         ErrorType::TypeError,
+        //         Some(pos),
+        //         format!(
+        //             "Expected tuple of types {:?}, but found {:?}",
+        //             types, top.datatype),))
         Ok(Instruction {
             control: InstructionType::Destruct,
             pos: Some(pos),
@@ -149,7 +158,7 @@ impl TupleExpression {
 
 impl AstDisplay for TupleExpression {
     fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
-        writeln!(f, "{prefix}tuple")?;
+        writeln!(f, "{prefix}tuple ")?;
         for value in &self.values {
             value.ast_fmt(f, &prefix.add_leaf())?;
         }

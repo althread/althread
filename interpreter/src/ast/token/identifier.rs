@@ -20,7 +20,6 @@ impl NodeBuilder for Identifier {
                     "Identifier builder expected only one inner pair.".to_string(),
                 ));
             }
-
             match pair.as_rule() {
                 Rule::IDENT => Ok(Self {
                     value: pair.as_str().to_string(),
@@ -36,5 +35,11 @@ impl NodeBuilder for Identifier {
                 "Internal Compiler Error: Identifier::build called with empty pairs. Check for Node::build calls on atomic IDENT rules.".to_string(),
             ))
         }
+    }
+}
+
+impl std::fmt::Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        writeln!(f, "{}", self.value)
     }
 }

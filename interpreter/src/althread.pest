@@ -125,7 +125,7 @@ binary_assignment_operator = { ASSIGN_OP | ADD_ASSIGN_OP | SUB_ASSIGN_OP | MUL_A
 
 /// ### Declarations
 /// Declarations introduce new variables, which can be mutable (let) or immutable (const).
-declaration         = { declaration_keyword ~ identifier ~ (":" ~ datatype)? ~ ("=" ~ side_effect_expression)? }
+declaration         = { declaration_keyword ~ ( identifier | identifier_tuple ) ~ (":" ~ datatype)? ~ ("=" ~ side_effect_expression)? }
 declaration_keyword = { LET_KW | CONST_KW }
 
 
@@ -332,12 +332,14 @@ NULL    = @{ NULL_KW }
 
 /// ### Identifiers
 /// Identifiers are used for naming variables, functions, and other constructs.
-identifier        = { IDENT | IDENT_GROUP }
+identifier        = { IDENT }
+identifier_null = {IDENT_NOT_USED}
 object_identifier = { (IDENT | DOLLAR) ~ ("." ~ ( IDENT | INT ))* }
+
+identifier_tuple = { "(" ~ (identifier | identifier_null | identifier_tuple) ~ ("," ~ (identifier | identifier_null | identifier_tuple))* ~ ")" }
 
 reserved_keywords = { (KEYWORDS | datatype) ~ !IDENT_CHAR }
 
-IDENT_GROUP = { "(" ~ (IDENT | IDENT_NOT_USED) ~ ("," ~ (IDENT | IDENT_NOT_USED))* ~ ")" }
 IDENT_NOT_USED = { "_" }
 //IDENT_GROUP = _{"(" (IDENT | NOT_USE_IDENT) ("," ( IDENT | NOT_USE_IDENT ) )*")"}
 //NOT_USE_IDENT = { "_" }

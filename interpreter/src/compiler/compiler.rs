@@ -12,6 +12,7 @@ use crate::{
         token::{
             condition_keyword::ConditionKeyword, datatype::DataType, identifier::Identifier,
             literal::Literal,
+            tuple_identifier::Lvalue,
         },
         Ast,
     },
@@ -327,16 +328,22 @@ impl Ast {
                         let literal = literal
                             .expect("declaration did not compile to expression nor PushNull");
                         memory.push(literal);
-
-                        let var_name = &decl.value.identifier.value.parts[0].value.value;
-                        // Use context instead of local global_table
-                        let last_program_stack = state.program_stack.last().unwrap().clone();
-                        state
-                            .global_table_mut()
-                            .insert(var_name.clone(), last_program_stack);
-                        state
-                            .global_memory_mut()
-                            .insert(var_name.clone(), memory.last().unwrap().clone());
+                        match &decl.value.identifier {
+                            Lvalue::Identifier(object) => {
+                                let var_name = &object.value.value;
+                                // Use context instead of local global_table
+                                let last_program_stack = state.program_stack.last().unwrap().clone();
+                                state
+                                    .global_table_mut()
+                                    .insert(var_name.clone(), last_program_stack);
+                                state
+                                    .global_memory_mut()
+                                    .insert(var_name.clone(), memory.last().unwrap().clone());
+                            }
+                            Lvalue::TupleIdentifier(object) => {
+                                print!("------------COMPILER 2-------------\n\n");
+                            }
+                        }
                     }
                     _ => {
                         return Err(AlthreadError::new(
