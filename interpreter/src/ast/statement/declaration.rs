@@ -67,18 +67,16 @@ impl NodeBuilder for Declaration {
     }
 }
 
-fn compile_identifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<Identifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize) ->
+fn compile_identifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<Identifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect : bool,unstack_len:usize) ->
     AlthreadResult<InstructionBuilderOk>
 {
-    let full_var_name = &node.value.value;
-    // Get the simple variable name (first and only part)
     let var_name = &node.value.value;
 
-    if state.global_table().contains_key(full_var_name) {
+    if state.global_table().contains_key(var_name) {
         return Err(AlthreadError::new(
             ErrorType::VariableError,
             Some(node.pos.clone()),
-            format!("Variable {} already declared", full_var_name),
+            format!("Variable {} already declared", var_name),
         ));
     }
 
@@ -100,11 +98,29 @@ fn compile_identifier(declaration : &Declaration , state: &mut CompilerState, no
             ));
         }
     }
+
+    if !side_effect
+    {
+        let r : Option<DataType> = std::option::Option::Some(datatype.clone());
+        builder.instructions.push(Instruction {
+            control: InstructionType::Push(r.as_ref().unwrap().default()),
+            pos: Some(declaration.keyword.pos.clone()),
+        });
+    }
+    
     state.program_stack.push(Variable {
         mutable: true,
         name: node.value.value.clone(), // Use the simple variable name, not the full qualified name
         datatype: datatype.clone(),
         depth: state.current_stack_depth,
+        declare_pos: Some(node.pos.clone()),
+    });
+    builder.debug_variables.push(crate::compiler::LocalVariableDebugInfo {
+        name: var_name.clone(),
+        datatype,
+        stack_index,
+        scope_start_ip,
+        scope_end_ip: None,
         declare_pos: Some(node.pos.clone()),
     });
     // builder.instructions.push(Instruction {
@@ -116,10 +132,9 @@ fn compile_identifier(declaration : &Declaration , state: &mut CompilerState, no
 
 
 
-fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<TupleIdentifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize) ->
+fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<TupleIdentifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect_expression : &Option<Node<SideEffectExpression>>,mut unstack_len : usize) ->
     AlthreadResult<InstructionBuilderOk>
-{
-    
+{  
     match datatype {
         DataType::Tuple(v) => {
             
@@ -129,35 +144,31 @@ fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerStat
                 return Err(AlthreadError::new(
                     ErrorType::VariableError,
                     Some(node.pos.clone()),
-                    format!("Tuple not well desfined")
+                    format!("Tuple not well defined")
                 ));
             }
             let mut veciter = vec.iter().enumerate();
-            if let Some(value) = &declaration.value {
-                print!("Est un SideEffectExpression\n");
-                state.current_stack_depth += 1;
-                builder.extend(value.compile(state)?);
-            }
-            print!("Value ! : \n");
             while let Some((i,elt)) = veciter.next()
             {
                 let value : Lvalue = (*(*elt).clone()).into();
                 let r: Result<InstructionBuilderOk, AlthreadError>;
                 match value {
                     Lvalue::Identifier(node) => {
-                        r = compile_identifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip);
-                        
-                        let r : Option<DataType> = std::option::Option::Some(v[i].clone());
-                        builder.instructions.push(Instruction {
-                            control: InstructionType::Push(r.as_ref().unwrap().default()),
-                            pos: Some(declaration.keyword.pos.clone()),
-                        });
+                        r = compile_identifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,*side_effect_expression!=None,unstack_len);
                     },
                     Lvalue::TupleIdentifier(node) => {
-                        r = compile_tupleidentifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip);
+                        r = compile_tupleidentifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,&side_effect_expression,unstack_len);
                     },
                 }
                 if r.is_err() {return r;}
+            }
+            if *side_effect_expression!=None
+            {
+                builder.instructions.push(
+                Instruction {
+                control: InstructionType::Destruct,
+                pos: Some(node.pos.clone()),}
+                );
             }
         }
         _=> {}
@@ -229,7 +240,6 @@ impl InstructionBuilder for Declaration {
                             } else {
                                 declared_datatype == computed_datatype
                             };
-
                         if !types_compatible {
                             return Err(AlthreadError::new(
                                 ErrorType::TypeError,
@@ -308,19 +318,56 @@ impl InstructionBuilder for Declaration {
                 });
             },
             Lvalue::TupleIdentifier(node) => {
+                let mut unstack_len:usize=0;
                 let mut datatype: Option<DataType> = None;
+                let mut valeur : Option<Node<SideEffectExpression>> = None;
 
                 if let Some(d) = &self.datatype {
                     datatype = Some(d.value.clone());
                 }
 
                 if let Some(value) = &self.value {
+                    valeur = Some(value.clone());
+                    state.current_stack_depth += 1;
+                    builder.extend(value.compile(state)?);
+                    let computed_datatype = state
+                        .program_stack
+                        .last()
+                        .expect("Error: Program stack is empty after compiling an expression")
+                        .datatype
+                        .clone();
+                    unstack_len = state.unstack_current_depth();
+                    
+                    if let Some(declared_datatype) = datatype {
+
+                        let types_compatible =
+                            if let (DataType::List(declared_elem), DataType::List(computed_elem)) =
+                                (&declared_datatype, &computed_datatype)
+                            {
+                                // Allow list(void) to be assigned to list(T) for any T (empty list case)
+                                **computed_elem == DataType::Void || declared_elem == computed_elem
+                            } else {
+                                declared_datatype == computed_datatype
+                            };
+                        
+                        if !types_compatible {
+                            return Err(AlthreadError::new(
+                                ErrorType::TypeError,
+                                Some(self.datatype.as_ref().unwrap().pos.clone()),
+                                format!(
+                                    "Declared type and assignment do not match (found :{} = {})",
+                                    declared_datatype, computed_datatype
+                                ),
+                            ));
+                        } else {
+                            datatype = Some(computed_datatype);
+                        }
+
+                    } else {
+                        datatype = Some(computed_datatype);
+                    }
+
                     print!("est une sideexpression ? : value -> {:?}\n",value);
-                    return Err(AlthreadError::new(
-                            ErrorType::TypeError,
-                            Some(node.pos.clone()),
-                            "Pas d'instantiatition".to_string(),
-                        ));
                 } else {
                     if datatype.is_none() {
                         return Err(AlthreadError::new(
@@ -329,9 +376,8 @@ impl InstructionBuilder for Declaration {
                             "Pas d'instantiatition".to_string(),
                         ));
                     }
-                    
                 }
-                let r = compile_tupleidentifier(&self, state, &node, &mut builder,datatype.unwrap(),0,0);
+                let r = compile_tupleidentifier(&self, state, &node, &mut builder,datatype.unwrap(),0,0,&valeur,unstack_len);
                 if r.is_err() {return r;}
             },
         }
