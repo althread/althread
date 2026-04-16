@@ -343,6 +343,7 @@ impl Ast {
                             Lvalue::TupleIdentifier(object) => {
                                 print!("------------COMPILER 2-------------\n\n");
                             }
+                            Lvalue::NullIdentifier(node) => {},
                         }
                     }
                     _ => {

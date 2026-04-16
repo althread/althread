@@ -4,7 +4,7 @@ use pest::iterators::{Pair, Pairs};
 
 use crate::{
     ast::{
-        display::{AstDisplay, Prefix}, node::{Node, NodeBuilder}, token::{identifier::Identifier,
+        display::{AstDisplay, Prefix}, node::{Node, NodeBuilder}, token::{identifier::Identifier,null_identifier::NullIdentifier,
         // object_identifier::ObjectIdentifier
         }
     }, error::{AlthreadResult, Pos}, no_rule, parser::Rule
@@ -20,6 +20,7 @@ pub struct TupleIdentifier{
 pub enum Lvalue {
     Identifier(Node<Identifier>,),
     TupleIdentifier(Node<TupleIdentifier>),
+    NullIdentifier(Node<NullIdentifier>),
     // Identifier(Node<Identifier>),
 }
 
@@ -35,12 +36,17 @@ impl NodeBuilder for TupleIdentifier {
                    value.append(&mut vec![
                         Box::new(Lvalue::Identifier(Node::build(pair, filepath)?))
                     ]); 
-                }
+                },
                 Rule::identifier_tuple => {
                     value.append(&mut vec![
                         Box::new(Lvalue::TupleIdentifier(Node::build(pair, filepath)?))
-                    ])
-                }
+                    ]);
+                },
+                Rule::identifier_null =>{
+                    value.append(&mut vec![
+                        Box::new(Lvalue::NullIdentifier(Node::build(pair, filepath)?))
+                    ]);
+                },
                 _=> {
                     return Err(no_rule!(pair, "ImportBlock", filepath));}
             }
@@ -72,6 +78,10 @@ impl AstDisplay for TupleIdentifier {
                 }
                 Lvalue::TupleIdentifier(node) => {
                     node.value.ast_fmt(f,&prefix.add_leaf())?;
+                },
+                Lvalue::NullIdentifier(node) => {
+                    write!(f, "{p}ident ignored : ")?;
+                    node.value.fmt(f)?;
                 },
             }
         }

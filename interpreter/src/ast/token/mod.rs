@@ -8,4 +8,5 @@ pub mod identifier;
 pub mod literal;
 pub mod object_identifier;
 pub mod unary_operator;
+pub mod null_identifier;
 pub mod tuple_identifier;

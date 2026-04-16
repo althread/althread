@@ -8,7 +8,7 @@ use crate::{
         node::{InstructionBuilder, Node, NodeBuilder}, 
         statement::{declaration, expression::tuple_expression::TupleExpression}, 
         token::{
-            self, datatype::{self, DataType}, declaration_keyword::DeclarationKeyword, identifier::{self, Identifier}, object_identifier::ObjectIdentifier, tuple_identifier::{self, Lvalue, TupleIdentifier}
+            self, datatype::{self, DataType}, declaration_keyword::DeclarationKeyword, identifier::{self, Identifier}, null_identifier::NullIdentifier, object_identifier::ObjectIdentifier, tuple_identifier::{self, Lvalue, TupleIdentifier}
         }
     },
     compiler::{CompilerState, InstructionBuilderOk, Variable},
@@ -66,6 +66,39 @@ impl NodeBuilder for Declaration {
         })
     }
 }
+
+fn compile_nullidentifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<NullIdentifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect : bool,unstack_len:usize) ->
+    AlthreadResult<InstructionBuilderOk>
+{
+
+    if !side_effect
+    {
+        let r : Option<DataType> = std::option::Option::Some(datatype.clone());
+        builder.instructions.push(Instruction {
+            control: InstructionType::Push(r.as_ref().unwrap().default()),
+            pos: Some(declaration.keyword.pos.clone()),
+        });
+    }
+    
+    state.program_stack.push(Variable {
+        mutable: true,
+        name: "_".to_string(), // Use the simple variable name, not the full qualified name
+        datatype: datatype.clone(),
+        depth: state.current_stack_depth,
+        declare_pos: Some(node.pos.clone()),
+    });
+    builder.debug_variables.push(crate::compiler::LocalVariableDebugInfo {
+        name: "_".to_string(),
+        datatype,
+        stack_index,
+        scope_start_ip,
+        scope_end_ip: None,
+        declare_pos: Some(node.pos.clone()),
+    });
+    Ok((*builder).clone())
+}
+
+
 
 fn compile_identifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<Identifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect : bool,unstack_len:usize) ->
     AlthreadResult<InstructionBuilderOk>
@@ -158,6 +191,9 @@ fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerStat
                     },
                     Lvalue::TupleIdentifier(node) => {
                         r = compile_tupleidentifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,&side_effect_expression,unstack_len);
+                    },
+                    Lvalue::NullIdentifier(node) =>{
+                        r = compile_nullidentifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,*side_effect_expression!=None,unstack_len);
                     },
                 }
                 if r.is_err() {return r;}
@@ -380,6 +416,13 @@ impl InstructionBuilder for Declaration {
                 let r = compile_tupleidentifier(&self, state, &node, &mut builder,datatype.unwrap(),0,0,&valeur,unstack_len);
                 if r.is_err() {return r;}
             },
+            Lvalue::NullIdentifier(node) => {
+                return Err(AlthreadError::new(
+                    ErrorType::TypeError,
+                    Some(node.pos.clone()),
+                    "Declaration of variable cannot be a unused value".to_string(),
+                ));
+            },
         }
         Ok(builder)
     }
@@ -471,6 +514,7 @@ impl AstDisplay for Declaration {
                     (None, None) => {}
                 }
             }
+            Lvalue::NullIdentifier(_node) => {},
         }
         Ok(())
     }

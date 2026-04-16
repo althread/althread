@@ -1,21 +1,16 @@
 use std::collections::HashMap;
-
 use crate::{
     analysis::control_flow_graph::ControlFlowGraph,
     ast::{
-        block::Block,
-        node::Node,
-        statement::{
-            assignment::Assignment,
-            channel_declaration::ChannelDeclaration,
-            expression::{primary_expression::PrimaryExpression, Expression, SideEffectExpression},
-            Statement,
-        },
-        token::datatype::DataType,
-        Ast,
+        Ast, block::Block, node::Node, statement::{
+            Statement, assignment::Assignment, declaration::Declaration,channel_declaration::ChannelDeclaration, expression::{Expression, SideEffectExpression, primary_expression::PrimaryExpression}
+        }, token::{
+            datatype::DataType,
+            tuple_identifier::Lvalue,
+        }
     },
     compiler::CompilerState,
-    error::{AlthreadError, AlthreadResult, ErrorType},
+    error::{AlthreadError, AlthreadResult, ErrorType, Pos},
 };
 
 impl Ast {
@@ -243,6 +238,158 @@ impl Ast {
         Ok(())
     }
 
+
+    // fn scan_identifier_declaration_for_run_statements(&self,
+    //     var_to_program: &mut HashMap<String, String>,
+    //     process_lists: &mut HashMap<String, String>,
+    //     var_name: &str,
+    //     var_decl: &Node<Declaration>
+    // ) -> AlthreadResult<()>{
+    //     // Check if this is a list
+    //     if let Some(list_type) = var_decl.value.datatype.as_ref() {
+    //         let (is_process, element_type) = list_type.value.is_process();
+    //         if is_process {
+    //             process_lists.insert(var_name.to_string(), element_type);
+    //         }
+    //     }
+
+    //     // check for run calls
+    //     if let Some(side_effect_node) = var_decl.value.value.as_ref() {
+    //         if let Some(program_name) =
+    //             self.extract_run_program_name(&side_effect_node.value)
+    //         {
+    //             match &var_decl.value.identifier {
+    //                 Lvalue::Identifier(object) => {
+    //                     var_to_program.insert(
+    //                         object.value.value.clone(),
+    //                         program_name,
+    //                     );
+    //                 }
+    //                 Lvalue::TupleIdentifier(object) => {
+    //                     print!("------------PRESCAN 2-------------\n\n");
+    //                 }
+    //             }
+    //         }
+    //         // check for reference assignments (let b = a;)
+    //         else if let Some(ref_var) =
+    //             self.extract_variable_reference(&side_effect_node.value)
+    //         {
+    //             if let Some(program_type) = var_to_program.get(&ref_var) {
+    //                 var_to_program.insert(var_name.to_string(), program_type.clone());
+    //             }
+
+    //             if let Some(element_type) = process_lists.get(&ref_var).cloned() {
+    //                 process_lists.insert(var_name.to_string(), element_type);
+    //             }
+    //         }
+    //         // check for .at() calls
+    //         else if let Some((list_var, _index)) =
+    //             self.extract_list_at_call(&side_effect_node.value)
+    //         {
+    //             if let Some(element_type) = process_lists.get(&list_var).cloned() {
+    //                 var_to_program.insert(var_name.to_string(), element_type);
+    //             }
+    //         }
+    //     }
+    //     Ok(())
+    // }
+
+    // fn scan_Lvalue_declaration_for_run_statements(&self,
+    //     statement: &Statement,
+    //     var_to_program: &mut HashMap<String, String>,
+    //     process_lists: &mut HashMap<String, String>,
+    //     current_program: &str,
+    //     var_name: &str,
+    //     lvalue: Lvalue
+    // ) -> AlthreadResult<()>{
+    //     match lvalue {
+    //         Lvalue::Identifier(node) => {
+    //             self.scan_identifier_declaration_for_run_statements(var_to_program, process_lists, var_name, node);
+    //         }
+    //         Lvalue::TupleIdentifier(node) => {
+    //             let vec = &node.value.value;
+    //             vec.iter().for_each(
+    //                 | ident |
+    //                 {
+    //                     let _ = self.scan_Lvalue_declaration_for_run_statements(statement, var_to_program, process_lists, current_program, var_name, (*(*ident).clone()).into());
+    //                 }
+    //             );
+    //         },
+    //     }
+    //     Ok(())
+    // }
+
+    // fn scan_declaration_for_run_statements(&self,
+    //     statement: &Statement,
+    //     var_to_program: &mut HashMap<String, String>,
+    //     process_lists: &mut HashMap<String, String>,
+    //     current_program: &str,
+    //     var_name: &str,
+    //     var_decl: &Node<Declaration>
+    // ) -> AlthreadResult<()> {
+    //     match &var_decl.value.identifier {
+    //         Lvalue::Identifier(node) => {
+    //         // Check if this is a list
+    //             if let Some(list_type) = var_decl.value.datatype.as_ref() {
+    //                 let (is_process, element_type) = list_type.value.is_process();
+    //                 if is_process {
+    //                     process_lists.insert(var_name.to_string(), element_type);
+    //                 }
+    //             }
+
+    //             // check for run calls
+    //             if let Some(side_effect_node) = var_decl.value.value.as_ref() {
+    //                 if let Some(program_name) =
+    //                     self.extract_run_program_name(&side_effect_node.value)
+    //                 {
+    //                     match &var_decl.value.identifier {
+    //                         Lvalue::Identifier(object) => {
+    //                             var_to_program.insert(
+    //                                 object.value.value.clone(),
+    //                                 program_name,
+    //                             );
+    //                         }
+    //                         Lvalue::TupleIdentifier(object) => {
+    //                             print!("------------PRESCAN 2-------------\n\n");
+    //                         }
+    //                     }
+    //                 }
+    //                 // check for reference assignments (let b = a;)
+    //                 else if let Some(ref_var) =
+    //                     self.extract_variable_reference(&side_effect_node.value)
+    //                 {
+    //                     if let Some(program_type) = var_to_program.get(&ref_var) {
+    //                         var_to_program.insert(var_name.to_string(), program_type.clone());
+    //                     }
+
+    //                     if let Some(element_type) = process_lists.get(&ref_var).cloned() {
+    //                         process_lists.insert(var_name.to_string(), element_type);
+    //                     }
+    //                 }
+    //                 // check for .at() calls
+    //                 else if let Some((list_var, _index)) =
+    //                     self.extract_list_at_call(&side_effect_node.value)
+    //                 {
+    //                     if let Some(element_type) = process_lists.get(&list_var).cloned() {
+    //                         var_to_program.insert(var_name.to_string(), element_type);
+    //                     }
+    //                 }
+    //             }
+    //     }
+    //         Lvalue::TupleIdentifier(node) => {
+    //             let vec = &node.value.value;
+    //             vec.iter().for_each(
+    //                 | ident |
+    //                 match (*(*ident).clone()).into() {
+    //                     Lvalue::TupleIdentifier(node) => {}
+    //                     Lvalue::Identifier(node) => todo!{},
+    //                 }
+    //             );
+    //         },
+    //     }
+    //     Ok(())
+    // }
+
     fn scan_statement_for_run_statements(
         &self,
         statement: &Statement,
@@ -252,46 +399,66 @@ impl Ast {
     ) -> AlthreadResult<()> {
         match statement {
             Statement::Declaration(var_decl) => {
-                let var_name = &var_decl.value.identifier.value.parts[0].value.value;
+                match &var_decl.value.identifier {
+                    Lvalue::Identifier(node) => {
+                        let var_name = &node.value.value;
 
-                // Check if this is a list
-                if let Some(list_type) = var_decl.value.datatype.as_ref() {
-                    let (is_process, element_type) = list_type.value.is_process();
-                    if is_process {
-                        process_lists.insert(var_name.clone(), element_type);
-                    }
-                }
-
-                // check for run calls
-                if let Some(side_effect_node) = var_decl.value.value.as_ref() {
-                    if let Some(program_name) =
-                        self.extract_run_program_name(&side_effect_node.value)
-                    {
-                        var_to_program.insert(
-                            var_decl.value.identifier.value.parts[0].value.value.clone(),
-                            program_name,
-                        );
-                    }
-                    // check for reference assignments (let b = a;)
-                    else if let Some(ref_var) =
-                        self.extract_variable_reference(&side_effect_node.value)
-                    {
-                        if let Some(program_type) = var_to_program.get(&ref_var) {
-                            var_to_program.insert(var_name.clone(), program_type.clone());
+                        // Check if this is a list
+                        if let Some(list_type) = var_decl.value.datatype.as_ref() {
+                            let (is_process, element_type) = list_type.value.is_process();
+                            if is_process {
+                                process_lists.insert(var_name.clone(), element_type);
+                            }
                         }
 
-                        if let Some(element_type) = process_lists.get(&ref_var).cloned() {
-                            process_lists.insert(var_name.clone(), element_type);
+                        // check for run calls
+                        if let Some(side_effect_node) = var_decl.value.value.as_ref() {
+                            if let Some(program_name) =
+                                self.extract_run_program_name(&side_effect_node.value)
+                            {
+                                match &var_decl.value.identifier {
+                                    Lvalue::Identifier(object) => {
+                                        var_to_program.insert(
+                                            object.value.value.clone(),
+                                            program_name,
+                                        );
+                                    }
+                                    Lvalue::TupleIdentifier(object) => {
+                                        print!("------------PRESCAN 2-------------\n\n");
+                                    }
+                                    Lvalue::NullIdentifier(node) => {
+                                        print!("------------PRESCAN 4-------------\n\n");
+                                    },
+                                }
+                            }
+                            // check for reference assignments (let b = a;)
+                            else if let Some(ref_var) =
+                                self.extract_variable_reference(&side_effect_node.value)
+                            {
+                                if let Some(program_type) = var_to_program.get(&ref_var) {
+                                    var_to_program.insert(var_name.clone(), program_type.clone());
+                                }
+
+                                if let Some(element_type) = process_lists.get(&ref_var).cloned() {
+                                    process_lists.insert(var_name.clone(), element_type);
+                                }
+                            }
+                            // check for .at() calls
+                            else if let Some((list_var, _index)) =
+                                self.extract_list_at_call(&side_effect_node.value)
+                            {
+                                if let Some(element_type) = process_lists.get(&list_var).cloned() {
+                                    var_to_program.insert(var_name.clone(), element_type);
+                                }
+                            }
                         }
                     }
-                    // check for .at() calls
-                    else if let Some((list_var, _index)) =
-                        self.extract_list_at_call(&side_effect_node.value)
-                    {
-                        if let Some(element_type) = process_lists.get(&list_var).cloned() {
-                            var_to_program.insert(var_name.clone(), element_type);
-                        }
+                    Lvalue::TupleIdentifier(node) => {
+                        print!("------------PRESCAN 3-------------\n\n");
                     }
+                    Lvalue::NullIdentifier(node) => {
+                        print!("------------PRESCAN 4-------------\n\n");
+                    },
                 }
             }
             Statement::Assignment(assignment) => {
@@ -398,13 +565,16 @@ impl Ast {
     ) -> Option<(String, String)> {
         match side_effect_expr {
             SideEffectExpression::FnCall(fn_call_node) => {
+                print!("side_effect_expression::fnCall\n");
                 let fn_call = &fn_call_node.value;
 
                 if fn_call.fn_name.value.parts.len() == 2 {
+                    print!("cas len == 2\n");
                     let receiver_name = &fn_call.fn_name.value.parts[0].value.value;
                     let method_name = &fn_call.fn_name.value.parts[1].value.value;
 
                     if method_name == "at" {
+                        print!("cas at \n");
                         return Some((receiver_name.clone(), "index".to_string()));
                     }
                 }
