@@ -231,7 +231,13 @@ fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerStat
                     Lvalue::TupleIdentifier(node) => {
 
                         vecnode.push(node.clone());
-                        vecindex.push(state.program_stack.len());
+                        if premier {
+                            vecindex.push(state.program_stack.len());
+                        }
+                        else {
+                            vecindex.push(state.program_stack.len()-1);
+                        }
+                        
                         vecdata.push(v[i].clone());
 
                         if side_effect_expression
