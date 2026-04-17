@@ -13,8 +13,8 @@ COPY interpreter/Cargo.toml interpreter/
 COPY web/Cargo.toml web/
 
 # Create dummy source files to pre-build dependencies
-RUN mkdir -p cli/src interpreter/src web/src && \
-    touch cli/src/main.rs interpreter/src/lib.rs web/src/lib.rs
+RUN mkdir -p cli/src interpreter/src web/src interpreter/benches && \
+    touch cli/src/main.rs interpreter/src/lib.rs web/src/lib.rs interpreter/benches/bench-examples.rs
 
 # Build dependencies (this layer will be cached)
 RUN cargo build --release -p althread-cli
