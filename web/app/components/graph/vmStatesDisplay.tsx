@@ -9,9 +9,10 @@ import { createGraphToolbarHandlers, setupNodeClickZoom } from "./visHelpers";
 import { themes } from "./visOptions";
 
 export const rendervmStates = (
-	vm_states,
+	vm_states: any[],
 	editor?: any,
 	stepLines?: number[][],
+	theme: "dark" | "light" = "dark",
 ) => {
 	console.log(vm_states);
 	let container: HTMLDivElement | undefined;
@@ -65,13 +66,16 @@ export const rendervmStates = (
 					from: i,
 					to: i + 1,
 					label: label,
-					lines: lines, // Store line numbers if available
+					lines: lines,
 					font: {
-						size: 0, // Hide labels by default
-						color: "#cccccc",
-						background: "rgba(30, 30, 30, 0.8)",
+						size: 0,
+						color: theme === "dark" ? "#cccccc" : "#544639",
+						background:
+							theme === "dark"
+								? "rgba(30, 30, 30, 0.8)"
+								: "rgba(255, 248, 239, 0.92)",
 						strokeWidth: 2,
-						strokeColor: "#000",
+						strokeColor: theme === "dark" ? "#000" : "#e7d8c3",
 					},
 				});
 			}
@@ -83,7 +87,7 @@ export const rendervmStates = (
 			"and edges:",
 			data.edges,
 		);
-		const options = themes.dark;
+		const options = theme === "dark" ? themes.dark : themes.light;
 		network = new vis.Network(container, data, options);
 		setupNodeClickZoom(network);
 
@@ -100,10 +104,13 @@ export const rendervmStates = (
 						...edge,
 						font: {
 							size: 12,
-							color: "#cccccc",
-							background: "rgba(30, 30, 30, 0.8)",
+							color: theme === "dark" ? "#cccccc" : "#544639",
+							background:
+								theme === "dark"
+									? "rgba(30, 30, 30, 0.8)"
+									: "rgba(255, 248, 239, 0.92)",
 							strokeWidth: 2,
-							strokeColor: "#000",
+							strokeColor: theme === "dark" ? "#000" : "#e7d8c3",
 						},
 					};
 					// Update the network

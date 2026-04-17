@@ -2,7 +2,7 @@
 .error-display .file-link {
 	background: none;
 	border: none;
-	color: #4fc3f7;
+	color: var(--app-syntax-keyword);
 	text-decoration: underline;
 	cursor: pointer;
 	font-family: inherit;
@@ -12,11 +12,11 @@
 }
 
 .error-display .file-link:hover {
-	color: #81d4fa;
+	color: var(--app-accent-blue);
 	text-decoration: none;
 }
 
 .error-display .file-link:focus {
-	outline: 1px solid #4fc3f7;
+	outline: 1px solid var(--app-accent-blue);
 	outline-offset: 1px;
 }

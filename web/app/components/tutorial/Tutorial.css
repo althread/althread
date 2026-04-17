@@ -3,8 +3,8 @@
 	flex-direction: column;
 	height: 100vh;
 	overflow: hidden;
-	background-color: #1e1e1e;
-	color: #d4d4d4;
+	background-color: var(--app-surface);
+	color: var(--app-text-muted);
 	font-family:
 		system-ui,
 		-apple-system,
@@ -13,7 +13,6 @@
 		Ubuntu,
 		Cantarell,
 		Noto Sans,
-		sans-serif,
 		BlinkMacSystemFont,
 		"Segoe UI",
 		Helvetica,
@@ -31,42 +30,49 @@
 
 .tutorial-header {
 	margin: 0;
-	/* Matches the padded height used for the main header layout math. */
 	height: 62px;
 	box-sizing: border-box;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 2rem;
-	padding: 1rem 1rem 1rem 0.5rem;
-	background-color: #1e1e1e;
-	border-bottom: 1px solid #333;
+	gap: 1rem;
+	padding: 0 1rem;
+	background-color: var(--app-surface);
+	border-bottom: 1px solid var(--app-border);
 }
 
 .tutorial-header .brand {
 	display: flex;
 	align-items: center;
-	/* flex: 1; */
+	flex-shrink: 0;
 }
 
 .tutorial-step-selector-wrapper {
-	/* flex-grow: 2; */
+	flex: 1;
 	display: flex;
 	justify-content: center;
+	min-width: 0;
+}
+
+.actions-placeholder {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-shrink: 0;
 }
 
 .tutorial-header select {
 	appearance: none;
 	-webkit-appearance: none;
 	-moz-appearance: none;
-	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23cccccc'%3E%3Cpath d='M12.78 5.22a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L3.22 6.28a.75.75 0 0 1 1.06-1.06L8 8.94l3.72-3.72a.75.75 0 0 1 1.06 0z'/%3E%3C/svg%3E");
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='currentColor'%3E%3Cpath d='M12.78 5.22a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L3.22 6.28a.75.75 0 0 1 1.06-1.06L8 8.94l3.72-3.72a.75.75 0 0 1 1.06 0z'/%3E%3C/svg%3E");
 	background-repeat: no-repeat;
 	background-position: right 0.7rem center;
 	background-size: 1em;
 	padding: 4px 28px 4px 12px;
-	border: 1px solid #3d3d3d;
-	background-color: #2d2d2d;
-	color: #cccccc;
+	border: 1px solid var(--app-border-strong);
+	background-color: var(--app-surface-hover);
+	color: var(--app-text);
 	font-size: 13px;
 	min-width: 250px;
 	max-width: 400px;
@@ -75,7 +81,7 @@
 }
 
 .tutorial-header select:hover {
-	border-color: #5e5e5e;
+	border-color: var(--app-border-strong);
 }
 
 .tutorial-header select:focus {
@@ -86,7 +92,7 @@
 .explanation-pane {
 	padding: 20px;
 	overflow-y: auto;
-	background-color: #1e1e1e;
+	background-color: var(--app-surface);
 	display: flex;
 	flex-direction: column;
 	position: relative;
@@ -107,11 +113,11 @@
 }
 
 .explanation-pane:hover::-webkit-scrollbar-thumb {
-	background: rgba(85, 85, 85, 0.6);
+	background: var(--app-scrollbar);
 }
 
 .explanation-pane::-webkit-scrollbar-thumb:hover {
-	background: rgba(102, 102, 102, 0.8);
+	background: var(--app-scrollbar-hover);
 }
 
 .tutorial-content {
@@ -121,8 +127,8 @@
 .tutorial-content h1,
 .tutorial-content h2,
 .tutorial-content h3 {
-	color: var(--ifm-color-primary-darkest);
-	border-bottom: 1px solid #444;
+	color: var(--app-text);
+	border-bottom: 1px solid var(--app-border-strong);
 	padding-bottom: 0.3em;
 }
 
@@ -140,19 +146,19 @@
 
 .tutorial-content p {
 	line-height: 1.7;
-	color: #ccc;
+	color: var(--app-text-muted);
 }
 
 .tutorial-content code {
-	background-color: #2d2d2d;
+	background-color: var(--app-input-bg);
 	padding: 0.2em 0.4em;
 	font-family: "Menlo", "Monaco", "Courier New", monospace;
 	color: var(--ifm-color-primary-lightest);
 }
 
 .tutorial-content pre {
-	background-color: #1e1e1e;
-	border: 1px solid #333;
+	background-color: var(--app-surface);
+	border: 1px solid var(--app-border);
 	padding: 1rem;
 	overflow-x: auto;
 }
@@ -174,9 +180,9 @@
 	justify-content: space-between;
 	align-items: center;
 	padding-top: 20px;
-	border-top: 1px solid #333;
+	border-top: 1px solid var(--app-border);
 	margin-top: auto;
-	background-color: #1e1e1e;
+	background-color: var(--app-surface);
 }
 
 .editor-toolbar-actions .action-buttons-center {
@@ -185,13 +191,14 @@
 }
 
 .editor-toolbar-actions .validate-button {
-	background-color: #314d31;
-	border-color: #a6dfa6;
-	color: #a6dfa6;
+	background-color: var(--app-accent-green-soft);
+	border-color: var(--app-accent-green-light);
+	color: #ffffff;
 }
 
 .editor-toolbar-actions .validate-button:hover:not(:disabled) {
-	background-color: #3f613f;
+	background-color: var(--app-accent-green-light);
+	color: #ffffff;
 }
 
 .editor-output-panes {
@@ -199,7 +206,7 @@
 	padding-right: 1rem;
 	display: flex;
 	flex-direction: column;
-	background-color: #1e1e1e;
+	background-color: var(--app-surface);
 }
 
 .editor-pane-area {
@@ -221,7 +228,7 @@
 .editor-toolbar h3 {
 	margin: 0;
 	font-size: 13px;
-	color: #cccccc;
+	color: var(--app-text-muted);
 	font-weight: normal;
 }
 
@@ -254,16 +261,16 @@
 
 .validation-message.success {
 	padding: 1rem;
-	background-color: #314d31;
-	color: #a6dfa6;
-	border: 1px solid #a6dfa6;
+	background-color: var(--app-accent-green-soft);
+	color: var(--app-success-text);
+	border: 1px solid var(--app-success-border);
 }
 
 .validation-message.error {
 	padding: 1rem;
-	background-color: #2a1a1a;
-	border: 1px solid #ec9999;
-	color: #b7b7b7;
+	background-color: var(--app-accent-red-bg);
+	border: 1px solid var(--app-accent-red-border);
+	color: var(--app-text-muted);
 }
 
 .console pre {
@@ -274,10 +281,10 @@
 /* Tutorial code block styling */
 .tutorial-code-block {
 	margin: 1rem 0;
-	border: 1px solid #333;
+	border: 1px solid var(--app-border);
 	border-radius: 4px;
 	overflow: hidden;
-	background-color: #1e1e1e;
+	background-color: var(--app-surface);
 }
 
 .tutorial-code-block .cm-editor {
@@ -294,7 +301,7 @@
 }
 
 .tutorial-code-block .cm-gutters {
-	border-right: 1px solid #333;
+	border-right: 1px solid var(--app-border);
 }
 
 /* Custom scrollbar for tutorial code blocks - consistent with main editor */
@@ -313,11 +320,11 @@
 }
 
 .tutorial-code-block .cm-scroller:hover::-webkit-scrollbar-thumb {
-	background: rgba(85, 85, 85, 0.6);
+	background: var(--app-scrollbar);
 }
 
 .tutorial-code-block .cm-scroller::-webkit-scrollbar-thumb:hover {
-	background: rgba(102, 102, 102, 0.8);
+	background: var(--app-scrollbar-hover);
 }
 
 /* Horizontal scrollbar styling */

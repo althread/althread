@@ -25,6 +25,7 @@ interface GraphBuildOptions {
 	stepLines?: number[][];
 	violationPath?: string[];
 	violationPathStates?: VMState[];
+	theme?: "dark" | "light";
 }
 
 export function stableStringify(value: unknown): string {
@@ -93,6 +94,7 @@ export function buildGraphFromNodes(
 		stepLines = [],
 		violationPath = [],
 		violationPathStates = [],
+		theme = "dark",
 	} = options;
 	const visNodes: VisGraphNode[] = [];
 	const visEdges: VisGraphEdge[] = [];
@@ -151,13 +153,16 @@ export function buildGraphFromNodes(
 				: typeof nodeLabel === "string" &&
 					fallbackViolationLabelSet.has(nodeLabel));
 
-		let backgroundColor, borderColor;
+		let backgroundColor, borderColor, fontColor;
 		if (mode === "run") {
 			backgroundColor = "#314d31";
 			borderColor = "#a6dfa6";
+			fontColor = theme === "dark" ? "#ffffff" : "#1a3a1a";
 		} else {
 			backgroundColor = isViolationNode ? "#4d3131" : "#314d31";
 			borderColor = isViolationNode ? "#ec9999" : "#a6dfa6";
+			fontColor =
+				theme === "dark" ? "#ffffff" : isViolationNode ? "#8b1a1a" : "#1a3a1a";
 		}
 
 		visNodes.push({
@@ -176,7 +181,7 @@ export function buildGraphFromNodes(
 					background: backgroundColor,
 				},
 			},
-			font: { size: 10, color: "#ffffff" } as any,
+			font: { size: 10, color: fontColor } as any,
 			borderWidth: 1,
 			title,
 			// Unified format for both run and check modes

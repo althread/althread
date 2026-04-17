@@ -10,16 +10,16 @@
 	font-family: "Consolas", "Monaco", monospace;
 	font-size: 13px;
 	padding: 4px 8px;
-	background: #1e1e1e;
+	background: var(--app-surface);
 	border-radius: 3px;
-	border-left: 3px solid #007acc;
+	border-left: 3px solid var(--app-accent-blue);
 }
 
 .var-name {
-	color: #9cdcfe;
+	color: var(--app-syntax-variable);
 	font-weight: 500;
 }
 
 .var-value {
-	color: #ce9178;
+	color: var(--app-syntax-string);
 }

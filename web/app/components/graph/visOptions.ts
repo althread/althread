@@ -5,8 +5,7 @@ const baseOptions = {
 	edges: {
 		arrows: "to",
 		font: {
-			size: 0, // Hide labels by default
-			color: "#cccccc",
+			size: 0,
 			strokeWidth: 0,
 		},
 		color: {
@@ -114,10 +113,9 @@ const darkTheme = {
 			size: 12,
 			align: "left",
 			multi: "markdown",
-			bold: { color: THEME_PRIMARY }, // was '#9cdcfe'
+			bold: { color: THEME_PRIMARY },
 			ital: { color: "#a0a0a0", size: 11 },
 		},
-		// Removed large constraints to allow smaller nodes
 	},
 };
 

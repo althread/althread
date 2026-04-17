@@ -53,11 +53,11 @@ export default (props: GraphProps) => {
 	};
 	const isDarkTheme = () => props.theme !== "light";
 	const graphOverlayStyles = () => ({
-		background: isDarkTheme() ? "#1e1e1e" : "#fffaf2",
-		color: isDarkTheme() ? "#ffffff" : "#332c26",
-		border: isDarkTheme() ? "#454545" : "#d8c9b3",
-		shadow: isDarkTheme() ? "rgba(0,0,0,0.3)" : "rgba(121, 89, 46, 0.18)",
-		buttonColor: isDarkTheme() ? "#cccccc" : "#6f5b46",
+		background: "var(--app-surface)",
+		color: "var(--app-text)",
+		border: "var(--app-border)",
+		shadow: isDarkTheme() ? "var(--app-shadow-md)" : "var(--app-shadow-sm)",
+		buttonColor: "var(--app-text-muted)",
 	});
 
 	createEffect(() => {
@@ -214,7 +214,7 @@ export default (props: GraphProps) => {
 		<div class={`state-graph${maximized() ? " maximized" : ""}`}>
 			{isGraphTooLarge() ? (
 				<div
-					style={`display: flex; height: 100%; align-items: center; justify-content: center; padding: 24px; color: ${isDarkTheme() ? "#cccccc" : "#5c4d3d"}; text-align: center;`}
+					style={`display: flex; height: 100%; align-items: center; justify-content: center; padding: 24px; color: var(--app-text-muted); text-align: center;`}
 				>
 					<div>
 						<div style="font-weight: 600; margin-bottom: 8px;">

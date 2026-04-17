@@ -11,11 +11,11 @@
 .subsection-title {
 	font-size: 10px;
 	font-weight: 600;
-	color: #858585;
+	color: var(--app-icon-muted);
 	margin-bottom: 8px;
 	text-transform: uppercase;
 	letter-spacing: 0.4px;
-	border-bottom: 1px solid #3e3e42;
+	border-bottom: 1px solid var(--app-border-strong);
 	padding-bottom: 4px;
 }
 
@@ -28,15 +28,15 @@
 }
 
 .message-card {
-	background: #1e1e1e;
-	border: 1px solid #3e3e42;
-	border-left: 3px solid #007acc;
+	background: var(--app-surface);
+	border: 1px solid var(--app-border-strong);
+	border-left: 3px solid var(--app-accent-blue);
 	border-radius: 4px;
 	padding: 10px;
 }
 
 .message-card.waiting {
-	border-left-color: #f48771;
+	border-left-color: var(--app-accent-red);
 }
 
 .message-route {
@@ -52,7 +52,7 @@
 /* Keep the arrow icon glued to the endpoint before it */
 .route-arrow {
 	flex-shrink: 0;
-	color: #858585;
+	color: var(--app-icon-muted);
 }
 
 .message-endpoint {
@@ -62,17 +62,17 @@
 }
 
 .message-endpoint.from {
-	background: #0e639c;
-	color: #ffffff;
+	background: var(--app-accent-blue-light);
+	color: var(--app-tooltip-text);
 }
 
 .message-endpoint.to {
-	background: #16825d;
-	color: #ffffff;
+	background: var(--app-accent-green);
+	color: var(--app-tooltip-text);
 }
 
 .message-status {
-	color: #f48771;
+	color: var(--app-accent-red);
 	font-size: 12px;
 	font-style: italic;
 }
@@ -87,7 +87,7 @@
 
 .payload-item {
 	padding: 4px 8px;
-	background: #2d2d30;
+	background: var(--app-code-bg);
 	border-radius: 3px;
-	color: #ce9178;
+	color: var(--app-syntax-string);
 }
