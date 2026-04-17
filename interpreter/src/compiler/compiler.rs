@@ -503,23 +503,33 @@ impl Ast {
                         let available_table = state.global_table().clone();
 
                         node.compile(&mut state)?;
+                        match &decl.value.identifier {
+                            Lvalue::Identifier(node) =>{
+                                let var_name = &node.value.value;
+                                // Use context instead of local global_table
+                                let last_program_stack = state.program_stack.last().unwrap().clone();
+                                let literal = Self::evaluate_shared_initializer(
+                                    decl.value.value.as_ref(),
+                                    &last_program_stack.datatype,
+                                    &available_table,
+                                    &available_globals,
+                                )?;
 
-                        let var_name = &decl.value.identifier.value.parts[0].value.value;
-                        // Use context instead of local global_table
-                        let last_program_stack = state.program_stack.last().unwrap().clone();
-                        let literal = Self::evaluate_shared_initializer(
-                            decl.value.value.as_ref(),
-                            &last_program_stack.datatype,
-                            &available_table,
-                            &available_globals,
-                        )?;
-
-                        state
-                            .global_table_mut()
-                            .insert(var_name.clone(), last_program_stack);
-                        state
-                            .global_memory_mut()
-                            .insert(var_name.clone(), literal);
+                                state
+                                    .global_table_mut()
+                                    .insert(var_name.clone(), last_program_stack);
+                                state
+                                    .global_memory_mut()
+                                    .insert(var_name.clone(), literal);
+                            },
+                            Lvalue::TupleIdentifier(node) => 
+                            {
+                                print!("-----------COMPILER 2-----------\n");
+                            },
+                            Lvalue::NullIdentifier(node) => {
+                                print!("-----------COMPILER 3-----------\n");
+                            },
+                        }
                     }
                     _ => {
                         return Err(AlthreadError::new(

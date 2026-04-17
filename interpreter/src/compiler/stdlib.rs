@@ -229,6 +229,7 @@ impl Stdlib {
                     name: "len".to_string(),
                     args: vec![],
                     ret: DataType::Integer,
+                    mutates_receiver: false,
                     f: Rc::new(|list, _v, pos| {
                         match list {
                             Literal::Tuple(v) => Ok(Literal::Int(v.len() as i64)),
@@ -242,11 +243,12 @@ impl Stdlib {
                 });
                 for s in 0..t.len(){
                     let size = s.clone();
-                    let func_name : String =String::from("set")+&size.to_string();
+                    let func_name : String =String::from("set") + &size.to_string();
                     new_interfaces.push(Interface {
                         name: func_name.clone(),
                         args: vec![t[size].clone()],
                         ret: DataType::Void,
+                        mutates_receiver: true,
                         f: Rc::new(move |tuple, v, pos| {
                             let v = v.to_tuple().unwrap();
                             if v.len() != 1 {
@@ -295,6 +297,7 @@ impl Stdlib {
                         name: size.to_string(),
                         args: vec![],
                         ret: t[size].clone(),
+                        mutates_receiver: false,
                         f: Rc::new(move |tuple, _v, pos| {
                             if let Literal::Tuple(vec ) = tuple {
                                 if vec.len() <=0  {
