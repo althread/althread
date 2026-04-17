@@ -67,6 +67,39 @@ impl NodeBuilder for Declaration {
     }
 }
 
+fn compile_templateidentifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<TupleIdentifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect : bool,unstack_len:usize) ->
+    AlthreadResult<InstructionBuilderOk>
+{
+
+    if !side_effect
+    {
+        let r : Option<DataType> = std::option::Option::Some(datatype.clone());
+        builder.instructions.push(Instruction {
+            control: InstructionType::Push(r.as_ref().unwrap().default()),
+            pos: Some(declaration.keyword.pos.clone()),
+        });
+    }
+    state.program_stack.push(Variable {
+    mutable: true,
+    name: "_".to_string(), // Use the simple variable name, not the full qualified name
+    datatype: datatype.clone(),
+    depth: state.current_stack_depth,
+    declare_pos: Some(node.pos.clone()),
+    });
+
+    builder.debug_variables.push(crate::compiler::LocalVariableDebugInfo {
+        name: "_".to_string(),
+        datatype,
+        stack_index,
+        scope_start_ip,
+        scope_end_ip: None,
+        declare_pos: Some(node.pos.clone()),
+    });
+    
+    
+    Ok((*builder).clone())
+}
+
 fn compile_nullidentifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<NullIdentifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect : bool,unstack_len:usize) ->
     AlthreadResult<InstructionBuilderOk>
 {
@@ -79,13 +112,12 @@ fn compile_nullidentifier(declaration : &Declaration , state: &mut CompilerState
             pos: Some(declaration.keyword.pos.clone()),
         });
     }
-    
     state.program_stack.push(Variable {
-        mutable: true,
-        name: "_".to_string(), // Use the simple variable name, not the full qualified name
-        datatype: datatype.clone(),
-        depth: state.current_stack_depth,
-        declare_pos: Some(node.pos.clone()),
+    mutable: true,
+    name: "_".to_string(),
+    datatype: datatype.clone(),
+    depth: state.current_stack_depth,
+    declare_pos: Some(node.pos.clone()),
     });
     builder.debug_variables.push(crate::compiler::LocalVariableDebugInfo {
         name: "_".to_string(),
@@ -145,7 +177,7 @@ fn compile_identifier(declaration : &Declaration , state: &mut CompilerState, no
         mutable: true,
         name: node.value.value.clone(), // Use the simple variable name, not the full qualified name
         datatype: datatype.clone(),
-        depth: state.current_stack_depth,
+        depth: state.current_stack_depth,  
         declare_pos: Some(node.pos.clone()),
     });
     builder.debug_variables.push(crate::compiler::LocalVariableDebugInfo {
@@ -165,9 +197,10 @@ fn compile_identifier(declaration : &Declaration , state: &mut CompilerState, no
 
 
 
-fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<TupleIdentifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect_expression : &Option<Node<SideEffectExpression>>,mut unstack_len : usize) ->
+fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<TupleIdentifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect_expression : bool,mut unstack_len : usize, position :&mut usize,premier : bool) ->
     AlthreadResult<InstructionBuilderOk>
 {  
+    print!("est appeler \n");
     match datatype {
         DataType::Tuple(v) => {
             
@@ -181,30 +214,82 @@ fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerStat
                 ));
             }
             let mut veciter = vec.iter().enumerate();
+
+            let mut vecnode :Vec<Node<TupleIdentifier>> = vec![];
+            let mut vecindex :Vec<usize>=vec![];
+            let mut vecdata :Vec<DataType>=vec![];
+
             while let Some((i,elt)) = veciter.next()
             {
                 let value : Lvalue = (*(*elt).clone()).into();
                 let r: Result<InstructionBuilderOk, AlthreadError>;
                 match value {
                     Lvalue::Identifier(node) => {
-                        r = compile_identifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,*side_effect_expression!=None,unstack_len);
+                        print!("identifier \n");
+                        r = compile_identifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,side_effect_expression,unstack_len);
                     },
                     Lvalue::TupleIdentifier(node) => {
-                        r = compile_tupleidentifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,&side_effect_expression,unstack_len);
+
+                        vecnode.push(node.clone());
+                        vecindex.push(state.program_stack.len());
+                        vecdata.push(v[i].clone());
+
+                        if side_effect_expression
+                        {
+                            r = compile_templateidentifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,side_effect_expression,unstack_len);
+                        }
+                        else {
+                            r= Ok((*builder).clone());
+                        }
+                        // state.current_stack_depth+=1;
+                        // r =compile_tupleidentifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,&side_effect_expression,unstack_len,0);
+                        
                     },
                     Lvalue::NullIdentifier(node) =>{
-                        r = compile_nullidentifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,*side_effect_expression!=None,unstack_len);
+                        r = compile_nullidentifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,side_effect_expression,unstack_len);
+                        // r = compile_tupleidentifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,&side_effect_expression,unstack_len);
                     },
                 }
                 if r.is_err() {return r;}
             }
-            if *side_effect_expression!=None
+            print!("\nstack : \n{:?}\n",state.program_stack);
+            if side_effect_expression
             {
+                let pose = state.program_stack.len()-1 -vec.len() - *position;
+                //let pose = *position;
+                print!("\npasse par sideffect\n");
                 builder.instructions.push(
                 Instruction {
-                control: InstructionType::Destruct,
+                control: InstructionType::Destruct(pose),
                 pos: Some(node.pos.clone()),}
                 );
+                if !premier
+                {
+                    let pose = *position;
+                    print!("\n\nvas ici non empty, ce qui va être sup {:?} à la position : {:?}\n\n",state.program_stack.get(pose),pose);
+                    state.program_stack.remove(pose);
+                }
+            }
+
+                // let pose = state.program_stack.len() -1 -position;
+                // state.program_stack.remove(pose);
+            if !vecindex.is_empty(){
+                
+                // let pose = state.program_stack.len() - *position -2;
+            
+            
+
+                print!("vecindex : {:?},\n vecnode : {:?}\n",vecindex,vecnode);
+                
+                let vecsize = vecindex.len()-1;
+
+                for i in 0..vecindex.len(){
+                    
+                    // state.current_stack_depth -= 1;
+                    print!("pass ici avec : \n-> node : {:?}\n-> type {:?}\n-> position : {:?}",vecnode[vecsize-i],vecdata[vecsize-i].clone(),vecindex[vecsize-i]);
+                    let r = compile_tupleidentifier(&declaration, state, &vecnode[vecsize-i],builder,vecdata[vecsize-i].clone(),stack_index,scope_start_ip,side_effect_expression,unstack_len,&mut vecindex[vecsize-i],false);
+                    if r.is_err() {return r;} 
+                };
             }
         }
         _=> {}
@@ -373,6 +458,7 @@ impl InstructionBuilder for Declaration {
                         .datatype
                         .clone();
                     unstack_len = state.unstack_current_depth();
+                    print!("\n\nstack side effet {:?}\n\n",state.program_stack);
                     
                     if let Some(declared_datatype) = datatype {
 
@@ -413,7 +499,9 @@ impl InstructionBuilder for Declaration {
                         ));
                     }
                 }
-                let r = compile_tupleidentifier(&self, state, &node, &mut builder,datatype.unwrap(),0,0,&valeur,unstack_len);
+                let mut position : usize= state.program_stack.len()-1;
+                let r = compile_tupleidentifier(&self, state, &node, &mut builder,datatype.unwrap(),0,0,
+                valeur!=None,unstack_len,&mut position,true);
                 if r.is_err() {return r;}
             },
             Lvalue::NullIdentifier(node) => {
