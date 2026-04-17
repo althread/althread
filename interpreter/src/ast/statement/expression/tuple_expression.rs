@@ -150,7 +150,7 @@ impl TupleExpression {
         //             "Expected tuple of types {:?}, but found {:?}",
         //             types, top.datatype),))
         Ok(Instruction {
-            control: InstructionType::Destruct,
+            control: InstructionType::Destruct(0),
             pos: Some(pos),
         })
     }

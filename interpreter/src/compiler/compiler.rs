@@ -1096,7 +1096,7 @@ impl Ast {
         
         if !args.value.identifiers.is_empty() {
             process_code.instructions.push(Instruction {
-                control: InstructionType::Destruct,
+                control: InstructionType::Destruct(0),
                 pos: Some(args.pos.clone()),
             });
         }

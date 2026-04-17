@@ -158,7 +158,7 @@ impl InstructionBuilder for Node<ReceiveStatement> {
             pos: Some(self.pos.clone()),
         });
         builder.instructions.push(Instruction {
-            control: InstructionType::Destruct,
+            control: InstructionType::Destruct(0),
             pos: Some(pos),
         });
         //repush the false boolean

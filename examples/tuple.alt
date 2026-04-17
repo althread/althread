@@ -8,28 +8,30 @@ fn simple(n: tuple(int,string,float)) ->tuple(int,string, float) {
 
 
 main {
-    let a = 12;
-    let n : tuple(int,string,float,int,int) = (a,"hello",11.99,12,1000);
-    let elt : list(int) ;
-    elt.push(1);
-    elt.push(2);
-    elt.push(3);
-    print(n);
-    let test : tuple(int,int) = (123,456);
-    print(test.0());
-    print(n.0());
-    let temps = n.at(0);
-    print(temps);
-    let nl : int = n.len();
-    print(nl);
-    
+  let a = 12;
+  let n : tuple(int,string,float,int,int) = (a,"hello",11.99,12,1000);
+  let elt : list(int) ;
+  elt.push(1);
+  elt.push(2);
+  elt.push(3);
+  print(n);
+  let test : tuple(int,int) = (123,456);
+  let test2 : tuple(int,int) = (123,456);
+  if (test==test2){print("super");}
+  print(test.0());
+  print(n.0());
+  let temps = n.0();
+  print(temps);
+  let nl : int = n.len();
+  print(nl);
+  
 
-    print(elt);
-    let l = elt.len();
-    print(l);
+  print(elt.at(2));
+  let l = elt.len();
+  print(l);
 
-    //print(n.at(0));
+  //print(n.at(0));
 
-    //let r = simple(n);
-    //print(r);
+  //let r = simple(n);
+  //print(r);
 }

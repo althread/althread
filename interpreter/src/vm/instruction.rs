@@ -27,7 +27,7 @@ pub enum InstructionType {
     Unstack {
         unstack_len: usize,
     },
-    Destruct,
+    Destruct(usize),
     GlobalReads {
         variables: Vec<String>,
         only_const: bool,
@@ -160,7 +160,7 @@ impl fmt::Display for InstructionType {
             } => write!(f, "jumpIf {} (unstack {})", jump_false, unstack_len)?,
             Self::Jump(a) => write!(f, "jump {}", a)?,
             Self::Unstack { unstack_len } => write!(f, "unstack {}", unstack_len)?,
-            Self::Destruct => write!(f, "destruct tuple",)?,
+            Self::Destruct(position) => write!(f, "destruct tuple in position {} in stack",position)?,
             Self::RunCall { name, .. } => write!(f, "run {}()", name)?,
             Self::Break { unstack_len, .. } => write!(f, "break (unstack {})", unstack_len)?,
             Self::EndProgram => write!(f, "end program")?,
@@ -300,7 +300,7 @@ impl InstructionType {
             | Self::JumpIf {..}
             | Self::Jump(_)
             | Self::Break {..}
-            | Self::Destruct
+            | Self::Destruct(_)
             | Self::Unstack {..}
             | Self::FnCall {..}
             | Self::MethodCall {..}

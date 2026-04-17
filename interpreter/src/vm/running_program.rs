@@ -714,19 +714,20 @@ impl<'a> RunningProgramState<'a> {
                     *jump
                 }
             }
-            InstructionType::Destruct => {
-                // The values are in a tuple on the top of the stack
-                let tuple = self
-                    .memory
-                    .pop()
-                    .expect("Panic: stack is empty, cannot destruct")
-                    .into_tuple()
-                    .expect("Panic: cannot convert to tuple");
+            InstructionType::Destruct(position) => {
+                let size = self.memory.len();
+                let index :usize = size -1 - *position;
+                let tuple = self.memory.remove(index).into_tuple().expect("Panic: cannot convert to tuple");
+
+                print!("\naffichage tuple destruct {:?}\n",tuple);
+                
                 for val in tuple.into_iter() {
                     self.memory.push(val);
+                    // self.memory.insert(index, val);
                 }
                 1
             }
+
             InstructionType::Push(literal) => {
                 self.memory.push(literal.clone());
                 1
