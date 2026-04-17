@@ -94,6 +94,32 @@ impl InstructionBuilderOk {
             var
         }));
     }
+    pub fn shift_instruction_indexes(&mut self, offset: usize) {
+        if offset == 0 {
+            return;
+        }
+
+        for indexes in self.break_indexes.values_mut() {
+            for index in indexes {
+                *index += offset;
+            }
+        }
+
+        for indexes in self.continue_indexes.values_mut() {
+            for index in indexes {
+                *index += offset;
+            }
+        }
+
+        for index in &mut self.return_indexes {
+            *index += offset;
+        }
+
+        for var in &mut self.debug_variables {
+            var.scope_start_ip += offset;
+            var.scope_end_ip = var.scope_end_ip.map(|end| end + offset);
+        }
+    }
     pub fn contains_jump(&self) -> bool {
         self.break_indexes.len() > 0
             || self.continue_indexes.len() > 0

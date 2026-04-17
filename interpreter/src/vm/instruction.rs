@@ -68,6 +68,7 @@ pub enum InstructionType {
         unstack_len: usize,
         drop_receiver: bool,
         arguments: Option<Vec<usize>>,
+        global_receiver: Option<String>,
     },
     Return {
         has_value: bool,
@@ -173,19 +174,37 @@ impl fmt::Display for InstructionType {
                 receiver_idx,
                 drop_receiver,
                 arguments,
-            } => write!(
-                f,
-                "{}() receiver [{}] (unstack {}, drop {}, args {})",
-                name,
-                receiver_idx,
-                unstack_len,
-                drop_receiver,
-                if arguments.is_some() {
-                    "scattered"
+                global_receiver,
+            } => {
+                if let Some(global_name) = global_receiver {
+                    write!(
+                        f,
+                        "{}() global {} (unstack {}, args {})",
+                        name,
+                        global_name,
+                        unstack_len,
+                        if arguments.is_some() {
+                            "scattered"
+                        } else {
+                            "tuple"
+                        }
+                    )?
                 } else {
-                    "tuple"
+                    write!(
+                        f,
+                        "{}() receiver [{}] (unstack {}, drop {}, args {})",
+                        name,
+                        receiver_idx,
+                        unstack_len,
+                        drop_receiver,
+                        if arguments.is_some() {
+                            "scattered"
+                        } else {
+                            "tuple"
+                        }
+                    )?
                 }
-            )?,
+            }
             Self::Return { has_value } => {
                 write!(f, "return {:?}", if *has_value { "value" } else { "void" })?
             }
@@ -303,7 +322,10 @@ impl InstructionType {
             | Self::Destruct(_)
             | Self::Unstack {..}
             | Self::FnCall {..}
-            | Self::MethodCall {..}
+            | Self::MethodCall {
+                global_receiver: None,
+                ..
+            }
             | Self::Return {..}
             | Self::Declaration {..}
             | Self::CreateListFromStack {..}
@@ -312,6 +334,11 @@ impl InstructionType {
             | Self::EndProgram
             | Self::Exit
             | Self::Push(_) => true,
+
+            Self::MethodCall {
+                global_receiver: Some(_),
+                ..
+            } => false,
         }
     }
 

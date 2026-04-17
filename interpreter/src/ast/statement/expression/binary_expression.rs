@@ -135,6 +135,20 @@ impl LocalBinaryExpressionNode {
                     )
                 }
             }
+            BinaryOperator::ShiftLeft | BinaryOperator::ShiftRight => {
+                if left_type == DataType::Integer && right_type == DataType::Integer {
+                    Ok(DataType::Integer)
+                } else {
+                    Err("bitwise shift operations can only be performed between integers".to_string())
+                }
+            }
+            BinaryOperator::BitAnd | BinaryOperator::BitOr => {
+                if left_type == DataType::Integer && right_type == DataType::Integer {
+                    Ok(DataType::Integer)
+                } else {
+                    Err("bitwise operations can only be performed between integers".to_string())
+                }
+            }
         }
     }
 
@@ -156,6 +170,10 @@ impl LocalBinaryExpressionNode {
             BinaryOperator::GreaterThanOrEqual => left.greater_than_or_equal(&right),
             BinaryOperator::And => left.and(&right),
             BinaryOperator::Or => left.or(&right),
+            BinaryOperator::ShiftLeft => left.shift_left(&right),
+            BinaryOperator::ShiftRight => left.shift_right(&right),
+            BinaryOperator::BitAnd => left.bit_and(&right),
+            BinaryOperator::BitOr => left.bit_or(&right),
         }
     }
 }

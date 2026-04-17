@@ -1,0 +1,32 @@
+program node(id:int) {
+  // TODO
+}
+main {
+  let n = 4; // nombre de processus
+  let procs:list(proc(node));
+  for i in 0..n {
+    let a = run node(i);
+    procs.push(a);
+  }
+
+  // Création des canaux de communication en anneau
+  for i in 0..n {
+    let a = procs.at(i);
+    let b = procs.at((i+1) % n);
+    channel a.out (string, int)> b.in;
+  }
+
+  // on ne peut pas encore creer des channels dont le nom 
+  // dépend d'une variable donc on le fait manuellement
+  let a = procs.at(0);
+  channel self.out.a (string)> a.fromMain;
+  let a = procs.at(1);
+  channel self.out.b (string)> a.fromMain;
+  let a = procs.at(2);
+  channel self.out.c (string)> a.fromMain;
+  let a = procs.at(3);
+  channel self.out.d (string)> a.fromMain;
+
+  // Initialisation de l'élection
+  send out.*("candidat");
+}

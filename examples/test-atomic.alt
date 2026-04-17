@@ -11,7 +11,7 @@ program A() {
     A = false;
     B = true;
   }
-  Done += 1;
+  Done = Done + 1;
   send out(42,true);
 }
 
@@ -21,7 +21,7 @@ program B() {
     A = true;
     B = false;
   }
-  Done += 1;
+  Done = Done + 1;
 }
 
 always {

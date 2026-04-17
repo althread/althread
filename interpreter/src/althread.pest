@@ -172,10 +172,12 @@ unary_expression = _{ unary_operator? ~ postfix_expression }
 unary_operator   =  { POS_OP | NEG_OP | NOT_OP }
 
 binary_expression   = _{ unary_expression ~ (binary_operator ~ unary_expression)* }
-binary_operator     = _{ or_operator | and_operator | equality_operator | comparison_operator | term_operator | factor_operator }
+binary_operator     = _{ or_operator | and_operator | bitwise_operator | equality_operator | shift_operator | comparison_operator | term_operator | factor_operator }
 or_operator         =  { OR_OP }
 and_operator        =  { AND_OP }
 equality_operator   =  { EQ_OP | NE_OP }
+shift_operator      =  { SHL_OP | SHR_OP }
+bitwise_operator     =  { BITWISE_AND_OP | BITWISE_OR_OP}
 comparison_operator =  { LE_OP | GE_OP | LT_OP | GT_OP }
 term_operator       =  { ADD_OP | SUB_OP }
 factor_operator     =  { MUL_OP | DIV_OP | MOD_OP }
@@ -298,6 +300,11 @@ LE_OP  = { "<=" }
 GE_OP  = { ">=" }
 AND_OP = { "&&" }
 OR_OP  = { "||" }
+SHL_OP = { "<<" }
+SHR_OP = { ">>" }
+
+BITWISE_AND_OP = { "&" }
+BITWISE_OR_OP  = { "|" }
 
 LIST_OP = _{ ".." }
 
@@ -325,7 +332,7 @@ TUPLE_TYPE = { "tuple" ~ "(" ~ datatype ~ ("," ~ datatype)* ~ ")" }
 /// Include literals such as booleans, integers, floats, strings, and null.
 literal =  { BOOL | FLOAT | INT | STR | NULL }
 BOOL    = @{ TRUE_KW | FALSE_KW }
-INT     = @{ ASCII_DIGIT+ }
+INT     = @{ ("0x" | "0X") ~ ASCII_HEX_DIGIT+ | ("0b" | "0B") ~ ASCII_BIN_DIGIT+ | ASCII_DIGIT+ }
 FLOAT   = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
 STR     = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 NULL    = @{ NULL_KW }

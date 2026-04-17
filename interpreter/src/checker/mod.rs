@@ -33,41 +33,46 @@ use crate::{
     vm::{instruction::Instruction, GlobalAction, VM},
 };
 
+pub type StateId = usize;
+
 #[derive(Debug, Clone)]
-pub struct StateLink<'a> {
+pub struct StateLink {
     pub instructions: Vec<Instruction>,
     pub actions: Vec<GlobalAction>,
     pub lines: Vec<usize>,
     pub pid: usize,
     pub name: String,
-    pub to: Rc<VM<'a>>,
+    pub to: StateId,
 }
 
 #[derive(Debug)]
-pub struct GraphNode<'a> {
+pub struct GraphNode {
     pub level: usize,
-    pub predecessor: Option<Rc<VM<'a>>>,
-    pub successors: Vec<StateLink<'a>>,
+    pub predecessor: Option<StateId>,
+    pub successors: Vec<StateLink>,
     pub eventually: bool,
+    pub expanded: bool,
 }
 
 #[derive(Debug)]
 pub struct StateGraph<'a> {
-    pub nodes: HashMap<Rc<VM<'a>>, GraphNode<'a>>,
+    pub states: Vec<Rc<VM<'a>>>,
+    pub nodes: Vec<GraphNode>,
+    pub initial_state: StateId,
     pub exhaustive: bool,
 }
 
-impl<'a> std::fmt::Display for StateLink<'a> {
+impl std::fmt::Display for StateLink {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "StateLink {{ lines: {:?}, pid: {}, name: {}, to: ... }}",
-            self.lines, self.pid, self.name
+            "StateLink {{ lines: {:?}, pid: {}, name: {}, to: {} }}",
+            self.lines, self.pid, self.name, self.to
         )
     }
 }
 
-impl<'a> Serialize for StateLink<'a> {
+impl Serialize for StateLink {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -77,27 +82,23 @@ impl<'a> Serialize for StateLink<'a> {
         state.serialize_field("lines", &self.lines)?;
         state.serialize_field("pid", &self.pid)?;
         state.serialize_field("name", &self.name)?;
-        state.serialize_field("to", &self.to.as_ref())?;
+        state.serialize_field("to", &self.to)?;
         state.serialize_field("actions", &self.actions)?;
         state.end()
     }
 }
-impl<'a> Serialize for GraphNode<'a> {
+impl Serialize for GraphNode {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         // 3 is the number of fields in the struct.
-        let mut state = serializer.serialize_struct("GraphNode", 4)?;
+        let mut state = serializer.serialize_struct("GraphNode", 5)?;
         state.serialize_field("level", &self.level)?;
-        let pred = if self.predecessor.is_some() {
-            Some(self.predecessor.as_ref().unwrap().as_ref().clone())
-        } else {
-            None
-        };
-        state.serialize_field("predecessor", &pred)?;
+        state.serialize_field("predecessor", &self.predecessor)?;
         state.serialize_field("successors", &self.successors)?;
         state.serialize_field("eventually", &self.eventually)?;
+        state.serialize_field("expanded", &self.expanded)?;
         state.end()
     }
 }
@@ -110,9 +111,10 @@ impl<'a> Serialize for StateGraph<'a> {
         state.serialize_field(
             "nodes",
             &self
-                .nodes
+                .states
                 .iter()
-                .map(|(key, node)| (key.as_ref(), node))
+                .zip(self.nodes.iter())
+                .map(|(vm, node)| (vm.as_ref(), node))
                 .collect::<Vec<(&VM, &GraphNode)>>(),
         )?;
         state.serialize_field("exhaustive", &self.exhaustive)?;
@@ -120,21 +122,119 @@ impl<'a> Serialize for StateGraph<'a> {
     }
 }
 
-impl<'a> GraphNode<'a> {
-    pub fn new(predecessor: Option<Rc<VM<'a>>>, level: usize) -> Self {
+impl GraphNode {
+    pub fn new(predecessor: Option<StateId>, level: usize) -> Self {
         Self {
             level,
             predecessor,
             eventually: false,
             successors: Vec::new(),
+            expanded: false,
         }
     }
+}
+
+impl<'a> StateGraph<'a> {
+    pub fn new(initial_vm: Rc<VM<'a>>) -> Self {
+        Self {
+            states: vec![initial_vm],
+            nodes: vec![GraphNode::new(None, 0)],
+            initial_state: 0,
+            exhaustive: true,
+        }
+    }
+
+    pub fn push_state(
+        &mut self,
+        vm: Rc<VM<'a>>,
+        predecessor: Option<StateId>,
+        level: usize,
+    ) -> StateId {
+        let id = self.states.len();
+        self.states.push(vm);
+        self.nodes.push(GraphNode::new(predecessor, level));
+        id
+    }
+
+    pub fn vm(&self, state_id: StateId) -> &Rc<VM<'a>> {
+        &self.states[state_id]
+    }
+}
+
+fn collect_instruction_lines(instructions: &[Instruction]) -> Vec<usize> {
+    let mut lines: Vec<usize> = instructions
+        .iter()
+        .map(|instruction| instruction.pos.clone().unwrap_or_default().line)
+        .filter(|line| *line > 0)
+        .collect();
+    lines.sort();
+    lines.dedup();
+    lines
+}
+
+fn build_state_graph<'a>(
+    compiled_project: &'a CompiledProject,
+    max_states: Option<usize>,
+) -> AlthreadResult<StateGraph<'a>> {
+    let mut init_vm = VM::new(compiled_project);
+    init_vm.start(0);
+
+    let initial_vm = Rc::new(init_vm);
+    let mut state_graph = StateGraph::new(initial_vm.clone());
+    let mut known_states = HashMap::new();
+    known_states.insert(initial_vm, state_graph.initial_state);
+
+    let mut next_nodes = VecDeque::new();
+    next_nodes.push_back(state_graph.initial_state);
+
+    while let Some(current_state) = next_nodes.pop_front() {
+        if let Some(max) = max_states {
+            if state_graph.nodes.len() >= max {
+                state_graph.exhaustive = false;
+                break;
+            }
+        }
+
+        let current_vm = state_graph.vm(current_state).clone();
+        let current_level = state_graph.nodes[current_state].level;
+        let successors = current_vm.next()?;
+
+        for (name, pid, instructions, actions, vm) in successors.into_iter() {
+            let next_vm = Rc::new(vm);
+            let lines = collect_instruction_lines(&instructions);
+            let next_state = if let Some(existing_state) = known_states.get(&next_vm) {
+                *existing_state
+            } else {
+                let new_state = state_graph.push_state(
+                    next_vm.clone(),
+                    Some(current_state),
+                    current_level + 1,
+                );
+                known_states.insert(next_vm.clone(), new_state);
+                next_nodes.push_back(new_state);
+                new_state
+            };
+
+            state_graph.nodes[current_state].successors.push(StateLink {
+                to: next_state,
+                lines,
+                instructions,
+                actions,
+                pid,
+                name,
+            });
+        }
+
+        state_graph.nodes[current_state].expanded = true;
+    }
+
+    Ok(state_graph)
 }
 /// Checks a given project, returning a path from an initial state to the first state that violates an invariant. (return an empty vector if no invariant is violated)
 pub fn check_program<'a>(
     compiled_project: &'a CompiledProject,
     max_states: Option<usize>,
-) -> AlthreadResult<(Vec<StateLink<'a>>, StateGraph<'a>)> {
+) -> AlthreadResult<(Vec<StateLink>, StateGraph<'a>)> {
     if !compiled_project.compiled_ltl_formulas.is_empty() {
         println!(
             "Found {} compiled LTL formulas in the project",
@@ -147,98 +247,22 @@ pub fn check_program<'a>(
         return check_program_with_ltl(compiled_project, max_states);
     }
 
-    let mut state_graph = StateGraph {
-        nodes: HashMap::new(),
-        exhaustive: true,
-    };
+    let mut state_graph = build_state_graph(compiled_project, max_states)?;
 
-    // Initialize a VM with the compiled project
-    let mut init_vm = VM::new(compiled_project);
-    init_vm.start(0);
-    let initial_vm = Rc::new(init_vm);
-
-    // Initialize the state graph with the initial state
-    state_graph
-        .nodes
-        .insert(initial_vm.clone(), GraphNode::new(None, 0));
-
-    // BFS queue for state exploration
-    let mut next_nodes = VecDeque::new();
-    next_nodes.push_back(initial_vm.clone());
-
-    // Explore states until queue is empty
-    while !next_nodes.is_empty() {
-        if let Some(max) = max_states {
-            if state_graph.nodes.len() >= max {
-                state_graph.exhaustive = false;
-                break;
-            }
-        }
-        // Pop next state from the queue
-        let current_node = next_nodes.pop_front().unwrap();
-        let current_level = state_graph.nodes.get_mut(&current_node).unwrap().level;
-        
-        // Get all successor states
-        let successors = current_node.next()?;
-
-        // Process each successor state
-        for (name, pid, instructions, actions, vm) in successors.into_iter() {
-            let vm: Rc<VM<'_>> = Rc::new(vm);
-
-            // Extract source line numbers from instructions
-            let mut lines: Vec<usize> = instructions
-                .iter()
-                .map(|x| x.pos.clone().unwrap_or_default().line)
-                .filter(|l| *l > 0)
-                .collect();
-            lines.sort();
-            lines.dedup();
-
-            // Add state link to the graph
-            state_graph
-                .nodes
-                .get_mut(&current_node)
-                .unwrap()
-                .successors
-                .push(StateLink {
-                    to: vm.clone(),
-                    lines,
-                    instructions,
-                    actions,
-                    pid,
-                    name,
-                });
-
-            // If successor state is new, add it to the graph and queue
-            if !state_graph.nodes.contains_key(&vm.clone()) {
-                state_graph.nodes.insert(
-                    vm.clone(),
-                    GraphNode::new(Some(current_node.clone()), current_level + 1),
-                );
-                next_nodes.push_back(vm.clone());
-            }
-        }
-
-        // Check invariants at this state
-        let check_ret = current_node.check_invariants();
+    for current_state in 0..state_graph.nodes.len() {
+        let check_ret = state_graph.vm(current_state).check_invariants();
         if let Err(e) = check_ret {
             let mut path = Vec::new();
-            let mut back_node = current_node.clone();
+            let mut back_node = current_state;
 
-            if state_graph
-                .nodes
-                .get(&back_node)
-                .unwrap()
-                .predecessor
-                .is_none()
-            {
+            if state_graph.nodes[back_node].predecessor.is_none() {
                 let lines = if let Some(pos) = &e.pos {
                     vec![pos.line]
                 } else {
                     vec![]
                 };
                 path.push(StateLink {
-                    to: back_node.clone(),
+                    to: back_node,
                     lines,
                     instructions: vec![],
                     actions: vec![],
@@ -248,17 +272,11 @@ pub fn check_program<'a>(
                 return Ok((path, state_graph));
             }
 
-            while let Some(pred) = state_graph
-                .nodes
-                .get(&back_node)
-                .unwrap()
-                .predecessor
-                .clone()
-            {
+            while let Some(pred) = state_graph.nodes[back_node].predecessor {
                 path.push(
                     state_graph
                         .nodes
-                        .get(&pred)
+                        .get(pred)
                         .unwrap()
                         .successors
                         .iter()
@@ -271,7 +289,7 @@ pub fn check_program<'a>(
 
             return Ok((path.into_iter().rev().collect(), state_graph));
         } else if check_ret.is_ok_and(|x| x == 1) {
-            state_graph.nodes.get_mut(&current_node).unwrap().eventually = true;
+            state_graph.nodes[current_state].eventually = true;
         }
     }
 
@@ -287,34 +305,26 @@ pub fn check_program<'a>(
     let mut path = Vec::new();
     let mut path_set = std::collections::HashSet::new();
     // if root node check eventually condition no path can exist
-    if state_graph.nodes.get(&initial_vm).unwrap().eventually {
+    if state_graph.nodes[state_graph.initial_state].eventually {
         return Ok((vec![], state_graph));
     }
 
-    // retrieving the state Link of the initial VM
-    path.push(initial_vm.clone());
-    path_set.insert(initial_vm.clone());
+    path.push(state_graph.initial_state);
+    path_set.insert(state_graph.initial_state);
     // no successors have yet been visited
     path_visit.push(0);
 
     while !path.is_empty() {
-        let curr_vm = {
+        let curr_state = {
             let temp = path.last().unwrap();
-            temp.clone() // Drops immutable borrow IMMEDIATELY
+            *temp
         };
 
         let mut visited_succ = path_visit.pop().unwrap();
 
         // get all the successors of the current node
         let mut succ = Vec::new();
-        for link in state_graph
-            .nodes
-            .get(&curr_vm)
-            .unwrap()
-            .successors
-            .iter()
-            .skip(visited_succ)
-        {
+        for link in state_graph.nodes[curr_state].successors.iter().skip(visited_succ) {
             succ.push(link.clone());
         }
 
@@ -346,7 +356,6 @@ pub fn check_program<'a>(
             if path_set.contains(&curr_succ.to) {
                 // If it is in the path, we push it temporarily just to have it for reconstruction,
                 // OR we can reconstruct including the cycle closing edge.
-                // reconstruct_path takes a Vec of VMs.
                 path.push(curr_succ.to.clone());
                 let ret = reconstruct_path(path, &state_graph);
                 match ret {
@@ -363,11 +372,11 @@ pub fn check_program<'a>(
             }
 
             // we get the corresponding graphnode and check wheter he has the eventually flag or not
-            let graph_node = state_graph.nodes.get(curr_succ.to.as_ref()).unwrap();
+            let graph_node = &state_graph.nodes[curr_succ.to];
             if !graph_node.eventually {
                 explorable_path = true;
-                path.push(curr_succ.to.clone());
-                path_set.insert(curr_succ.to.clone());
+                path.push(curr_succ.to);
+                path_set.insert(curr_succ.to);
                 // we update the number of visited successors of the current node
                 path_visit.push(visited_succ);
                 // we then init the number of visited successors from the new node in the path
@@ -376,7 +385,7 @@ pub fn check_program<'a>(
         }
         // if no explorable path was found we condemn this node (it is a dead end)
         if !explorable_path {
-            state_graph.nodes.get_mut(&curr_vm).unwrap().eventually = true;
+            state_graph.nodes[curr_state].eventually = true;
             let popped = path.pop();
             if let Some(p) = popped {
                 path_set.remove(&p);
@@ -387,9 +396,9 @@ pub fn check_program<'a>(
 }
 
 pub fn reconstruct_path<'a>(
-    mut vec_vm: Vec<Rc<VM>>,
+    mut vec_vm: Vec<StateId>,
     state_graph: &StateGraph<'a>,
-) -> AlthreadResult<Vec<StateLink<'a>>> {
+) -> AlthreadResult<Vec<StateLink>> {
     let mut ret_path = Vec::new();
     let mut back_node = vec_vm.pop().unwrap();
 
@@ -397,7 +406,7 @@ pub fn reconstruct_path<'a>(
         ret_path.push(
             state_graph
                 .nodes
-                .get(&pred)
+                .get(pred)
                 .unwrap()
                 .successors
                 .iter()
@@ -413,8 +422,8 @@ pub fn reconstruct_path<'a>(
 
 /// Combined state for product automaton (VM state + monitor states)
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct CombinedProductState<'a> {
-    vm: Rc<VM<'a>>,
+struct CombinedProductState {
+    vm: StateId,
     monitors: MonitoringState,
 }
 
@@ -428,7 +437,7 @@ struct CombinedProductState<'a> {
 fn check_program_with_ltl<'a>(
     compiled_project: &'a CompiledProject,
     max_states: Option<usize>,
-) -> AlthreadResult<(Vec<StateLink<'a>>, StateGraph<'a>)> {
+) -> AlthreadResult<(Vec<StateLink>, StateGraph<'a>)> {
     // Step 1: Build Büchi automatons from compiled LTL formulas
     let automatons: Vec<BuchiAutomaton> = compiled_project
         .compiled_ltl_formulas
@@ -453,55 +462,40 @@ fn check_program_with_ltl<'a>(
 
     println!("Built {} Büchi automatons", automatons.len());
 
-    // Step 2: Initialize VM
-    let mut init_vm = VM::new(compiled_project);
-    init_vm.start(0);
+    // Step 2: Build the VM state graph once and reuse it for all formulas.
+    let state_graph = build_state_graph(compiled_project, max_states)?;
+    let initial_vm = state_graph.vm(state_graph.initial_state).clone();
 
     // Step 3: Initialize monitoring state with proper quantifier handling
     let initial_monitoring = ltl::quantifier::initialize_monitoring(
         &compiled_project.compiled_ltl_formulas,
         &automatons,
-        &init_vm,
+        initial_vm.as_ref(),
     )?;
-
-    let initial_vm = Rc::new(init_vm);
-
-    // Step 4: Initialize state graph (for visualization/debugging)
-    let mut state_graph = StateGraph {
-        nodes: HashMap::new(),
-        exhaustive: true,
-    };
-
-    state_graph
-        .nodes
-        .insert(initial_vm.clone(), GraphNode::new(None, 0));
 
     // ============================================================
     // NESTED DFS ALGORITHM FOR ACCEPTING CYCLE DETECTION
     // ============================================================
     
     // Track visited states for the outer DFS
-    let mut visited_outer: HashSet<CombinedProductState<'a>> = HashSet::new();
+    let mut visited_outer: HashSet<CombinedProductState> = HashSet::new();
     // Track states on the current DFS stack (for cycle detection in inner DFS)
-    let mut on_stack: HashSet<CombinedProductState<'a>> = HashSet::new();
+    let mut on_stack: HashSet<CombinedProductState> = HashSet::new();
     // Track visited states for the inner DFS (reset for each accepting state)
-    let mut visited_inner: HashSet<CombinedProductState<'a>> = HashSet::new();
+    let mut visited_inner: HashSet<CombinedProductState> = HashSet::new();
     
     // Store the graph edges for path reconstruction
-    let mut product_edges: HashMap<CombinedProductState<'a>, Vec<CombinedProductState<'a>>> = HashMap::new();
+    let mut product_edges: HashMap<CombinedProductState, Vec<CombinedProductState>> = HashMap::new();
     
     // Initial product state
     let initial_product_state = CombinedProductState {
-        vm: initial_vm.clone(),
+        vm: state_graph.initial_state,
         monitors: initial_monitoring.clone(),
     };
     
     // Stack for iterative DFS: (state, phase)
     // phase 0 = first visit, phase 1 = post-order (after children explored)
-    let mut dfs_stack: Vec<(CombinedProductState<'a>, usize)> = vec![(initial_product_state.clone(), 0)];
-    
-    // State counter for limiting exploration
-    let mut state_count = 0;
+    let mut dfs_stack: Vec<(CombinedProductState, usize)> = vec![(initial_product_state.clone(), 0)];
     
     while let Some((current_state, phase)) = dfs_stack.pop() {
         if phase == 0 {
@@ -510,16 +504,9 @@ fn check_program_with_ltl<'a>(
                 continue;
             }
             
-            state_count += 1;
-            if let Some(max) = max_states {
-                if state_count >= max {
-                    state_graph.exhaustive = false;
-                    break;
-                }
-            }
-            
             visited_outer.insert(current_state.clone());
             on_stack.insert(current_state.clone());
+            let current_vm_id = current_state.vm;
             
             // ================================================================
             // OPTIMIZATION: Early violation detection
@@ -528,34 +515,35 @@ fn check_program_with_ltl<'a>(
             // we can immediately report a violation. This gives:
             // - Shorter counter-example traces (exactly where violation occurs)
             // - Faster detection (no need to find the actual cycle)
-            let is_immediate_accepting = monitors_in_immediate_accepting_state(
-                &current_state.monitors,
-                &automatons,
-                &compiled_project.compiled_ltl_formulas,
-            );
+            let is_terminal_state = state_graph.nodes[current_vm_id].expanded
+                && state_graph.nodes[current_vm_id].successors.is_empty();
+            let is_immediate_accepting = is_terminal_state
+                && monitors_in_immediate_accepting_state(
+                    &current_state.monitors,
+                    &automatons,
+                    &compiled_project.compiled_ltl_formulas,
+                );
             
             if is_immediate_accepting {
                 log::debug!("DEBUG: Immediate accepting state detected (no temporal obligations)");
                 println!("LTL violation detected: accepting state with no temporal obligations");
-                let violation_path = build_violation_path(&state_graph, &current_state.vm)?;
+                let violation_path = build_violation_path(&state_graph, current_state.vm)?;
                 return Ok((violation_path, state_graph));
             }
             
             // Push post-order visit
             dfs_stack.push((current_state.clone(), 1));
             
-            let current_vm = &current_state.vm;
+            let current_vm = state_graph.vm(current_vm_id).clone();
             let current_monitors = &current_state.monitors;
-            let current_level = state_graph.nodes.get(current_vm).map(|n| n.level).unwrap_or(0);
-            
-            // Get VM successors
-            let successors = current_vm.next()?;
+            // Get VM successors from the prebuilt state graph
+            let successors = state_graph.nodes[current_vm_id].successors.clone();
             
             // Handle terminal states (stuttering)
             // This includes both proper termination (is_finished=true) and deadlock states
             // (no successors but processes still waiting). In both cases, the execution
             // can only "stutter" in place forever, which we model as a self-loop.
-            if successors.is_empty() {
+            if successors.is_empty() && state_graph.nodes[current_vm_id].expanded {
                 log::debug!("DEBUG: Terminal state - is_finished={}", current_vm.is_finished());
                 
                 // Model stuttering as a self-loop: VM stays in same state, monitor transitions
@@ -564,17 +552,17 @@ fn check_program_with_ltl<'a>(
                     &compiled_project.compiled_ltl_formulas,
                     &automatons,
                     &mut base_next_monitors,
-                    current_vm,
-                    current_vm,
+                    current_vm.as_ref(),
+                    current_vm.as_ref(),
                 )?;
                 
                 let possible_next_monitoring_states =
-                    base_next_monitors.get_possible_successors(current_vm, &automatons)?;
+                    base_next_monitors.get_possible_successors(current_vm.as_ref(), &automatons)?;
                 
                 // Record stuttering transitions as edges (self-loops in the product automaton)
                 for next_monitors in possible_next_monitoring_states {
                     let next_product_state = CombinedProductState {
-                        vm: current_vm.clone(), // Same VM state (stuttering)
+                        vm: current_vm_id,
                         monitors: next_monitors,
                     };
                     
@@ -591,40 +579,16 @@ fn check_program_with_ltl<'a>(
                 }
                 continue;
             }
+
+            if successors.is_empty() {
+                log::debug!("DEBUG: Frontier state reached before full expansion, skipping terminal-state reasoning");
+                continue;
+            }
             
             // Process successors
-            for (name, pid, instructions, actions, next_vm) in successors.into_iter() {
-                let next_vm = Rc::new(next_vm);
-                
-                let mut lines: Vec<usize> = instructions
-                    .iter()
-                    .map(|x| x.pos.clone().unwrap_or_default().line)
-                    .filter(|l| *l > 0)
-                    .collect();
-                lines.sort();
-                lines.dedup();
-                
-                // Add to state graph for visualization
-                state_graph
-                    .nodes
-                    .entry(current_vm.clone())
-                    .or_insert_with(|| GraphNode::new(None, current_level))
-                    .successors
-                    .push(StateLink {
-                        to: next_vm.clone(),
-                        lines,
-                        instructions,
-                        actions,
-                        pid,
-                        name,
-                    });
-                
-                if !state_graph.nodes.contains_key(&next_vm) {
-                    state_graph.nodes.insert(
-                        next_vm.clone(),
-                        GraphNode::new(Some(current_vm.clone()), current_level + 1),
-                    );
-                }
+            for successor in successors.into_iter() {
+                let next_state = successor.to;
+                let next_vm = state_graph.vm(next_state).clone();
                 
                 // Update monitors for this transition
                 let mut base_next_monitors = current_monitors.clone();
@@ -632,16 +596,16 @@ fn check_program_with_ltl<'a>(
                     &compiled_project.compiled_ltl_formulas,
                     &automatons,
                     &mut base_next_monitors,
-                    current_vm,
-                    &next_vm,
+                    current_vm.as_ref(),
+                    next_vm.as_ref(),
                 )?;
                 
                 let possible_next_monitoring_states =
-                    base_next_monitors.get_possible_successors(&next_vm, &automatons)?;
+                    base_next_monitors.get_possible_successors(next_vm.as_ref(), &automatons)?;
                 
                 for next_monitors in possible_next_monitoring_states {
                     let next_product_state = CombinedProductState {
-                        vm: next_vm.clone(),
+                        vm: next_state,
                         monitors: next_monitors,
                     };
                     
@@ -673,7 +637,7 @@ fn check_program_with_ltl<'a>(
                 
                 // Launch inner DFS to find a cycle back to this accepting state
                 visited_inner.clear();
-                let mut inner_stack: Vec<CombinedProductState<'a>> = vec![current_state.clone()];
+                let mut inner_stack: Vec<CombinedProductState> = vec![current_state.clone()];
                 
                 while let Some(inner_current) = inner_stack.pop() {
                     if visited_inner.contains(&inner_current) {
@@ -688,7 +652,7 @@ fn check_program_with_ltl<'a>(
                             if *successor == current_state {
                                 log::debug!("DEBUG: Found accepting cycle!");
                                 println!("LTL violation detected: accepting cycle found");
-                                let violation_path = build_violation_path(&state_graph, &current_state.vm)?;
+                                let violation_path = build_violation_path(&state_graph, current_state.vm)?;
                                 return Ok((violation_path, state_graph));
                             }
                             
@@ -699,7 +663,7 @@ fn check_program_with_ltl<'a>(
                                 // Check if any state in the cycle is accepting
                                 log::debug!("DEBUG: Found cycle through stack from accepting state");
                                 println!("LTL violation detected: accepting cycle found (via stack)");
-                                let violation_path = build_violation_path(&state_graph, &current_state.vm)?;
+                                let violation_path = build_violation_path(&state_graph, current_state.vm)?;
                                 return Ok((violation_path, state_graph));
                             }
                             
@@ -715,10 +679,11 @@ fn check_program_with_ltl<'a>(
 
     // Traditional invariant checking (separate pass for safety properties)
     // This is done on the state graph we built
-    for (vm, _node) in state_graph.nodes.iter() {
+    for state_id in 0..state_graph.nodes.len() {
+        let vm = state_graph.vm(state_id).clone();
         let check_ret = vm.check_invariants();
         if let Err(e) = check_ret {
-            let violation_path = build_violation_path(&state_graph, vm)?;
+            let violation_path = build_violation_path(&state_graph, state_id)?;
             if violation_path.is_empty() {
                 // Initial state violation
                 let lines = if let Some(pos) = &e.pos {
@@ -727,7 +692,7 @@ fn check_program_with_ltl<'a>(
                     vec![]
                 };
                 return Ok((vec![StateLink {
-                    to: vm.clone(),
+                    to: state_id,
                     lines,
                     instructions: vec![],
                     actions: vec![],
@@ -746,21 +711,15 @@ fn check_program_with_ltl<'a>(
 
 fn build_violation_path<'a>(
     state_graph: &StateGraph<'a>,
-    target: &Rc<VM<'a>>,
-) -> AlthreadResult<Vec<StateLink<'a>>> {
+    target: StateId,
+) -> AlthreadResult<Vec<StateLink>> {
     let mut path = Vec::new();
-    let mut back_node = target.clone();
+    let mut back_node = target;
 
-    while let Some(pred) = state_graph
-        .nodes
-        .get(&back_node)
-        .unwrap()
-        .predecessor
-        .clone()
-    {
+    while let Some(pred) = state_graph.nodes[back_node].predecessor {
         let link = state_graph
             .nodes
-            .get(&pred)
+            .get(pred)
             .unwrap()
             .successors
             .iter()

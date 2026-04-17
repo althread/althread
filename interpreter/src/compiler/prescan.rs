@@ -568,14 +568,11 @@ impl Ast {
                 print!("side_effect_expression::fnCall\n");
                 let fn_call = &fn_call_node.value;
 
-                if fn_call.fn_name.value.parts.len() == 2 {
-                    print!("cas len == 2\n");
-                    let receiver_name = &fn_call.fn_name.value.parts[0].value.value;
-                    let method_name = &fn_call.fn_name.value.parts[1].value.value;
-
+                if let (Some(receiver_name), Some(method_name)) =
+                    (fn_call.receiver_name(), fn_call.method_name())
+                {
                     if method_name == "at" {
-                        print!("cas at \n");
-                        return Some((receiver_name.clone(), "index".to_string()));
+                        return Some((receiver_name, "index".to_string()));
                     }
                 }
             }

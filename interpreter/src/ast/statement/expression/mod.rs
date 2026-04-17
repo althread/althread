@@ -22,7 +22,7 @@ use crate::{
         node::{InstructionBuilder, Node, NodeBuilder},
         token::{datatype::DataType, identifier::Identifier, literal::Literal},
     },
-    compiler::{CompilerState, InstructionBuilderOk, Variable},
+    compiler::{stdlib::invoke_interface_method, CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
     no_rule,
     parser::Rule,
@@ -41,7 +41,9 @@ lazy_static::lazy_static! {
         PrattParser::new()
             .op(Op::infix(Rule::or_operator, Left))
             .op(Op::infix(Rule::and_operator, Left))
+            .op(Op::infix(Rule::bitwise_operator, Left))
             .op(Op::infix(Rule::equality_operator, Left))
+            .op(Op::infix(Rule::shift_operator, Left))
             .op(Op::infix(Rule::comparison_operator, Left))
             .op(Op::infix(Rule::term_operator, Left))
             .op(Op::infix(Rule::factor_operator, Left))
@@ -903,6 +905,61 @@ impl LocalExpressionNode {
         }
     }
 
+    fn scope_stack(scope: &[String]) -> Vec<Variable> {
+        scope
+            .iter()
+            .map(|name| Variable {
+                mutable: false,
+                name: name.clone(),
+                datatype: DataType::Void,
+                depth: 0,
+                declare_pos: None,
+            })
+            .collect()
+    }
+
+    fn localize_expression_for_scope(
+        expression: &Node<Expression>,
+        scope: &[String],
+    ) -> Result<LocalExpressionNode, String> {
+        LocalExpressionNode::from_expression(
+            &expression.value,
+            &LocalExpressionNode::scope_stack(scope),
+        )
+        .map_err(|e| e.message)
+    }
+
+    fn resolve_literal_in_scope(
+        name: &str,
+        mem: &Memory,
+        scope: &[String],
+        vm: &crate::vm::VM,
+    ) -> Result<Literal, String> {
+        if let Some(idx) = scope.iter().rposition(|scoped_name| scoped_name == name) {
+            return mem
+                .get(idx)
+                .cloned()
+                .ok_or_else(|| format!("Variable '{}' is missing from evaluation scope", name));
+        }
+
+        vm.globals
+            .get(name)
+            .cloned()
+            .ok_or_else(|| format!("Variable '{}' not found in evaluation scope", name))
+    }
+
+    fn evaluate_method_call(
+        vm: &crate::vm::VM,
+        receiver: &mut Literal,
+        name: &str,
+        args_value: &mut Literal,
+        pos: Option<Pos>,
+    ) -> Result<Literal, String> {
+        invoke_interface_method(vm.stdlib.as_ref(), name, receiver, args_value, pos)
+            .map(|(ret, _)| ret)
+            .map_err(|e| e.message)
+    }
+
     pub fn datatype(&self, state: &CompilerState) -> Result<DataType, String> {
         match self {
             Self::Binary(node) => node.datatype(state),
@@ -929,28 +986,33 @@ impl LocalExpressionNode {
                     }
                 } else {
                     // Method call
-                    let receiver_name = &node.value.fn_name.value.parts[0].value.value;
+                    let receiver_name = node
+                        .value
+                        .receiver_name()
+                        .ok_or_else(|| format!("Receiver {} not found", full_name))?;
                     let var = state
                         .program_stack
                         .iter()
                         .rev()
-                        .find(|v| &v.name == receiver_name);
-                    if let Some(var) = var {
+                        .find(|v| v.name == receiver_name);
+                    let global_var = state.global_table().get(&receiver_name);
+                    if let Some(var) = var.or(global_var) {
                         let interfaces = state.stdlib().interfaces(&var.datatype);
                         if !interfaces.is_empty() {
-                            let method_name =
-                                &node.value.fn_name.value.parts.last().unwrap().value.value;
-                            if let Some(method) = interfaces.iter().find(|m| &m.name == method_name)
+                            let method_name = node.value.method_name().ok_or_else(|| {
+                                format!("Method name missing in {}", full_name)
+                            })?;
+                            if let Some(method) = interfaces.iter().find(|m| m.name == method_name)
                             {
                                 Ok(method.ret.clone())
                             } else {
-                                Err(format!("Method {} not found in interface", method_name))
+                                Err(format!("No method {} found on variable of type {}", method_name, var.datatype))
                             }
                         } else {
-                            Err(format!("No interface found for type {}", var.datatype))
+                            Err(format!("Type {} has no available methods", var.datatype))
                         }
                     } else {
-                        Err(format!("Receiver {} not found in stack", receiver_name))
+                        Err(format!("Variable {} not found", receiver_name))
                     }
                 }
             }
@@ -1021,7 +1083,7 @@ impl LocalExpressionNode {
                             let interfaces = state.stdlib().interfaces(&current_type);
                             let method = interfaces.iter().find(|m| m.name == *name);
                             let method =
-                                method.ok_or_else(|| format!("undefined function {}", name))?;
+                                method.ok_or_else(|| format!("No method {} found on variable of type {}", name, current_type))?;
 
                             let args_type = args.datatype(state)?;
                             if let DataType::Tuple(arg_types) = args_type {
@@ -1262,27 +1324,36 @@ impl LocalExpressionNode {
     }
 
     pub fn eval_with_context(&self, mem: &Memory, vm: &crate::vm::VM) -> Result<Literal, String> {
+        self.eval_with_scope(mem, &[], vm)
+    }
+
+    pub fn eval_with_scope(
+        &self,
+        mem: &Memory,
+        scope: &[String],
+        vm: &crate::vm::VM,
+    ) -> Result<Literal, String> {
         match self {
             LocalExpressionNode::Binary(binary_exp) => match binary_exp.operator {
                 crate::ast::token::binary_operator::BinaryOperator::And => {
-                    let left = binary_exp.left.eval_with_context(mem, vm)?;
+                    let left = binary_exp.left.eval_with_scope(mem, scope, vm)?;
                     if !left.is_true() {
                         return Ok(Literal::Bool(false));
                     }
-                    let right = binary_exp.right.eval_with_context(mem, vm)?;
+                    let right = binary_exp.right.eval_with_scope(mem, scope, vm)?;
                     left.and(&right)
                 }
                 crate::ast::token::binary_operator::BinaryOperator::Or => {
-                    let left = binary_exp.left.eval_with_context(mem, vm)?;
+                    let left = binary_exp.left.eval_with_scope(mem, scope, vm)?;
                     if left.is_true() {
                         return Ok(Literal::Bool(true));
                     }
-                    let right = binary_exp.right.eval_with_context(mem, vm)?;
+                    let right = binary_exp.right.eval_with_scope(mem, scope, vm)?;
                     left.or(&right)
                 }
                 _ => {
-                    let left = binary_exp.left.eval_with_context(mem, vm)?;
-                    let right = binary_exp.right.eval_with_context(mem, vm)?;
+                    let left = binary_exp.left.eval_with_scope(mem, scope, vm)?;
+                    let right = binary_exp.right.eval_with_scope(mem, scope, vm)?;
                     match binary_exp.operator {
                         crate::ast::token::binary_operator::BinaryOperator::Add => left.add(&right),
                         crate::ast::token::binary_operator::BinaryOperator::Subtract => {
@@ -1315,12 +1386,24 @@ impl LocalExpressionNode {
                         crate::ast::token::binary_operator::BinaryOperator::GreaterThanOrEqual => {
                             left.greater_than_or_equal(&right)
                         }
+                        crate::ast::token::binary_operator::BinaryOperator::ShiftLeft => {
+                            left.shift_left(&right)
+                        }
+                        crate::ast::token::binary_operator::BinaryOperator::ShiftRight => {
+                            left.shift_right(&right)
+                        }
+                        crate::ast::token::binary_operator::BinaryOperator::BitAnd => {
+                            left.bit_and(&right)
+                        }
+                        crate::ast::token::binary_operator::BinaryOperator::BitOr => {
+                            left.bit_or(&right)
+                        }
                         _ => unreachable!("short-circuit handled above"),
                     }
                 }
             },
             LocalExpressionNode::Unary(unary_exp) => {
-                let operand = unary_exp.operand.eval_with_context(mem, vm)?;
+                let operand = unary_exp.operand.eval_with_scope(mem, scope, vm)?;
                 match unary_exp.operator {
                     crate::ast::token::unary_operator::UnaryOperator::Positive => {
                         operand.positive()
@@ -1340,19 +1423,19 @@ impl LocalExpressionNode {
                     Ok(lit.clone())
                 }
                 LocalPrimaryExpressionNode::Expression(expr) => {
-                    expr.as_ref().eval_with_context(mem, vm)
+                    expr.as_ref().eval_with_scope(mem, scope, vm)
                 }
             },
             LocalExpressionNode::Tuple(tuple_exp) => Ok(Literal::Tuple(
                 tuple_exp
                     .values
                     .iter()
-                    .map(|v| v.eval_with_context(mem, vm))
+                    .map(|v| v.eval_with_scope(mem, scope, vm))
                     .collect::<Result<Vec<Literal>, String>>()?,
             )),
             LocalExpressionNode::Range(list_exp) => {
-                let start = list_exp.expression_start.eval_with_context(mem, vm)?;
-                let end = list_exp.expression_end.eval_with_context(mem, vm)?;
+                let start = list_exp.expression_start.eval_with_scope(mem, scope, vm)?;
+                let end = list_exp.expression_end.eval_with_scope(mem, scope, vm)?;
                 Ok(Literal::List(
                     DataType::Integer,
                     (start.to_integer()?..end.to_integer()?)
@@ -1360,10 +1443,36 @@ impl LocalExpressionNode {
                         .collect(),
                 ))
             }
-            LocalExpressionNode::FnCall(node) => Err(format!(
-                "Cannot evaluate function call in this context: {:?}",
-                &node.value.fn_name
-            )),
+            LocalExpressionNode::FnCall(node) => {
+                if node.value.fn_name.value.parts.len() == 1 {
+                    return Err(format!(
+                        "Cannot evaluate function call in this context: {:?}",
+                        &node.value.fn_name
+                    ));
+                }
+
+                let receiver_name = node.value.receiver_name().ok_or_else(|| {
+                    format!("Receiver not found in call {:?}", &node.value.fn_name)
+                })?;
+                let method_name = node.value.method_name().ok_or_else(|| {
+                    format!("Method name not found in call {:?}", &node.value.fn_name)
+                })?;
+                let mut receiver =
+                    LocalExpressionNode::resolve_literal_in_scope(&receiver_name, mem, scope, vm)?;
+                let args_expr = LocalExpressionNode::localize_expression_for_scope(
+                    node.value.values.as_ref(),
+                    scope,
+                )?;
+                let mut args_value = args_expr.eval_with_scope(mem, scope, vm)?;
+
+                LocalExpressionNode::evaluate_method_call(
+                    vm,
+                    &mut receiver,
+                    &method_name,
+                    &mut args_value,
+                    Some(node.pos.clone()),
+                )
+            }
             LocalExpressionNode::Reaches(node) => {
                 let lit = mem
                     .get(mem.len() - 1 - node.var.index)
@@ -1371,7 +1480,7 @@ impl LocalExpressionNode {
                 let (program_name, pid) = match (lit, node.index.as_ref()) {
                     (Literal::Process(name, pid), None) => (name.clone(), *pid),
                     (Literal::List(DataType::Process(_name), values), Some(index_expr)) => {
-                        let idx_lit = index_expr.eval_with_context(mem, vm)?;
+                        let idx_lit = index_expr.eval_with_scope(mem, scope, vm)?;
                         let idx = idx_lit.to_integer()? as usize;
                         let proc_lit = match values.get(idx) {
                             Some(v) => v,
@@ -1425,33 +1534,18 @@ impl LocalExpressionNode {
                 Ok(Literal::Bool(reached))
             }
             LocalExpressionNode::CallChain(node) => {
-                let mut current = node.base.eval_with_context(mem, vm)?;
+                let mut current = node.base.eval_with_scope(mem, scope, vm)?;
                 for segment in node.segments.iter() {
                     match segment {
                         LocalCallChainSegment::Call { name, args } => {
-                            let mut interfaces = vm.stdlib.interfaces(&current.get_datatype());
-                            let method = interfaces
-                                .iter_mut()
-                                .find(|m| m.name == *name)
-                                .ok_or(format!("undefined function {}", name))?;
-                            let mut args_value = args.eval_with_context(mem, vm)?;
-
-                            if name == "at" {
-                                if let (Literal::List(_, values), Literal::Tuple(arg_vals)) =
-                                    (&current, &args_value)
-                                {
-                                    if let Some(idx_lit) = arg_vals.first() {
-                                        let idx = idx_lit.to_integer()? as isize;
-                                        if idx < 0 || (idx as usize) >= values.len() {
-                                            current = Literal::Null;
-                                            continue;
-                                        }
-                                    }
-                                }
-                            }
-
-                            current = (method.f.as_ref())(&mut current, &mut args_value, None)
-                                .map_err(|e| e.message)?;
+                            let mut args_value = args.eval_with_scope(mem, scope, vm)?;
+                            current = LocalExpressionNode::evaluate_method_call(
+                                vm,
+                                &mut current,
+                                name,
+                                &mut args_value,
+                                None,
+                            )?;
                         }
                         LocalCallChainSegment::Reaches { label } => {
                             log::debug!("CallChain Reaches evaluation started for label '{}'", label);
@@ -1520,12 +1614,12 @@ impl LocalExpressionNode {
                 Ok(current)
             }
             LocalExpressionNode::IfExpr(node) => {
-                let cond = node.condition.eval_with_context(mem, vm)?;
+                let cond = node.condition.eval_with_scope(mem, scope, vm)?;
                 if cond.is_true() {
-                    node.then_expr.eval_with_context(mem, vm)
+                    node.then_expr.eval_with_scope(mem, scope, vm)
                 } else {
                     if let Some(else_expr) = &node.else_expr {
-                        else_expr.eval_with_context(mem, vm)
+                        else_expr.eval_with_scope(mem, scope, vm)
                     } else {
                         // if A { B } means A -> B. If A is false, result is true.
                         Ok(Literal::Bool(true))
@@ -1533,16 +1627,19 @@ impl LocalExpressionNode {
                 }
             }
             LocalExpressionNode::ForAll(node) => {
-                let list = node.list.eval_with_context(mem, vm)?;
+                let list = node.list.eval_with_scope(mem, scope, vm)?;
                 let values = match list {
                     Literal::List(_, values) => values,
                     _ => return Err("forall expects a list".to_string()),
                 };
 
+                let mut temp_scope = scope.to_vec();
+                temp_scope.push(node.var_name.clone());
+
                 for value in values.into_iter() {
                     let mut temp_mem = mem.clone();
                     temp_mem.push(value);
-                    let body_value = node.body.eval_with_context(&temp_mem, vm)?;
+                    let body_value = node.body.eval_with_scope(&temp_mem, &temp_scope, vm)?;
                     if !body_value.is_true() {
                         return Ok(Literal::Bool(false));
                     }
@@ -1550,16 +1647,19 @@ impl LocalExpressionNode {
                 Ok(Literal::Bool(true))
             }
             LocalExpressionNode::Exists(node) => {
-                let list = node.list.eval_with_context(mem, vm)?;
+                let list = node.list.eval_with_scope(mem, scope, vm)?;
                 let values = match list {
                     Literal::List(_, values) => values,
                     _ => return Err("exists expects a list".to_string()),
                 };
 
+                let mut temp_scope = scope.to_vec();
+                temp_scope.push(node.var_name.clone());
+
                 for value in values.into_iter() {
                     let mut temp_mem = mem.clone();
                     temp_mem.push(value);
-                    let body_value = node.body.eval_with_context(&temp_mem, vm)?;
+                    let body_value = node.body.eval_with_scope(&temp_mem, &temp_scope, vm)?;
                     if body_value.is_true() {
                         return Ok(Literal::Bool(true));
                     }
@@ -1649,6 +1749,7 @@ impl CallChainExpression {
                             unstack_len: 1,
                             drop_receiver: true,
                             arguments: None,
+                            global_receiver: None,
                         },
                     });
 
@@ -1688,7 +1789,13 @@ impl InstructionBuilder for Node<Expression> {
         }
         let mut instructions = Vec::new();
         let mut vars = HashSet::new();
-        self.value.get_vars(&mut vars);
+        if state.in_condition_block {
+            let mut dependencies = WaitDependency::new();
+            self.value.add_dependencies(&mut dependencies);
+            vars.extend(dependencies.variables);
+        } else {
+            self.value.get_vars(&mut vars);
+        }
 
         if !state.in_condition_block
             && vars
@@ -1738,11 +1845,16 @@ impl InstructionBuilder for Node<Expression> {
             AlthreadError::new(
                 ErrorType::ExpressionError,
                 Some(self.pos.clone()),
-                format!("Type of expression is not well-defined: {} (if this is a global variable, it has not been implemented yet)", err),
+                format!("Type of expression is not well-defined: {}", err),
             )
         })?;
 
-        if !local_expr.contains_fn_call() {
+        if state.in_condition_block {
+            instructions.push(Instruction {
+                pos: Some(self.pos.clone()),
+                control: InstructionType::Expression(local_expr),
+            });
+        } else if !local_expr.contains_fn_call() {
             instructions.push(Instruction {
                 pos: Some(self.pos.clone()),
                 control: InstructionType::Expression(local_expr),
@@ -1793,6 +1905,82 @@ impl InstructionBuilder for Node<Expression> {
                             expression_end: Box::new(shift_var_indices(
                                 &node.expression_end,
                                 shift,
+                            )),
+                        })
+                    }
+                    _ => expr.clone(),
+                }
+            }
+
+            fn shift_non_temp_var_indices(
+                expr: &LocalExpressionNode,
+                shift: usize,
+                temp_count: usize,
+            ) -> LocalExpressionNode {
+                match expr {
+                    LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(var)) => {
+                        let index = if var.index >= temp_count {
+                            var.index + shift
+                        } else {
+                            var.index
+                        };
+
+                        LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(
+                            LocalVarNode { index },
+                        ))
+                    }
+                    LocalExpressionNode::Binary(node) => {
+                        LocalExpressionNode::Binary(LocalBinaryExpressionNode {
+                            left: Box::new(shift_non_temp_var_indices(
+                                &node.left,
+                                shift,
+                                temp_count,
+                            )),
+                            operator: node.operator.clone(),
+                            right: Box::new(shift_non_temp_var_indices(
+                                &node.right,
+                                shift,
+                                temp_count,
+                            )),
+                        })
+                    }
+                    LocalExpressionNode::Unary(node) => {
+                        LocalExpressionNode::Unary(LocalUnaryExpressionNode {
+                            operand: Box::new(shift_non_temp_var_indices(
+                                &node.operand,
+                                shift,
+                                temp_count,
+                            )),
+                            operator: node.operator.clone(),
+                        })
+                    }
+                    LocalExpressionNode::Tuple(node) => {
+                        LocalExpressionNode::Tuple(LocalTupleExpressionNode {
+                            values: node
+                                .values
+                                .iter()
+                                .map(|value| {
+                                    shift_non_temp_var_indices(value, shift, temp_count)
+                                })
+                                .collect(),
+                        })
+                    }
+                    LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Expression(expr)) => {
+                        LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Expression(
+                            Box::new(shift_non_temp_var_indices(expr, shift, temp_count)),
+                        ))
+                    }
+                    LocalExpressionNode::Range(node) => {
+                        LocalExpressionNode::Range(LocalRangeListExpressionNode {
+                            expression_start: Box::new(shift_non_temp_var_indices(
+                                &node.expression_start,
+                                shift,
+                                temp_count,
+                            )),
+                            expression_end: Box::new(shift_non_temp_var_indices(
+                                &node.expression_end,
+                                shift,
+                                temp_count,
                             )),
                         })
                     }
@@ -1853,9 +2041,15 @@ impl InstructionBuilder for Node<Expression> {
                             left_expr
                         };
 
+                        let shifted_right = if left_calls > 0 {
+                            shift_non_temp_var_indices(&right_expr, left_calls, right_calls)
+                        } else {
+                            right_expr
+                        };
+
                         let new_expr = LocalExpressionNode::Binary(LocalBinaryExpressionNode {
                             left: Box::new(shifted_left),
-                            right: Box::new(right_expr),
+                            right: Box::new(shifted_right),
                             operator: node.operator.clone(),
                         });
 
@@ -2171,5 +2365,466 @@ mod tests {
             local_expr.eval(&Memory::new()).unwrap(),
             Literal::Int(42 + 42)
         );
+    }
+    
+    #[test]
+    fn test_shift_left_expression() {
+        let literal_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: Literal::Int(8),
+        };
+        let shift_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: Literal::Int(2),
+        };
+
+        let left_expr = Expression::Primary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: PrimaryExpression::Literal(literal_node),
+        });
+
+        let right_expr = Expression::Primary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: PrimaryExpression::Literal(shift_node),
+        });
+
+        let expr = Expression::Binary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: BinaryExpression {
+                left: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: left_expr,
+                }),
+                right: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: right_expr,
+                }),
+                operator: Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: BinaryOperator::ShiftLeft,
+                },
+            },
+        });
+
+        let local_expr = LocalExpressionNode::from_expression(&expr, &vec![]).unwrap();
+        assert_eq!(local_expr.eval(&Memory::new()).unwrap(), Literal::Int(32));
+    }
+
+    #[test]
+    fn test_shift_right_expression() {
+        let literal_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: Literal::Int(32),
+        };
+        let shift_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: Literal::Int(3),
+        };
+
+        let left_expr = Expression::Primary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: PrimaryExpression::Literal(literal_node),
+        });
+
+        let right_expr = Expression::Primary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: PrimaryExpression::Literal(shift_node),
+        });
+
+        let expr = Expression::Binary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: BinaryExpression {
+                left: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: left_expr,
+                }),
+                right: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: right_expr,
+                }),
+                operator: Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: BinaryOperator::ShiftRight,
+                },
+            },
+        });
+
+        let local_expr = LocalExpressionNode::from_expression(&expr, &vec![]).unwrap();
+        assert_eq!(local_expr.eval(&Memory::new()).unwrap(), Literal::Int(4));
+    }
+
+    #[test]
+    fn test_shift_out_of_range_fails() {
+        let left = Literal::Int(1);
+        let right = Literal::Int(64); // i64::BITS
+        let err = left.shift_left(&right).unwrap_err();
+        assert!(err.contains("Shift count out of range"));
+    }
+
+    #[test]
+    fn test_bitwise_and_expression() {
+        let literal_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: Literal::Int(6), // 110 in binary
+        };
+        let and_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: Literal::Int(3), // 011 in binary
+        };
+
+        let left_expr = Expression::Primary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: PrimaryExpression::Literal(literal_node),
+        });
+
+        let right_expr = Expression::Primary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: PrimaryExpression::Literal(and_node),
+        });
+
+        let expr = Expression::Binary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: BinaryExpression {
+                left: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: left_expr,
+                }),
+                right: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: right_expr,
+                }),
+                operator: Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: BinaryOperator::BitAnd,
+                },
+            },
+        });
+
+        let local_expr = LocalExpressionNode::from_expression(&expr, &vec![]).unwrap();
+        assert_eq!(local_expr.eval(&Memory::new()).unwrap(), Literal::Int(2)); // 010 in binary
+    }
+
+    #[test]
+    fn test_bitwise_or_expression() {
+        let literal_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: Literal::Int(6), // 110 in binary
+        };
+        let or_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: Literal::Int(3), // 011 in binary
+        };
+        let left_expr = Expression::Primary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: PrimaryExpression::Literal(literal_node),
+        });
+        let right_expr = Expression::Primary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: PrimaryExpression::Literal(or_node),
+        });
+
+        let expression = Expression::Binary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: BinaryExpression {
+                left: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: left_expr,
+                }),
+                right: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: right_expr,
+                }),
+                operator: Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: BinaryOperator::BitOr,
+                },
+            },
+        });
+        let local_expr = LocalExpressionNode::from_expression(&expression, &vec![]).unwrap();
+        assert_eq!(local_expr.eval(&Memory::new()).unwrap(), Literal::Int(7)); // 111 in binary
+    }
+
+    #[test]
+    fn test_bitwise_operation_type_error() {
+        let literal_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: Literal::Int(6),
+        };
+        let float_node = Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: Literal::Float(ordered_float::OrderedFloat(0.33)),
+        };
+
+        let left_expr = Expression::Primary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: PrimaryExpression::Literal(literal_node),
+        });
+
+        let right_expr = Expression::Primary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: PrimaryExpression::Literal(float_node),
+        });
+
+        let expr = Expression::Binary(Node {
+            pos: Pos {
+                line: 0,
+                col: 0,
+                start: 0,
+                end: 0,
+                file_path: "test".to_string(),
+            },
+            value: BinaryExpression {
+                left: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: left_expr,
+                }),
+                right: Box::new(Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: right_expr,
+                }),
+                operator: Node {
+                    pos: Pos {
+                        line: 0,
+                        col: 0,
+                        start: 0,
+                        end: 0,
+                        file_path: "test".to_string(),
+                    },
+                    value: BinaryOperator::BitAnd,
+                },
+            },
+        });
+
+        let local_expr = LocalExpressionNode::from_expression(&expr, &vec![]).unwrap();
+        let err = local_expr.eval(&Memory::new()).unwrap_err();
+        assert!(err.contains("Cannot perform bitwise AND between int and float"));
     }
 }

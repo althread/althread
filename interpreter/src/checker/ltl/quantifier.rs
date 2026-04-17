@@ -71,7 +71,7 @@ pub fn initialize_monitoring(
             let memory = prepare_list_memory(&quantifier.list_read_variables, vm)?;
             let list_value = quantifier
                 .list_expression
-                .eval_with_context(&memory, vm)
+                .eval_with_scope(&memory, &quantifier.list_read_variables, vm)
                 .map_err(|msg| {
                     AlthreadError::new(
                         ErrorType::ExpressionError,
@@ -170,7 +170,7 @@ pub fn update_monitors_for_new_processes(
             let memory = prepare_list_memory(&quantifier.list_read_variables, next_vm)?;
             let list_value = quantifier
                 .list_expression
-                .eval_with_context(&memory, next_vm)
+                .eval_with_scope(&memory, &quantifier.list_read_variables, next_vm)
                 .map_err(|msg| {
                     AlthreadError::new(
                         ErrorType::ExpressionError,
@@ -188,7 +188,7 @@ pub fn update_monitors_for_new_processes(
             let memory_current = prepare_list_memory(&quantifier.list_read_variables, current_vm)?;
             let list_value_current = quantifier
                 .list_expression
-                .eval_with_context(&memory_current, current_vm)
+                .eval_with_scope(&memory_current, &quantifier.list_read_variables, current_vm)
                 .map_err(|msg| {
                     AlthreadError::new(
                         ErrorType::ExpressionError,

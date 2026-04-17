@@ -1,6 +1,9 @@
-use std::collections::HashSet;
-
-use crate::ast::statement::expression::{Expression, LocalExpressionNode};
+use crate::ast::{
+    statement::{
+        expression::{Expression, LocalExpressionNode},
+        waiting_case::WaitDependency,
+    },
+};
 use crate::ast::token::datatype::DataType;
 use crate::checker::ltl::ast::LtlExpression;
 use crate::checker::ltl::compiled::CompiledLtlExpression;
@@ -182,8 +185,9 @@ fn compile_expression_with_context(
     state: &CompilerState,
     loop_vars: &Vec<Variable>,
 ) -> AlthreadResult<(LocalExpressionNode, Vec<String>)> {
-    let mut used_vars = HashSet::new();
-    expr.get_vars(&mut used_vars);
+    let mut dependencies = WaitDependency::new();
+    expr.add_dependencies(&mut dependencies);
+    let used_vars = dependencies.variables;
 
     let mut globals = Vec::new();
     let mut temp_stack = Vec::new();

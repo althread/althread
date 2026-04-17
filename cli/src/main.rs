@@ -185,22 +185,31 @@ pub fn check_command(cli_args: &CheckCommand) {
         // More detailed state graph could be output as DOT here
     }
 
-    if checked.0.is_empty() {
-        if !checked.1.exhaustive {
-            println!(
-                "{}",
-                format!(
-                    "Warning: Maximum number of states ({}) reached. The search was not exhaustive.",
-                    cli_args.max_states
-                )
-                .yellow()
-            );
+    if !checked.1.exhaustive {
+        println!(
+            "{}",
+            format!(
+                "Warning: Maximum number of states ({}) reached. The search was not exhaustive.",
+                cli_args.max_states
+            )
+            .yellow()
+        );
+        if checked.0.is_empty() {
             println!(
                 "{}",
                 "Note: Liveness properties (eventually) were not checked because the state space is incomplete."
-                .italic()
+                    .italic()
+            );
+        } else {
+            println!(
+                "{}",
+                "Note: The reported counterexample is valid, but verification stopped early at the state limit."
+                    .italic()
             );
         }
+    }
+
+    if checked.0.is_empty() {
         println!("✓ No invariant violated");
     } else {
         println!("✗ Invariant violated");
@@ -223,7 +232,7 @@ pub fn check_command(cli_args: &CheckCommand) {
 
     println!("\nVerification Statistics:");
     println!("  States explored: {}", checked.1.nodes.len());
-    let max_depth = checked.1.nodes.values().map(|n| n.level).max().unwrap_or(0);
+    let max_depth = checked.1.nodes.iter().map(|n| n.level).max().unwrap_or(0);
     println!("  Maximum depth:  {}", max_depth);
 
     if !checked.0.is_empty() {

@@ -33,15 +33,36 @@ impl FnCall {
             .join(".")
     }
 
+    pub fn receiver_name(&self) -> Option<String> {
+        if self.fn_name.value.parts.len() > 1 {
+            Some(
+                self.fn_name.value.parts[..self.fn_name.value.parts.len() - 1]
+                    .iter()
+                    .map(|part| part.value.value.as_str())
+                    .collect::<Vec<_>>()
+                    .join("."),
+            )
+        } else {
+            None
+        }
+    }
+
+    pub fn method_name(&self) -> Option<String> {
+        self.fn_name
+            .value
+            .parts
+            .last()
+            .map(|part| part.value.value.clone())
+    }
+
     pub fn add_dependencies(&self, dependencies: &mut WaitDependency) {
-        let full_name = self.fn_name_to_string();
-        dependencies.variables.insert(full_name);
+        if let Some(receiver_name) = self.receiver_name() {
+            dependencies.variables.insert(receiver_name);
+        }
         self.values.value.add_dependencies(dependencies);
     }
 
     pub fn get_vars(&self, vars: &mut HashSet<String>) {
-        let full_name = self.fn_name_to_string();
-        vars.insert(full_name);
         self.values.value.get_vars(vars);
     }
 }
@@ -235,45 +256,77 @@ impl InstructionBuilder for Node<FnCall> {
             }
         } else {
             // Handle method calls (e.g., obj.method())
-            if self.value.fn_name.value.parts.len() > 2 {
-                return Err(AlthreadError::new(
-                    ErrorType::UndefinedFunction,
-                    Some(self.pos.clone()),
-                    format!(
-                        "Chaining attributes or methods is not supported: {}",
-                        self.value.fn_name_to_string()
-                    ),
-                ));
-            }
-            let receiver_name = &self.value.fn_name.value.parts[0].value.value;
-            let method_name = &self.value.fn_name.value.parts.last().unwrap().value.value;
+            let receiver_name = self.value.receiver_name().ok_or(AlthreadError::new(
+                ErrorType::UndefinedFunction,
+                Some(self.pos.clone()),
+                format!(
+                    "Method call receiver is missing in {}",
+                    self.value.fn_name_to_string()
+                ),
+            ))?;
+            let method_name = self.value.method_name().ok_or(AlthreadError::new(
+                ErrorType::UndefinedFunction,
+                Some(self.pos.clone()),
+                format!(
+                    "Method name is missing in {}",
+                    self.value.fn_name_to_string()
+                ),
+            ))?;
 
-            let raw_var_id = state
+            let local_var_id = state
                 .program_stack
                 .iter()
                 .rev()
-                .position(|var| var.name.eq(receiver_name))
-                .ok_or(AlthreadError::new(
-                    ErrorType::VariableError,
-                    Some(self.pos.clone()),
-                    format!("Variable '{}' not found (if this is a global variable, it has not been implemented yet)", receiver_name),
-                ))?;
+                .position(|var| var.name == receiver_name);
 
-            let final_var_id = raw_var_id + state.method_call_stack_offset;
-            let var = &state.program_stack[state.program_stack.len() - 1 - raw_var_id];
-            let interfaces = state.stdlib().interfaces(&var.datatype);
+            let (receiver_idx, global_receiver, receiver_type, receiver_is_mutable) =
+                if let Some(raw_var_id) = local_var_id {
+                    let var = &state.program_stack[state.program_stack.len() - 1 - raw_var_id];
+                    (
+                        raw_var_id + state.method_call_stack_offset,
+                        None,
+                        var.datatype.clone(),
+                        var.mutable,
+                    )
+                } else if let Some(global_var) = state.global_table().get(&receiver_name) {
+                    (
+                        0,
+                        Some(receiver_name.clone()),
+                        global_var.datatype.clone(),
+                        global_var.mutable,
+                    )
+                } else {
+                    return Err(AlthreadError::new(
+                        ErrorType::VariableError,
+                        Some(self.pos.clone()),
+                        format!("Variable '{}' not found", receiver_name),
+                    ));
+                };
 
-            let fn_idx = interfaces.iter().position(|i| i.name == *method_name);
+            let interfaces = state.stdlib().interfaces(&receiver_type);
+
+            let fn_idx = interfaces.iter().position(|i| i.name == method_name);
             if fn_idx.is_none() {
                 return Err(AlthreadError::new(
                     ErrorType::UndefinedFunction,
                     Some(self.pos.clone()),
-                    format!("undefined function {}", method_name),
+                    format!("No method {} found on variable of type {}", method_name, receiver_type),
                 ));
             }
             let fn_idx = fn_idx.unwrap();
             let fn_info = &interfaces[fn_idx];
             let ret_type = fn_info.ret.clone();
+
+            if fn_info.mutates_receiver && !receiver_is_mutable {
+                return Err(AlthreadError::new(
+                    ErrorType::VariableError,
+                    Some(self.pos.clone()),
+                    format!(
+                        "Cannot call mutating method '{}' on immutable global variable {}",
+                        method_name, receiver_name
+                    ),
+                ));
+            }
 
             let unstack_len = state.unstack_current_depth();
 
@@ -287,11 +340,12 @@ impl InstructionBuilder for Node<FnCall> {
 
             builder.instructions.push(Instruction {
                 control: InstructionType::MethodCall {
-                    name: method_name.clone(),
-                    receiver_idx: final_var_id,
+                    name: method_name,
+                    receiver_idx,
                     unstack_len,
                     drop_receiver: false,
                     arguments: None,
+                    global_receiver,
                 },
                 pos: Some(self.pos.clone()),
             });

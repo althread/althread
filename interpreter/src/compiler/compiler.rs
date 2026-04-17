@@ -7,8 +7,14 @@ use std::{
 
 use crate::{
     ast::{
-        node::InstructionBuilder,
-        statement::Statement,
+        node::{InstructionBuilder, Node},
+        statement::{
+            expression::{
+                BracketContent, BracketExpression, Expression, LocalExpressionNode,
+                SideEffectExpression,
+            },
+            Statement,
+        },
         token::{
             condition_keyword::ConditionKeyword, datatype::DataType, identifier::Identifier,
             literal::Literal,
@@ -22,10 +28,7 @@ use crate::{
     },
     error::{AlthreadError, AlthreadResult, ErrorType},
     module_resolver::{module_resolver::ModuleResolver, FileSystem},
-    vm::{
-        instruction::{Instruction, InstructionType, ProgramCode},
-        VM,
-    },
+    vm::instruction::{Instruction, InstructionType, ProgramCode},
 };
 
 use super::ltl;
@@ -155,6 +158,205 @@ impl Ast {
             }
         }
         Ok(())
+    }
+
+    fn build_shared_const_scope(
+        global_table: &HashMap<String, Variable>,
+        global_memory: &BTreeMap<String, Literal>,
+    ) -> AlthreadResult<(Vec<Variable>, Vec<Literal>)> {
+        let mut names: Vec<_> = global_table.keys().cloned().collect();
+        names.sort();
+
+        let mut scope = Vec::with_capacity(names.len());
+        let mut memory = Vec::with_capacity(names.len());
+
+        for name in names {
+            let variable = global_table
+                .get(&name)
+                .cloned()
+                .expect("shared const scope key should exist in global_table");
+            let literal = global_memory.get(&name).cloned().ok_or_else(|| {
+                AlthreadError::new(
+                    ErrorType::VariableError,
+                    variable.declare_pos.clone(),
+                    format!(
+                        "Shared variable '{}' is registered but has no compile-time value",
+                        name
+                    ),
+                )
+            })?;
+            scope.push(variable);
+            memory.push(literal);
+        }
+
+        Ok((scope, memory))
+    }
+
+    fn validate_shared_const_expression(
+        expression: &LocalExpressionNode,
+        pos: &crate::error::Pos,
+    ) -> AlthreadResult<()> {
+        match expression {
+            LocalExpressionNode::Binary(node) => {
+                Self::validate_shared_const_expression(&node.left, pos)?;
+                Self::validate_shared_const_expression(&node.right, pos)
+            }
+            LocalExpressionNode::Unary(node) => {
+                Self::validate_shared_const_expression(&node.operand, pos)
+            }
+            LocalExpressionNode::Primary(node) => match node {
+                crate::ast::statement::expression::primary_expression::LocalPrimaryExpressionNode::Literal(_) => {
+                    Ok(())
+                }
+                crate::ast::statement::expression::primary_expression::LocalPrimaryExpressionNode::Var(_) => {
+                    Ok(())
+                }
+                crate::ast::statement::expression::primary_expression::LocalPrimaryExpressionNode::Expression(expr) => {
+                    Self::validate_shared_const_expression(expr, pos)
+                }
+            },
+            LocalExpressionNode::Tuple(node) => {
+                for value in &node.values {
+                    Self::validate_shared_const_expression(value, pos)?;
+                }
+                Ok(())
+            }
+            LocalExpressionNode::Range(node) => {
+                Self::validate_shared_const_expression(&node.expression_start, pos)?;
+                Self::validate_shared_const_expression(&node.expression_end, pos)
+            }
+            LocalExpressionNode::FnCall(_) | LocalExpressionNode::CallChain(_) => Err(
+                AlthreadError::new(
+                    ErrorType::InstructionNotAllowed,
+                    Some(pos.clone()),
+                    "Shared initializers do not allow function or method calls".to_string(),
+                ),
+            ),
+            LocalExpressionNode::Reaches(_) => Err(AlthreadError::new(
+                ErrorType::InstructionNotAllowed,
+                Some(pos.clone()),
+                "Shared initializers do not allow 'reaches' predicates".to_string(),
+            )),
+            LocalExpressionNode::IfExpr(_)
+            | LocalExpressionNode::ForAll(_)
+            | LocalExpressionNode::Exists(_) => Err(AlthreadError::new(
+                ErrorType::InstructionNotAllowed,
+                Some(pos.clone()),
+                "Shared initializers only allow pure compile-time expressions".to_string(),
+            )),
+        }
+    }
+
+    fn evaluate_shared_expression(
+        expression: &Node<Expression>,
+        scope: &[Variable],
+        memory: &[Literal],
+    ) -> AlthreadResult<Literal> {
+        let scope = scope.to_vec();
+        let memory = memory.to_vec();
+        let local = LocalExpressionNode::from_expression(&expression.value, &scope)?;
+
+        Self::validate_shared_const_expression(&local, &expression.pos)?;
+
+        local.eval(&memory).map_err(|err| {
+            AlthreadError::new(
+                ErrorType::ExpressionError,
+                Some(expression.pos.clone()),
+                err,
+            )
+        })
+    }
+
+    fn evaluate_shared_bracket_expression(
+        bracket: &Node<BracketExpression>,
+        scope: &[Variable],
+        memory: &[Literal],
+    ) -> AlthreadResult<Literal> {
+        match &bracket.value.content {
+            BracketContent::Range(range) => {
+                let expression = Node {
+                    pos: range.pos.clone(),
+                    value: Expression::Range(range.clone()),
+                };
+                Self::evaluate_shared_expression(&expression, scope, memory)
+            }
+            BracketContent::ListLiteral(elements) => {
+                let mut evaluated = Vec::with_capacity(elements.len());
+                let mut element_type = DataType::Void;
+
+                for (index, element) in elements.iter().enumerate() {
+                    let literal = Self::evaluate_shared_side_effect_expression(
+                        element,
+                        scope,
+                        memory,
+                    )?;
+                    let literal_type = literal.get_datatype();
+
+                    if index == 0 {
+                        element_type = literal_type.clone();
+                    } else if literal_type != element_type {
+                        return Err(AlthreadError::new(
+                            ErrorType::TypeError,
+                            Some(element.pos.clone()),
+                            format!(
+                                "List element {} has type {}, expected {}",
+                                index, literal_type, element_type
+                            ),
+                        ));
+                    }
+
+                    evaluated.push(literal);
+                }
+
+                Ok(Literal::List(element_type, evaluated))
+            }
+        }
+    }
+
+    fn evaluate_shared_side_effect_expression(
+        expression: &Node<SideEffectExpression>,
+        scope: &[Variable],
+        memory: &[Literal],
+    ) -> AlthreadResult<Literal> {
+        match &expression.value {
+            SideEffectExpression::Expression(node) => {
+                Self::evaluate_shared_expression(node, scope, memory)
+            }
+            SideEffectExpression::Bracket(node) => {
+                Self::evaluate_shared_bracket_expression(node, scope, memory)
+            }
+            SideEffectExpression::FnCall(_) => Err(AlthreadError::new(
+                ErrorType::InstructionNotAllowed,
+                Some(expression.pos.clone()),
+                "Shared initializers do not allow function or method calls".to_string(),
+            )),
+            SideEffectExpression::RunCall(_) => Err(AlthreadError::new(
+                ErrorType::InstructionNotAllowed,
+                Some(expression.pos.clone()),
+                "Shared initializers do not allow run calls".to_string(),
+            )),
+        }
+    }
+
+    fn evaluate_shared_initializer(
+        value: Option<&Node<SideEffectExpression>>,
+        datatype: &DataType,
+        global_table: &HashMap<String, Variable>,
+        global_memory: &BTreeMap<String, Literal>,
+    ) -> AlthreadResult<Literal> {
+        let literal = if let Some(value) = value {
+            let (scope, memory) = Self::build_shared_const_scope(global_table, global_memory)?;
+            Self::evaluate_shared_side_effect_expression(value, &scope, &memory)?
+        } else {
+            datatype.default()
+        };
+
+        match (literal, datatype) {
+            (Literal::List(_, elements), DataType::List(element_type)) if elements.is_empty() => {
+                Ok(Literal::List((**element_type).clone(), elements))
+            }
+            (literal, _) => Ok(literal),
+        }
     }
 
     pub fn compile<F: FileSystem + Clone>(
@@ -294,64 +496,36 @@ impl Ast {
         state.current_stack_depth = 1;
         state.is_shared = true;
         if let Some(global) = self.global_block.as_ref() {
-            let mut memory = VM::new_memory();
             for node in global.value.children.iter() {
                 match &node.value {
                     Statement::Declaration(decl) => {
-                        let mut literal = None;
-                        let node_compiled = node.compile(&mut state)?;
-                        for gi in node_compiled.instructions {
-                            match gi.control {
-                                InstructionType::Expression(exp) => {
-                                    literal = Some(exp.eval(&memory).or_else(|err| {
-                                        Err(AlthreadError::new(
-                                            ErrorType::ExpressionError,
-                                            gi.pos,
-                                            err,
-                                        ))
-                                    })?);
-                                }
-                                InstructionType::Declaration { unstack_len } => {
-                                    // do nothing
-                                    assert!(unstack_len == 1)
-                                }
-                                InstructionType::Push(pushed_literal) => {
-                                    literal = Some(pushed_literal)
-                                }
-                                _ => {
-                                    panic!(
-                                        "unexpected instruction in compiled declaration statement"
-                                    )
-                                }
-                            }
-                        }
-                        let literal = literal
-                            .expect("declaration did not compile to expression nor PushNull");
-                        memory.push(literal);
-                        match &decl.value.identifier {
-                            Lvalue::Identifier(object) => {
-                                let var_name = &object.value.value;
-                                // Use context instead of local global_table
-                                let last_program_stack = state.program_stack.last().unwrap().clone();
-                                state
-                                    .global_table_mut()
-                                    .insert(var_name.clone(), last_program_stack);
-                                state
-                                    .global_memory_mut()
-                                    .insert(var_name.clone(), memory.last().unwrap().clone());
-                            }
-                            Lvalue::TupleIdentifier(object) => {
-                                print!("------------COMPILER 2-------------\n\n");
-                            }
-                            Lvalue::NullIdentifier(node) => {},
-                        }
+                        let available_globals = state.global_memory().clone();
+                        let available_table = state.global_table().clone();
+
+                        node.compile(&mut state)?;
+
+                        let var_name = &decl.value.identifier.value.parts[0].value.value;
+                        // Use context instead of local global_table
+                        let last_program_stack = state.program_stack.last().unwrap().clone();
+                        let literal = Self::evaluate_shared_initializer(
+                            decl.value.value.as_ref(),
+                            &last_program_stack.datatype,
+                            &available_table,
+                            &available_globals,
+                        )?;
+
+                        state
+                            .global_table_mut()
+                            .insert(var_name.clone(), last_program_stack);
+                        state
+                            .global_memory_mut()
+                            .insert(var_name.clone(), literal);
                     }
                     _ => {
                         return Err(AlthreadError::new(
                             ErrorType::InstructionNotAllowed,
                             Some(node.pos.clone()),
-                            "The 'shared' block can only contains assignment from an expression"
-                                .to_string(),
+                            "The 'shared' block can only contain declarations".to_string(),
                         ))
                     }
                 }
@@ -724,6 +898,13 @@ impl Ast {
                     InstructionType::GlobalAssignment { identifier, .. } => {
                         *identifier = self.build_qualified_name(identifier, module_prefix);
                     }
+                    InstructionType::MethodCall {
+                        global_receiver, ..
+                    } => {
+                        if let Some(identifier) = global_receiver {
+                            *identifier = self.build_qualified_name(identifier, module_prefix);
+                        }
+                    }
                     InstructionType::RunCall {
                         name: call_name, ..
                     } => {
@@ -967,6 +1148,13 @@ impl Ast {
                     }
                     InstructionType::GlobalAssignment { identifier, .. } => {
                         *identifier = self.build_qualified_name(identifier, module_prefix);
+                    }
+                    InstructionType::MethodCall {
+                        global_receiver, ..
+                    } => {
+                        if let Some(identifier) = global_receiver {
+                            *identifier = self.build_qualified_name(identifier, module_prefix);
+                        }
                     }
                     InstructionType::RunCall {
                         name: call_name, ..

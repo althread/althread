@@ -15,6 +15,7 @@ pub struct Interface {
     pub name: String,
     pub args: Vec<DataType>,
     pub ret: DataType,
+    pub mutates_receiver: bool,
     //pub f: Mutex<Box<dyn Fn(&mut Literal, &mut Literal) -> Literal + Send + Sync>>,
     pub f: Rc<dyn Fn(&mut Literal, &mut Literal, Option<Pos>) -> Result<Literal, AlthreadError>>,
 }
@@ -66,6 +67,7 @@ impl Stdlib {
                     name: "len".to_string(),
                     args: vec![],
                     ret: DataType::Integer,
+                    mutates_receiver: false,
                     f: Rc::new(|list, _v, pos| {
                         // let args = v.to_tuple().unwrap();
                         // TODO!: for in control uses len with args???
@@ -90,6 +92,7 @@ impl Stdlib {
                     name: "push".to_string(),
                     args: vec![t.as_ref().clone()],
                     ret: DataType::Void,
+                    mutates_receiver: true,
                     f: Rc::new(|list, v, pos| {
                         let v = v.to_tuple().unwrap();
                         if let Literal::List(dtype, list) = list {
@@ -123,6 +126,7 @@ impl Stdlib {
                     name: "remove".to_string(),
                     args: vec![DataType::Integer],
                     ret: t.as_ref().clone(),
+                    mutates_receiver: true,
                     f: Rc::new(|list, v, pos| {
                         let args = v.to_tuple().unwrap();
                         if args.len() != 1 {
@@ -155,6 +159,7 @@ impl Stdlib {
                     name: "set".to_string(),
                     args: vec![DataType::Integer, t.as_ref().clone()],
                     ret: DataType::Void,
+                    mutates_receiver: true,
                     f: Rc::new(|list, v, pos| {
                         let v = v.to_tuple().unwrap();
                         if v.len() != 2 {
@@ -196,6 +201,7 @@ impl Stdlib {
                     name: "at".to_string(),
                     args: vec![DataType::Integer],
                     ret: t.as_ref().clone(),
+                    mutates_receiver: false,
                     f: Rc::new(|list, v, pos| {
                         let v = v.to_tuple().unwrap();
                         let v = v.first().unwrap().to_integer().unwrap();
@@ -318,4 +324,38 @@ impl Stdlib {
             .insert(dtype.clone(), new_interfaces.clone());
         new_interfaces
     }
+}
+
+pub fn invoke_interface_method(
+    stdlib: &Stdlib,
+    name: &str,
+    receiver: &mut Literal,
+    args: &mut Literal,
+    pos: Option<Pos>,
+) -> Result<(Literal, bool), AlthreadError> {
+    let datatype = receiver.get_datatype();
+    let interfaces = stdlib.interfaces(&datatype);
+
+    if interfaces.is_empty() {
+        return Err(AlthreadError::new(
+            ErrorType::UndefinedFunction,
+            pos.clone(),
+            format!("Type {:?} has no interface available", datatype),
+        ));
+    }
+
+    let interface = interfaces
+        .iter()
+        .find(|interface| interface.name == name)
+        .ok_or_else(|| {
+            AlthreadError::new(
+                ErrorType::UndefinedFunction,
+                pos.clone(),
+                format!("undefined function {}", name),
+            )
+        })?;
+
+    let ret = interface.f.as_ref()(receiver, args, pos)?;
+
+    Ok((ret, interface.mutates_receiver))
 }

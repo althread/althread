@@ -18,7 +18,7 @@ use crate::{
     vm::instruction::{Instruction, InstructionType},
 };
 
-use super::waiting_case::{WaitDependency, WaitingBlockCase};
+use super::waiting_case::{WaitDependency, WaitingBlockCase, WaitingBlockCaseRule};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum WaitingBlockKind {
@@ -104,6 +104,7 @@ impl InstructionBuilder for Node<Wait> {
 
         if self.value.waiting_cases.len() == 1 && self.value.waiting_cases[0].value.statement.is_none() {
             let case = &self.value.waiting_cases[0];
+            let keeps_condition_values = matches!(case.value.rule, WaitingBlockCaseRule::Receive(_));
 
             // Here it is partucular, we only unstack these variables if the wait is not over
             // and we leave the stack unchanged if the wait is over
@@ -118,26 +119,36 @@ impl InstructionBuilder for Node<Wait> {
             debug_assert!(boolean_var.is_some() && boolean_var.as_ref().unwrap().datatype == DataType::Boolean);
 
             let unstack_len = state.program_stack.len() - stack_size_before;
+            let success_unstack_len = if keeps_condition_values {
+                1
+            } else {
+                unstack_len + 1
+            };
 
+            // On success, leave the guard-evaluation phase and drop only temporary values.
+            // On failure, clean up and loop back through the wait instruction.
+            builder.instructions.push(Instruction {
+                pos: Some(case.pos.clone()),
+                control: InstructionType::JumpIf { 
+                    jump_false: if self.value.start_atomic { 3 } else { 4 },
+                    unstack_len: 0, // leave the boolean
+                }
+            });
             if !self.value.start_atomic {
-                // if the entire wait block is not atomic, stop the atomicity here
                 builder.instructions.push(Instruction {
                     pos: Some(case.pos.clone()),
                     control: InstructionType::AtomicEnd,
                 });
             }
-
-            // jump over the unstacking if the wait is not over
             builder.instructions.push(Instruction {
                 pos: Some(case.pos.clone()),
-                control: InstructionType::JumpIf { 
-                    jump_false: 2, // jump over the jump instruction
-                    unstack_len: 0, // leave the boolean
-                }
+                control: InstructionType::Unstack {
+                    unstack_len: success_unstack_len,
+                },
             });
             builder.instructions.push(Instruction {
                 pos: Some(case.pos.clone()),
-                control: InstructionType::Jump(3) // jump over the unstacking instruction and the push false
+                control: InstructionType::Jump(if self.value.start_atomic { 4 } else { 5 })
             });
 
             builder.instructions.push(Instruction {
@@ -152,6 +163,13 @@ impl InstructionBuilder for Node<Wait> {
                 control: InstructionType::Push(Literal::Bool(false)),
             });
 
+            if !self.value.start_atomic {
+                builder.instructions.push(Instruction {
+                    pos: Some(case.pos.clone()),
+                    control: InstructionType::AtomicEnd,
+                });
+            }
+
             builder.instructions.push(Instruction {
                 pos: Some(case.pos.clone()),
                 control: InstructionType::Wait {
@@ -159,6 +177,11 @@ impl InstructionBuilder for Node<Wait> {
                     unstack_len: 1,
                 },
             });
+            if !keeps_condition_values {
+                for _ in 0..unstack_len {
+                    state.program_stack.pop();
+                }
+            }
             // when the wait is over the variables declared in case are still on the stack and will be removed when the current scope ends
             // if the wait is not over, since there is only one case, we know that the variables declared will be eventually there.
             return Ok(builder)
@@ -170,9 +193,9 @@ impl InstructionBuilder for Node<Wait> {
         we push a false boolean at the beginning, start atomicity if needed,
         then for each case:
         - condition instructions (adding a boolean and possibly other variables to the stack)
-        - stop atomicity instruction (if needed)
         - jump over the statement if the condition is false (and remove the boolean from the stack)
-          - statement instructions (possibly adding other variables to the stack)
+                    - stop atomicity instruction (if needed)
+                    - statement instructions (possibly adding other variables to the stack)
           - unstack the instructions from the statement and condition variables
           - push true
           - jump over the unstacking of the condition variables
@@ -200,21 +223,15 @@ impl InstructionBuilder for Node<Wait> {
         });
         
 
-        // Store the indexes of the jumps to fill them later if "first" is used
-        let mut jump_index = Vec::new();
+        // Store the indexes of the success-path jumps to fill them later if
+        // "first" is used. Failed cases must still fall through to later cases.
+        let mut success_jump_index = Vec::new();
         for case in &self.value.waiting_cases {
             // In this case, the variables declared in the case condition are in their own scope
             state.current_stack_depth += 1;
             let case_condition = case.value.rule.compile(state)?;
 
             builder.extend(case_condition);
-            if !self.value.start_atomic {
-                // if the entire wait block is not atomic, stop the atomicity here
-                builder.instructions.push(Instruction {
-                    pos: Some(case.pos.clone()),
-                    control: InstructionType::AtomicEnd,
-                });
-            }
             
             // Remove the boolean from the compiler stack (it will be unstacked at runtime before the statement)
             let boolean_var = state.program_stack.pop();
@@ -230,6 +247,17 @@ impl InstructionBuilder for Node<Wait> {
                 Some(s) => s.compile(state)?,
                 None => InstructionBuilderOk::new(),
             };
+
+            if !self.value.start_atomic {
+                case_statement.shift_instruction_indexes(1);
+                case_statement.instructions.insert(
+                    0,
+                    Instruction {
+                        pos: Some(case.pos.clone()),
+                        control: InstructionType::AtomicEnd,
+                    },
+                );
+            }
 
             // now we know hwo many variables were stacked the case condition and the statement
             let unstack_len_statement = state.unstack_current_depth();
@@ -249,9 +277,34 @@ impl InstructionBuilder for Node<Wait> {
 
             case_statement.instructions.push(Instruction {
                 pos: Some(case.pos.clone()),
-                control: InstructionType::Jump(
-                    (3) as i64, // jump over the unstacking of the condition variables and the push false
-                )
+                control: InstructionType::LocalAssignment {
+                    index: 0,
+                    operator: BinaryAssignmentOperator::OrAssign,
+                    unstack_len: 1,
+                },
+            });
+
+            if self.value.block_kind == WaitingBlockKind::Seq && !self.value.start_atomic {
+                // Re-enter atomic mode so the remaining seq cases are evaluated
+                // as one uninterrupted guard-evaluation phase.
+                case_statement.instructions.push(Instruction {
+                    pos: Some(case.pos.clone()),
+                    control: InstructionType::AtomicStart,
+                });
+            }
+
+            case_statement.instructions.push(Instruction {
+                pos: Some(case.pos.clone()),
+                control: match self.value.block_kind {
+                    WaitingBlockKind::First => {
+                        // Placeholder patched to jump to the final wait check.
+                        InstructionType::Empty
+                    }
+                    WaitingBlockKind::Seq => {
+                        // Skip this case's failure cleanup and continue with the next case.
+                        InstructionType::Jump(4)
+                    }
+                },
             });
             //  --- Statement compilation is over ---
 
@@ -266,6 +319,10 @@ impl InstructionBuilder for Node<Wait> {
             });
 
             builder.extend(case_statement);
+
+            if self.value.block_kind == WaitingBlockKind::First {
+                success_jump_index.push(builder.instructions.len() - 1);
+            }
 
             builder.instructions.push(Instruction {
                 pos: Some(case.pos.clone()),
@@ -287,13 +344,15 @@ impl InstructionBuilder for Node<Wait> {
                 },
             });
 
-            jump_index.push(builder.instructions.len());
-            builder.instructions.push(Instruction {
-                pos: Some(case.pos.clone()),
-                control: InstructionType::Empty, // placeholder for the jump if the keyword "first" is used
-            });
         }
 
+        let wait_index = builder.instructions.len();
+        if !self.value.start_atomic {
+            builder.instructions.push(Instruction {
+                pos: Some(self.pos.clone()),
+                control: InstructionType::AtomicEnd,
+            });
+        }
         builder.instructions.push(Instruction {
             pos: Some(self.pos.clone()),
             control: InstructionType::Wait {
@@ -304,9 +363,9 @@ impl InstructionBuilder for Node<Wait> {
         state.program_stack.pop();
 
         if self.value.block_kind == WaitingBlockKind::First {
-            for index in jump_index.iter() {
+            for index in success_jump_index.iter() {
                 builder.instructions[*index].control =
-                    InstructionType::Jump((builder.instructions.len() - index - 1) as i64);
+                    InstructionType::Jump((wait_index - index) as i64);
             }
         }
 

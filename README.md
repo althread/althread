@@ -32,6 +32,16 @@ Althread is an open source Promela alternative for modeling and verifying multi-
     ```
     cargo run run test.alt
     ```
+4. run the web interface
+
+    ```
+    cd web
+    pnpm install
+    pnpm build-lezer
+    pnpm install-deps
+    pnpm build-wasm
+    pnpm start
+    ```
 
 ## Quick Start
 Here is a minimal example of modeling a multi-thread system :

@@ -74,10 +74,33 @@ impl NodeBuilder for Literal {
             })
         }
 
+        fn parse_int(pair: &Pair<Rule>, filepath: &str) -> Result<i64, AlthreadError> {
+            // parse int with support for hex and binary
+            let s = pair.as_str();
+            let (s, radix) = if s.starts_with("0x") || s.starts_with("0X") {
+                (&s[2..], 16)
+            } else if s.starts_with("0b") || s.starts_with("0B") {
+                (&s[2..], 2)
+            } else { (s, 10) };
+            i64::from_str_radix(s, radix).map_err(|_| {
+                AlthreadError::new(
+                    ErrorType::SyntaxError,
+                    Some(Pos {
+                        start: pair.as_span().start(),
+                        end: pair.as_span().end(),
+                        line: pair.line_col().0,
+                        col: pair.line_col().1,
+                        file_path: filepath.to_string(),
+                    }),
+                    format!("Cannot parse {}", pair.as_str()),
+                )
+            })
+        }
+
         Ok(match pair.as_rule() {
             Rule::NULL => Self::Null,
             Rule::BOOL => Self::Bool(safe_parse(&pair, filepath)?),
-            Rule::INT => Self::Int(safe_parse(&pair, filepath)?),
+            Rule::INT => Self::Int(parse_int(&pair, filepath)?),
             Rule::FLOAT => Self::Float(safe_parse(&pair, filepath)?),
             Rule::STR => {
                 let s = pair.as_str();
@@ -161,6 +184,7 @@ impl Literal {
     pub fn not(&self) -> Result<Self, String> {
         match self {
             Self::Bool(b) => Ok(Self::Bool(!b)),
+            Self::Int(i) => Ok(Self::Int(!i)),
             i => Err(format!("Cannot negate {}", i.get_datatype())),
         }
     }
@@ -335,6 +359,42 @@ impl Literal {
             Self::Int(i) => Ok(Self::Int(i - 1)),
             Self::Float(f) => Ok(Self::Float(f - 1.0)),
             i => Err(format!("Cannot decrement {}", i.get_datatype())),
+        }
+    }
+
+    pub fn shift_left(&self, other: &Self) -> Result<Self, String> {
+    match (self, other) {
+        (Self::Int(i), Self::Int(j)) if *j >= 0 && *j < i64::BITS as i64 => {
+            i.checked_shl(*j as u32)
+                .map(Self::Int)
+                .ok_or("Cannot shift left".to_string())
+        }
+        (Self::Int(_), Self::Int(_)) => Err("Shift count out of range".to_string()),
+        (a, b) => Err(format!("Cannot shift {} by {}", a.get_datatype(), b.get_datatype())),
+    }
+}
+
+    pub fn shift_right(&self, other: &Self) -> Result<Self, String> {
+        match (self, other) {
+            (Self::Int(i), Self::Int(j)) if *j >= 0 && *j < i64::BITS as i64 => {
+                i.checked_shr(*j as u32)
+                    .map(Self::Int)
+                    .ok_or("Cannot shift right".to_string())
+            }
+            (Self::Int(_), Self::Int(_)) => Err("Shift count out of range".to_string()),
+            (a, b) => Err(format!("Cannot shift {} by {}", a.get_datatype(), b.get_datatype())),
+        }
+    }
+    pub fn bit_and(&self, other: &Self) -> Result<Self, String> {
+        match (self, other) {
+            (Self::Int(i), Self::Int(j)) => Ok(Self::Int(i & j)),
+            (a, b) => Err(format!("Cannot perform bitwise AND between {} and {}", a.get_datatype(), b.get_datatype())),
+        }
+    }
+    pub fn bit_or(&self, other: &Self) -> Result<Self, String> {
+        match (self, other) {
+            (Self::Int(i), Self::Int(j)) => Ok(Self::Int(i | j)),
+            (a, b) => Err(format!("Cannot perform bitwise OR between {} and {}", a.get_datatype(), b.get_datatype())),
         }
     }
 }

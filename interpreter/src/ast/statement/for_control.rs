@@ -127,6 +127,7 @@ impl InstructionBuilder for Node<ForControl> {
                 unstack_len: 0,
                 drop_receiver: false,
                 arguments: Some(vec![]), // no args for len()
+                global_receiver: None,
             },
         });
         builder.instructions.push(Instruction {
@@ -162,6 +163,7 @@ impl InstructionBuilder for Node<ForControl> {
                 unstack_len: 0,
                 drop_receiver: false,
                 arguments: Some(vec![0]), // if the arguments are scattered in the stack
+                global_receiver: None,
             },
         });
         builder.instructions.push(Instruction {

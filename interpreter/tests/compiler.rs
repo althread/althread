@@ -10,13 +10,13 @@ use althread::{
         },
         token::{
             binary_assignment_operator::BinaryAssignmentOperator, binary_operator::BinaryOperator,
-            literal::Literal,
+            datatype::DataType, literal::Literal,
         },
         Ast,
     },
     error::Pos,
     module_resolver::StandardFileSystem,
-    vm::instruction::{Instruction, InstructionType},
+    vm::{instruction::{Instruction, InstructionType}, GlobalAction, VM},
 };
 
 // A simple test to verify that the compiler can compile a simple program
@@ -179,6 +179,394 @@ main {
 }
 
 #[test]
+fn test_shared_method_call_in_expression() {
+    let input = r#"
+shared {
+    let Global:list(int);
+}
+
+main {
+    Global = [1, 2, 3];
+    print(Global.at(0));
+}
+    "#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let mut vm = VM::new(&compiled_project);
+    vm.start(0);
+
+    let mut actions = Vec::new();
+    loop {
+        let next_states = vm.next().unwrap();
+        if next_states.is_empty() {
+            break;
+        }
+        let (_, _, _, step_actions, next_vm) = next_states.into_iter().next().unwrap();
+        actions.extend(step_actions);
+        vm = next_vm;
+    }
+
+    assert!(actions.iter().any(|action| matches!(
+        action,
+        GlobalAction::Write(name) if name == "Global"
+    )));
+    assert!(actions.iter().any(|action| matches!(
+        action,
+        GlobalAction::Print(msg) if msg == "1"
+    )));
+    assert_eq!(
+        vm.globals.get("Global"),
+        Some(&Literal::List(
+            DataType::Integer,
+            vec![Literal::Int(1), Literal::Int(2), Literal::Int(3)]
+        ))
+    );
+}
+
+#[test]
+fn test_shared_list_literal_initialization() {
+    let input = r#"
+shared {
+    let Tab = [1, 2];
+}
+
+main {
+}
+    "#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    assert_eq!(
+        compiled_project.global_memory.get("Tab"),
+        Some(&Literal::List(
+            DataType::Integer,
+            vec![Literal::Int(1), Literal::Int(2)]
+        ))
+    );
+}
+
+#[test]
+fn test_shared_empty_typed_list_initialization() {
+    let input = r#"
+shared {
+    let Tab:list(int) = [];
+}
+
+main {
+}
+    "#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    assert_eq!(
+        compiled_project.global_memory.get("Tab"),
+        Some(&Literal::List(DataType::Integer, vec![]))
+    );
+}
+
+#[test]
+fn test_shared_initializer_can_reference_previous_shared_variable() {
+    let input = r#"
+shared {
+    let Base = 1;
+    let Tab = [Base, Base + 1];
+}
+
+main {
+}
+    "#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    assert_eq!(compiled_project.global_memory.get("Base"), Some(&Literal::Int(1)));
+    assert_eq!(
+        compiled_project.global_memory.get("Tab"),
+        Some(&Literal::List(
+            DataType::Integer,
+            vec![Literal::Int(1), Literal::Int(2)]
+        ))
+    );
+}
+
+#[test]
+fn test_await_method_call_keeps_right_operand_stack_index() {
+    let input = r#"
+shared {
+    let T = 1;
+    let Flag:list(bool);
+}
+
+program A() {
+    await Flag.at(0) || T == 0;
+}
+
+main {
+    Flag = [false, false];
+    run A();
+}
+    "#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let instructions = &compiled_project.programs_code.get("A").unwrap().instructions;
+
+    assert!(instructions.iter().any(|instruction| {
+        matches!(
+            &instruction.control,
+            InstructionType::ExpressionAndCleanup {
+                expression: LocalExpressionNode::Binary(LocalBinaryExpressionNode {
+                    left,
+                    operator: BinaryOperator::Or,
+                    right,
+                }),
+                unstack_len: 1,
+            }
+            if matches!(
+                left.as_ref(),
+                LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(LocalVarNode {
+                    index: 0,
+                }))
+            ) && matches!(
+                right.as_ref(),
+                LocalExpressionNode::Binary(LocalBinaryExpressionNode {
+                    left,
+                    operator: BinaryOperator::Equals,
+                    right,
+                })
+                if matches!(
+                    left.as_ref(),
+                    LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(LocalVarNode {
+                        index: 1,
+                    }))
+                ) && matches!(
+                    right.as_ref(),
+                    LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Literal(
+                        LocalLiteralNode {
+                            value: Literal::Int(0),
+                        }
+                    ))
+                )
+            )
+        )
+    }));
+}
+
+#[test]
+fn test_await_expression_rechecks_with_clean_stack() {
+    let input = r#"
+shared {
+    let REQUEST = false;
+    let VALUE = 0;
+}
+
+program worker(next:int) {
+    loop {
+        atomic {
+            await REQUEST;
+            REQUEST = false;
+            VALUE = next;
+        }
+    }
+}
+
+main {
+    run worker(1);
+    let seen = 0;
+    @ REQUEST = true;
+    await VALUE > 0;
+    seen = VALUE;
+    print(seen);
+}
+    "#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let mut initial_vm = VM::new(&compiled_project);
+    initial_vm.start(0);
+
+    let mut frontier = vec![(initial_vm, Vec::<String>::new())];
+    let mut terminal_states = 0;
+
+    while let Some((vm, prints)) = frontier.pop() {
+        let next_states = vm.next().unwrap();
+        if next_states.is_empty() {
+            terminal_states += 1;
+            assert_eq!(vm.globals.get("VALUE"), Some(&Literal::Int(1)));
+            assert!(prints.iter().any(|message| message == "1"));
+            continue;
+        }
+
+        for (_, _, _, step_actions, next_vm) in next_states {
+            let mut next_prints = prints.clone();
+            for action in step_actions {
+                if let GlobalAction::Print(message) = action {
+                    next_prints.push(message);
+                }
+            }
+            frontier.push((next_vm, next_prints));
+        }
+    }
+
+    assert!(terminal_states > 0);
+}
+
+#[test]
+fn test_mutating_shared_method_call_updates_global_memory() {
+    let input = r#"
+shared {
+    let Global:list(int);
+}
+
+main {
+    Global = [1, 2, 3];
+    Global.push(4);
+}
+    "#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let mut vm = VM::new(&compiled_project);
+    vm.start(0);
+
+    let mut actions = Vec::new();
+    loop {
+        let next_states = vm.next().unwrap();
+        if next_states.is_empty() {
+            break;
+        }
+        let (_, _, _, step_actions, next_vm) = next_states.into_iter().next().unwrap();
+        actions.extend(step_actions);
+        vm = next_vm;
+    }
+
+    assert!(actions.iter().any(|action| matches!(
+        action,
+        GlobalAction::Write(name) if name == "Global"
+    )));
+    assert_eq!(
+        vm.globals.get("Global"),
+        Some(&Literal::List(
+            DataType::Integer,
+            vec![
+                Literal::Int(1),
+                Literal::Int(2),
+                Literal::Int(3),
+                Literal::Int(4),
+            ]
+        ))
+    );
+}
+
+#[test]
+fn test_disjoint_shared_list_writes_do_not_lose_updates() {
+    let input = r#"
+shared {
+    let Global:list(int);
+}
+
+program A() {
+    Global.set(0, 1);
+}
+
+program B() {
+    Global.set(1, 2);
+}
+
+main {
+    Global = [0, 0];
+    run A();
+    run B();
+}
+    "#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let mut initial_vm = VM::new(&compiled_project);
+    initial_vm.start(0);
+
+    let mut frontier = vec![initial_vm];
+    let mut terminal_states = 0;
+
+    while let Some(vm) = frontier.pop() {
+        let next_states = vm.next().unwrap();
+        if next_states.is_empty() {
+            terminal_states += 1;
+            assert_eq!(
+                vm.globals.get("Global"),
+                Some(&Literal::List(
+                    DataType::Integer,
+                    vec![Literal::Int(1), Literal::Int(2)]
+                ))
+            );
+            continue;
+        }
+
+        for (_, _, _, _, next_vm) in next_states {
+            frontier.push(next_vm);
+        }
+    }
+
+    assert!(terminal_states > 0);
+}
+
+#[test]
 fn test_condition_quantifiers_and_if_expr() {
     let input = r#"
 shared {
@@ -244,6 +632,319 @@ main {
         }
         _ => panic!("Expected binary '&&' expression"),
     }
+}
+
+#[test]
+fn test_always_condition_supports_shared_method_calls() {
+    let input = r#"
+shared {
+    let Global = [1..3];
+}
+
+always {
+    Global.len() == 2 && Global.at(0) == 1;
+}
+
+main {
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    assert_eq!(compiled_project.always_conditions.len(), 1);
+
+    let mut vm = VM::new(&compiled_project);
+    vm.start(0);
+
+    assert_eq!(vm.check_invariants().unwrap(), 1);
+}
+
+#[test]
+fn test_wait_first_can_match_later_receive_case() {
+    let input = r#"
+program A() {
+    await first {
+        receive chin (msg) => {
+            print("reçu:", msg);
+        }
+        receive chin2 (msg) => {
+            print("reçu:", msg);
+        }
+    }
+}
+
+program B() {
+    send chout("hello from B");
+}
+
+main {
+    let a = run A();
+    let b = run B();
+    channel self.chout (string)> a.chin;
+    channel b.chout (string)> a.chin2;
+    send chout("hello from main");
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let mut vm = VM::new(&compiled_project);
+    vm.start(0);
+
+    let (_, _, _, _, after_main) = vm.next().unwrap().into_iter().next().unwrap();
+    let (_, _, _, _, after_b) = after_main
+        .next()
+        .unwrap()
+        .into_iter()
+        .find(|(name, pid, _, _, _)| name == "B" && *pid == 2)
+        .unwrap();
+
+    let (_, _, _, _, after_b_delivery) = after_b
+        .next()
+        .unwrap()
+        .into_iter()
+        .find(|(name, _, _, _, _)| name == "__deliver__ chin2#1")
+        .unwrap();
+
+    let next_states = after_b_delivery.next().unwrap();
+    let a_step = next_states
+        .iter()
+        .find(|(name, pid, _, _, _)| name == "A" && *pid == 1)
+        .expect("A should be schedulable after a message arrives on chin2");
+
+    assert!(a_step.3.iter().any(|action| matches!(
+        action,
+        GlobalAction::Print(msg) if msg == "reçu: hello from B"
+    )));
+}
+
+#[test]
+fn test_wait_first_eventually_consumes_later_receive_case() {
+    let input = r#"
+program A() {
+    await first {
+        receive chin (msg) => {
+            print("reçu:", msg);
+        }
+        receive chin2 (msg) => {
+            print("reçu:", msg);
+        }
+    }
+}
+
+program B() {
+    send chout("hello from B");
+}
+
+main {
+    let a = run A();
+    let b = run B();
+    channel self.chout (string)> a.chin;
+    channel b.chout (string)> a.chin2;
+    send chout("hello from main");
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let mut vm = VM::new(&compiled_project);
+    vm.start(0);
+
+    let (_, _, _, _, after_main) = vm.next().unwrap().into_iter().next().unwrap();
+    let (_, _, _, _, after_b) = after_main
+        .next()
+        .unwrap()
+        .into_iter()
+        .find(|(name, pid, _, _, _)| name == "B" && *pid == 2)
+        .unwrap();
+
+    let (_, _, _, _, after_b_delivery) = after_b
+        .next()
+        .unwrap()
+        .into_iter()
+        .find(|(name, _, _, _, _)| name == "__deliver__ chin2#1")
+        .unwrap();
+
+    let (_, _, _, actions, _) = after_b_delivery
+        .next()
+        .unwrap()
+        .into_iter()
+        .find(|(name, pid, _, _, _)| name == "A" && *pid == 1)
+        .unwrap();
+
+    assert!(actions.iter().any(|action| matches!(
+        action,
+        GlobalAction::Print(msg) if msg == "reçu: hello from B"
+    )));
+}
+
+#[test]
+fn test_wait_seq_executes_following_matching_cases() {
+    let input = r#"
+shared {
+    let VA = 1;
+}
+
+main {
+    await seq {
+        (VA == 0) => { print("CASE 0"); }
+        (VA == 1) => { print("CASE 1"); VA = 2; }
+        (VA == 2) => { print("CASE 2"); }
+    }
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let mut vm = VM::new(&compiled_project);
+    vm.start(0);
+
+    let mut actions = Vec::new();
+    loop {
+        let next_states = vm.next().unwrap();
+        if next_states.is_empty() {
+            break;
+        }
+
+        let (_, _, _, step_actions, next_vm) = next_states.into_iter().next().unwrap();
+        actions.extend(step_actions);
+        vm = next_vm;
+    }
+
+    assert!(actions.iter().any(|action| matches!(
+        action,
+        GlobalAction::Print(msg) if msg == "CASE 1"
+    )));
+    assert!(actions.iter().any(|action| matches!(
+        action,
+        GlobalAction::Print(msg) if msg == "CASE 2"
+    )));
+    assert_eq!(vm.globals.get("VA"), Some(&Literal::Int(2)));
+}
+
+#[test]
+fn test_wait_seq_restarts_atomic_guard_evaluation_after_match() {
+    let input = r#"
+shared {
+    let VA = 1;
+}
+
+main {
+    await seq {
+        (VA == 1) => { print("CASE 1"); VA = 2; }
+        (VA == 2) => { print("CASE 2"); }
+    }
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let instructions = &compiled_project.programs_code.get("main").unwrap().instructions;
+    let atomic_start_count = instructions
+        .iter()
+        .filter(|inst| matches!(inst.control, InstructionType::AtomicStart))
+        .count();
+
+    assert!(atomic_start_count >= 1);
+}
+
+#[test]
+fn test_wait_seq_break_inside_loop_compiles_and_runs() {
+    let input = r#"
+program A() {
+    send out(0);
+    send out(0);
+    send out(0);
+}
+
+main {
+    let a = run A();
+
+    channel a.out (int)> self.in;
+
+    let n = 0;
+    loop await seq {
+        receive in(v) => {
+            print(v);
+            n += 1;
+        }
+        n == 2 => {
+            print("n", n);
+            break;
+        }
+    }
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let pairs = althread::parser::parse(input, "").unwrap();
+    let ast = Ast::build(pairs, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let mut vm = VM::new(&compiled_project);
+    vm.start(0);
+
+    let mut actions = Vec::new();
+    loop {
+        let next_states = vm.next().unwrap();
+        if next_states.is_empty() {
+            break;
+        }
+
+        let (_, _, _, step_actions, next_vm) = next_states.into_iter().next().unwrap();
+        actions.extend(step_actions);
+        vm = next_vm;
+    }
+
+    let printed: Vec<&str> = actions
+        .iter()
+        .filter_map(|action| match action {
+            GlobalAction::Print(msg) => Some(msg.as_str()),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(printed, vec!["0", "0", "n 2"]);
 }
 
 #[test]
@@ -472,6 +1173,450 @@ main {
                 col: 6,
                 start: 6,
                 end: 135,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::EndProgram,
+        },
+    ];
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    // parse code with pest
+    let pairs = althread::parser::parse(input, "").unwrap();
+
+    let ast = Ast::build(pairs, "").unwrap();
+
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    assert_eq!(
+        compiled_project
+            .programs_code
+            .get("main")
+            .unwrap()
+            .instructions,
+        expected
+    );
+}
+
+#[test]
+fn test_int_declaration() {
+    let input = r#"
+main {
+    let a = 5;
+    let b = 0X2a;
+    let c = 0x2A;
+    let d = 0b1010;
+    let e = 0B1010;
+}
+    "#;
+
+    let expected = vec![
+        Instruction {
+            pos: Some(Pos {
+                line: 3,
+                col: 13,
+                start: 20,
+                end: 21,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Expression(LocalExpressionNode::Primary(
+                LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                    value: Literal::Int(5),
+                }),
+            )),
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 3,
+                col: 5,
+                start: 12,
+                end: 15,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Declaration { unstack_len: 1 },
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 4,
+                col: 13,
+                start: 35,
+                end: 39,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Expression(LocalExpressionNode::Primary(
+                LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                    value: Literal::Int(42),
+                }),
+            )),
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 4,
+                col: 5,
+                start: 27,
+                end: 30,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Declaration { unstack_len: 1 },
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 5,
+                col: 13,
+                start: 53,
+                end: 57,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Expression(LocalExpressionNode::Primary(
+                LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                    value: Literal::Int(42),
+                }),
+            )),
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 5,
+                col: 5,
+                start: 45,
+                end: 48,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Declaration { unstack_len: 1 },
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 6,
+                col: 13,
+                start: 71,
+                end: 77,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Expression(LocalExpressionNode::Primary(
+                LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                    value: Literal::Int(10),
+                }),
+            )),
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 6,
+                col: 5,
+                start: 63,
+                end: 66,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Declaration { unstack_len: 1 },
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 7,
+                col: 13,
+                start: 91,
+                end: 97,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Expression(LocalExpressionNode::Primary(
+                LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                    value: Literal::Int(10),
+                }),
+            )),
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 7,
+                col: 5,
+                start: 83,
+                end: 86,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Declaration { unstack_len: 1 },
+        },
+        Instruction {
+            pos: None,
+            control: InstructionType::Unstack { unstack_len: 5 },
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 2,
+                col: 6,
+                start: 6,
+                end: 100,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::EndProgram,
+        },
+    ];
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    // parse code with pest
+    let pairs = althread::parser::parse(input, "").unwrap();
+
+    let ast = Ast::build(pairs, "").unwrap();
+
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    assert_eq!(
+        compiled_project
+            .programs_code
+            .get("main")
+            .unwrap()
+            .instructions,
+        expected
+    );
+}
+
+#[test]
+fn test_shift_operators() {
+    let input = r#"
+main {
+    let a = 5 << 2;
+    let b = 20 >> 1;
+}
+    "#;
+    let expected = vec![
+        Instruction {
+            pos: Some(Pos {
+                line: 3,
+                col: 13,
+                start: 20,
+                end: 26,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Expression(LocalExpressionNode::Binary(
+                LocalBinaryExpressionNode {
+                    left: Box::new(LocalExpressionNode::Primary(
+                        LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                            value: Literal::Int(5),
+                        }),
+                    )),
+                    operator: BinaryOperator::ShiftLeft,
+                    right: Box::new(LocalExpressionNode::Primary(
+                        LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                            value: Literal::Int(2),
+                        }),
+                    )),
+                },
+            )),
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 3,
+                col: 5,
+                start: 12,
+                end: 15,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Declaration { unstack_len: 1 },
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 4,
+                col: 13,
+                start: 40,
+                end: 47,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Expression(LocalExpressionNode::Binary(
+                LocalBinaryExpressionNode {
+                    left: Box::new(LocalExpressionNode::Primary(
+                        LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                            value: Literal::Int(20),
+                        }),
+                    )),
+                    operator: BinaryOperator::ShiftRight,
+                    right: Box::new(LocalExpressionNode::Primary(
+                        LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                            value: Literal::Int(1),
+                        }),
+                    )),
+                },
+            )),
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 4,
+                col: 5,
+                start: 32,
+                end: 35,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Declaration { unstack_len: 1 },
+        },
+        Instruction {
+            pos: None,
+            control: InstructionType::Unstack { unstack_len: 2 },
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 2,
+                col: 6,
+                start: 6,
+                end: 50,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::EndProgram,
+        },
+    ];
+    
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    // parse code with pest
+    let pairs = althread::parser::parse(input, "").unwrap();
+
+    let ast = Ast::build(pairs, "").unwrap();
+
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    assert_eq!(
+        compiled_project
+            .programs_code
+            .get("main")
+            .unwrap()
+            .instructions,
+        expected
+    );
+}
+
+#[test]
+fn test_bitwise_operators() {
+    let input = r#"
+main {
+    let a = 5 & 3;
+    let b = 5 | 2;
+    let c = 5 & 3 | 2;
+}
+    "#;
+    let expected = vec![
+        Instruction {
+            pos: Some(Pos {
+                line: 3,
+                col: 13,
+                start: 20,
+                end: 25,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Expression(LocalExpressionNode::Binary(
+                LocalBinaryExpressionNode {
+                    left: Box::new(LocalExpressionNode::Primary(
+                        LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                            value: Literal::Int(5),
+                        }),
+                    )),
+                    operator: BinaryOperator::BitAnd,
+                    right: Box::new(LocalExpressionNode::Primary(
+                        LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                            value: Literal::Int(3),
+                        }),
+                    )),
+                },
+            )),
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 3,
+                col: 5,
+                start: 12, 
+                end: 15,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Declaration { unstack_len: 1 },
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 4,
+                col: 13,
+                start: 39,
+                end: 44,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Expression(LocalExpressionNode::Binary(
+                LocalBinaryExpressionNode {
+                    left: Box::new(LocalExpressionNode::Primary(
+                        LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                            value: Literal::Int(5),
+                        }),
+                    )),
+                    operator: BinaryOperator::BitOr,
+                    right: Box::new(LocalExpressionNode::Primary(
+                        LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                            value: Literal::Int(2),
+                        }),
+                    )),
+                },
+            )),
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 4,
+                col: 5,
+                start: 31,
+                end: 34,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Declaration { unstack_len: 1 },
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 5,
+                col: 13,
+                start: 58,
+                end: 67,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Expression(LocalExpressionNode::Binary(
+                LocalBinaryExpressionNode {
+                    left: Box::new(LocalExpressionNode::Binary(LocalBinaryExpressionNode {
+                        left: Box::new(LocalExpressionNode::Primary(
+                            LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                                value: Literal::Int(5),
+                            }),
+                        )),
+                        operator: BinaryOperator::BitAnd,
+                        right: Box::new(LocalExpressionNode::Primary(
+                            LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                                value: Literal::Int(3),
+                            }),
+                        )),
+                    })),
+                    operator: BinaryOperator::BitOr,
+                    right: Box::new(LocalExpressionNode::Primary(
+                        LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+                            value: Literal::Int(2),
+                        }),
+                    )),
+                },
+            )),
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 5,
+                col: 5,
+                start: 50,
+                end: 53,
+                file_path: "".to_string(),
+            }),
+            control: InstructionType::Declaration { unstack_len: 1 },
+        },
+        Instruction {
+            pos: None,
+            control: InstructionType::Unstack { unstack_len: 3 },
+        },
+        Instruction {
+            pos: Some(Pos {
+                line: 2,
+                col: 6,
+                start: 6,
+                end: 70,
                 file_path: "".to_string(),
             }),
             control: InstructionType::EndProgram,

@@ -149,6 +149,17 @@ impl Channels {
         self.pending_deliveries.values().any(|v| !v.is_empty())
     }
 
+    pub fn has_buffered_message(&self, program_id: usize, channel_name: &str) -> bool {
+        self.states
+            .get(&(program_id, channel_name.to_string()))
+            .is_some_and(|queue| !queue.is_empty())
+    }
+
+    pub fn has_connection_from(&self, program_id: usize, channel_name: &str) -> bool {
+        self.connections
+            .contains_key(&(program_id, channel_name.to_string()))
+    }
+
     /// Deliver exactly one pending message for a given link.
     pub fn deliver_one(&mut self, link: ChannelLinkKey) -> Option<DeliveryInfo> {
         let (from_pid, from_channel, to_pid, to_channel) = link.clone();

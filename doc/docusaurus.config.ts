@@ -103,6 +103,17 @@ const config: Config = {
     ],
   ],
 
+  plugins: [
+    [
+      "@cmfcmf/docusaurus-search-local",
+      {
+        indexBlog: false,
+        indexPages: true,
+        language: ["fr", "en"],
+      },
+    ],
+  ],
+
   themeConfig: {
     navbar: {
       title: "Althread",

@@ -61,11 +61,11 @@ shared {
 }
 
 program A() {
-    X++;
+    X = X + 1;
 }
 
 program B() {
-    X--;
+    X = X - 1;
 }
 
 main {

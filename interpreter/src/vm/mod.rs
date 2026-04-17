@@ -166,6 +166,20 @@ impl<'a> VM<'a> {
         self.run_program("main", 0, Literal::empty_tuple(), None, None); // No caller for main
     }
 
+    fn wait_dependencies_satisfied_now(
+        &self,
+        program_id: usize,
+        dependencies: &WaitDependency,
+    ) -> bool {
+        dependencies
+            .channels_state
+            .iter()
+            .any(|channel_name| self.channels.has_buffered_message(program_id, channel_name))
+            || dependencies.channels_connection.iter().any(|channel_name| {
+                self.channels.has_connection_from(program_id, channel_name)
+            })
+    }
+
     pub fn next_random(&mut self) -> AlthreadResult<ExecutionStepInfo> {
         enum Candidate {
             Program(usize),
@@ -224,7 +238,6 @@ impl<'a> VM<'a> {
                 .channels
                 .deliver_one(link)
                 .expect("pending link must have a deliverable message");
-
             if let Some(dependency) = self.waiting_programs.get(&delivery_info.to.program_id) {
                 if dependency
                     .channels_state
@@ -305,22 +318,24 @@ impl<'a> VM<'a> {
                 "a process returning await should means that no actions have been performed..."
             );
 
-            let program = self
+            let dependencies = match &self
                 .running_programs
-                .get_mut(program_id)
-                .expect("program is waiting but not found in running programs");
-            match &program
+                .get(program_id)
+                .expect("program is waiting but not found in running programs")
                 .current_instruction()
                 .expect("waiting on no instruction")
                 .control
             {
-                InstructionType::WaitStart { dependencies, .. } => {
-                    self.executable_programs.remove(&program_id);
-                    self.waiting_programs
-                        .insert(program_id, dependencies.clone());
-                }
+                InstructionType::WaitStart { dependencies, .. } => dependencies.clone(),
                 _ => unreachable!("waiting on an instruction that is not a WaitStart instruction"),
+            };
+
+            if self.wait_dependencies_satisfied_now(program_id, &dependencies) {
+                return self.next_random();
             }
+
+            self.executable_programs.remove(&program_id);
+            self.waiting_programs.insert(program_id, dependencies);
             return self.next_random();
         }
 
@@ -423,21 +438,24 @@ impl<'a> VM<'a> {
                 "a process returning await should means that no actions have been performed..."
             );
 
-            let program = self
+            let dependencies = match &self
                 .running_programs
-                .get_mut(pid)
-                .expect("program is waiting but not found in running programs");
-            match &program
+                .get(pid)
+                .expect("program is waiting but not found in running programs")
                 .current_instruction()
                 .expect("waiting on no instruction")
                 .control
             {
-                InstructionType::WaitStart { dependencies, .. } => {
-                    self.executable_programs.remove(&pid);
-                    self.waiting_programs.insert(pid, dependencies.clone());
-                }
+                InstructionType::WaitStart { dependencies, .. } => dependencies.clone(),
                 _ => unreachable!("waiting on an instruction that is not a WaitStart instruction"),
+            };
+
+            if self.wait_dependencies_satisfied_now(pid, &dependencies) {
+                return self.next_step_pid(pid);
             }
+
+            self.executable_programs.remove(&pid);
+            self.waiting_programs.insert(pid, dependencies);
             return Ok(None);
         }
 
@@ -647,7 +665,7 @@ impl<'a> VM<'a> {
                     );
                 }
             }
-            match expr.eval_with_context(&memory, self) {
+            match expr.eval_with_scope(&memory, read_vars, self) {
                 Ok(cond) => {
                     if !cond.is_true() {
                         return Err(AlthreadError::new(
@@ -741,6 +759,281 @@ impl std::cmp::PartialEq for VM<'_> {
 }
 
 impl std::cmp::Eq for VM<'_> {}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashMap, path::Path};
+
+    use crate::{ast::Ast, module_resolver::VirtualFileSystem, parser};
+
+    use super::*;
+
+    fn compile_vm(source: &str) -> VM<'static> {
+        let mut input_map = HashMap::new();
+        input_map.insert("main.alt".to_string(), source.to_string());
+
+        let pairs = parser::parse(source, "main.alt").unwrap();
+        let ast = Ast::build(pairs, "main.alt").unwrap();
+        let compiled_project = Box::new(
+            ast.compile(
+                Path::new("main.alt"),
+                VirtualFileSystem::new(input_map.clone()),
+                &mut input_map,
+            )
+            .unwrap(),
+        );
+        let compiled_project = Box::leak(compiled_project);
+
+        let mut vm = VM::new(compiled_project);
+        vm.start(0);
+        vm
+    }
+
+    fn step_program_to_wait_start(vm: &mut VM<'_>, pid: usize) {
+        loop {
+            let instruction = vm.get_program(pid).current_instruction().unwrap().control.clone();
+            if matches!(instruction, InstructionType::WaitStart { .. }) {
+                break;
+            }
+            assert!(vm.next_step_pid(pid).unwrap().is_some());
+        }
+    }
+
+    fn deliver_pending_message(vm: &mut VM<'_>, to_pid: usize, to_channel: &str) {
+        let link = vm
+            .channels
+            .pending_links()
+            .into_iter()
+            .find(|(_, _, pid, channel)| *pid == to_pid && channel == to_channel)
+            .unwrap();
+        vm.channels.deliver_one(link).unwrap();
+
+        if let Some(dependency) = vm.waiting_programs.get(&to_pid) {
+            if dependency.channels_state.contains(to_channel) {
+                vm.waiting_programs.remove(&to_pid);
+                vm.executable_programs.insert(to_pid);
+            }
+        }
+    }
+
+    #[test]
+    fn wait_first_evaluates_all_receive_guards_atomically() {
+        let source = r#"
+program sender() {}
+
+main {
+    let a = run sender();
+    let b = run sender();
+
+    channel a.out (int)> self.fromA;
+    channel b.out (int)> self.fromB;
+
+  loop await first {
+    receive fromA(v) => print("A", v);
+    receive fromB(v) => print("B", v);
+  }
+}
+        "#;
+
+        let mut vm = compile_vm(source);
+        step_program_to_wait_start(&mut vm, 0);
+
+        let program = vm.running_programs.get_mut(0).unwrap();
+        let (actions, executed_instructions) = program
+            .next_global(&mut vm.globals, &mut vm.channels, &mut vm.next_program_id)
+            .unwrap();
+
+        assert!(actions.wait);
+        assert!(actions.actions.is_empty());
+        assert!(executed_instructions.iter().any(|inst| {
+            inst.control == InstructionType::ChannelPeek("fromA".to_string())
+        }));
+        assert!(executed_instructions.iter().any(|inst| {
+            inst.control == InstructionType::ChannelPeek("fromB".to_string())
+        }));
+    }
+
+    #[test]
+    fn wait_does_not_park_when_a_watched_channel_already_has_data() {
+        let source = r#"
+program sender() {
+  send out(1);
+}
+
+main {
+  let a = run sender();
+  let b = run sender();
+
+  channel a.out (int)> self.fromA;
+  channel b.out (int)> self.fromB;
+
+  loop await first {
+    receive fromA(v) => print("A", v);
+    receive fromB(v) => print("B", v);
+  }
+}
+        "#;
+
+        let mut vm = compile_vm(source);
+        step_program_to_wait_start(&mut vm, 0);
+
+        let _sender_step = vm.next_step_pid(1).unwrap();
+        deliver_pending_message(&mut vm, 0, "fromA");
+
+        let step = vm.next_step_pid(0).unwrap();
+
+        assert!(step.is_some());
+        assert!(vm.executable_programs.contains(&0));
+        assert!(!vm.waiting_programs.contains_key(&0));
+        assert!(step
+            .as_ref()
+            .unwrap()
+            .actions
+            .iter()
+            .any(|action| matches!(action, GlobalAction::Print(message) if message == "A 1")));
+    }
+
+        #[test]
+        fn wait_seq_restarts_atomic_evaluation_after_a_successful_block() {
+                let source = r#"
+shared {
+    let Ready = true;
+}
+
+main {
+    channel self.out (string)> self.in;
+    send out("tail");
+
+    await seq {
+        (Ready) => {
+            print("CASE 1");
+            Ready = false;
+        }
+        receive in(msg) => {
+            print("TAIL", msg);
+        }
+    }
+}
+                "#;
+
+                let mut vm = compile_vm(source);
+                step_program_to_wait_start(&mut vm, 0);
+                deliver_pending_message(&mut vm, 0, "in");
+
+                let first_step = vm.next_step_pid(0).unwrap().unwrap();
+
+                assert!(first_step.actions.iter().any(|action| matches!(
+                    action,
+                    GlobalAction::Print(message) if message == "CASE 1"
+                )));
+
+                let mut saw_tail = first_step.actions.iter().any(|action| matches!(
+                    action,
+                    GlobalAction::Print(message) if message == "TAIL tail"
+                ));
+                for _ in 0..4 {
+                    if saw_tail {
+                        break;
+                    }
+                    let Some(step) = vm.next_step_pid(0).unwrap() else {
+                        break;
+                    };
+                    if step.actions.iter().any(|action| matches!(
+                        action,
+                        GlobalAction::Print(message) if message == "TAIL tail"
+                    )) {
+                        saw_tail = true;
+                    }
+                }
+
+                assert!(saw_tail);
+        }
+
+        #[test]
+        fn wait_seq_does_not_skip_a_blocked_matched_case() {
+                let source = r#"
+shared {
+    let Ready = true;
+}
+
+main {
+    channel self.block_out (string)> self.block_in;
+    channel self.tail_out (string)> self.tail_in;
+    send tail_out("tail");
+
+    await seq {
+        (Ready) => {
+            await receive block_in(msg) => {
+                print("BLOCK", msg);
+            }
+            Ready = false;
+        }
+        receive tail_in(msg) => {
+            print("TAIL", msg);
+        }
+    }
+}
+                "#;
+
+                let mut vm = compile_vm(source);
+                step_program_to_wait_start(&mut vm, 0);
+                deliver_pending_message(&mut vm, 0, "tail_in");
+
+                let mut observed_actions = Vec::new();
+                let mut blocked = false;
+                for _ in 0..4 {
+                    match vm.next_step_pid(0).unwrap() {
+                        Some(step) => observed_actions.extend(step.actions),
+                        None => {
+                            blocked = true;
+                            break;
+                        }
+                    }
+                }
+
+                assert!(blocked);
+                assert!(vm.waiting_programs.contains_key(&0));
+                assert!(!observed_actions.iter().any(|action| matches!(
+                    action,
+                    GlobalAction::Print(message) if message == "TAIL tail"
+                )));
+
+                let _ = vm.channels.send(
+                    0,
+                    "block_out".to_string(),
+                    Literal::Tuple(vec![Literal::String("go".to_string())]),
+                    1,
+                );
+                deliver_pending_message(&mut vm, 0, "block_in");
+
+                let mut resumed_actions = Vec::new();
+                for _ in 0..8 {
+                    let Some(step) = vm.next_step_pid(0).unwrap() else {
+                        break;
+                    };
+                    resumed_actions.extend(step.actions);
+                }
+
+                let print_messages = resumed_actions
+                    .iter()
+                    .filter_map(|action| match action {
+                        GlobalAction::Print(message) => Some(message.as_str()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>();
+
+                let block_index = print_messages
+                    .iter()
+                    .position(|message| *message == "BLOCK go")
+                    .unwrap();
+                let tail_index = print_messages
+                    .iter()
+                    .position(|message| *message == "TAIL tail")
+                    .unwrap();
+
+                assert!(block_index < tail_index);
+        }
+}
 
 #[derive(Serialize)]
 struct SerializableRunningProgramStateForJs<'b> {
