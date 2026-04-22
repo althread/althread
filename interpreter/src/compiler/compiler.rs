@@ -524,10 +524,18 @@ impl Ast {
                             },
                             Lvalue::TupleIdentifier(node) => 
                             {
-                                print!("-----------COMPILER 2-----------\n");
+                                return Err(AlthreadError::new(
+                                    ErrorType::InstructionNotAllowed,
+                                    Some(node.pos.clone()),
+                                    "The 'shared' block cannot contains declarations by a tuple destruction".to_string(),
+                                ));
                             },
                             Lvalue::NullIdentifier(node) => {
-                                print!("-----------COMPILER 3-----------\n");
+                                return Err(AlthreadError::new(
+                                    ErrorType::InstructionNotAllowed,
+                                    Some(node.pos.clone()),
+                                    "The 'shared' block cannot contains a null identifier '_' destruction".to_string(),
+                                ));
                             },
                         }
                     }

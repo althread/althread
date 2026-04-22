@@ -132,7 +132,7 @@ impl TupleExpression {
         }
 
         for (i, variable) in variable_names.iter().enumerate() {
-            print!("variable : ({:?}) {:?}\n",types[i],variable);
+            //print!("variable : ({:?}) {:?}\n",types[i],variable);
             state.program_stack.push(Variable {
                 mutable: true,
                 name: variable.clone(),

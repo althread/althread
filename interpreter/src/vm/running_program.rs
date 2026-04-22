@@ -728,7 +728,7 @@ impl<'a> RunningProgramState<'a> {
                 let index :usize = size -1 - *position;
                 let tuple = self.memory.remove(index).into_tuple().expect("Panic: cannot convert to tuple");
 
-                print!("\naffichage tuple destruct {:?}\n",tuple);
+                //print!("\naffichage tuple destruct {:?}\n",tuple);
                 
                 for val in tuple.into_iter() {
                     self.memory.push(val);

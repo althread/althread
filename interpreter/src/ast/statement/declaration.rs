@@ -6,13 +6,12 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix}, 
         node::{InstructionBuilder, Node, NodeBuilder}, 
-        statement::{declaration, expression::tuple_expression::TupleExpression}, 
         token::{
-            self, datatype::{self, DataType}, declaration_keyword::DeclarationKeyword, identifier::{self, Identifier}, null_identifier::NullIdentifier, object_identifier::ObjectIdentifier, tuple_identifier::{self, Lvalue, TupleIdentifier}
+            datatype::DataType, declaration_keyword::DeclarationKeyword, identifier::Identifier, null_identifier::NullIdentifier, tuple_identifier::{Lvalue, TupleIdentifier}
         }
     },
     compiler::{CompilerState, InstructionBuilderOk, Variable},
-    error::{AlthreadError, AlthreadResult, ErrorType,Pos},
+    error::{AlthreadError, AlthreadResult, ErrorType},
     no_rule,
     parser::Rule,
     vm::instruction::{Instruction, InstructionType},
@@ -44,7 +43,6 @@ impl NodeBuilder for Declaration {
         }
         let mut datatype = None;
         let mut value = None;
-        print!("pas ouf du tout : \n\n -> id : {:?}\n\n -> pairs {:?} \n\n\n",identifier.clone(),pairs.clone().next());
 
         for pair in pairs {
             match pair.as_rule() {
@@ -67,7 +65,7 @@ impl NodeBuilder for Declaration {
     }
 }
 
-fn compile_templateidentifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<TupleIdentifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect : bool,unstack_len:usize) ->
+fn compile_templateidentifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<TupleIdentifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect : bool) ->
     AlthreadResult<InstructionBuilderOk>
 {
 
@@ -100,7 +98,7 @@ fn compile_templateidentifier(declaration : &Declaration , state: &mut CompilerS
     Ok((*builder).clone())
 }
 
-fn compile_nullidentifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<NullIdentifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect : bool,unstack_len:usize) ->
+fn compile_nullidentifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<NullIdentifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect : bool) ->
     AlthreadResult<InstructionBuilderOk>
 {
 
@@ -132,7 +130,7 @@ fn compile_nullidentifier(declaration : &Declaration , state: &mut CompilerState
 
 
 
-fn compile_identifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<Identifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect : bool,unstack_len:usize) ->
+fn compile_identifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<Identifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect : bool) ->
     AlthreadResult<InstructionBuilderOk>
 {
     let var_name = &node.value.value;
@@ -197,20 +195,26 @@ fn compile_identifier(declaration : &Declaration , state: &mut CompilerState, no
 
 
 
-fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<TupleIdentifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect_expression : bool,mut unstack_len : usize, position :&mut usize,premier : bool) ->
+fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<TupleIdentifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect_expression : bool, position :&mut usize,premier : bool) ->
     AlthreadResult<InstructionBuilderOk>
-{  
-    print!("est appeler \n");
+{ 
+    let vec = node.value.value.clone();
+    if vec.len() < 2
+    {
+        return Err(AlthreadError::new(
+            ErrorType::VariableError,
+            Some(node.pos.clone()),
+            format!("A declaration with a tuple cannot contains only one element")
+        ));
+    }
     match datatype {
         DataType::Tuple(v) => {
-            
-            let vec = node.value.value.clone();
             if v.len() != vec.len()
             {
                 return Err(AlthreadError::new(
                     ErrorType::VariableError,
                     Some(node.pos.clone()),
-                    format!("Tuple not well defined")
+                    format!("Tuple not well defined : the number of element declared ({}) is not the same than the number of element assigned {}",v.len(),vec.len())
                 ));
             }
             let mut veciter = vec.iter().enumerate();
@@ -221,12 +225,12 @@ fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerStat
 
             while let Some((i,elt)) = veciter.next()
             {
+                
                 let value : Lvalue = (*(*elt).clone()).into();
                 let r: Result<InstructionBuilderOk, AlthreadError>;
                 match value {
                     Lvalue::Identifier(node) => {
-                        print!("identifier \n");
-                        r = compile_identifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,side_effect_expression,unstack_len);
+                        r = compile_identifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,side_effect_expression);
                     },
                     Lvalue::TupleIdentifier(node) => {
 
@@ -242,7 +246,7 @@ fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerStat
 
                         if side_effect_expression
                         {
-                            r = compile_templateidentifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,side_effect_expression,unstack_len);
+                            r = compile_templateidentifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,side_effect_expression);
                         }
                         else {
                             r= Ok((*builder).clone());
@@ -252,18 +256,15 @@ fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerStat
                         
                     },
                     Lvalue::NullIdentifier(node) =>{
-                        r = compile_nullidentifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,side_effect_expression,unstack_len);
+                        r = compile_nullidentifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,side_effect_expression);
                         // r = compile_tupleidentifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,&side_effect_expression,unstack_len);
                     },
                 }
                 if r.is_err() {return r;}
             }
-            print!("\nstack : \n{:?}\n",state.program_stack);
             if side_effect_expression
             {
                 let pose = state.program_stack.len()-1 -vec.len() - *position;
-                //let pose = *position;
-                print!("\npasse par sideffect\n");
                 builder.instructions.push(
                 Instruction {
                 control: InstructionType::Destruct(pose),
@@ -272,7 +273,7 @@ fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerStat
                 if !premier
                 {
                     let pose = *position;
-                    print!("\n\nvas ici non empty, ce qui va être sup {:?} à la position : {:?}\n\n",state.program_stack.get(pose),pose);
+                    //print!("\n\nvas ici non empty, ce qui va être sup {:?} à la position : {:?}\n\n",state.program_stack.get(pose),pose);
                     state.program_stack.remove(pose);
                 }
             }
@@ -285,20 +286,26 @@ fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerStat
             
             
 
-                print!("vecindex : {:?},\n vecnode : {:?}\n",vecindex,vecnode);
+                //print!("vecindex : {:?},\n vecnode : {:?}\n",vecindex,vecnode);
                 
                 let vecsize = vecindex.len()-1;
 
                 for i in 0..vecindex.len(){
                     
                     // state.current_stack_depth -= 1;
-                    print!("pass ici avec : \n-> node : {:?}\n-> type {:?}\n-> position : {:?}",vecnode[vecsize-i],vecdata[vecsize-i].clone(),vecindex[vecsize-i]);
-                    let r = compile_tupleidentifier(&declaration, state, &vecnode[vecsize-i],builder,vecdata[vecsize-i].clone(),stack_index,scope_start_ip,side_effect_expression,unstack_len,&mut vecindex[vecsize-i],false);
+                    //print!("pass ici avec : \n-> node : {:?}\n-> type {:?}\n-> position : {:?}",vecnode[vecsize-i],vecdata[vecsize-i].clone(),vecindex[vecsize-i]);
+                    let r = compile_tupleidentifier(&declaration, state, &vecnode[vecsize-i],builder,vecdata[vecsize-i].clone(),stack_index,scope_start_ip,side_effect_expression,&mut vecindex[vecsize-i],false);
                     if r.is_err() {return r;} 
                 };
             }
         }
-        _=> {}
+        _=> {
+            return Err(AlthreadError::new(
+                ErrorType::VariableError,
+                Some(node.pos.clone()),
+                format!("Cannot have a tuple that try to divide a single element in {} ",vec.len()),
+            ));
+        }
     }
     Ok((*builder).clone())
 }
@@ -445,7 +452,6 @@ impl InstructionBuilder for Declaration {
                 });
             },
             Lvalue::TupleIdentifier(node) => {
-                let mut unstack_len:usize=0;
                 let mut datatype: Option<DataType> = None;
                 let mut valeur : Option<Node<SideEffectExpression>> = None;
 
@@ -463,8 +469,7 @@ impl InstructionBuilder for Declaration {
                         .expect("Error: Program stack is empty after compiling an expression")
                         .datatype
                         .clone();
-                    unstack_len = state.unstack_current_depth();
-                    print!("\n\nstack side effet {:?}\n\n",state.program_stack);
+                    _ = state.unstack_current_depth();
                     
                     if let Some(declared_datatype) = datatype {
 
@@ -494,20 +499,21 @@ impl InstructionBuilder for Declaration {
                     } else {
                         datatype = Some(computed_datatype);
                     }
-
-                    print!("est une sideexpression ? : value -> {:?}\n",value);
                 } else {
                     if datatype.is_none() {
                         return Err(AlthreadError::new(
                             ErrorType::TypeError,
                             Some(node.pos.clone()),
-                            "Pas d'instantiatition".to_string(),
+                            "Tuple has no datatype".to_string(),
                         ));
                     }
                 }
+                let stack_index = state.program_stack.len();
+                let scope_start_ip = builder.instructions.len();
+
                 let mut position : usize= state.program_stack.len()-1;
-                let r = compile_tupleidentifier(&self, state, &node, &mut builder,datatype.unwrap(),0,0,
-                valeur!=None,unstack_len,&mut position,true);
+                let r = compile_tupleidentifier(&self, state, &node, &mut builder,datatype.unwrap(),stack_index,scope_start_ip,
+                valeur!=None,&mut position,true);
                 if r.is_err() {return r;}
             },
             Lvalue::NullIdentifier(node) => {

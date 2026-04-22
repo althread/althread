@@ -1,13 +1,13 @@
 use std::fmt::{self, Display};
 
-use pest::iterators::{Pair, Pairs};
+use pest::iterators::{Pairs};
 
 use crate::{
     ast::{
         display::{AstDisplay, Prefix}, node::{Node, NodeBuilder}, token::{identifier::Identifier,null_identifier::NullIdentifier,
         // object_identifier::ObjectIdentifier
         }
-    }, error::{AlthreadResult, Pos}, no_rule, parser::Rule
+    }, error::{AlthreadResult}, no_rule, parser::Rule
 };
 
 #[derive(Debug, Clone, PartialEq)]

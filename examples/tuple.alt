@@ -1,37 +1,108 @@
-//fn simple(n: tuple(int,string,float)) -> tuple(int,string, float) {
-//  return n;
-//}
+//Tuple can be used in global
+shared {
+  let Default_tuple = (0,"zero",0.0);
+  let Tuple = Default_tuple; 
+  let Tuple_of_proc : tuple(proc(A),proc(A),proc(A));
+}
 
-fn simple(n: tuple(int,string,float)) ->tuple(int,string, float) {
-  return n;
+check {
+  eventually (Tuple_of_proc.0().reaches(end)
+    && Tuple_of_proc.1().reaches(end)
+    && Tuple_of_proc.2().reaches(end)
+    );
+  always (if 
+    (Tuple_of_proc.0().reaches(end)
+    || Tuple_of_proc.1().reaches(end)
+    || Tuple_of_proc.2().reaches(end)
+    )
+    {
+      Tuple != Default_tuple;
+    }
+    );
+}
+
+program A(id : int)
+{
+  Tuple.set0( Tuple.0()+1);
+  if (id == 1)
+  {
+    Tuple.set1("one");
+  }
+  if (id == 2)
+  {
+    Tuple.set1("two");
+  }
+  if (id == 3)
+  {
+    Tuple.set1("three");
+  }
+  Tuple.set2( Tuple.2()+1.0 );
+  print("id : ",id," -> ",Tuple);
 }
 
 
+//how to return tuple type in a function
+fn init() -> tuple(int,string,float)
+{
+  return (1,"2",3.0);
+}
+
+
+
+
 main {
-  let a = 12;
-  let n : tuple(int,string,float,int,int) = (a,"hello",11.99,12,1000);
-  let elt : list(int) ;
-  elt.push(1);
-  elt.push(2);
-  elt.push(3);
-  print(n);
-  let test : tuple(int,int) = (123,456);
-  let test2 : tuple(int,int) = (123,456);
-  if (test==test2){print("super");}
-  print(test.0());
-  print(n.0());
-  let temps = n.0();
-  print(temps);
-  let nl : int = n.len();
-  print(nl);
+  let i = init();
+
+  let copyi = i;
+
+  //change value of tuple
+
+  let first = i.0();
+  copyi.set0( first*2 );
+
+  copyi.set1("Hello");
+
+  copyi.set2( i.2() * 2.0 );
+
+
+  // initialisation of tuple with default value
+
+  let otherinit : tuple(int,string,float);
+
+
+  // initalisation of multiple variable at the same type
+
+  //with default value : a = 0 , b = "" , c = 0
+  let (a,b,c) : tuple(int,string,float);
+
+  //with value d = 9 , e = "World" , f = 10
+  let (d,e,f) : tuple(int,string,float) = (9,"World",10.0);
+
+
+  //compare tuple only work if the tuple are of the same type, if they are not, the program will not compile
+  let t = (a,b,c);
+  let equal = ( otherinit == t );
+
+  let not_equal = ( copyi != i );
+
+ 
+
+  let megatuple =((i,copyi),equal,not_equal,otherinit != t,(((a,b,c),(d,e,f)),(12,(otherinit,"!"))),"fin");
+
+  // Initiate variable from a tuple but with _ to ignore some value or entire tuple
+
+  let ((_,(_,hello,_)),_,_,_,((_,(_,world,_)),(_,(_,inter))),_) = megatuple;
+
+  let message = (hello,world,inter);
+
+  print("from megatuple : ",megatuple);
   
+  print("to : ",message);
 
-  print(elt.at(2));
-  let l = elt.len();
-  print(l);
-
-  //print(n.at(0));
-
-  //let r = simple(n);
-  //print(r);
+  print("modification of a global tuple : ",Tuple);
+  let a1 = run A(1);
+  let a2 = run A(2);
+  let a3 = run A(3);
+  
+  Tuple_of_proc = (a1,a2,a3);
 }

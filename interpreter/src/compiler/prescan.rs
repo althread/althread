@@ -3,14 +3,14 @@ use crate::{
     analysis::control_flow_graph::ControlFlowGraph,
     ast::{
         Ast, block::Block, node::Node, statement::{
-            Statement, assignment::Assignment, declaration::Declaration,channel_declaration::ChannelDeclaration, expression::{Expression, SideEffectExpression, primary_expression::PrimaryExpression}
+            Statement, assignment::Assignment,channel_declaration::ChannelDeclaration, expression::{Expression, SideEffectExpression, primary_expression::PrimaryExpression}
         }, token::{
             datatype::DataType,
             tuple_identifier::Lvalue,
         }
     },
     compiler::CompilerState,
-    error::{AlthreadError, AlthreadResult, ErrorType, Pos},
+    error::{AlthreadError, AlthreadResult, ErrorType},
 };
 
 impl Ast {
@@ -423,12 +423,7 @@ impl Ast {
                                             program_name,
                                         );
                                     }
-                                    Lvalue::TupleIdentifier(object) => {
-                                        print!("------------PRESCAN 2-------------\n\n");
-                                    }
-                                    Lvalue::NullIdentifier(node) => {
-                                        print!("------------PRESCAN 4-------------\n\n");
-                                    },
+                                    _ => {} //tuple is not accepted for run call, null identifier too
                                 }
                             }
                             // check for reference assignments (let b = a;)
@@ -453,12 +448,12 @@ impl Ast {
                             }
                         }
                     }
-                    Lvalue::TupleIdentifier(node) => {
-                        print!("------------PRESCAN 3-------------\n\n");
+                    Lvalue::TupleIdentifier(_node) => {
+                        // no run call can be initiate in a tuple
                     }
-                    Lvalue::NullIdentifier(node) => {
-                        print!("------------PRESCAN 4-------------\n\n");
-                    },
+                    Lvalue::NullIdentifier(_node) => {
+                        // NullIdentifier are in TupleIdentifier
+                    }
                 }
             }
             Statement::Assignment(assignment) => {
@@ -565,7 +560,6 @@ impl Ast {
     ) -> Option<(String, String)> {
         match side_effect_expr {
             SideEffectExpression::FnCall(fn_call_node) => {
-                print!("side_effect_expression::fnCall\n");
                 let fn_call = &fn_call_node.value;
 
                 if let (Some(receiver_name), Some(method_name)) =
