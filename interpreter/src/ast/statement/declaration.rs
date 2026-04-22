@@ -186,20 +186,16 @@ fn compile_identifier(declaration : &Declaration , state: &mut CompilerState, no
         scope_end_ip: None,
         declare_pos: Some(node.pos.clone()),
     });
-    // builder.instructions.push(Instruction {
-    //     control: InstructionType::Declaration { unstack_len },
-    //     pos: Some(declaration.keyword.pos.clone()),
-    // });
     Ok((*builder).clone())
 }
 
 
 
-fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<TupleIdentifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect_expression : bool, position : usize,premier : bool) ->
+fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<TupleIdentifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect_expression : bool, position : usize,first_tuple_compile : bool) ->
     AlthreadResult<InstructionBuilderOk>
 { 
-    let vec = node.value.value.clone();
-    if vec.len() < 2
+    let vec_value = node.value.value.clone();
+    if vec_value.len() < 2
     {
         return Err(AlthreadError::new(
             ErrorType::VariableError,
@@ -208,92 +204,72 @@ fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerStat
         ));
     }
     match datatype {
-        DataType::Tuple(v) => {
-            if v.len() != vec.len()
+        DataType::Tuple(tuple_datatype) => {
+            if tuple_datatype.len() != vec_value.len()
             {
                 return Err(AlthreadError::new(
                     ErrorType::VariableError,
                     Some(node.pos.clone()),
-                    format!("Tuple not well defined : the number of element declared ({}) is not the same than the number of element assigned {}",v.len(),vec.len())
+                    format!("Tuple not well defined : the number of element declared ({}) is not the same than the number of element assigned {}",tuple_datatype.len(),vec_value.len())
                 ));
             }
-            let mut veciter = vec.iter().enumerate();
+            let mut vec_value_iter = vec_value.iter().enumerate();
 
-            let mut vecnode :Vec<Node<TupleIdentifier>> = vec![];
-            let mut vecindex :Vec<usize>=vec![];
-            let mut vecdata :Vec<DataType>=vec![];
+            let mut vec_tuple_indent :Vec<(Node<TupleIdentifier>,usize,DataType)> = vec![];
 
-            while let Some((i,elt)) = veciter.next()
+            while let Some((i,elt)) = vec_value_iter.next()
             {
                 
                 let value : Lvalue = (*(*elt).clone()).into();
                 let r: Result<InstructionBuilderOk, AlthreadError>;
                 match value {
                     Lvalue::Identifier(node) => {
-                        r = compile_identifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,side_effect_expression);
+                        r = compile_identifier(&declaration, state, &node,builder,tuple_datatype[i].clone(),stack_index,scope_start_ip,side_effect_expression);
                     },
                     Lvalue::TupleIdentifier(node) => {
-
-                        vecnode.push(node.clone());
-                        if premier {
-                            vecindex.push(state.program_stack.len());
+                        let index : usize;
+                        if first_tuple_compile {
+                            index = state.program_stack.len();
                         }
                         else {
-                            vecindex.push(state.program_stack.len()-1);
+                            index = state.program_stack.len()-1;
                         }
-                        
-                        vecdata.push(v[i].clone());
+                        vec_tuple_indent.push((node.clone(),index,tuple_datatype[i].clone()));
 
                         if side_effect_expression
                         {
-                            r = compile_templateidentifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,side_effect_expression);
+                            r = compile_templateidentifier(&declaration, state, &node,builder,tuple_datatype[i].clone(),stack_index,scope_start_ip,side_effect_expression);
                         }
                         else {
                             r= Ok((*builder).clone());
                         }
-                        // state.current_stack_depth+=1;
-                        // r =compile_tupleidentifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,&side_effect_expression,unstack_len,0);
                         
                     },
                     Lvalue::NullIdentifier(node) =>{
-                        r = compile_nullidentifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,side_effect_expression);
-                        // r = compile_tupleidentifier(&declaration, state, &node,builder,v[i].clone(),stack_index,scope_start_ip,&side_effect_expression,unstack_len);
+                        r = compile_nullidentifier(&declaration, state, &node,builder,tuple_datatype[i].clone(),stack_index,scope_start_ip,side_effect_expression);
                     },
                 }
                 if r.is_err() {return r;}
             }
             if side_effect_expression
             {
-                let pose = state.program_stack.len()-1 -vec.len() - position;
+                let pose = state.program_stack.len() -1 - vec_value.len() - position;
                 builder.instructions.push(
                 Instruction {
                 control: InstructionType::Destruct(pose),
                 pos: Some(node.pos.clone()),}
                 );
-                if !premier
+                if !first_tuple_compile
                 {
-                    //print!("\n\nvas ici non empty, ce qui va être sup {:?} à la position : {:?}\n\n",state.program_stack.get(pose),pose);
                     state.program_stack.remove(position);
                 }
             }
+            if !vec_tuple_indent.is_empty(){
+                let vecsize = vec_tuple_indent.len()-1;
 
-                // let pose = state.program_stack.len() -1 -position;
-                // state.program_stack.remove(pose);
-            if !vecindex.is_empty(){
-                
-                // let pose = state.program_stack.len() - *position -2;
-            
-            
-
-                //print!("vecindex : {:?},\n vecnode : {:?}\n",vecindex,vecnode);
-                
-                let vecsize = vecindex.len()-1;
-
-                for i in 0..vecindex.len(){
-                    
-                    // state.current_stack_depth -= 1;
-                    //print!("pass ici avec : \n-> node : {:?}\n-> type {:?}\n-> position : {:?}",vecnode[vecsize-i],vecdata[vecsize-i].clone(),vecindex[vecsize-i]);
-                    let r = compile_tupleidentifier(&declaration, state, &vecnode[vecsize-i],builder,vecdata[vecsize-i].clone(),stack_index,scope_start_ip,side_effect_expression,vecindex[vecsize-i],false);
+                for i in 0..vec_tuple_indent.len(){
+                    let (node_iter,index_iter,dtype_iter) = vec_tuple_indent[vecsize-i].clone();
+                    let r = compile_tupleidentifier(&declaration, state, &node_iter,builder,dtype_iter,stack_index,scope_start_ip,side_effect_expression,index_iter,false);
                     if r.is_err() {return r;} 
                 };
             }
@@ -302,7 +278,7 @@ fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerStat
             return Err(AlthreadError::new(
                 ErrorType::VariableError,
                 Some(node.pos.clone()),
-                format!("Cannot have a tuple that try to divide a single element in {} ",vec.len()),
+                format!("Cannot have a tuple that try to divide a single element in {} ",vec_value.len()),
             ));
         }
     }
