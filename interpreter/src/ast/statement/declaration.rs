@@ -195,7 +195,7 @@ fn compile_identifier(declaration : &Declaration , state: &mut CompilerState, no
 
 
 
-fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<TupleIdentifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect_expression : bool, position :&mut usize,premier : bool) ->
+fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<TupleIdentifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect_expression : bool, position : usize,premier : bool) ->
     AlthreadResult<InstructionBuilderOk>
 { 
     let vec = node.value.value.clone();
@@ -264,7 +264,7 @@ fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerStat
             }
             if side_effect_expression
             {
-                let pose = state.program_stack.len()-1 -vec.len() - *position;
+                let pose = state.program_stack.len()-1 -vec.len() - position;
                 builder.instructions.push(
                 Instruction {
                 control: InstructionType::Destruct(pose),
@@ -272,9 +272,8 @@ fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerStat
                 );
                 if !premier
                 {
-                    let pose = *position;
                     //print!("\n\nvas ici non empty, ce qui va être sup {:?} à la position : {:?}\n\n",state.program_stack.get(pose),pose);
-                    state.program_stack.remove(pose);
+                    state.program_stack.remove(position);
                 }
             }
 
@@ -294,7 +293,7 @@ fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerStat
                     
                     // state.current_stack_depth -= 1;
                     //print!("pass ici avec : \n-> node : {:?}\n-> type {:?}\n-> position : {:?}",vecnode[vecsize-i],vecdata[vecsize-i].clone(),vecindex[vecsize-i]);
-                    let r = compile_tupleidentifier(&declaration, state, &vecnode[vecsize-i],builder,vecdata[vecsize-i].clone(),stack_index,scope_start_ip,side_effect_expression,&mut vecindex[vecsize-i],false);
+                    let r = compile_tupleidentifier(&declaration, state, &vecnode[vecsize-i],builder,vecdata[vecsize-i].clone(),stack_index,scope_start_ip,side_effect_expression,vecindex[vecsize-i],false);
                     if r.is_err() {return r;} 
                 };
             }
@@ -511,9 +510,9 @@ impl InstructionBuilder for Declaration {
                 let stack_index = state.program_stack.len();
                 let scope_start_ip = builder.instructions.len();
 
-                let mut position : usize= state.program_stack.len()-1;
+                let position : usize= state.program_stack.len()-1;
                 let r = compile_tupleidentifier(&self, state, &node, &mut builder,datatype.unwrap(),stack_index,scope_start_ip,
-                valeur!=None,&mut position,true);
+                valeur!=None,position,true);
                 if r.is_err() {return r;}
             },
             Lvalue::NullIdentifier(node) => {
