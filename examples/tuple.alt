@@ -1,6 +1,6 @@
 //Tuple can be used in global
 shared {
-  let Default_tuple = (0,"zero",0.0);
+  const Default_tuple = (0,"zero",0.0);
   let Tuple = Default_tuple; 
   let Tuple_of_proc : tuple(proc(A),proc(A),proc(A));
 }

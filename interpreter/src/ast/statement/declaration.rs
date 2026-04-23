@@ -78,8 +78,8 @@ fn compile_templateidentifier(declaration : &Declaration , state: &mut CompilerS
         });
     }
     state.program_stack.push(Variable {
-    mutable: true,
-    name: "_".to_string(), // Use the simple variable name, not the full qualified name
+    mutable: false,
+    name: "_".to_string(),
     datatype: datatype.clone(),
     depth: state.current_stack_depth,
     declare_pos: Some(node.pos.clone()),
@@ -111,7 +111,7 @@ fn compile_nullidentifier(declaration : &Declaration , state: &mut CompilerState
         });
     }
     state.program_stack.push(Variable {
-    mutable: true,
+    mutable: false,
     name: "_".to_string(),
     datatype: datatype.clone(),
     depth: state.current_stack_depth,
@@ -172,7 +172,7 @@ fn compile_identifier(declaration : &Declaration , state: &mut CompilerState, no
     }
     
     state.program_stack.push(Variable {
-        mutable: true,
+        mutable: declaration.keyword.value == DeclarationKeyword::Let,
         name: node.value.value.clone(), // Use the simple variable name, not the full qualified name
         datatype: datatype.clone(),
         depth: state.current_stack_depth,  
