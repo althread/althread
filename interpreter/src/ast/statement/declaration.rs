@@ -444,8 +444,7 @@ impl InstructionBuilder for Declaration {
                         .expect("Error: Program stack is empty after compiling an expression")
                         .datatype
                         .clone();
-                    _ = state.unstack_current_depth();
-                    
+                    let unstack_len = state.unstack_current_depth();
                     if let Some(declared_datatype) = datatype {
 
                         let types_compatible =
@@ -474,6 +473,11 @@ impl InstructionBuilder for Declaration {
                     } else {
                         datatype = Some(computed_datatype);
                     }
+                    builder.instructions.push(Instruction {
+                        control: InstructionType::Declaration { unstack_len },
+                        pos: Some(self.keyword.pos.clone()),
+                    });
+                    
                 } else {
                     if datatype.is_none() {
                         return Err(AlthreadError::new(
@@ -485,8 +489,9 @@ impl InstructionBuilder for Declaration {
                 }
                 let stack_index = state.program_stack.len();
                 let scope_start_ip = builder.instructions.len();
-
-                let position : usize= state.program_stack.len()-1;
+                 print!("position : {:?}\n",stack_index);
+                let position : usize= state.program_stack.len() - 1;
+               
                 let r = compile_tupleidentifier(&self, state, &node, &mut builder,datatype.unwrap(),stack_index,scope_start_ip,
                 valeur!=None,position,true);
                 if r.is_err() {return r;}
