@@ -14,14 +14,14 @@ use crate::{
     vm::instruction::{Instruction, InstructionType},
 };
 
-use super::expression::SideEffectExpression;
+use super::expression::Expression;
 
 #[derive(Debug, Clone)]
 pub struct Declaration {
     pub keyword: Node<DeclarationKeyword>,
     pub identifier: Node<ObjectIdentifier>,
     pub datatype: Option<Node<DataType>>,
-    pub value: Option<Node<SideEffectExpression>>,
+    pub value: Option<Node<Expression>>,
 }
 
 impl InstructionBuilder for Declaration {

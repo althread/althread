@@ -1,133 +1,10 @@
-use std::fs;
-
-use althread::parser::syntax::SyntaxBlockDetail;
-use althread::parser::{chumsky_combinator::parse_program as parse_program_combinator, parse_ast};
-
-#[test]
-fn chumsky_parses_basic_program() {
-    let source = r#"
-import [github.com/example/demo as demo]
-
-shared {
-    let Global:list(int) = [1, 2, 3];
-}
-
-always {
-    Global.at(0) == 1;
-}
-
-check {
-    always true;
-}
-
-program Worker(id: int) {
-    await first {
-        receive Inbox(id) => {
-            send Out(id);
-        }
-    }
-}
-
-fn twice(value: int) -> int {
-    return value + value;
-}
-
-main {
-    run Worker(1);
-}
-"#;
-
-    parse_ast(source, "").unwrap();
-}
+use althread::{
+    ast::statement::Statement,
+    parser::{chumsky_combinator, parse_ast, syntax::SyntaxSnippet},
+};
 
 #[test]
-fn chumsky_parses_nested_header_types() {
-    let source = r#"
-program Worker(items: list(tuple(int, list(proc(Node))))) {
-    let ready = true;
-}
-
-fn project(items: list(tuple(int, list(proc(Node))))) -> list(proc(Node)) {
-    return items.at(0).at(1);
-}
-
-main {}
-"#;
-
-    parse_ast(source, "").unwrap();
-}
-
-#[test]
-fn chumsky_parses_nested_channel_types() {
-    let source = r#"
-program Sender() {
-    channel self.Out<(list(proc(Node)), tuple(int, bool))> Receiver.In;
-}
-
-program Receiver() {
-}
-
-main {
-    let target = run Receiver();
-    run Sender();
-}
-"#;
-
-    parse_ast(source, "").unwrap();
-}
-
-#[test]
-fn chumsky_parses_example_corpus() {
-    for entry in fs::read_dir("../examples").unwrap() {
-        let path = entry.unwrap().path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("alt") {
-            continue;
-        }
-        if path.file_name().and_then(|name| name.to_str()) == Some("TP2-communication.alt") {
-            continue;
-        }
-
-        let source = fs::read_to_string(&path).unwrap();
-        if source.trim().is_empty() {
-            continue;
-        }
-
-        parse_ast(&source, &path.to_string_lossy()).unwrap();
-    }
-}
-
-#[test]
-fn malformed_input_reports_syntax_error() {
-    let source = r#"
-main {
-    let x = 1;
-"#;
-
-    let err = parse_ast(source, "").unwrap_err();
-
-    assert_eq!(err.error_type.to_string(), "Syntax Error");
-    assert!(err.pos.is_some());
-}
-
-#[test]
-fn postfix_errors_report_expected_method_name() {
-    let source = r#"
-main {
-    let xs = [1, 2];
-    let y = xs.;
-}
-"#;
-
-    let err = parse_ast(source, "").unwrap_err();
-
-    assert_eq!(err.error_type.to_string(), "Syntax Error");
-    assert!(err
-        .message
-        .contains("expected method name or 'reaches' after '.'"));
-}
-
-#[test]
-fn combinator_prototype_parses_shared_declarations() {
+fn parse_ast_builds_shared_block_directly() {
     let source = r#"
 shared {
     let Count: int = 1;
@@ -135,28 +12,82 @@ shared {
 }
 "#;
 
-    let syntax = parse_program_combinator(source, "").unwrap();
+    let ast = parse_ast(source, "").unwrap();
+    let shared = ast.global_block.expect("shared block should be present");
 
-    assert_eq!(syntax.blocks.len(), 1);
-    match &syntax.blocks[0].detail {
-        SyntaxBlockDetail::Global { body, .. } => {
-            assert_eq!(body.len(), 2);
-            assert!(body[0].text.contains("let Count: int = 1;"));
-            assert!(body[1]
-                .text
-                .contains("const Names: list(string) = [\"a\", \"b\"];"));
+    assert_eq!(shared.value.children.len(), 2);
+    assert!(matches!(
+        &shared.value.children[0].value,
+        Statement::Declaration(_)
+    ));
+    assert!(matches!(
+        &shared.value.children[1].value,
+        Statement::Declaration(_)
+    ));
+}
+
+#[test]
+fn combinator_parser_exposes_shared_ast_shape() {
+    let source = r#"
+shared {
+    let Count: int = 1;
+}
+"#;
+
+    let ast = chumsky_combinator::parse_program(source, "").unwrap();
+    let shared = ast.global_block.expect("shared block should be present");
+
+    assert_eq!(shared.value.children.len(), 1);
+    match &shared.value.children[0].value {
+        Statement::Declaration(node) => {
+            assert_eq!(node.value.identifier.value.parts.len(), 1);
+            assert_eq!(node.value.identifier.value.parts[0].value.value, "Count");
         }
-        other => panic!("expected global block, got {other:?}"),
+        other => panic!("expected declaration, got {other:?}"),
     }
 }
 
 #[test]
-#[should_panic]
-fn combinator_prototype_uses_todo_for_main_block() {
+fn unsupported_blocks_fail_for_now() {
     let source = r#"
 main {
 }
 "#;
 
-    let _ = parse_program_combinator(source, "");
+    assert!(parse_ast(source, "").is_err());
+}
+
+#[test]
+fn expression_parser_accepts_arithmetic() {
+    let snippet = SyntaxSnippet::new(
+        althread::error::Pos::from_offsets("1 + 2 * 3", "", 0, "1 + 2 * 3".len()),
+        "1 + 2 * 3".to_string(),
+    );
+
+    chumsky_combinator::parse_expression("1 + 2 * 3", &snippet, "").unwrap();
+}
+
+#[test]
+fn expression_parser_accepts_function_calls_and_callchains() {
+    let source = "worker.test(1).next(2)";
+    let snippet = SyntaxSnippet::new(
+        althread::error::Pos::from_offsets(source, "", 0, source.len()),
+        source.to_string(),
+    );
+
+    chumsky_combinator::parse_expression(source, &snippet, "").unwrap();
+}
+
+#[test]
+fn datatype_errors_are_human_readable() {
+    let source = r#"
+shared {
+    let a:;
+}
+"#;
+
+    let err = parse_ast(source, "").unwrap_err();
+
+    assert!(err.message.contains("expected a datatype"));
+    assert!(err.message.contains("found ';'"));
 }

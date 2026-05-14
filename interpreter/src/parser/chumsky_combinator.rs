@@ -1,30 +1,32 @@
-use chumsky::{extra, input::ValueInput, pratt::*, prelude::*, primitive::todo};
+use chumsky::{error::{RichPattern, RichReason}, extra, input::ValueInput, pratt::*, prelude::*};
 use logos::Logos;
 use ordered_float::OrderedFloat;
+use std::fmt;
 
 use crate::{
     ast::{
-        import_block::ImportBlock,
+        block::Block,
         node::Node,
         statement::{
-            channel_declaration::ChannelDeclaration,
+            declaration::Declaration,
             expression::{
+                binary_expression::BinaryExpression,
                 primary_expression::PrimaryExpression, tuple_expression::TupleExpression,
-                BracketContent, BracketExpression, Expression, SideEffectExpression,
+                unary_expression::UnaryExpression, BracketContent, BracketExpression,
+                CallChainExpression, CallChainSegment, Expression,
             },
             fn_call::FnCall,
-            run_call::RunCall,
-            send::SendStatement,
+            Statement,
         },
         token::{
-            args_list::ArgsList, datatype::DataType, identifier::Identifier, literal::Literal,
-            object_identifier::ObjectIdentifier,
+            binary_operator::BinaryOperator,
+            datatype::DataType, declaration_keyword::DeclarationKeyword, identifier::Identifier,
+            literal::Literal, object_identifier::ObjectIdentifier, unary_operator::UnaryOperator,
         },
+        Ast,
     },
     error::{AlthreadError, ErrorType, Pos},
-    parser::syntax::{
-        SyntaxBlock, SyntaxBlockDetail, SyntaxBlockKind, SyntaxProgram, SyntaxSnippet,
-    },
+    parser::syntax::SyntaxSnippet,
 };
 
 pub type Span = SimpleSpan<usize>;
@@ -91,10 +93,20 @@ pub enum Token {
     EqEq,
     #[token("!=")]
     NotEq,
+    #[token("<=")]
+    LtEq,
+    #[token(">=")]
+    GtEq,
+    #[token("<<")]
+    ShiftLeft,
+    #[token(">>")]
+    ShiftRight,
     #[token("&&")]
     AndAnd,
     #[token("||")]
     OrOr,
+    #[token("!")]
+    Bang,
     #[token("+")]
     Plus,
     #[token("-")]
@@ -103,6 +115,12 @@ pub enum Token {
     Star,
     #[token("/")]
     Slash,
+    #[token("%")]
+    Percent,
+    #[token("&")]
+    Amp,
+    #[token("|")]
+    Pipe,
     #[token("=")]
     Eq,
     #[token(".")]
@@ -131,6 +149,68 @@ pub enum Token {
     Gt,
 }
 
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Token::AtPrivate => write!(f, "@private"),
+            Token::Shared => write!(f, "shared"),
+            Token::Main => write!(f, "main"),
+            Token::Always => write!(f, "always"),
+            Token::Never => write!(f, "never"),
+            Token::Check => write!(f, "check"),
+            Token::Program => write!(f, "program"),
+            Token::Fn => write!(f, "fn"),
+            Token::Let => write!(f, "let"),
+            Token::Const => write!(f, "const"),
+            Token::Proc => write!(f, "proc"),
+            Token::List => write!(f, "list"),
+            Token::Tuple => write!(f, "tuple"),
+            Token::BoolType => write!(f, "bool"),
+            Token::IntType => write!(f, "int"),
+            Token::FloatType => write!(f, "float"),
+            Token::StringType => write!(f, "string"),
+            Token::VoidType => write!(f, "void"),
+            Token::True => write!(f, "true"),
+            Token::False => write!(f, "false"),
+            Token::Null => write!(f, "null"),
+            Token::StringLiteral(_) => write!(f, "string literal"),
+            Token::FloatLiteral(_) => write!(f, "float literal"),
+            Token::IntLiteral(_) => write!(f, "int literal"),
+            Token::Ident(name) => write!(f, "{name}"),
+            Token::Arrow => write!(f, "->"),
+            Token::EqEq => write!(f, "=="),
+            Token::NotEq => write!(f, "!="),
+            Token::LtEq => write!(f, "<="),
+            Token::GtEq => write!(f, ">="),
+            Token::ShiftLeft => write!(f, "<<"),
+            Token::ShiftRight => write!(f, ">>"),
+            Token::AndAnd => write!(f, "&&"),
+            Token::OrOr => write!(f, "||"),
+            Token::Bang => write!(f, "!"),
+            Token::Plus => write!(f, "+"),
+            Token::Minus => write!(f, "-"),
+            Token::Star => write!(f, "*"),
+            Token::Slash => write!(f, "/"),
+            Token::Percent => write!(f, "%"),
+            Token::Amp => write!(f, "&"),
+            Token::Pipe => write!(f, "|"),
+            Token::Eq => write!(f, "="),
+            Token::Dot => write!(f, "."),
+            Token::Comma => write!(f, ","),
+            Token::Colon => write!(f, ":"),
+            Token::Semi => write!(f, ";"),
+            Token::LParen => write!(f, "("),
+            Token::RParen => write!(f, ")"),
+            Token::LBrace => write!(f, "{{"),
+            Token::RBrace => write!(f, "}}"),
+            Token::LBracket => write!(f, "["),
+            Token::RBracket => write!(f, "]"),
+            Token::Lt => write!(f, "<"),
+            Token::Gt => write!(f, ">"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 #[allow(dead_code)]
 enum PrototypeExpr {
@@ -146,10 +226,15 @@ enum PrototypeExpr {
     Neg(Box<Self>),
 }
 
-pub fn parse_program(source: &str, file_path: &str) -> Result<SyntaxProgram, AlthreadError> {
+#[derive(Debug)]
+enum TopLevelBlock {
+    Shared(Node<Block>),
+}
+
+pub fn parse_program(source: &str, file_path: &str) -> Result<Ast, AlthreadError> {
     let tokens = lex(source, file_path)?;
     let eoi = Span::new((), source.len()..source.len());
-    let parser = program_parser(source, file_path);
+    let parser = ast_parser(source, file_path);
     let input = tokens.as_slice().map(eoi, |(token, span)| (token, span));
 
     parser
@@ -158,95 +243,8 @@ pub fn parse_program(source: &str, file_path: &str) -> Result<SyntaxProgram, Alt
         .map_err(|errs| map_rich_errors(source, file_path, errs))
 }
 
-pub fn parse_args_list(
-    source: &str,
-    snippet: &SyntaxSnippet,
-    file_path: &str,
-) -> Result<Node<ArgsList>, AlthreadError> {
-    Err(not_implemented_error(
-        source,
-        file_path,
-        snippet.pos.clone(),
-        "args list parsing is not implemented in chumsky_combinator yet",
-    ))
-}
-
-pub fn parse_statement_block(
-    source: &str,
-    snippet: &SyntaxSnippet,
-    file_path: &str,
-) -> Result<(Pos, Vec<SyntaxSnippet>), AlthreadError> {
-    Err(not_implemented_error(
-        source,
-        file_path,
-        snippet.pos.clone(),
-        "statement block parsing is not implemented in chumsky_combinator yet",
-    ))
-}
-
-pub fn parse_import_block(
-    source: &str,
-    snippet: &SyntaxSnippet,
-    file_path: &str,
-) -> Result<Node<ImportBlock>, AlthreadError> {
-    Err(not_implemented_error(
-        source,
-        file_path,
-        snippet.pos.clone(),
-        "import block parsing is not implemented in chumsky_combinator yet",
-    ))
-}
-
-pub fn parse_fn_call(
-    source: &str,
-    snippet: &SyntaxSnippet,
-    file_path: &str,
-) -> Result<Node<FnCall>, AlthreadError> {
-    Err(not_implemented_error(
-        source,
-        file_path,
-        snippet.pos.clone(),
-        "function call parsing is not implemented in chumsky_combinator yet",
-    ))
-}
-
-pub fn parse_run_call(
-    source: &str,
-    snippet: &SyntaxSnippet,
-    file_path: &str,
-) -> Result<Node<RunCall>, AlthreadError> {
-    Err(not_implemented_error(
-        source,
-        file_path,
-        snippet.pos.clone(),
-        "run call parsing is not implemented in chumsky_combinator yet",
-    ))
-}
-
-pub fn parse_send_call(
-    source: &str,
-    snippet: &SyntaxSnippet,
-    file_path: &str,
-) -> Result<Node<SendStatement>, AlthreadError> {
-    Err(not_implemented_error(
-        source,
-        file_path,
-        snippet.pos.clone(),
-        "send call parsing is not implemented in chumsky_combinator yet",
-    ))
-}
-
-pub fn parse_channel_declaration(
-    source: &str,
-    snippet: &SyntaxSnippet,
-    file_path: &str,
-) -> Result<Node<ChannelDeclaration>, AlthreadError> {
-    Err(not_implemented_error(
-        source,
-        file_path,
-        snippet.pos.clone(),
-        "channel declaration parsing is not implemented in chumsky_combinator yet",
-    ))
+pub fn parse_ast(source: &str, file_path: &str) -> Result<Ast, AlthreadError> {
+    parse_program(source, file_path)
 }
 
 pub fn parse_datatype(
@@ -294,21 +292,6 @@ pub fn parse_expression(
         .map_err(|errs| map_rich_errors(source, file_path, errs))
 }
 
-pub fn parse_side_effect_expression(
-    source: &str,
-    snippet: &SyntaxSnippet,
-    file_path: &str,
-) -> Result<Node<SideEffectExpression>, AlthreadError> {
-    let tokens = lex_snippet(snippet, file_path)?;
-    let eoi = Span::new((), snippet.pos.end..snippet.pos.end);
-    let parser = side_effect_expression_parser();
-    let input = tokens.as_slice().map(eoi, |(token, span)| (token, span));
-    parser
-        .parse(input)
-        .into_result()
-        .map_err(|errs| map_rich_errors(source, file_path, errs))
-}
-
 pub fn parse_list_expression(
     source: &str,
     snippet: &SyntaxSnippet,
@@ -336,120 +319,87 @@ fn lex(source: &str, file_path: &str) -> Result<Vec<Spanned<Token>>, AlthreadErr
     Ok(tokens)
 }
 
-fn program_parser<'tokens, 'src: 'tokens, I>(
+fn ast_parser<'tokens, 'src: 'tokens, I>(
     source: &'src str,
     file_path: &'src str,
-) -> impl Parser<'tokens, I, SyntaxProgram, ParserExtra<'tokens>> + Clone
+) -> impl Parser<'tokens, I, Ast, ParserExtra<'tokens>> + Clone
 where
     I: ValueInput<'tokens, Token = Token, Span = Span>,
 {
     choice((
         shared_block_parser(source, file_path).boxed(),
-        unsupported_block_parser(Token::Main).boxed(),
-        unsupported_block_parser(Token::Always).boxed(),
-        unsupported_block_parser(Token::Never).boxed(),
-        unsupported_block_parser(Token::Check).boxed(),
-        unsupported_prefixed_block_parser(Token::Program).boxed(),
-        unsupported_prefixed_block_parser(Token::Fn).boxed(),
+        unsupported_block_parser(Token::Main, "main").boxed(),
+        unsupported_block_parser(Token::Always, "always").boxed(),
+        unsupported_block_parser(Token::Never, "never").boxed(),
+        unsupported_block_parser(Token::Check, "check").boxed(),
+        unsupported_prefixed_block_parser(Token::Program, "program").boxed(),
+        unsupported_prefixed_block_parser(Token::Fn, "function").boxed(),
     ))
     .repeated()
-    .collect::<Vec<_>>()
+    .collect::<Vec<TopLevelBlock>>()
     .then_ignore(end())
-    .map(|blocks| SyntaxProgram { blocks })
+    .map(|blocks| {
+        let mut ast = Ast::new();
+        for block in blocks {
+            match block {
+                TopLevelBlock::Shared(block) => ast.global_block = Some(block),
+            }
+        }
+        ast
+    })
 }
 
 fn shared_block_parser<'tokens, 'src: 'tokens, I>(
     source: &'src str,
     file_path: &'src str,
-) -> impl Parser<'tokens, I, SyntaxBlock, ParserExtra<'tokens>> + Clone
+) -> impl Parser<'tokens, I, TopLevelBlock, ParserExtra<'tokens>> + Clone
 where
     I: ValueInput<'tokens, Token = Token, Span = Span>,
 {
     just(Token::Shared)
         .ignore_then(
-            shared_declaration_parser(source, file_path)
+            declaration_statement_parser()
                 .repeated()
                 .collect::<Vec<_>>()
-                .map_with(move |body, e| (pos_from_span(source, file_path, e.span()), body))
+                .map_with(move |children, e| Node {
+                    pos: pos_from_span(source, file_path, e.span()),
+                    value: Block { children },
+                })
                 .delimited_by(just(Token::LBrace), just(Token::RBrace)),
         )
-        .map_with(move |(body_pos, body), e| SyntaxBlock {
-            kind: SyntaxBlockKind::Global,
-            pos: pos_from_span(source, file_path, e.span()),
-            text: slice_from_span(source, e.span()).to_string(),
-            detail: SyntaxBlockDetail::Global { body_pos, body },
-        })
+        .map(TopLevelBlock::Shared)
 }
 
-fn shared_declaration_parser<'tokens, 'src: 'tokens, I>(
-    source: &'src str,
-    file_path: &'src str,
-) -> impl Parser<'tokens, I, SyntaxSnippet, ParserExtra<'tokens>> + Clone
+fn declaration_statement_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, Node<Statement>, ParserExtra<'tokens>> + Clone
 where
     I: ValueInput<'tokens, Token = Token, Span = Span>,
 {
-    let ident = select! { Token::Ident(name) => name }.labelled("identifier");
-
-    let object_ident = ident
-        .clone()
-        .separated_by(just(Token::Dot))
-        .at_least(1)
-        .collect::<Vec<_>>();
-
-    let datatype = recursive(|datatype| {
-        let primitive = choice((
-            just(Token::BoolType),
-            just(Token::IntType),
-            just(Token::FloatType),
-            just(Token::StringType),
-            just(Token::VoidType),
-        ))
-        .ignored();
-
-        let proc = just(Token::Proc)
-            .ignore_then(
-                object_ident
-                    .clone()
-                    .delimited_by(just(Token::LParen), just(Token::RParen)),
-            )
-            .ignored();
-
-        let list = just(Token::List)
-            .ignore_then(
-                datatype
-                    .clone()
-                    .delimited_by(just(Token::LParen), just(Token::RParen)),
-            )
-            .ignored();
-
-        let tuple = just(Token::Tuple)
-            .ignore_then(
-                datatype
-                    .clone()
-                    .separated_by(just(Token::Comma))
-                    .at_least(1)
-                    .collect::<Vec<_>>()
-                    .delimited_by(just(Token::LParen), just(Token::RParen)),
-            )
-            .ignored();
-
-        choice((primitive, proc, list, tuple)).labelled("datatype")
+    let keyword = choice((
+        just(Token::Let).to(DeclarationKeyword::Let),
+        just(Token::Const).to(DeclarationKeyword::Const),
+    ))
+    .map_with(|value, e| Node {
+        pos: pos_from_span_source(e.span()),
+        value,
     });
 
-    let initializer = raw_initializer_parser();
-
-    choice((just(Token::Let), just(Token::Const)))
-        .ignored()
-        .then(ident)
-        .then(just(Token::Colon).ignore_then(datatype.clone()).or_not())
-        .then(just(Token::Eq).ignore_then(initializer).or_not())
+    keyword
+        .then(object_identifier_parser())
+        .then(just(Token::Colon).ignore_then(datatype_parser()).or_not())
+        .then(just(Token::Eq).ignore_then(expression_parser()).or_not())
         .then_ignore(just(Token::Semi))
-        .to_span()
-        .map(move |span| {
-            SyntaxSnippet::new(
-                pos_from_span(source, file_path, span),
-                slice_from_span(source, span).to_string(),
-            )
+        .map_with(|(((keyword, identifier), datatype), value), e| Node {
+            pos: pos_from_span_source(e.span()),
+            value: Statement::Declaration(Node {
+                pos: pos_from_span_source(e.span()),
+                value: Declaration {
+                    keyword,
+                    identifier,
+                    datatype,
+                    value,
+                },
+            }),
         })
 }
 
@@ -553,6 +503,14 @@ where
     I: ValueInput<'tokens, Token = Token, Span = Span>,
 {
     recursive(|expr| {
+        let args_tuple = expr
+            .clone()
+            .separated_by(just(Token::Comma))
+            .allow_trailing()
+            .collect::<Vec<_>>()
+            .delimited_by(just(Token::LParen), just(Token::RParen))
+            .map_with(|values, e| tuple_expression_node(values, e.span()));
+
         let literal = literal_parser().map(|literal| Node {
             pos: literal.pos.clone(),
             value: Expression::Primary(Node {
@@ -572,16 +530,10 @@ where
         let tuple = expr
             .clone()
             .separated_by(just(Token::Comma))
-            .at_least(1)
+            .at_least(2)
             .collect::<Vec<_>>()
             .delimited_by(just(Token::LParen), just(Token::RParen))
-            .map_with(|values, e| Node {
-                pos: pos_from_span_source(e.span()),
-                value: Expression::Tuple(Node {
-                    pos: pos_from_span_source(e.span()),
-                    value: TupleExpression { values },
-                }),
-            });
+            .map_with(|values, e| tuple_expression_node(values, e.span()));
 
         let grouped = expr
             .clone()
@@ -594,17 +546,7 @@ where
                 }),
             });
 
-        choice((literal, tuple, grouped, ident)).boxed()
-    })
-}
-
-fn side_effect_expression_parser<'tokens, I>(
-) -> impl Parser<'tokens, I, Node<SideEffectExpression>, ParserExtra<'tokens>> + Clone
-where
-    I: ValueInput<'tokens, Token = Token, Span = Span>,
-{
-    let list_items = recursive(|side_effect| {
-        side_effect
+        let list = expr
             .clone()
             .separated_by(just(Token::Comma))
             .allow_trailing()
@@ -612,73 +554,128 @@ where
             .delimited_by(just(Token::LBracket), just(Token::RBracket))
             .map_with(|items, e| Node {
                 pos: pos_from_span_source(e.span()),
-                value: SideEffectExpression::Bracket(Node {
+                value: Expression::Bracket(Node {
                     pos: pos_from_span_source(e.span()),
                     value: BracketExpression {
                         content: BracketContent::ListLiteral(items),
                     },
                 }),
-            })
-            .or(expression_parser().map(|expr| Node {
-                pos: expr.pos.clone(),
-                value: SideEffectExpression::Expression(expr),
-            }))
-    });
+            });
 
-    list_items
-}
+        let direct_call = object_identifier_parser()
+            .then(args_tuple.clone())
+            .map_with(|(fn_name, values), e| Node {
+                pos: pos_from_span_source(e.span()),
+                value: Expression::FnCall(Node {
+                    pos: pos_from_span_source(e.span()),
+                    value: FnCall {
+                        fn_name,
+                        values: Box::new(values),
+                    },
+                }),
+            });
 
-fn raw_initializer_parser<'tokens, I>() -> impl Parser<'tokens, I, (), ParserExtra<'tokens>> + Clone
-where
-    I: ValueInput<'tokens, Token = Token, Span = Span>,
-{
-    recursive(|value| {
-        let atom = select! {
-            Token::Ident(_) => (),
-            Token::IntLiteral(_) => (),
-            Token::FloatLiteral(_) => (),
-            Token::StringLiteral(_) => (),
-            Token::True => (),
-            Token::False => (),
-            Token::Null => (),
-            Token::Plus => (),
-            Token::Minus => (),
-            Token::Star => (),
-            Token::Slash => (),
-            Token::EqEq => (),
-            Token::NotEq => (),
-            Token::AndAnd => (),
-            Token::OrOr => (),
-            Token::Dot => (),
-            Token::Comma => (),
-            Token::Colon => (),
-            Token::Lt => (),
-            Token::Gt => (),
-        }
-        .ignored();
+        let atom = choice((direct_call, literal, tuple, grouped, list, ident)).boxed();
 
-        choice((
-            atom,
-            value
-                .clone()
-                .repeated()
-                .delimited_by(just(Token::LParen), just(Token::RParen))
-                .ignored(),
-            value
-                .clone()
-                .repeated()
-                .delimited_by(just(Token::LBracket), just(Token::RBracket))
-                .ignored(),
-            value
-                .clone()
-                .repeated()
-                .delimited_by(just(Token::LBrace), just(Token::RBrace))
-                .ignored(),
+        let chain_segment = just(Token::Dot)
+            .ignore_then(select! { Token::Ident(name) => name })
+            .then(args_tuple.clone())
+            .map_with(|(name, args), e| CallChainSegment::Call {
+                name: Node {
+                    pos: pos_from_span_source(e.span()),
+                    value: Identifier { value: name },
+                },
+                args,
+            });
+
+        let postfix = atom
+            .then(chain_segment.repeated().collect::<Vec<_>>())
+            .map_with(|(base, segments), e| {
+                if segments.is_empty() {
+                    base
+                } else {
+                    Node {
+                        pos: pos_from_span_source(e.span()),
+                        value: Expression::CallChain(Node {
+                            pos: pos_from_span_source(e.span()),
+                            value: CallChainExpression {
+                                base: Box::new(base),
+                                segments,
+                            },
+                        }),
+                    }
+                }
+            });
+
+        postfix.pratt((
+            prefix(7, just(Token::Bang), |_, rhs, e| unary_expression_node(
+                UnaryOperator::Not,
+                rhs,
+                e.span(),
+            )),
+            prefix(7, just(Token::Plus), |_, rhs, e| unary_expression_node(
+                UnaryOperator::Positive,
+                rhs,
+                e.span(),
+            )),
+            prefix(7, just(Token::Minus), |_, rhs, e| unary_expression_node(
+                UnaryOperator::Negative,
+                rhs,
+                e.span(),
+            )),
+            infix(left(6), just(Token::Star), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::Multiply, l, r, e.span())
+            }),
+            infix(left(6), just(Token::Slash), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::Divide, l, r, e.span())
+            }),
+            infix(left(6), just(Token::Percent), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::Modulo, l, r, e.span())
+            }),
+            infix(left(5), just(Token::Plus), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::Add, l, r, e.span())
+            }),
+            infix(left(5), just(Token::Minus), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::Subtract, l, r, e.span())
+            }),
+            infix(left(4), just(Token::ShiftLeft), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::ShiftLeft, l, r, e.span())
+            }),
+            infix(left(4), just(Token::ShiftRight), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::ShiftRight, l, r, e.span())
+            }),
+            infix(left(3), just(Token::LtEq), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::LessThanOrEqual, l, r, e.span())
+            }),
+            infix(left(3), just(Token::GtEq), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::GreaterThanOrEqual, l, r, e.span())
+            }),
+            infix(left(3), just(Token::Lt), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::LessThan, l, r, e.span())
+            }),
+            infix(left(3), just(Token::Gt), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::GreaterThan, l, r, e.span())
+            }),
+            infix(left(2), just(Token::EqEq), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::Equals, l, r, e.span())
+            }),
+            infix(left(2), just(Token::NotEq), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::NotEquals, l, r, e.span())
+            }),
+            infix(left(1), just(Token::Amp), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::BitAnd, l, r, e.span())
+            }),
+            infix(left(1), just(Token::Pipe), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::BitOr, l, r, e.span())
+            }),
+            infix(left(0), just(Token::AndAnd), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::And, l, r, e.span())
+            }),
+            infix(left(0), just(Token::OrOr), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::Or, l, r, e.span())
+            }),
         ))
     })
-    .repeated()
-    .at_least(1)
-    .ignored()
 }
 
 #[allow(dead_code)]
@@ -717,23 +714,38 @@ where
 
 fn unsupported_block_parser<'tokens, I>(
     token: Token,
-) -> impl Parser<'tokens, I, SyntaxBlock, ParserExtra<'tokens>> + Clone
+    block_name: &'static str,
+) -> impl Parser<'tokens, I, TopLevelBlock, ParserExtra<'tokens>> + Clone
 where
     I: ValueInput<'tokens, Token = Token, Span = Span>,
 {
-    just(token).ignore_then(todo())
+    just(token)
+        .map_with(move |_, e| e.span())
+        .try_map(move |span, _| {
+            Err(Rich::custom(
+                span,
+                format!("{block_name} blocks are not implemented yet"),
+            ))
+        })
 }
 
 fn unsupported_prefixed_block_parser<'tokens, I>(
     token: Token,
-) -> impl Parser<'tokens, I, SyntaxBlock, ParserExtra<'tokens>> + Clone
+    block_name: &'static str,
+) -> impl Parser<'tokens, I, TopLevelBlock, ParserExtra<'tokens>> + Clone
 where
     I: ValueInput<'tokens, Token = Token, Span = Span>,
 {
     just(Token::AtPrivate)
         .or_not()
         .ignore_then(just(token))
-        .ignore_then(todo())
+        .map_with(move |_, e| e.span())
+        .try_map(move |span, _| {
+            Err(Rich::custom(
+                span,
+                format!("{block_name} blocks are not implemented yet"),
+            ))
+        })
 }
 
 fn lex_snippet(
@@ -777,13 +789,56 @@ fn unquote_string(value: &str) -> String {
         .to_string()
 }
 
-fn not_implemented_error(
-    _source: &str,
-    _file_path: &str,
-    pos: Pos,
-    message: &str,
-) -> AlthreadError {
-    AlthreadError::new(ErrorType::SyntaxError, Some(pos), message.to_string())
+fn tuple_expression_node(values: Vec<Node<Expression>>, span: Span) -> Node<Expression> {
+    Node {
+        pos: pos_from_span_source(span),
+        value: Expression::Tuple(Node {
+            pos: pos_from_span_source(span),
+            value: TupleExpression { values },
+        }),
+    }
+}
+
+fn unary_expression_node(
+    operator: UnaryOperator,
+    operand: Node<Expression>,
+    span: Span,
+) -> Node<Expression> {
+    Node {
+        pos: pos_from_span_source(span),
+        value: Expression::Unary(Node {
+            pos: pos_from_span_source(span),
+            value: UnaryExpression {
+                operator: Node {
+                    pos: pos_from_span_source(span),
+                    value: operator,
+                },
+                operand: Box::new(operand),
+            },
+        }),
+    }
+}
+
+fn binary_expression_node(
+    operator: BinaryOperator,
+    left: Node<Expression>,
+    right: Node<Expression>,
+    span: Span,
+) -> Node<Expression> {
+    Node {
+        pos: pos_from_span_source(span),
+        value: Expression::Binary(Node {
+            pos: pos_from_span_source(span),
+            value: BinaryExpression {
+                left: Box::new(left),
+                operator: Node {
+                    pos: pos_from_span_source(span),
+                    value: operator,
+                },
+                right: Box::new(right),
+            },
+        }),
+    }
 }
 
 fn pos_from_span_source(span: Span) -> Pos {
@@ -800,17 +855,13 @@ fn pos_from_span(source: &str, file_path: &str, span: Span) -> Pos {
     Pos::from_offsets(source, file_path, span.start, span.end)
 }
 
-fn slice_from_span(source: &str, span: Span) -> &str {
-    &source[span.start..span.end]
-}
-
 fn map_rich_errors(
     source: &str,
     file_path: &str,
     errs: Vec<Rich<'_, Token, Span>>,
 ) -> AlthreadError {
     let err = errs.into_iter().next().expect("chumsky returned no errors");
-    let message = format!("{:?}", err.reason());
+    let message = format_rich_reason(&err);
     AlthreadError::new(
         ErrorType::SyntaxError,
         Some(Pos::from_offsets(
@@ -820,5 +871,79 @@ fn map_rich_errors(
             err.span().end,
         )),
         message,
+    )
+}
+
+fn format_rich_reason(err: &Rich<'_, Token, Span>) -> String {
+    match err.reason() {
+        RichReason::Custom(message) => message.clone(),
+        RichReason::ExpectedFound { .. } => {
+            let expected = err.expected().collect::<Vec<_>>();
+            let expected_text = format_expected_patterns(&expected);
+            let found_text = format_found_token(err.found());
+            format!("expected {expected_text}, found {found_text}")
+        }
+    }
+}
+
+fn format_expected_patterns(expected: &[&RichPattern<'_, Token>]) -> String {
+    if expected.iter().all(|pattern| is_datatype_pattern(pattern)) && !expected.is_empty() {
+        return "a datatype".to_string();
+    }
+
+    let mut labels = expected
+        .iter()
+        .map(|pattern| format_pattern(pattern))
+        .collect::<Vec<_>>();
+    labels.sort();
+    labels.dedup();
+
+    match labels.as_slice() {
+        [] => "something else".to_string(),
+        [single] => single.clone(),
+        [left, right] => format!("{left} or {right}"),
+        many => {
+            let mut out = many[..many.len() - 1].join(", ");
+            out.push_str(", or ");
+            out.push_str(&many[many.len() - 1]);
+            out
+        }
+    }
+}
+
+fn format_pattern(pattern: &RichPattern<'_, Token>) -> String {
+    match pattern {
+        RichPattern::Token(token) => format!("'{}'", &**token),
+        RichPattern::Label(label) => label.to_string(),
+        RichPattern::Identifier(identifier) => format!("'{identifier}'"),
+        RichPattern::Any => "any token".to_string(),
+        RichPattern::SomethingElse => "something else".to_string(),
+        RichPattern::EndOfInput => "end of input".to_string(),
+        _ => "something".to_string(),
+    }
+}
+
+fn format_found_token(found: Option<&Token>) -> String {
+    match found {
+        Some(token) => format!("'{}'", token),
+        None => "end of input".to_string(),
+    }
+}
+
+fn is_datatype_pattern(pattern: &RichPattern<'_, Token>) -> bool {
+    matches!(
+        pattern,
+        RichPattern::Token(token)
+            if matches!(
+                &**token,
+                Token::BoolType
+                    | Token::IntType
+                    | Token::FloatType
+                    | Token::StringType
+                    | Token::VoidType
+                    | Token::Proc
+                    | Token::List
+                    | Token::Tuple
+            )
     )
 }

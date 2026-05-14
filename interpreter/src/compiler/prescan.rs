@@ -8,7 +8,7 @@ use crate::{
         statement::{
             assignment::Assignment,
             channel_declaration::ChannelDeclaration,
-            expression::{primary_expression::PrimaryExpression, Expression, SideEffectExpression},
+            expression::{primary_expression::PrimaryExpression, Expression},
             Statement,
         },
         token::datatype::DataType,
@@ -373,31 +373,20 @@ impl Ast {
         Ok(())
     }
 
-    fn extract_variable_reference(
-        &self,
-        side_effect_expr: &SideEffectExpression,
-    ) -> Option<String> {
-        match side_effect_expr {
-            SideEffectExpression::Expression(expr_node) => {
-                if let Expression::Primary(primary_expr) = &expr_node.value {
-                    if let PrimaryExpression::Identifier(identifier) = &primary_expr.value {
-                        if identifier.value.parts.len() == 1 {
-                            return Some(identifier.value.parts[0].value.value.clone());
-                        }
-                    }
+    fn extract_variable_reference(&self, expression: &Expression) -> Option<String> {
+        if let Expression::Primary(primary_expr) = expression {
+            if let PrimaryExpression::Identifier(identifier) = &primary_expr.value {
+                if identifier.value.parts.len() == 1 {
+                    return Some(identifier.value.parts[0].value.value.clone());
                 }
             }
-            _ => {}
         }
         None
     }
 
-    fn extract_list_at_call(
-        &self,
-        side_effect_expr: &SideEffectExpression,
-    ) -> Option<(String, String)> {
-        match side_effect_expr {
-            SideEffectExpression::FnCall(fn_call_node) => {
+    fn extract_list_at_call(&self, expression: &Expression) -> Option<(String, String)> {
+        match expression {
+            Expression::FnCall(fn_call_node) => {
                 let fn_call = &fn_call_node.value;
 
                 if let (Some(receiver_name), Some(method_name)) =
@@ -413,9 +402,9 @@ impl Ast {
         None
     }
 
-    fn extract_run_program_name(&self, side_effect_expr: &SideEffectExpression) -> Option<String> {
-        match side_effect_expr {
-            SideEffectExpression::RunCall(run_call_node) => {
+    fn extract_run_program_name(&self, expression: &Expression) -> Option<String> {
+        match expression {
+            Expression::RunCall(run_call_node) => {
                 Some(run_call_node.value.program_name_to_string())
             }
             _ => None,

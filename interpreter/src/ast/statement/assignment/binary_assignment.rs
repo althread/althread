@@ -4,7 +4,7 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node},
-        statement::expression::SideEffectExpression,
+        statement::expression::Expression,
         token::{
             binary_assignment_operator::BinaryAssignmentOperator,
             object_identifier::ObjectIdentifier,
@@ -19,7 +19,7 @@ use crate::{
 pub struct BinaryAssignment {
     pub identifier: Node<ObjectIdentifier>,
     pub operator: Node<BinaryAssignmentOperator>,
-    pub value: Node<SideEffectExpression>,
+    pub value: Node<Expression>,
 }
 
 impl InstructionBuilder for Node<BinaryAssignment> {

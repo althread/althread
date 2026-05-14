@@ -32,14 +32,6 @@ use crate::{
 use super::{fn_call::FnCall, run_call::RunCall, waiting_case::WaitDependency};
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum SideEffectExpression {
-    Expression(Node<Expression>),
-    RunCall(Node<RunCall>),
-    FnCall(Node<FnCall>),
-    Bracket(Node<BracketExpression>),
-}
-
-#[derive(Debug, PartialEq, Clone)]
 pub struct BracketExpression {
     pub content: BracketContent,
 }
@@ -47,219 +39,7 @@ pub struct BracketExpression {
 #[derive(Debug, PartialEq, Clone)]
 pub enum BracketContent {
     Range(Node<RangeListExpression>),
-    ListLiteral(Vec<Node<SideEffectExpression>>),
-}
-
-impl InstructionBuilder for SideEffectExpression {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
-        match self {
-            Self::Expression(node) => node.compile(state),
-            Self::RunCall(node) => node.compile(state),
-            Self::FnCall(node) => node.compile(state),
-            Self::Bracket(node) => node.compile(state),
-        }
-    }
-}
-
-impl InstructionBuilder for BracketExpression {
-    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
-        match &self.content {
-            BracketContent::Range(range_node) => {
-                // Create an Expression::Range and compile it
-                let range_expr = Node {
-                    pos: range_node.pos.clone(),
-                    value: Expression::Range(range_node.clone()),
-                };
-                range_expr.compile(state)
-            }
-            BracketContent::ListLiteral(expressions) => {
-                let mut instructions = Vec::new();
-
-                // Determine element type from first expression
-                let element_type = if let Some(first_expr) = expressions.first() {
-                    match &first_expr.value {
-                        SideEffectExpression::Expression(node) => {
-                            let local_expr = LocalExpressionNode::from_expression(
-                                &node.value,
-                                &state.program_stack,
-                            )?;
-                            local_expr.datatype(state).map_err(|err| {
-                                AlthreadError::new(
-                                    ErrorType::ExpressionError,
-                                    Some(node.pos.clone()),
-                                    format!("Cannot infer type of list element: {}", err),
-                                )
-                            })?
-                        }
-                        SideEffectExpression::FnCall(node) => {
-                            let local_expr = LocalExpressionNode::FnCall(Box::new(node.clone()));
-                            local_expr.datatype(state).map_err(|err| {
-                                AlthreadError::new(
-                                    ErrorType::ExpressionError,
-                                    Some(node.pos.clone()),
-                                    format!(
-                                        "Cannot infer list element type from function call: {}",
-                                        err
-                                    ),
-                                )
-                            })?
-                        }
-                        SideEffectExpression::RunCall(_) => {
-                            return Err(AlthreadError::new(
-                                ErrorType::ExpressionError,
-                                Some(first_expr.pos.clone()),
-                                "Run calls cannot be used in list literals".to_string(),
-                            ));
-                        }
-                        SideEffectExpression::Bracket(node) => {
-                            // Compile the nested bracket to get its type
-                            let _nested_builder = node.compile(state)?;
-                            let nested_type = if let Some(last_var) = state.program_stack.last() {
-                                let t = last_var.datatype.clone();
-                                state.program_stack.pop(); // Remove the temporary variable
-                                t
-                            } else {
-                                DataType::Void
-                            };
-                            nested_type
-                        }
-                    }
-                } else {
-                    DataType::Void // Empty list
-                };
-
-                // Compile each expression onto the stack
-                for (i, expr) in expressions.iter().enumerate() {
-                    // Forbid run calls in list literals
-                    if matches!(expr.value, SideEffectExpression::RunCall(_)) {
-                        return Err(AlthreadError::new(
-                            ErrorType::ExpressionError,
-                            Some(expr.pos.clone()),
-                            "Run calls cannot be used in list literals".to_string(),
-                        ));
-                    }
-
-                    // Compile the expression
-                    let builder = expr.compile(state)?;
-                    instructions.extend(builder.instructions);
-
-                    // Type check if we have a determined element type
-                    if element_type != DataType::Void {
-                        let expr_type = match &expr.value {
-                            SideEffectExpression::Expression(node) => {
-                                let local_expr = LocalExpressionNode::from_expression(
-                                    &node.value,
-                                    &state.program_stack,
-                                )?;
-                                local_expr.datatype(state).map_err(|err| {
-                                    AlthreadError::new(
-                                        ErrorType::ExpressionError,
-                                        Some(expr.pos.clone()),
-                                        format!(
-                                            "Cannot determine type of list element {}: {}",
-                                            i, err
-                                        ),
-                                    )
-                                })?
-                            }
-                            SideEffectExpression::FnCall(node) => {
-                                let local_expr =
-                                    LocalExpressionNode::FnCall(Box::new(node.clone()));
-                                local_expr.datatype(state).map_err(|err| {
-                                    AlthreadError::new(
-                                        ErrorType::ExpressionError,
-                                        Some(expr.pos.clone()),
-                                        format!("Cannot determine type of function call in list element {}: {}", i, err),
-                                    )
-                                })?
-                            }
-                            SideEffectExpression::Bracket(_) => {
-                                // Get type from the variable that was just pushed to stack
-                                if let Some(last_var) = state.program_stack.last() {
-                                    last_var.datatype.clone()
-                                } else {
-                                    return Err(AlthreadError::new(
-                                        ErrorType::ExpressionError,
-                                        Some(expr.pos.clone()),
-                                        "Cannot determine type of bracket expression".to_string(),
-                                    ));
-                                }
-                            }
-                            SideEffectExpression::RunCall(_) => {
-                                unreachable!("Run calls already filtered out above");
-                            }
-                        };
-
-                        if expr_type != element_type {
-                            return Err(AlthreadError::new(
-                                ErrorType::ExpressionError,
-                                Some(expr.pos.clone()),
-                                format!(
-                                    "List element {} has type {:?}, expected {:?}",
-                                    i, expr_type, element_type
-                                ),
-                            ));
-                        }
-                    }
-                }
-
-                // Create list from stack elements
-                instructions.push(Instruction {
-                    pos: None,
-                    control: InstructionType::CreateListFromStack {
-                        element_count: expressions.len(),
-                        element_type: element_type.clone(),
-                    },
-                });
-
-                // Update stack - remove individual elements and add the list
-                for _ in 0..expressions.len() {
-                    state.program_stack.pop();
-                }
-
-                let list_type = DataType::List(Box::new(element_type));
-                state.program_stack.push(Variable {
-                    name: "".to_string(),
-                    depth: state.current_stack_depth,
-                    mutable: false,
-                    datatype: list_type,
-                    declare_pos: None,
-                });
-
-                Ok(InstructionBuilderOk::from_instructions(instructions))
-            }
-        }
-    }
-}
-
-impl AstDisplay for SideEffectExpression {
-    fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
-        match self {
-            Self::Expression(node) => node.ast_fmt(f, prefix),
-            Self::RunCall(node) => node.ast_fmt(f, prefix),
-            Self::FnCall(node) => node.ast_fmt(f, prefix),
-            Self::Bracket(node) => node.ast_fmt(f, prefix),
-        }
-    }
-}
-
-impl AstDisplay for BracketExpression {
-    fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
-        match &self.content {
-            BracketContent::Range(range) => {
-                writeln!(f, "{}RangeExpression", prefix)?;
-                range.ast_fmt(f, &prefix.add_branch())
-            }
-            BracketContent::ListLiteral(exprs) => {
-                writeln!(f, "{}ListLiteral", prefix)?;
-                let new_prefix = prefix.add_branch();
-                for expr in exprs {
-                    expr.ast_fmt(f, &new_prefix)?;
-                }
-                Ok(())
-            }
-        }
-    }
+    ListLiteral(Vec<Node<Expression>>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -270,14 +50,13 @@ pub enum Expression {
     Tuple(Node<TupleExpression>),
     Range(Node<RangeListExpression>),
     FnCall(Node<FnCall>),
+    RunCall(Box<Node<RunCall>>),
+    Bracket(Node<BracketExpression>),
     CallChain(Node<CallChainExpression>),
 }
 
 impl fmt::Display for Expression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // We can't implement decent Display easily without more effort,
-        // but for LTL Predicates printing we might need it.
-        // For now let's use Debug-like print or placeholder.
         write!(f, "{:?}", self)
     }
 }
@@ -312,6 +91,7 @@ pub enum LocalExpressionNode {
     Tuple(LocalTupleExpressionNode),
     Range(LocalRangeListExpressionNode),
     FnCall(Box<Node<FnCall>>),
+    RunCall(Box<Node<RunCall>>),
     Reaches(LocalReachesNode),
     CallChain(LocalCallChainNode),
     IfExpr(LocalIfExprNode),
@@ -363,6 +143,128 @@ pub struct LocalExistsNode {
     pub list: Box<LocalExpressionNode>,
     pub body: Box<LocalExpressionNode>,
 }
+
+impl InstructionBuilder for BracketExpression {
+    fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
+        match &self.content {
+            BracketContent::Range(range_node) => {
+                let range_expr = Node {
+                    pos: range_node.pos.clone(),
+                    value: Expression::Range(range_node.clone()),
+                };
+                range_expr.compile(state)
+            }
+            BracketContent::ListLiteral(expressions) => {
+                let mut instructions = Vec::new();
+
+                let element_type = if let Some(first_expr) = expressions.first() {
+                    match &first_expr.value {
+                        Expression::RunCall(_) => {
+                            return Err(AlthreadError::new(
+                                ErrorType::ExpressionError,
+                                Some(first_expr.pos.clone()),
+                                "Run calls cannot be used in list literals".to_string(),
+                            ));
+                        }
+                        value => {
+                            let local_expr =
+                                LocalExpressionNode::from_expression(value, &state.program_stack)?;
+                            local_expr.datatype(state).map_err(|err| {
+                                AlthreadError::new(
+                                    ErrorType::ExpressionError,
+                                    Some(first_expr.pos.clone()),
+                                    format!("Cannot infer type of list element: {}", err),
+                                )
+                            })?
+                        }
+                    }
+                } else {
+                    DataType::Void
+                };
+
+                for (i, expr) in expressions.iter().enumerate() {
+                    if matches!(expr.value, Expression::RunCall(_)) {
+                        return Err(AlthreadError::new(
+                            ErrorType::ExpressionError,
+                            Some(expr.pos.clone()),
+                            "Run calls cannot be used in list literals".to_string(),
+                        ));
+                    }
+
+                    let builder = expr.compile(state)?;
+                    instructions.extend(builder.instructions);
+
+                    if element_type != DataType::Void {
+                        let local_expr = LocalExpressionNode::from_expression(
+                            &expr.value,
+                            &state.program_stack,
+                        )?;
+                        let expr_type = local_expr.datatype(state).map_err(|err| {
+                            AlthreadError::new(
+                                ErrorType::ExpressionError,
+                                Some(expr.pos.clone()),
+                                format!("Cannot determine type of list element {}: {}", i, err),
+                            )
+                        })?;
+
+                        if expr_type != element_type {
+                            return Err(AlthreadError::new(
+                                ErrorType::ExpressionError,
+                                Some(expr.pos.clone()),
+                                format!(
+                                    "List element {} has type {:?}, expected {:?}",
+                                    i, expr_type, element_type
+                                ),
+                            ));
+                        }
+                    }
+                }
+
+                instructions.push(Instruction {
+                    pos: None,
+                    control: InstructionType::CreateListFromStack {
+                        element_count: expressions.len(),
+                        element_type: element_type.clone(),
+                    },
+                });
+
+                for _ in 0..expressions.len() {
+                    state.program_stack.pop();
+                }
+
+                let list_type = DataType::List(Box::new(element_type));
+                state.program_stack.push(Variable {
+                    name: "".to_string(),
+                    depth: state.current_stack_depth,
+                    mutable: false,
+                    datatype: list_type,
+                    declare_pos: None,
+                });
+
+                Ok(InstructionBuilderOk::from_instructions(instructions))
+            }
+        }
+    }
+}
+
+impl AstDisplay for BracketExpression {
+    fn ast_fmt(&self, f: &mut fmt::Formatter, prefix: &Prefix) -> fmt::Result {
+        match &self.content {
+            BracketContent::Range(range) => {
+                writeln!(f, "{}RangeExpression", prefix)?;
+                range.ast_fmt(f, &prefix.add_branch())
+            }
+            BracketContent::ListLiteral(exprs) => {
+                writeln!(f, "{}ListLiteral", prefix)?;
+                let new_prefix = prefix.add_branch();
+                for expr in exprs {
+                    expr.ast_fmt(f, &new_prefix)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
 impl fmt::Display for LocalExpression {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.root)
@@ -378,6 +280,7 @@ impl fmt::Display for LocalExpressionNode {
             Self::Tuple(node) => write!(f, "{}", node),
             Self::Range(node) => write!(f, "{}", node),
             Self::FnCall(node) => write!(f, "{:?}", node),
+            Self::RunCall(node) => write!(f, "{:?}", node),
             Self::Reaches(node) => {
                 if node.index.is_some() {
                     write!(f, "[{}].at(...).reaches({})", node.var.index, node.label)
@@ -517,12 +420,29 @@ impl LocalExpressionNode {
                 )?),
             },
             Expression::FnCall(node) => LocalExpressionNode::FnCall(Box::new(node.clone())),
+            Expression::RunCall(node) => LocalExpressionNode::RunCall(node.clone()),
             Expression::Tuple(node) => LocalExpressionNode::Tuple(
                 LocalTupleExpressionNode::from_tuple(&node.value, program_stack)?,
             ),
             Expression::Range(node) => LocalExpressionNode::Range(
                 LocalRangeListExpressionNode::from_range(&node.value, program_stack)?,
             ),
+            Expression::Bracket(node) => match &node.value.content {
+                BracketContent::Range(range) => LocalExpressionNode::Range(
+                    LocalRangeListExpressionNode::from_range(&range.value, program_stack)?,
+                ),
+                BracketContent::ListLiteral(values) => {
+                    let local_values = values
+                        .iter()
+                        .map(|value| {
+                            LocalExpressionNode::from_expression(&value.value, program_stack)
+                        })
+                        .collect::<AlthreadResult<Vec<_>>>()?;
+                    LocalExpressionNode::Tuple(LocalTupleExpressionNode {
+                        values: local_values,
+                    })
+                }
+            },
             Expression::CallChain(node) => {
                 let base =
                     LocalExpressionNode::from_expression(&node.value.base.value, program_stack)?;
@@ -553,45 +473,39 @@ impl LocalExpressionNode {
         Ok(root)
     }
 
-    pub fn contains_fn_call(&self) -> bool {
+    pub fn contains_call(&self) -> bool {
         match self {
-            LocalExpressionNode::FnCall(_) => true,
-            LocalExpressionNode::Binary(n) => {
-                n.left.contains_fn_call() || n.right.contains_fn_call()
-            }
-            LocalExpressionNode::Unary(n) => n.operand.contains_fn_call(),
+            LocalExpressionNode::FnCall(_) | LocalExpressionNode::RunCall(_) => true,
+            LocalExpressionNode::Binary(n) => n.left.contains_call() || n.right.contains_call(),
+            LocalExpressionNode::Unary(n) => n.operand.contains_call(),
             LocalExpressionNode::Primary(n) => match n {
-                LocalPrimaryExpressionNode::Expression(e) => e.contains_fn_call(),
+                LocalPrimaryExpressionNode::Expression(e) => e.contains_call(),
                 _ => false,
             },
-            LocalExpressionNode::Tuple(n) => n.values.iter().any(|e| e.contains_fn_call()),
+            LocalExpressionNode::Tuple(n) => n.values.iter().any(|e| e.contains_call()),
             LocalExpressionNode::Range(n) => {
-                n.expression_start.contains_fn_call() || n.expression_end.contains_fn_call()
+                n.expression_start.contains_call() || n.expression_end.contains_call()
             }
             LocalExpressionNode::Reaches(_) => false,
             LocalExpressionNode::CallChain(n) => {
-                let mut has_call = n.base.contains_fn_call();
+                let mut has_call = n.base.contains_call();
                 for seg in n.segments.iter() {
                     if let LocalCallChainSegment::Call { args, .. } = seg {
-                        has_call |= args.contains_fn_call();
+                        has_call |= args.contains_call();
                     }
                 }
                 has_call
             }
             LocalExpressionNode::IfExpr(n) => {
-                n.condition.contains_fn_call()
-                    || n.then_expr.contains_fn_call()
+                n.condition.contains_call()
+                    || n.then_expr.contains_call()
                     || n.else_expr
                         .as_ref()
-                        .map(|e| e.contains_fn_call())
+                        .map(|e| e.contains_call())
                         .unwrap_or(false)
             }
-            LocalExpressionNode::ForAll(n) => {
-                n.list.contains_fn_call() || n.body.contains_fn_call()
-            }
-            LocalExpressionNode::Exists(n) => {
-                n.list.contains_fn_call() || n.body.contains_fn_call()
-            }
+            LocalExpressionNode::ForAll(n) => n.list.contains_call() || n.body.contains_call(),
+            LocalExpressionNode::Exists(n) => n.list.contains_call() || n.body.contains_call(),
         }
     }
 
@@ -697,6 +611,10 @@ impl LocalExpressionNode {
                         Err(format!("Variable {} not found", receiver_name))
                     }
                 }
+            }
+            Self::RunCall(node) => {
+                let full_program_name = node.value.program_name_to_string();
+                Ok(DataType::Process(full_program_name))
             }
             Self::Reaches(node) => {
                 if !state.in_condition_block {
@@ -961,6 +879,10 @@ impl LocalExpressionNode {
                 "Cannot evaluate function call in this context: {:?}",
                 &node.value.fn_name
             )),
+            LocalExpressionNode::RunCall(node) => Err(format!(
+                "Cannot evaluate run call in this context: {:?}",
+                &node.value.identifier
+            )),
             LocalExpressionNode::Reaches(_) => {
                 Err("'reaches' is only supported in always/check blocks".to_string())
             }
@@ -1129,6 +1051,10 @@ impl LocalExpressionNode {
                     Some(node.pos.clone()),
                 )
             }
+            LocalExpressionNode::RunCall(node) => Err(format!(
+                "Cannot evaluate run call in this context: {:?}",
+                &node.value.identifier
+            )),
             LocalExpressionNode::Reaches(node) => {
                 let lit = mem
                     .get(mem.len() - 1 - node.var.index)
@@ -1442,6 +1368,11 @@ impl CallChainExpression {
 // because we need line/column information
 impl InstructionBuilder for Node<Expression> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
+        match &self.value {
+            Expression::RunCall(node) => return node.compile(state),
+            Expression::Bracket(node) => return node.compile(state),
+            _ => {}
+        }
         if let Expression::CallChain(node) = &self.value {
             if !state.in_condition_block {
                 return node.value.compile_chain(state, &self.pos);
@@ -1509,7 +1440,7 @@ impl InstructionBuilder for Node<Expression> {
                 pos: Some(self.pos.clone()),
                 control: InstructionType::Expression(local_expr),
             });
-        } else if !local_expr.contains_fn_call() {
+        } else if !local_expr.contains_call() {
             instructions.push(Instruction {
                 pos: Some(self.pos.clone()),
                 control: InstructionType::Expression(local_expr),
@@ -1652,6 +1583,14 @@ impl InstructionBuilder for Node<Expression> {
                         );
                         Ok((placeholder, builder, 1))
                     }
+                    LocalExpressionNode::RunCall(node) => {
+                        let builder = node.compile(state)?;
+                        state.program_stack.pop();
+                        let placeholder = LocalExpressionNode::Primary(
+                            LocalPrimaryExpressionNode::Var(LocalVarNode { index: 0 }),
+                        );
+                        Ok((placeholder, builder, 1))
+                    }
                     LocalExpressionNode::Binary(node) => {
                         // Compile left side first, to match execution order.
                         let (left_expr, mut left_builder, left_calls) =
@@ -1783,8 +1722,8 @@ impl InstructionBuilder for Node<Expression> {
             instructions.extend(builder.instructions);
 
             if fn_call_count > 0 {
-                if let Expression::FnCall(_) = self.value {
-                    // It's a direct function call statement, FnCall instruction handles the stack
+                if matches!(self.value, Expression::FnCall(_) | Expression::RunCall(_)) {
+                    // Direct call expressions handle their own stack effect.
                 } else if let Expression::Tuple(_) = self.value {
                     instructions.push(Instruction {
                         pos: Some(self.pos.clone()),
@@ -1833,8 +1772,17 @@ impl Expression {
             Self::Unary(node) => node.value.add_dependencies(dependencies),
             Self::Primary(node) => node.value.add_dependencies(dependencies),
             Self::FnCall(node) => node.value.add_dependencies(dependencies),
+            Self::RunCall(_) => {}
             Self::Tuple(node) => node.value.add_dependencies(dependencies),
             Self::Range(node) => node.value.add_dependencies(dependencies),
+            Self::Bracket(node) => match &node.value.content {
+                BracketContent::Range(range) => range.value.add_dependencies(dependencies),
+                BracketContent::ListLiteral(values) => {
+                    for value in values {
+                        value.value.add_dependencies(dependencies);
+                    }
+                }
+            },
             Self::CallChain(node) => {
                 node.value.base.value.add_dependencies(dependencies);
                 for segment in node.value.segments.iter() {
@@ -1862,6 +1810,15 @@ impl Expression {
             Self::Tuple(node) => node.value.get_vars(vars),
             Self::Range(node) => node.value.get_vars(vars),
             Self::FnCall(node) => node.value.get_vars(vars),
+            Self::RunCall(node) => node.value.args.value.get_vars(vars),
+            Self::Bracket(node) => match &node.value.content {
+                BracketContent::Range(range) => range.value.get_vars(vars),
+                BracketContent::ListLiteral(values) => {
+                    for value in values {
+                        value.value.get_vars(vars);
+                    }
+                }
+            },
             Self::CallChain(node) => {
                 node.value.base.value.get_vars(vars);
                 for segment in node.value.segments.iter() {
@@ -1883,6 +1840,8 @@ impl AstDisplay for Expression {
             Self::Tuple(node) => node.ast_fmt(f, prefix),
             Self::Range(node) => node.ast_fmt(f, prefix),
             Self::FnCall(node) => node.ast_fmt(f, prefix),
+            Self::RunCall(node) => node.ast_fmt(f, prefix),
+            Self::Bracket(node) => node.ast_fmt(f, prefix),
             Self::CallChain(node) => {
                 writeln!(f, "{prefix}call_chain")?;
                 node.ast_fmt(f, &prefix.add_branch())
