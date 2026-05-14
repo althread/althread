@@ -1,6 +1,7 @@
 use std::fs;
 
-use althread::parser::parse_ast;
+use althread::parser::syntax::SyntaxBlockDetail;
+use althread::parser::{chumsky_combinator::parse_program as parse_program_combinator, parse_ast};
 
 #[test]
 fn chumsky_parses_basic_program() {
@@ -123,4 +124,39 @@ main {
     assert!(err
         .message
         .contains("expected method name or 'reaches' after '.'"));
+}
+
+#[test]
+fn combinator_prototype_parses_shared_declarations() {
+    let source = r#"
+shared {
+    let Count: int = 1;
+    const Names: list(string) = ["a", "b"];
+}
+"#;
+
+    let syntax = parse_program_combinator(source, "").unwrap();
+
+    assert_eq!(syntax.blocks.len(), 1);
+    match &syntax.blocks[0].detail {
+        SyntaxBlockDetail::Global { body, .. } => {
+            assert_eq!(body.len(), 2);
+            assert!(body[0].text.contains("let Count: int = 1;"));
+            assert!(body[1]
+                .text
+                .contains("const Names: list(string) = [\"a\", \"b\"];"));
+        }
+        other => panic!("expected global block, got {other:?}"),
+    }
+}
+
+#[test]
+#[should_panic]
+fn combinator_prototype_uses_todo_for_main_block() {
+    let source = r#"
+main {
+}
+"#;
+
+    let _ = parse_program_combinator(source, "");
 }

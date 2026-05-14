@@ -9,6 +9,7 @@ workspace = true
 [dependencies]
 lazy_static = { workspace = true }
 chumsky = { workspace = true }
+logos = { workspace = true }
 ariadne = { workspace = true }
 fastrand = { workspace = true }
 serde = { workspace = true }
