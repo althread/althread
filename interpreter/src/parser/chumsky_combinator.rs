@@ -10,10 +10,14 @@ use ordered_float::OrderedFloat;
 use std::fmt;
 
 use crate::{
+    ast::statement::expression::list_expression::RangeListExpression,
     ast::{
         block::Block,
         node::Node,
         statement::{
+            assignment::{binary_assignment::BinaryAssignment, Assignment},
+            atomic::Atomic,
+            break_loop::{BreakLoopControl, BreakLoopType},
             declaration::Declaration,
             expression::{
                 binary_expression::BinaryExpression, primary_expression::PrimaryExpression,
@@ -21,9 +25,19 @@ use crate::{
                 BracketContent, BracketExpression, CallChainExpression, CallChainSegment,
                 Expression,
             },
+            fn_call::FnCall,
+            for_control::ForControl,
+            if_control::IfControl,
+            loop_control::LoopControl,
+            receive::ReceiveStatement,
+            run_call::RunCall,
+            wait::{Wait, WaitingBlockKind},
+            waiting_case::{WaitingBlockCase, WaitingBlockCaseRule},
+            while_control::WhileControl,
             Statement,
         },
         token::{
+            args_list::ArgsList, binary_assignment_operator::BinaryAssignmentOperator,
             binary_operator::BinaryOperator, datatype::DataType,
             declaration_keyword::DeclarationKeyword, identifier::Identifier, literal::Literal,
             object_identifier::ObjectIdentifier, unary_operator::UnaryOperator,
@@ -44,6 +58,8 @@ type ParserExtra<'a> = extra::Err<Rich<'a, Token, Span>>;
 pub enum Token {
     #[token("@private")]
     AtPrivate,
+    #[token("@")]
+    At,
     #[token("shared")]
     Shared,
     #[token("main")]
@@ -62,6 +78,34 @@ pub enum Token {
     Let,
     #[token("const")]
     Const,
+    #[token("run")]
+    Run,
+    #[token("await")]
+    Await,
+    #[token("first")]
+    First,
+    #[token("seq")]
+    Seq,
+    #[token("receive")]
+    Receive,
+    #[token("if")]
+    If,
+    #[token("else")]
+    Else,
+    #[token("while")]
+    While,
+    #[token("for")]
+    For,
+    #[token("in")]
+    In,
+    #[token("loop")]
+    Loop,
+    #[token("atomic")]
+    Atomic,
+    #[token("break")]
+    Break,
+    #[token("continue")]
+    Continue,
     #[token("proc")]
     Proc,
     #[token("list")]
@@ -94,6 +138,8 @@ pub enum Token {
     Ident(String),
     #[token("->")]
     Arrow,
+    #[token("=>")]
+    FatArrow,
     #[token("==")]
     EqEq,
     #[token("!=")]
@@ -106,6 +152,8 @@ pub enum Token {
     ShiftLeft,
     #[token(">>")]
     ShiftRight,
+    #[token("..")]
+    DotDot,
     #[token("&&")]
     AndAnd,
     #[token("||")]
@@ -158,6 +206,7 @@ impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Token::AtPrivate => write!(f, "@private"),
+            Token::At => write!(f, "@"),
             Token::Shared => write!(f, "shared"),
             Token::Main => write!(f, "main"),
             Token::Always => write!(f, "always"),
@@ -167,6 +216,20 @@ impl fmt::Display for Token {
             Token::Fn => write!(f, "fn"),
             Token::Let => write!(f, "let"),
             Token::Const => write!(f, "const"),
+            Token::Run => write!(f, "run"),
+            Token::Await => write!(f, "await"),
+            Token::First => write!(f, "first"),
+            Token::Seq => write!(f, "seq"),
+            Token::Receive => write!(f, "receive"),
+            Token::If => write!(f, "if"),
+            Token::Else => write!(f, "else"),
+            Token::While => write!(f, "while"),
+            Token::For => write!(f, "for"),
+            Token::In => write!(f, "in"),
+            Token::Loop => write!(f, "loop"),
+            Token::Atomic => write!(f, "atomic"),
+            Token::Break => write!(f, "break"),
+            Token::Continue => write!(f, "continue"),
             Token::Proc => write!(f, "proc"),
             Token::List => write!(f, "list"),
             Token::Tuple => write!(f, "tuple"),
@@ -183,12 +246,14 @@ impl fmt::Display for Token {
             Token::IntLiteral(_) => write!(f, "int literal"),
             Token::Ident(name) => write!(f, "{name}"),
             Token::Arrow => write!(f, "->"),
+            Token::FatArrow => write!(f, "=>"),
             Token::EqEq => write!(f, "=="),
             Token::NotEq => write!(f, "!="),
             Token::LtEq => write!(f, "<="),
             Token::GtEq => write!(f, ">="),
             Token::ShiftLeft => write!(f, "<<"),
             Token::ShiftRight => write!(f, ">>"),
+            Token::DotDot => write!(f, ".."),
             Token::AndAnd => write!(f, "&&"),
             Token::OrOr => write!(f, "||"),
             Token::Bang => write!(f, "!"),
@@ -219,6 +284,13 @@ impl fmt::Display for Token {
 #[derive(Debug)]
 enum TopLevelBlock {
     Shared(Node<Block>),
+    Main(Node<Block>),
+    Program {
+        name: Node<Identifier>,
+        args: Node<ArgsList>,
+        block: Node<Block>,
+        is_private: bool,
+    },
 }
 
 pub fn parse_program(source: &str, file_path: &str) -> Result<Ast, AlthreadError> {
@@ -318,11 +390,11 @@ where
 {
     choice((
         shared_block_parser(source, file_path).boxed(),
-        unsupported_block_parser(Token::Main, "main").boxed(),
+        main_block_parser(source, file_path).boxed(),
         unsupported_block_parser(Token::Always, "always").boxed(),
         unsupported_block_parser(Token::Never, "never").boxed(),
         unsupported_block_parser(Token::Check, "check").boxed(),
-        unsupported_prefixed_block_parser(Token::Program, "program").boxed(),
+        program_block_parser(source, file_path).boxed(),
         unsupported_prefixed_block_parser(Token::Fn, "function").boxed(),
     ))
     .repeated()
@@ -333,6 +405,19 @@ where
         for block in blocks {
             match block {
                 TopLevelBlock::Shared(block) => ast.global_block = Some(block),
+                TopLevelBlock::Main(block) => {
+                    ast.process_blocks
+                        .insert("main".to_string(), (Node::new(), block, false));
+                }
+                TopLevelBlock::Program {
+                    name,
+                    args,
+                    block,
+                    is_private,
+                } => {
+                    ast.process_blocks
+                        .insert(name.value.value.clone(), (args, block, is_private));
+                }
             }
         }
         ast
@@ -358,6 +443,234 @@ where
                 .delimited_by(just(Token::LBrace), just(Token::RBrace)),
         )
         .map(TopLevelBlock::Shared)
+}
+
+fn main_block_parser<'tokens, 'src: 'tokens, I>(
+    source: &'src str,
+    file_path: &'src str,
+) -> impl Parser<'tokens, I, TopLevelBlock, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    just(Token::Main)
+        .ignore_then(block_parser(source, file_path))
+        .map(TopLevelBlock::Main)
+}
+
+fn program_block_parser<'tokens, 'src: 'tokens, I>(
+    source: &'src str,
+    file_path: &'src str,
+) -> impl Parser<'tokens, I, TopLevelBlock, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    just(Token::AtPrivate)
+        .or_not()
+        .then_ignore(just(Token::Program))
+        .then(identifier_parser())
+        .then(args_list_parser())
+        .then(block_parser(source, file_path))
+        .map(
+            |(((private_marker, name), args), block)| TopLevelBlock::Program {
+                name,
+                args,
+                block,
+                is_private: private_marker.is_some(),
+            },
+        )
+}
+
+fn args_list_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, Node<ArgsList>, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    identifier_parser()
+        .then_ignore(just(Token::Colon))
+        .then(datatype_parser())
+        .separated_by(just(Token::Comma))
+        .allow_trailing()
+        .collect::<Vec<_>>()
+        .delimited_by(just(Token::LParen), just(Token::RParen))
+        .map_with(|args, e| {
+            let (identifiers, datatypes): (Vec<_>, Vec<_>) = args.into_iter().unzip();
+            Node {
+                pos: pos_from_span_source(e.span()),
+                value: ArgsList {
+                    identifiers,
+                    datatypes,
+                },
+            }
+        })
+}
+
+fn block_parser<'tokens, 'src: 'tokens, I>(
+    source: &'src str,
+    file_path: &'src str,
+) -> impl Parser<'tokens, I, Node<Block>, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    statement_parser(source, file_path)
+        .repeated()
+        .collect::<Vec<_>>()
+        .delimited_by(just(Token::LBrace), just(Token::RBrace))
+        .map_with(move |children, e| Node {
+            pos: pos_from_span(source, file_path, e.span()),
+            value: Block { children },
+        })
+}
+
+fn statement_parser<'tokens, 'src: 'tokens, I>(
+    source: &'src str,
+    file_path: &'src str,
+) -> impl Parser<'tokens, I, Node<Statement>, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    recursive(move |statement| {
+        let block = statement
+            .clone()
+            .repeated()
+            .collect::<Vec<_>>()
+            .delimited_by(just(Token::LBrace), just(Token::RBrace))
+            .map_with(move |children, e| Node {
+                pos: pos_from_span(source, file_path, e.span()),
+                value: Block { children },
+            });
+
+        let nested_block = block.clone().map_with(move |block: Node<Block>, e| Node {
+            pos: pos_from_span(source, file_path, e.span()),
+            value: Statement::Block(Node {
+                pos: pos_from_span(source, file_path, e.span()),
+                value: block.value,
+            }),
+        });
+
+        let if_statement = recursive(|if_statement| {
+            just(Token::If)
+                .ignore_then(expression_parser())
+                .then(block.clone())
+                .then(
+                    just(Token::Else)
+                        .ignore_then(block.clone().or(if_statement.map_with(
+                            move |statement, e| Node {
+                                pos: pos_from_span(source, file_path, e.span()),
+                                value: Block {
+                                    children: vec![statement],
+                                },
+                            },
+                        )))
+                        .or_not(),
+                )
+                .map_with(move |((condition, then_block), else_block), e| Node {
+                    pos: pos_from_span(source, file_path, e.span()),
+                    value: Statement::If(Node {
+                        pos: pos_from_span(source, file_path, e.span()),
+                        value: IfControl {
+                            condition,
+                            then_block: Box::new(then_block),
+                            else_block: else_block.map(Box::new),
+                        },
+                    }),
+                })
+        });
+
+        let while_statement = just(Token::While)
+            .ignore_then(expression_parser())
+            .then(block.clone())
+            .map_with(move |(condition, then_block), e| Node {
+                pos: pos_from_span(source, file_path, e.span()),
+                value: Statement::While(Node {
+                    pos: pos_from_span(source, file_path, e.span()),
+                    value: WhileControl {
+                        condition,
+                        then_block: Box::new(then_block),
+                    },
+                }),
+            });
+
+        let for_statement = just(Token::For)
+            .ignore_then(identifier_parser())
+            .then_ignore(just(Token::In))
+            .then(expression_parser())
+            .then(statement.clone())
+            .map_with(move |((identifier, expression), body), e| Node {
+                pos: pos_from_span(source, file_path, e.span()),
+                value: Statement::For(Node {
+                    pos: pos_from_span(source, file_path, e.span()),
+                    value: ForControl {
+                        identifier,
+                        expression,
+                        statement: Box::new(body),
+                    },
+                }),
+            });
+
+        let loop_statement =
+            just(Token::Loop)
+                .ignore_then(statement.clone())
+                .map_with(move |body, e| Node {
+                    pos: pos_from_span(source, file_path, e.span()),
+                    value: Statement::Loop(Node {
+                        pos: pos_from_span(source, file_path, e.span()),
+                        value: LoopControl {
+                            statement: Box::new(body),
+                        },
+                    }),
+                });
+
+        let wait_statement =
+            wait_statement_parser(source, file_path, statement.clone(), block.clone());
+
+        let atomic_statement = choice((just(Token::Atomic), just(Token::At)))
+            .ignore_then(statement.clone())
+            .map_with(move |body, e| {
+                apply_atomic_prefix(body, pos_from_span(source, file_path, e.span()))
+            });
+
+        let break_statement =
+            just(Token::Break)
+                .then_ignore(just(Token::Semi))
+                .map_with(move |_, e| Node {
+                    pos: pos_from_span(source, file_path, e.span()),
+                    value: Statement::BreakLoop(Node {
+                        pos: pos_from_span(source, file_path, e.span()),
+                        value: BreakLoopControl {
+                            kind: BreakLoopType::Break,
+                            label: None,
+                        },
+                    }),
+                });
+
+        let continue_statement = just(Token::Continue)
+            .then_ignore(just(Token::Semi))
+            .map_with(move |_, e| Node {
+                pos: pos_from_span(source, file_path, e.span()),
+                value: Statement::BreakLoop(Node {
+                    pos: pos_from_span(source, file_path, e.span()),
+                    value: BreakLoopControl {
+                        kind: BreakLoopType::Continue,
+                        label: None,
+                    },
+                }),
+            });
+
+        choice((
+            if_statement.boxed(),
+            while_statement.boxed(),
+            for_statement.boxed(),
+            loop_statement.boxed(),
+            atomic_statement.boxed(),
+            wait_statement.boxed(),
+            break_statement.boxed(),
+            continue_statement.boxed(),
+            declaration_statement_parser().boxed(),
+            assignment_statement_parser().boxed(),
+            expression_statement_parser().boxed(),
+            nested_block.boxed(),
+        ))
+    })
 }
 
 fn declaration_statement_parser<'tokens, I>(
@@ -391,6 +704,47 @@ where
                 },
             }),
         })
+}
+
+fn assignment_statement_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, Node<Statement>, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    object_identifier_parser()
+        .then_ignore(just(Token::Eq))
+        .then(expression_parser())
+        .then_ignore(just(Token::Semi))
+        .map_with(|(identifier, value), e| {
+            let pos = pos_from_span_source(e.span());
+            Node {
+                pos: pos.clone(),
+                value: Statement::Assignment(Node {
+                    pos: pos.clone(),
+                    value: Assignment::Binary(Node {
+                        pos: pos.clone(),
+                        value: BinaryAssignment {
+                            identifier,
+                            operator: Node {
+                                pos: pos.clone(),
+                                value: BinaryAssignmentOperator::Assign,
+                            },
+                            value,
+                        },
+                    }),
+                }),
+            }
+        })
+}
+
+fn expression_statement_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, Node<Statement>, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    expression_parser()
+        .then_ignore(just(Token::Semi))
+        .try_map(|expression, _| expression_to_statement(expression))
 }
 
 fn datatype_parser<'tokens, I>(
@@ -508,6 +862,17 @@ where
             .delimited_by(just(Token::LParen), just(Token::RParen))
             .map_with(|values, e| tuple_expression_node(values, e.span()));
 
+        let run_call = just(Token::Run)
+            .ignore_then(object_identifier_parser())
+            .then(args_tuple.clone())
+            .map_with(|(identifier, args), e| Node {
+                pos: pos_from_span_source(e.span()),
+                value: Expression::RunCall(Box::new(Node {
+                    pos: pos_from_span_source(e.span()),
+                    value: RunCall { identifier, args },
+                })),
+            });
+
         let literal = literal_parser().map(|literal| Node {
             pos: literal.pos.clone(),
             value: Expression::Primary(Node {
@@ -566,7 +931,7 @@ where
                 }),
             });
 
-        let atom = choice((literal, tuple, grouped, list, ident)).boxed();
+        let atom = choice((run_call, literal, tuple, grouped, list, ident)).boxed();
 
         let invoke_segment = args_tuple
             .clone()
@@ -617,7 +982,7 @@ where
                 }
             });
 
-        postfix.pratt((
+        let non_range = postfix.pratt((
             prefix(7, just(Token::Bang), |_, rhs, e| {
                 unary_expression_node(UnaryOperator::Not, rhs, e.span())
             }),
@@ -678,8 +1043,306 @@ where
             infix(left(0), just(Token::OrOr), |l, _, r, e| {
                 binary_expression_node(BinaryOperator::Or, l, r, e.span())
             }),
-        ))
+        ));
+
+        non_range
+            .clone()
+            .then(just(Token::DotDot).ignore_then(expr.clone()).or_not())
+            .map_with(|(start, end), e| match end {
+                Some(end) => Node {
+                    pos: pos_from_span_source(e.span()),
+                    value: Expression::Range(Node {
+                        pos: pos_from_span_source(e.span()),
+                        value: RangeListExpression {
+                            expression_start: Box::new(start),
+                            expression_end: Box::new(end),
+                        },
+                    }),
+                },
+                None => start,
+            })
     })
+}
+
+fn expression_to_statement(
+    expression: Node<Expression>,
+) -> Result<Node<Statement>, Rich<'static, Token, Span>> {
+    match expression.value {
+        Expression::RunCall(node) => Ok(Node {
+            pos: expression.pos,
+            value: Statement::Run(*node),
+        }),
+        Expression::FnCall(node) => Ok(Node {
+            pos: expression.pos,
+            value: Statement::FnCall(node),
+        }),
+        Expression::CallChain(node) => call_chain_to_statement(expression.pos, node),
+        _ => Err(Rich::custom(
+            span_from_pos(&expression.pos),
+            "only function, method, and run calls can be used as standalone statements",
+        )),
+    }
+}
+
+fn call_chain_to_statement(
+    expr_pos: Pos,
+    chain: Node<CallChainExpression>,
+) -> Result<Node<Statement>, Rich<'static, Token, Span>> {
+    let mut parts = match &chain.value.base.value {
+        Expression::Primary(primary) => match &primary.value {
+            PrimaryExpression::Identifier(identifier) => identifier.value.parts.clone(),
+            _ => {
+                return Err(Rich::custom(
+                    span_from_pos(&chain.pos),
+                    "call statements must start from an identifier or object path",
+                ));
+            }
+        },
+        _ => {
+            return Err(Rich::custom(
+                span_from_pos(&chain.pos),
+                "call statements must start from an identifier or object path",
+            ));
+        }
+    };
+
+    let mut final_args = None;
+    for segment in chain.value.segments {
+        match segment {
+            CallChainSegment::Field { name } => {
+                if final_args.is_some() {
+                    return Err(Rich::custom(
+                        span_from_pos(&expr_pos),
+                        "chained statement calls after an invocation are not supported yet",
+                    ));
+                }
+                parts.push(name);
+            }
+            CallChainSegment::Call { name, args } => {
+                if final_args.is_some() {
+                    return Err(Rich::custom(
+                        span_from_pos(&expr_pos),
+                        "chained statement calls after an invocation are not supported yet",
+                    ));
+                }
+                parts.push(name);
+                final_args = Some(args);
+            }
+            CallChainSegment::Invoke { args } => {
+                if final_args.is_some() {
+                    return Err(Rich::custom(
+                        span_from_pos(&expr_pos),
+                        "chained statement calls after an invocation are not supported yet",
+                    ));
+                }
+                final_args = Some(args);
+            }
+            CallChainSegment::TupleIndex { .. } => {
+                return Err(Rich::custom(
+                    span_from_pos(&expr_pos),
+                    "tuple indexing cannot be used as a standalone statement",
+                ));
+            }
+            CallChainSegment::Reaches { .. } => {
+                return Err(Rich::custom(
+                    span_from_pos(&expr_pos),
+                    "'reaches' predicates cannot be used as standalone statements",
+                ));
+            }
+        }
+    }
+
+    let Some(values) = final_args else {
+        return Err(Rich::custom(
+            span_from_pos(&expr_pos),
+            "only function, method, and run calls can be used as standalone statements",
+        ));
+    };
+
+    Ok(Node {
+        pos: expr_pos.clone(),
+        value: Statement::FnCall(Node {
+            pos: expr_pos.clone(),
+            value: FnCall {
+                fn_name: Node {
+                    pos: expr_pos.clone(),
+                    value: ObjectIdentifier { parts },
+                },
+                values: Box::new(values),
+            },
+        }),
+    })
+}
+
+fn wait_statement_parser<'tokens, 'src: 'tokens, I, S, B>(
+    source: &'src str,
+    file_path: &'src str,
+    statement: S,
+    block: B,
+) -> impl Parser<'tokens, I, Node<Statement>, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+    S: Parser<'tokens, I, Node<Statement>, ParserExtra<'tokens>> + Clone + 'tokens,
+    B: Parser<'tokens, I, Node<Block>, ParserExtra<'tokens>> + Clone + 'tokens,
+{
+    let receive_rule = receive_rule_parser();
+    let receive_case = receive_rule
+        .clone()
+        .then(
+            just(Token::FatArrow)
+                .ignore_then(statement.clone())
+                .or_not(),
+        )
+        .map_with(move |(rule, statement), e| Node {
+            pos: pos_from_span(source, file_path, e.span()),
+            value: WaitingBlockCase {
+                rule: WaitingBlockCaseRule::Receive(rule),
+                statement,
+            },
+        });
+
+    let expression_case = expression_parser()
+        .then(
+            just(Token::FatArrow)
+                .ignore_then(statement.clone())
+                .or_not(),
+        )
+        .map_with(move |(rule, statement), e| Node {
+            pos: pos_from_span(source, file_path, e.span()),
+            value: WaitingBlockCase {
+                rule: WaitingBlockCaseRule::Expression(rule),
+                statement,
+            },
+        });
+
+    let wait_block = choice((
+        just(Token::First).to(WaitingBlockKind::First),
+        just(Token::Seq).to(WaitingBlockKind::Seq),
+    ))
+    .then(
+        choice((receive_case.boxed(), expression_case.boxed()))
+            .repeated()
+            .at_least(1)
+            .collect::<Vec<_>>()
+            .delimited_by(just(Token::LBrace), just(Token::RBrace)),
+    )
+    .map_with(move |(block_kind, waiting_cases), e| Node {
+        pos: pos_from_span(source, file_path, e.span()),
+        value: Statement::Wait(Node {
+            pos: pos_from_span(source, file_path, e.span()),
+            value: Wait {
+                block_kind,
+                waiting_cases,
+                start_atomic: false,
+            },
+        }),
+    });
+
+    let wait_single_receive = receive_rule
+        .then(just(Token::FatArrow).ignore_then(statement).or_not())
+        .then_ignore(just(Token::Semi).or_not())
+        .map_with(move |(rule, statement), e| Node {
+            pos: pos_from_span(source, file_path, e.span()),
+            value: Statement::Wait(Node {
+                pos: pos_from_span(source, file_path, e.span()),
+                value: Wait {
+                    block_kind: WaitingBlockKind::First,
+                    waiting_cases: vec![Node {
+                        pos: pos_from_span(source, file_path, e.span()),
+                        value: WaitingBlockCase {
+                            rule: WaitingBlockCaseRule::Receive(rule),
+                            statement,
+                        },
+                    }],
+                    start_atomic: false,
+                },
+            }),
+        });
+
+    let wait_single_expression =
+        expression_parser()
+            .then_ignore(just(Token::Semi))
+            .map_with(move |rule, e| Node {
+                pos: pos_from_span(source, file_path, e.span()),
+                value: Statement::Wait(Node {
+                    pos: pos_from_span(source, file_path, e.span()),
+                    value: Wait {
+                        block_kind: WaitingBlockKind::First,
+                        waiting_cases: vec![Node {
+                            pos: pos_from_span(source, file_path, e.span()),
+                            value: WaitingBlockCase {
+                                rule: WaitingBlockCaseRule::Expression(rule),
+                                statement: None,
+                            },
+                        }],
+                        start_atomic: false,
+                    },
+                }),
+            });
+
+    just(Token::Await).ignore_then(choice((
+        wait_block.boxed(),
+        wait_single_receive.boxed(),
+        wait_single_expression.boxed(),
+        block
+            .clone()
+            .ignored()
+            .try_map(move |_, span| Err(Rich::custom(span, "bare await blocks are not supported"))),
+    )))
+}
+
+fn receive_rule_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, Node<ReceiveStatement>, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    let channel_name = choice((
+        select! { Token::Ident(name) => name },
+        just(Token::In).to("in".to_string()),
+    ));
+
+    just(Token::Receive)
+        .ignore_then(channel_name)
+        .then(
+            identifier_parser()
+                .separated_by(just(Token::Comma))
+                .allow_trailing()
+                .collect::<Vec<_>>()
+                .delimited_by(just(Token::LParen), just(Token::RParen)),
+        )
+        .map_with(|(channel, variables), e| Node {
+            pos: pos_from_span_source(e.span()),
+            value: ReceiveStatement {
+                channel,
+                variables: variables.into_iter().map(|var| var.value.value).collect(),
+            },
+        })
+}
+
+fn apply_atomic_prefix(statement: Node<Statement>, pos: Pos) -> Node<Statement> {
+    match statement.value {
+        Statement::Wait(mut wait) => {
+            wait.pos = pos.clone();
+            wait.value.start_atomic = true;
+            Node {
+                pos,
+                value: Statement::Wait(wait),
+            }
+        }
+        other => Node {
+            pos: pos.clone(),
+            value: Statement::Atomic(Node {
+                pos,
+                value: Atomic {
+                    statement: Box::new(Node {
+                        pos: statement.pos,
+                        value: other,
+                    }),
+                    delegated: false,
+                },
+            }),
+        },
+    }
 }
 
 fn unsupported_block_parser<'tokens, I>(
@@ -823,6 +1486,10 @@ fn pos_from_span_source(span: Span) -> Pos {
 
 fn pos_from_span(source: &str, file_path: &str, span: Span) -> Pos {
     Pos::from_offsets(source, file_path, span.start, span.end)
+}
+
+fn span_from_pos(pos: &Pos) -> Span {
+    Span::new((), pos.start..pos.end)
 }
 
 fn map_rich_errors(
