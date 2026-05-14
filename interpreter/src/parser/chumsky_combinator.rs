@@ -516,7 +516,7 @@ where
             }),
         });
 
-        let ident = identifier_parser().map(|ident| Node {
+        let ident = identifier_parser().map(|ident| {
             let pos = ident.pos.clone();
             let object_identifier = Node {
                 pos: pos.clone(),

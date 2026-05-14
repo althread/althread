@@ -3,6 +3,7 @@ use althread::{
         expression::{CallChainSegment, Expression},
         Statement,
     },
+    ast::statement::expression::primary_expression::PrimaryExpression,
     parser::{chumsky_combinator, parse_ast, syntax::SyntaxSnippet},
 };
 
@@ -127,6 +128,33 @@ fn expression_parser_accepts_tuple_field_style_indexes() {
         node.value.segments.as_slice(),
         [CallChainSegment::TupleIndex { index: 0 }]
     ));
+}
+
+#[test]
+fn expression_parser_keeps_only_single_identifier_in_chain_base() {
+    let source = "a.b.c()";
+    let snippet = SyntaxSnippet::new(
+        althread::error::Pos::from_offsets(source, "", 0, source.len()),
+        source.to_string(),
+    );
+
+    let expr = chumsky_combinator::parse_expression(source, &snippet, "").unwrap();
+
+    let Expression::CallChain(node) = &expr.value else {
+        panic!("expected a call chain, got {:?}", expr.value);
+    };
+
+    let Expression::Primary(primary) = &node.value.base.value else {
+        panic!("expected a primary base, got {:?}", node.value.base.value);
+    };
+
+    let PrimaryExpression::Identifier(identifier) = &primary.value else {
+        panic!("expected an identifier base, got {:?}", primary.value);
+    };
+
+    assert_eq!(identifier.value.parts.len(), 1);
+    assert_eq!(identifier.value.parts[0].value.value, "a");
+    assert!(matches!(node.value.segments[0], CallChainSegment::Field { .. }));
 }
 
 #[test]
