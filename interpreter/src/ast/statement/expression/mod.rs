@@ -8,7 +8,9 @@ use std::{collections::HashSet, fmt};
 
 use binary_expression::{BinaryExpression, LocalBinaryExpressionNode};
 use list_expression::{LocalRangeListExpressionNode, RangeListExpression};
-use primary_expression::{LocalPrimaryExpressionNode, LocalVarNode, PrimaryExpression};
+use primary_expression::{
+    LocalLiteralNode, LocalPrimaryExpressionNode, LocalVarNode, PrimaryExpression,
+};
 use tuple_expression::{LocalTupleExpressionNode, TupleExpression};
 use unary_expression::{LocalUnaryExpressionNode, UnaryExpression};
 
@@ -1552,6 +1554,1062 @@ impl LocalExpressionNode {
     }
 }
 
+struct LoweredRuntimeExpression {
+    setup: InstructionBuilderOk,
+    expr: LocalExpressionNode,
+    temp_types: Vec<DataType>,
+    result_type: DataType,
+}
+
+impl LoweredRuntimeExpression {
+    fn pure(expr: LocalExpressionNode, result_type: DataType) -> Self {
+        Self {
+            setup: InstructionBuilderOk::new(),
+            expr,
+            temp_types: Vec::new(),
+            result_type,
+        }
+    }
+
+    fn extracted(setup: InstructionBuilderOk, result_type: DataType) -> Self {
+        Self {
+            setup,
+            expr: LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(LocalVarNode {
+                index: 0,
+            })),
+            temp_types: vec![result_type.clone()],
+            result_type,
+        }
+    }
+}
+
+#[derive(Clone)]
+struct NamedReceiver {
+    receiver_idx: usize,
+    global_receiver: Option<String>,
+    datatype: DataType,
+    mutable: bool,
+}
+
+fn clone_state_with_stack(state: &CompilerState, program_stack: Vec<Variable>) -> CompilerState {
+    CompilerState {
+        program_stack,
+        current_stack_depth: state.current_stack_depth,
+        current_program_name: state.current_program_name.clone(),
+        is_atomic: state.is_atomic,
+        is_shared: state.is_shared,
+        in_function: state.in_function,
+        method_call_stack_offset: state.method_call_stack_offset,
+        in_condition_block: state.in_condition_block,
+        context: state.context.clone(),
+        always_conditions: state.always_conditions.clone(),
+        ltl_formulas: state.ltl_formulas.clone(),
+        user_functions: state.user_functions.clone(),
+        global_table: state.global_table.clone(),
+        program_arguments: state.program_arguments.clone(),
+        programs_code: state.programs_code.clone(),
+        global_memory: state.global_memory.clone(),
+        debug_variables: state.debug_variables.clone(),
+        program_debug_info: state.program_debug_info.clone(),
+    }
+}
+
+fn datatype_with_runtime_temps(
+    expr: &LocalExpressionNode,
+    temp_types: &[DataType],
+    state: &CompilerState,
+) -> Result<DataType, String> {
+    let mut temp_stack = state.program_stack.clone();
+    for datatype in temp_types {
+        temp_stack.push(Variable {
+            name: "<expr-temp>".to_string(),
+            depth: state.current_stack_depth,
+            mutable: false,
+            datatype: datatype.clone(),
+            declare_pos: None,
+        });
+    }
+    expr.datatype(&clone_state_with_stack(state, temp_stack))
+}
+
+fn shift_non_temp_var_indices(
+    expr: &LocalExpressionNode,
+    shift: usize,
+    temp_count: usize,
+) -> LocalExpressionNode {
+    match expr {
+        LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(var)) => {
+            let index = if var.index >= temp_count {
+                var.index + shift
+            } else {
+                var.index
+            };
+
+            LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(LocalVarNode { index }))
+        }
+        LocalExpressionNode::Binary(node) => {
+            LocalExpressionNode::Binary(LocalBinaryExpressionNode {
+                left: Box::new(shift_non_temp_var_indices(&node.left, shift, temp_count)),
+                operator: node.operator.clone(),
+                right: Box::new(shift_non_temp_var_indices(&node.right, shift, temp_count)),
+            })
+        }
+        LocalExpressionNode::Unary(node) => LocalExpressionNode::Unary(LocalUnaryExpressionNode {
+            operand: Box::new(shift_non_temp_var_indices(&node.operand, shift, temp_count)),
+            operator: node.operator.clone(),
+        }),
+        LocalExpressionNode::Tuple(node) => LocalExpressionNode::Tuple(LocalTupleExpressionNode {
+            values: node
+                .values
+                .iter()
+                .map(|value| shift_non_temp_var_indices(value, shift, temp_count))
+                .collect(),
+        }),
+        LocalExpressionNode::TupleIndex(node) => {
+            LocalExpressionNode::TupleIndex(LocalTupleIndexNode {
+                base: Box::new(shift_non_temp_var_indices(&node.base, shift, temp_count)),
+                index: node.index,
+            })
+        }
+        LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Expression(expr)) => {
+            LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Expression(Box::new(
+                shift_non_temp_var_indices(expr, shift, temp_count),
+            )))
+        }
+        LocalExpressionNode::Range(node) => {
+            LocalExpressionNode::Range(LocalRangeListExpressionNode {
+                expression_start: Box::new(shift_non_temp_var_indices(
+                    &node.expression_start,
+                    shift,
+                    temp_count,
+                )),
+                expression_end: Box::new(shift_non_temp_var_indices(
+                    &node.expression_end,
+                    shift,
+                    temp_count,
+                )),
+            })
+        }
+        _ => expr.clone(),
+    }
+}
+
+fn shift_expr_for_embedding(
+    expr: &LocalExpressionNode,
+    own_temp_count: usize,
+    temps_above_self: usize,
+    total_temp_count: usize,
+) -> LocalExpressionNode {
+    match expr {
+        LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(var)) => {
+            let index = if var.index < own_temp_count {
+                var.index + temps_above_self
+            } else {
+                var.index + total_temp_count
+            };
+            LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(LocalVarNode { index }))
+        }
+        LocalExpressionNode::Binary(node) => {
+            LocalExpressionNode::Binary(LocalBinaryExpressionNode {
+                left: Box::new(shift_expr_for_embedding(
+                    &node.left,
+                    own_temp_count,
+                    temps_above_self,
+                    total_temp_count,
+                )),
+                operator: node.operator.clone(),
+                right: Box::new(shift_expr_for_embedding(
+                    &node.right,
+                    own_temp_count,
+                    temps_above_self,
+                    total_temp_count,
+                )),
+            })
+        }
+        LocalExpressionNode::Unary(node) => LocalExpressionNode::Unary(LocalUnaryExpressionNode {
+            operand: Box::new(shift_expr_for_embedding(
+                &node.operand,
+                own_temp_count,
+                temps_above_self,
+                total_temp_count,
+            )),
+            operator: node.operator.clone(),
+        }),
+        LocalExpressionNode::Tuple(node) => LocalExpressionNode::Tuple(LocalTupleExpressionNode {
+            values: node
+                .values
+                .iter()
+                .map(|value| {
+                    shift_expr_for_embedding(
+                        value,
+                        own_temp_count,
+                        temps_above_self,
+                        total_temp_count,
+                    )
+                })
+                .collect(),
+        }),
+        LocalExpressionNode::TupleIndex(node) => {
+            LocalExpressionNode::TupleIndex(LocalTupleIndexNode {
+                base: Box::new(shift_expr_for_embedding(
+                    &node.base,
+                    own_temp_count,
+                    temps_above_self,
+                    total_temp_count,
+                )),
+                index: node.index,
+            })
+        }
+        LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Expression(expr)) => {
+            LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Expression(Box::new(
+                shift_expr_for_embedding(expr, own_temp_count, temps_above_self, total_temp_count),
+            )))
+        }
+        LocalExpressionNode::Range(node) => {
+            LocalExpressionNode::Range(LocalRangeListExpressionNode {
+                expression_start: Box::new(shift_expr_for_embedding(
+                    &node.expression_start,
+                    own_temp_count,
+                    temps_above_self,
+                    total_temp_count,
+                )),
+                expression_end: Box::new(shift_expr_for_embedding(
+                    &node.expression_end,
+                    own_temp_count,
+                    temps_above_self,
+                    total_temp_count,
+                )),
+            })
+        }
+        _ => expr.clone(),
+    }
+}
+
+fn emit_expression_instruction(
+    builder: &mut InstructionBuilderOk,
+    expr: LocalExpressionNode,
+    temp_count: usize,
+    pos: &Pos,
+) {
+    let control = if temp_count == 0 {
+        InstructionType::Expression(expr)
+    } else if let LocalExpressionNode::Tuple(tuple) = expr {
+        InstructionType::MakeTupleAndCleanup {
+            elements: tuple.values,
+            unstack_len: temp_count,
+        }
+    } else {
+        InstructionType::ExpressionAndCleanup {
+            expression: expr,
+            unstack_len: temp_count,
+        }
+    };
+
+    builder.instructions.push(Instruction {
+        pos: Some(pos.clone()),
+        control,
+    });
+}
+
+fn materialize_lowered_expression(
+    mut lowered: LoweredRuntimeExpression,
+    existing_stack_results: usize,
+    pos: &Pos,
+) -> InstructionBuilderOk {
+    if existing_stack_results > 0 {
+        lowered.expr = shift_non_temp_var_indices(
+            &lowered.expr,
+            existing_stack_results,
+            lowered.temp_types.len(),
+        );
+    }
+    let mut builder = lowered.setup;
+    emit_expression_instruction(&mut builder, lowered.expr, lowered.temp_types.len(), pos);
+    builder
+}
+
+fn local_var_expr(index: usize) -> LocalExpressionNode {
+    LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(LocalVarNode { index }))
+}
+
+fn literal_expr(value: Literal) -> LocalExpressionNode {
+    LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Literal(LocalLiteralNode {
+        value,
+    }))
+}
+
+fn object_identifier_name(identifier: &Node<ObjectIdentifier>) -> String {
+    identifier
+        .value
+        .parts
+        .iter()
+        .map(|part| part.value.value.as_str())
+        .collect::<Vec<_>>()
+        .join(".")
+}
+
+fn resolve_named_receiver(name: &str, state: &CompilerState) -> Option<NamedReceiver> {
+    if let Some(raw_var_id) = state
+        .program_stack
+        .iter()
+        .rev()
+        .position(|var| var.name == name)
+    {
+        let var = &state.program_stack[state.program_stack.len() - 1 - raw_var_id];
+        return Some(NamedReceiver {
+            receiver_idx: raw_var_id + state.method_call_stack_offset,
+            global_receiver: None,
+            datatype: var.datatype.clone(),
+            mutable: var.mutable,
+        });
+    }
+
+    state
+        .global_table()
+        .get(name)
+        .map(|global_var| NamedReceiver {
+            receiver_idx: 0,
+            global_receiver: Some(name.to_string()),
+            datatype: global_var.datatype.clone(),
+            mutable: global_var.mutable,
+        })
+}
+
+fn validate_direct_function_call(
+    function_name: &str,
+    args_type: &DataType,
+    state: &CompilerState,
+    pos: &Pos,
+) -> AlthreadResult<DataType> {
+    let provided_arg_types = tuple_arg_types(args_type).map_err(|message| {
+        AlthreadError::new(
+            ErrorType::FunctionArgumentTypeMismatch,
+            Some(pos.clone()),
+            message,
+        )
+    })?;
+
+    if let Some(func_def) = state.user_functions().get(function_name) {
+        if func_def.arguments.len() != provided_arg_types.len() {
+            return Err(AlthreadError::new(
+                ErrorType::FunctionArgumentCountError,
+                Some(pos.clone()),
+                format!(
+                    "Function '{}' expects {} arguments, but {} were provided.",
+                    function_name,
+                    func_def.arguments.len(),
+                    provided_arg_types.len()
+                ),
+            ));
+        }
+
+        for (idx, ((arg_name, expected_type), provided_type)) in func_def
+            .arguments
+            .iter()
+            .zip(provided_arg_types.iter())
+            .enumerate()
+        {
+            if expected_type != provided_type {
+                return Err(AlthreadError::new(
+                    ErrorType::FunctionArgumentTypeMismatch,
+                    Some(pos.clone()),
+                    format!(
+                        "Function '{}' expects argument {} ('{}') to be of type {}, but got {}.",
+                        function_name,
+                        idx + 1,
+                        arg_name.value,
+                        expected_type,
+                        provided_type
+                    ),
+                ));
+            }
+        }
+
+        return Ok(func_def.return_type.clone());
+    }
+
+    match function_name {
+        "print" => {
+            for (idx, arg_type) in provided_arg_types.iter().enumerate() {
+                if *arg_type == DataType::Void {
+                    return Err(AlthreadError::new(
+                        ErrorType::FunctionArgumentTypeMismatch,
+                        Some(pos.clone()),
+                        format!(
+                            "Function 'print' can't accept argument {} of type Void.",
+                            idx + 1
+                        ),
+                    ));
+                }
+            }
+            Ok(DataType::Void)
+        }
+        "assert" => {
+            if provided_arg_types.len() != 2 {
+                return Err(AlthreadError::new(
+                    ErrorType::FunctionArgumentCountError,
+                    Some(pos.clone()),
+                    "Function 'assert' expects exactly 2 arguments.".to_string(),
+                ));
+            }
+            if provided_arg_types[0] != DataType::Boolean {
+                return Err(AlthreadError::new(
+                    ErrorType::FunctionArgumentTypeMismatch,
+                    Some(pos.clone()),
+                    format!(
+                        "Function 'assert' expects the first argument to be of type bool, but got {}.",
+                        provided_arg_types[0]
+                    ),
+                ));
+            }
+            if provided_arg_types[1] != DataType::String {
+                return Err(AlthreadError::new(
+                    ErrorType::FunctionArgumentTypeMismatch,
+                    Some(pos.clone()),
+                    format!(
+                        "Function 'assert' expects the second argument to be of type string, but got {}.",
+                        provided_arg_types[1]
+                    ),
+                ));
+            }
+            Ok(DataType::Void)
+        }
+        _ => Err(AlthreadError::new(
+            ErrorType::UndefinedFunction,
+            Some(pos.clone()),
+            format!("undefined function {}", function_name),
+        )),
+    }
+}
+
+fn lower_identifier_path(
+    name: &str,
+    pos: &Pos,
+    state: &CompilerState,
+) -> AlthreadResult<LoweredRuntimeExpression> {
+    if let Some(local_index) = state
+        .program_stack
+        .iter()
+        .rev()
+        .position(|var| var.name == name)
+    {
+        let var = &state.program_stack[state.program_stack.len() - 1 - local_index];
+        return Ok(LoweredRuntimeExpression::pure(
+            local_var_expr(local_index),
+            var.datatype.clone(),
+        ));
+    }
+
+    if let Some(global_var) = state.global_table().get(name) {
+        let mut builder = InstructionBuilderOk::new();
+        builder.instructions.push(Instruction {
+            pos: Some(pos.clone()),
+            control: InstructionType::GlobalReads {
+                variables: vec![name.to_string()],
+                only_const: !global_var.mutable,
+            },
+        });
+        return Ok(LoweredRuntimeExpression::extracted(
+            builder,
+            global_var.datatype.clone(),
+        ));
+    }
+
+    Err(AlthreadError::new(
+        ErrorType::VariableError,
+        Some(pos.clone()),
+        format!("Variable '{}' not found", name),
+    ))
+}
+
+fn lower_runtime_expression(
+    expression: &Node<Expression>,
+    state: &CompilerState,
+) -> AlthreadResult<LoweredRuntimeExpression> {
+    match &expression.value {
+        Expression::Binary(node) => {
+            let left = lower_runtime_expression(&node.value.left, state)?;
+            let right = lower_runtime_expression(&node.value.right, state)?;
+            let left_temp_count = left.temp_types.len();
+            let right_temp_count = right.temp_types.len();
+            let total_temps = left_temp_count + right_temp_count;
+            let mut setup = left.setup;
+            setup.extend(right.setup);
+            let mut temp_types = left.temp_types;
+            temp_types.extend(right.temp_types);
+
+            let left_expr = shift_expr_for_embedding(
+                &left.expr,
+                left_temp_count,
+                right_temp_count,
+                total_temps,
+            );
+            let right_expr =
+                shift_expr_for_embedding(&right.expr, right_temp_count, 0, total_temps);
+            let expr = LocalExpressionNode::Binary(LocalBinaryExpressionNode {
+                left: Box::new(left_expr),
+                operator: node.value.operator.value.clone(),
+                right: Box::new(right_expr),
+            });
+            let result_type =
+                datatype_with_runtime_temps(&expr, &temp_types, state).map_err(|message| {
+                    AlthreadError::new(
+                        ErrorType::ExpressionError,
+                        Some(expression.pos.clone()),
+                        message,
+                    )
+                })?;
+            Ok(LoweredRuntimeExpression {
+                setup,
+                expr,
+                temp_types,
+                result_type,
+            })
+        }
+        Expression::Unary(node) => {
+            let operand = lower_runtime_expression(&node.value.operand, state)?;
+            let expr = LocalExpressionNode::Unary(LocalUnaryExpressionNode {
+                operand: Box::new(operand.expr),
+                operator: node.value.operator.value.clone(),
+            });
+            let result_type = datatype_with_runtime_temps(&expr, &operand.temp_types, state)
+                .map_err(|message| {
+                    AlthreadError::new(
+                        ErrorType::ExpressionError,
+                        Some(expression.pos.clone()),
+                        message,
+                    )
+                })?;
+            Ok(LoweredRuntimeExpression {
+                setup: operand.setup,
+                expr,
+                temp_types: operand.temp_types,
+                result_type,
+            })
+        }
+        Expression::Primary(node) => match &node.value {
+            PrimaryExpression::Literal(literal) => Ok(LoweredRuntimeExpression::pure(
+                literal_expr(literal.value.clone()),
+                literal.value.get_datatype(),
+            )),
+            PrimaryExpression::Identifier(identifier) => {
+                let name = object_identifier_name(identifier);
+                lower_identifier_path(&name, &expression.pos, state)
+            }
+            PrimaryExpression::Expression(inner) => {
+                let inner_lowered = lower_runtime_expression(inner, state)?;
+                let expr = LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Expression(
+                    Box::new(inner_lowered.expr),
+                ));
+                let result_type =
+                    datatype_with_runtime_temps(&expr, &inner_lowered.temp_types, state).map_err(
+                        |message| {
+                            AlthreadError::new(
+                                ErrorType::ExpressionError,
+                                Some(expression.pos.clone()),
+                                message,
+                            )
+                        },
+                    )?;
+                Ok(LoweredRuntimeExpression {
+                    setup: inner_lowered.setup,
+                    expr,
+                    temp_types: inner_lowered.temp_types,
+                    result_type,
+                })
+            }
+            _ => Err(AlthreadError::new(
+                ErrorType::InstructionNotAllowed,
+                Some(expression.pos.clone()),
+                "This expression kind is only supported inside always/check blocks".to_string(),
+            )),
+        },
+        Expression::Tuple(node) => {
+            let lowered_values = node
+                .value
+                .values
+                .iter()
+                .map(|value| lower_runtime_expression(value, state))
+                .collect::<AlthreadResult<Vec<_>>>()?;
+
+            let total_temps = lowered_values
+                .iter()
+                .map(|value| value.temp_types.len())
+                .sum::<usize>();
+            let mut temps_to_right = total_temps;
+            let mut setup = InstructionBuilderOk::new();
+            let mut temp_types = Vec::new();
+            let mut values = Vec::new();
+
+            for lowered in lowered_values {
+                temps_to_right -= lowered.temp_types.len();
+                let embedded = shift_expr_for_embedding(
+                    &lowered.expr,
+                    lowered.temp_types.len(),
+                    temps_to_right,
+                    total_temps,
+                );
+                setup.extend(lowered.setup);
+                temp_types.extend(lowered.temp_types);
+                values.push(embedded);
+            }
+
+            let expr = LocalExpressionNode::Tuple(LocalTupleExpressionNode { values });
+            let result_type =
+                datatype_with_runtime_temps(&expr, &temp_types, state).map_err(|message| {
+                    AlthreadError::new(
+                        ErrorType::ExpressionError,
+                        Some(expression.pos.clone()),
+                        message,
+                    )
+                })?;
+            Ok(LoweredRuntimeExpression {
+                setup,
+                expr,
+                temp_types,
+                result_type,
+            })
+        }
+        Expression::Range(node) => {
+            let start = lower_runtime_expression(&node.value.expression_start, state)?;
+            let end = lower_runtime_expression(&node.value.expression_end, state)?;
+            let start_temp_count = start.temp_types.len();
+            let end_temp_count = end.temp_types.len();
+            let total_temps = start_temp_count + end_temp_count;
+            let mut setup = start.setup;
+            setup.extend(end.setup);
+            let mut temp_types = start.temp_types;
+            temp_types.extend(end.temp_types);
+
+            let start_expr = shift_expr_for_embedding(
+                &start.expr,
+                start_temp_count,
+                end_temp_count,
+                total_temps,
+            );
+            let end_expr = shift_expr_for_embedding(&end.expr, end_temp_count, 0, total_temps);
+            let expr = LocalExpressionNode::Range(LocalRangeListExpressionNode {
+                expression_start: Box::new(start_expr),
+                expression_end: Box::new(end_expr),
+            });
+            let result_type =
+                datatype_with_runtime_temps(&expr, &temp_types, state).map_err(|message| {
+                    AlthreadError::new(
+                        ErrorType::ExpressionError,
+                        Some(expression.pos.clone()),
+                        message,
+                    )
+                })?;
+            Ok(LoweredRuntimeExpression {
+                setup,
+                expr,
+                temp_types,
+                result_type,
+            })
+        }
+        Expression::FnCall(node) => {
+            let args = lower_runtime_expression(node.value.values.as_ref(), state)?;
+            let args_type = args.result_type.clone();
+            let ret_type = validate_direct_function_call(
+                &node.value.fn_name_to_string(),
+                &args_type,
+                state,
+                &expression.pos,
+            )?;
+            let mut setup = materialize_lowered_expression(args, 0, &expression.pos);
+            setup.instructions.push(Instruction {
+                pos: Some(expression.pos.clone()),
+                control: InstructionType::FnCall {
+                    name: node.value.fn_name_to_string(),
+                    unstack_len: 1,
+                    arguments: None,
+                },
+            });
+            Ok(LoweredRuntimeExpression::extracted(setup, ret_type))
+        }
+        Expression::RunCall(node) => {
+            let args = lower_runtime_expression(&node.value.args, state)?;
+            let args_type = args.result_type.clone();
+            let call_datatype = tuple_arg_types(&args_type).map_err(|message| {
+                AlthreadError::new(ErrorType::TypeError, Some(expression.pos.clone()), message)
+            })?;
+            let full_program_name = node.value.program_name_to_string();
+            let Some((prog_args, _)) = state.program_arguments().get(&full_program_name) else {
+                return Err(AlthreadError::new(
+                    ErrorType::TypeError,
+                    Some(expression.pos.clone()),
+                    format!("Program {} does not exist", full_program_name),
+                ));
+            };
+            if prog_args.len() != call_datatype.len() {
+                return Err(AlthreadError::new(
+                    ErrorType::TypeError,
+                    Some(expression.pos.clone()),
+                    format!(
+                        "Expected {} argument(s), got {}",
+                        prog_args.len(),
+                        call_datatype.len()
+                    ),
+                ));
+            }
+            for (idx, arg) in prog_args.iter().enumerate() {
+                if arg != &call_datatype[idx] {
+                    return Err(AlthreadError::new(
+                        ErrorType::TypeError,
+                        Some(expression.pos.clone()),
+                        format!(
+                            "Expected argument {} to be of type {:?}, got {:?}",
+                            idx + 1,
+                            arg,
+                            call_datatype[idx]
+                        ),
+                    ));
+                }
+            }
+
+            let mut setup = materialize_lowered_expression(args, 0, &expression.pos);
+            setup.instructions.push(Instruction {
+                pos: Some(expression.pos.clone()),
+                control: InstructionType::RunCall {
+                    name: full_program_name.clone(),
+                    unstack_len: 1,
+                },
+            });
+            Ok(LoweredRuntimeExpression::extracted(
+                setup,
+                DataType::Process(full_program_name),
+            ))
+        }
+        Expression::Bracket(node) => match &node.value.content {
+            BracketContent::Range(range) => lower_runtime_expression(
+                &Node {
+                    pos: range.pos.clone(),
+                    value: Expression::Range(range.clone()),
+                },
+                state,
+            ),
+            BracketContent::ListLiteral(values) => {
+                let mut setup = InstructionBuilderOk::new();
+                let mut existing_results = 0;
+                let mut element_type = None::<DataType>;
+
+                for value in values {
+                    let lowered = lower_runtime_expression(value, state)?;
+                    if let Some(expected) = &element_type {
+                        if lowered.result_type != *expected {
+                            return Err(AlthreadError::new(
+                                ErrorType::ExpressionError,
+                                Some(value.pos.clone()),
+                                format!(
+                                    "List literal element has type {}, expected {}",
+                                    lowered.result_type, expected
+                                ),
+                            ));
+                        }
+                    } else {
+                        element_type = Some(lowered.result_type.clone());
+                    }
+                    setup.extend(materialize_lowered_expression(
+                        lowered,
+                        existing_results,
+                        &value.pos,
+                    ));
+                    existing_results += 1;
+                }
+
+                let element_type = element_type.unwrap_or(DataType::Void);
+                setup.instructions.push(Instruction {
+                    pos: Some(expression.pos.clone()),
+                    control: InstructionType::CreateListFromStack {
+                        element_count: values.len(),
+                        element_type: element_type.clone(),
+                    },
+                });
+
+                Ok(LoweredRuntimeExpression::extracted(
+                    setup,
+                    DataType::List(Box::new(element_type)),
+                ))
+            }
+        },
+        Expression::CallChain(node) => {
+            let mut name_path = None::<String>;
+            let mut current = None::<LoweredRuntimeExpression>;
+
+            if let Expression::Primary(primary) = &node.value.base.value {
+                if let PrimaryExpression::Identifier(identifier) = &primary.value {
+                    let base_name = object_identifier_name(identifier);
+                    if resolve_named_receiver(&base_name, state).is_some() {
+                        current = Some(lower_identifier_path(
+                            &base_name,
+                            &node.value.base.pos,
+                            state,
+                        )?);
+                    } else {
+                        name_path = Some(base_name);
+                    }
+                }
+            }
+
+            if current.is_none() && name_path.is_none() {
+                current = Some(lower_runtime_expression(node.value.base.as_ref(), state)?);
+            }
+
+            for segment in &node.value.segments {
+                match segment {
+                    CallChainSegment::Field { name } => {
+                        if let Some(path) = name_path.as_mut() {
+                            path.push('.');
+                            path.push_str(&name.value.value);
+                        } else {
+                            return Err(AlthreadError::new(
+                                ErrorType::InstructionNotAllowed,
+                                Some(expression.pos.clone()),
+                                format!(
+                                    "field access '.{}' is not supported in compilation yet",
+                                    name.value.value
+                                ),
+                            ));
+                        }
+                    }
+                    CallChainSegment::TupleIndex { index } => {
+                        if let Some(path) = name_path.take() {
+                            current = Some(lower_identifier_path(&path, &expression.pos, state)?);
+                        }
+                        let lowered = current.take().ok_or_else(|| {
+                            AlthreadError::new(
+                                ErrorType::ExpressionError,
+                                Some(expression.pos.clone()),
+                                "tuple access is missing its receiver".to_string(),
+                            )
+                        })?;
+                        let expr = LocalExpressionNode::TupleIndex(LocalTupleIndexNode {
+                            base: Box::new(lowered.expr),
+                            index: *index,
+                        });
+                        let result_type =
+                            datatype_with_runtime_temps(&expr, &lowered.temp_types, state)
+                                .map_err(|message| {
+                                    AlthreadError::new(
+                                        ErrorType::ExpressionError,
+                                        Some(expression.pos.clone()),
+                                        message,
+                                    )
+                                })?;
+                        current = Some(LoweredRuntimeExpression {
+                            setup: lowered.setup,
+                            expr,
+                            temp_types: lowered.temp_types,
+                            result_type,
+                        });
+                    }
+                    CallChainSegment::Invoke { args } => {
+                        let function_name = name_path.take().ok_or_else(|| {
+                            AlthreadError::new(
+                                ErrorType::ExpressionError,
+                                Some(expression.pos.clone()),
+                                "calling arbitrary expression values is not supported".to_string(),
+                            )
+                        })?;
+                        let args_lowered = lower_runtime_expression(args, state)?;
+                        let args_type = args_lowered.result_type.clone();
+                        let ret_type = validate_direct_function_call(
+                            &function_name,
+                            &args_type,
+                            state,
+                            &expression.pos,
+                        )?;
+                        let mut setup =
+                            materialize_lowered_expression(args_lowered, 0, &expression.pos);
+                        setup.instructions.push(Instruction {
+                            pos: Some(expression.pos.clone()),
+                            control: InstructionType::FnCall {
+                                name: function_name,
+                                unstack_len: 1,
+                                arguments: None,
+                            },
+                        });
+                        current = Some(LoweredRuntimeExpression::extracted(setup, ret_type));
+                    }
+                    CallChainSegment::Call { name, args } => {
+                        let method_name = name.value.value.clone();
+                        if let Some(path) = name_path.take() {
+                            if let Some(receiver) = resolve_named_receiver(&path, state) {
+                                let args_lowered = lower_runtime_expression(args, state)?;
+                                let args_type = args_lowered.result_type.clone();
+                                let method = resolve_interface_method(
+                                    &state.stdlib(),
+                                    &receiver.datatype,
+                                    &method_name,
+                                )
+                                .map_err(|message| {
+                                    AlthreadError::new(
+                                        ErrorType::UndefinedFunction,
+                                        Some(expression.pos.clone()),
+                                        message,
+                                    )
+                                })?;
+                                let arg_types = tuple_arg_types(&args_type).map_err(|message| {
+                                    AlthreadError::new(
+                                        ErrorType::FunctionArgumentTypeMismatch,
+                                        Some(expression.pos.clone()),
+                                        message,
+                                    )
+                                })?;
+                                validate_interface_call(&method, arg_types).map_err(|message| {
+                                    AlthreadError::new(
+                                        ErrorType::FunctionArgumentTypeMismatch,
+                                        Some(expression.pos.clone()),
+                                        message,
+                                    )
+                                })?;
+                                if method.mutates_receiver && !receiver.mutable {
+                                    return Err(AlthreadError::new(
+                                        ErrorType::VariableError,
+                                        Some(expression.pos.clone()),
+                                        format!(
+                                            "Cannot call mutating method '{}' on immutable variable {}",
+                                            method_name, path
+                                        ),
+                                    ));
+                                }
+
+                                let mut setup = materialize_lowered_expression(
+                                    args_lowered,
+                                    0,
+                                    &expression.pos,
+                                );
+                                setup.instructions.push(Instruction {
+                                    pos: Some(expression.pos.clone()),
+                                    control: InstructionType::MethodCall {
+                                        name: method_name,
+                                        receiver_idx: receiver.receiver_idx,
+                                        unstack_len: 1,
+                                        drop_receiver: false,
+                                        arguments: None,
+                                        global_receiver: receiver.global_receiver,
+                                    },
+                                });
+                                current = Some(LoweredRuntimeExpression::extracted(
+                                    setup,
+                                    method.ret.clone(),
+                                ));
+                            } else {
+                                let function_name = format!("{path}.{}", method_name);
+                                let args_lowered = lower_runtime_expression(args, state)?;
+                                let args_type = args_lowered.result_type.clone();
+                                let ret_type = validate_direct_function_call(
+                                    &function_name,
+                                    &args_type,
+                                    state,
+                                    &expression.pos,
+                                )?;
+                                let mut setup = materialize_lowered_expression(
+                                    args_lowered,
+                                    0,
+                                    &expression.pos,
+                                );
+                                setup.instructions.push(Instruction {
+                                    pos: Some(expression.pos.clone()),
+                                    control: InstructionType::FnCall {
+                                        name: function_name,
+                                        unstack_len: 1,
+                                        arguments: None,
+                                    },
+                                });
+                                current =
+                                    Some(LoweredRuntimeExpression::extracted(setup, ret_type));
+                            }
+                        } else {
+                            let receiver_lowered = current.take().ok_or_else(|| {
+                                AlthreadError::new(
+                                    ErrorType::ExpressionError,
+                                    Some(expression.pos.clone()),
+                                    "missing receiver before method call".to_string(),
+                                )
+                            })?;
+                            let receiver_type = receiver_lowered.result_type.clone();
+                            let args_lowered = lower_runtime_expression(args, state)?;
+                            let args_type = args_lowered.result_type.clone();
+                            let method = resolve_interface_method(
+                                &state.stdlib(),
+                                &receiver_type,
+                                &method_name,
+                            )
+                            .map_err(|message| {
+                                AlthreadError::new(
+                                    ErrorType::UndefinedFunction,
+                                    Some(expression.pos.clone()),
+                                    message,
+                                )
+                            })?;
+                            let arg_types = tuple_arg_types(&args_type).map_err(|message| {
+                                AlthreadError::new(
+                                    ErrorType::FunctionArgumentTypeMismatch,
+                                    Some(expression.pos.clone()),
+                                    message,
+                                )
+                            })?;
+                            validate_interface_call(&method, arg_types).map_err(|message| {
+                                AlthreadError::new(
+                                    ErrorType::FunctionArgumentTypeMismatch,
+                                    Some(expression.pos.clone()),
+                                    message,
+                                )
+                            })?;
+
+                            let mut setup = materialize_lowered_expression(
+                                receiver_lowered,
+                                0,
+                                &expression.pos,
+                            );
+                            setup.extend(materialize_lowered_expression(
+                                args_lowered,
+                                1,
+                                &expression.pos,
+                            ));
+                            setup.instructions.push(Instruction {
+                                pos: Some(expression.pos.clone()),
+                                control: InstructionType::MethodCall {
+                                    name: method_name,
+                                    receiver_idx: 1,
+                                    unstack_len: 1,
+                                    drop_receiver: true,
+                                    arguments: None,
+                                    global_receiver: None,
+                                },
+                            });
+                            current = Some(LoweredRuntimeExpression::extracted(
+                                setup,
+                                method.ret.clone(),
+                            ));
+                        }
+                    }
+                    CallChainSegment::Reaches { .. } => {
+                        return Err(AlthreadError::new(
+                            ErrorType::InstructionNotAllowed,
+                            Some(expression.pos.clone()),
+                            "'reaches' is only allowed inside always/check blocks".to_string(),
+                        ));
+                    }
+                }
+            }
+
+            if let Some(path) = name_path {
+                lower_identifier_path(&path, &expression.pos, state)
+            } else {
+                current.ok_or_else(|| {
+                    AlthreadError::new(
+                        ErrorType::ExpressionError,
+                        Some(expression.pos.clone()),
+                        "postfix expression has no resulting value".to_string(),
+                    )
+                })
+            }
+        }
+    }
+}
+
 impl CallChainExpression {
     fn compile_chain(
         &self,
@@ -1616,7 +2674,10 @@ impl CallChainExpression {
                     return Err(AlthreadError::new(
                         ErrorType::InstructionNotAllowed,
                         Some(pos.clone()),
-                        format!("tuple access '.{}' is not supported in compilation yet", index),
+                        format!(
+                            "tuple access '.{}' is not supported in compilation yet",
+                            index
+                        ),
                     ));
                 }
                 CallChainSegment::Call { name, args } => {
@@ -1701,6 +2762,19 @@ impl CallChainExpression {
 // because we need line/column information
 impl InstructionBuilder for Node<Expression> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
+        if !state.in_condition_block {
+            let lowered = lower_runtime_expression(self, state)?;
+            let result_type = lowered.result_type.clone();
+            let builder = materialize_lowered_expression(lowered, 0, &self.pos);
+            state.program_stack.push(Variable {
+                name: "".to_string(),
+                depth: state.current_stack_depth,
+                mutable: false,
+                datatype: result_type,
+                declare_pos: None,
+            });
+            return Ok(builder);
+        }
         match &self.value {
             Expression::RunCall(node) => return node.compile(state),
             Expression::Bracket(node) => return node.compile(state),
@@ -2239,7 +3313,59 @@ impl AstDisplay for CallChainExpression {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::token::{binary_operator::BinaryOperator, literal::Literal};
+    use crate::{
+        ast::token::{binary_operator::BinaryOperator, literal::Literal},
+        compiler::{CompilationContext, CompilerState, Variable},
+        vm::instruction::InstructionType,
+    };
+    use std::{cell::RefCell, rc::Rc};
+
+    fn test_pos() -> Pos {
+        Pos {
+            line: 0,
+            col: 0,
+            start: 0,
+            end: 0,
+            file_path: "test".to_string(),
+        }
+    }
+
+    fn test_state() -> CompilerState {
+        CompilerState::new_with_context(Rc::new(RefCell::new(CompilationContext::new())))
+    }
+
+    fn identifier_expression(name: &str) -> Node<Expression> {
+        Node {
+            pos: test_pos(),
+            value: Expression::Primary(Node {
+                pos: test_pos(),
+                value: PrimaryExpression::Identifier(Node {
+                    pos: test_pos(),
+                    value: ObjectIdentifier {
+                        parts: vec![Node {
+                            pos: test_pos(),
+                            value: Identifier {
+                                value: name.to_string(),
+                            },
+                        }],
+                    },
+                }),
+            }),
+        }
+    }
+
+    fn int_expression(value: i64) -> Node<Expression> {
+        Node {
+            pos: test_pos(),
+            value: Expression::Primary(Node {
+                pos: test_pos(),
+                value: PrimaryExpression::Literal(Node {
+                    pos: test_pos(),
+                    value: Literal::Int(value),
+                }),
+            }),
+        }
+    }
 
     #[test]
     fn test_literal_expression() {
@@ -2800,5 +3926,121 @@ mod tests {
         let local_expr = LocalExpressionNode::from_expression(&expr, &vec![]).unwrap();
         let err = local_expr.eval(&Memory::new()).unwrap_err();
         assert!(err.contains("Cannot perform bitwise AND between int and float"));
+    }
+
+    #[test]
+    fn compile_extracts_globals_as_separate_reads() {
+        let mut state = test_state();
+        state.global_table.insert(
+            "B".to_string(),
+            Variable {
+                mutable: false,
+                name: "B".to_string(),
+                datatype: DataType::Integer,
+                depth: 0,
+                declare_pos: None,
+            },
+        );
+        state.global_table.insert(
+            "C".to_string(),
+            Variable {
+                mutable: false,
+                name: "C".to_string(),
+                datatype: DataType::Integer,
+                depth: 0,
+                declare_pos: None,
+            },
+        );
+
+        let expr = Node {
+            pos: test_pos(),
+            value: Expression::Binary(Node {
+                pos: test_pos(),
+                value: BinaryExpression {
+                    left: Box::new(identifier_expression("B")),
+                    right: Box::new(identifier_expression("C")),
+                    operator: Node {
+                        pos: test_pos(),
+                        value: BinaryOperator::Add,
+                    },
+                },
+            }),
+        };
+
+        let compiled = expr.compile(&mut state).unwrap();
+        assert_eq!(compiled.instructions.len(), 3);
+        assert!(matches!(
+            &compiled.instructions[0].control,
+            InstructionType::GlobalReads { variables, .. } if variables == &vec!["B".to_string()]
+        ));
+        assert!(matches!(
+            &compiled.instructions[1].control,
+            InstructionType::GlobalReads { variables, .. } if variables == &vec!["C".to_string()]
+        ));
+        assert!(matches!(
+            &compiled.instructions[2].control,
+            InstructionType::ExpressionAndCleanup { unstack_len, .. } if *unstack_len == 2
+        ));
+    }
+
+    #[test]
+    fn compile_tuple_with_run_extracts_run_before_final_eval() {
+        let mut state = test_state();
+        state
+            .program_arguments
+            .insert("A".to_string(), (Vec::new(), false));
+
+        let expr = Node {
+            pos: test_pos(),
+            value: Expression::Tuple(Node {
+                pos: test_pos(),
+                value: TupleExpression {
+                    values: vec![
+                        int_expression(1),
+                        Node {
+                            pos: test_pos(),
+                            value: Expression::RunCall(Box::new(Node {
+                                pos: test_pos(),
+                                value: RunCall {
+                                    identifier: Node {
+                                        pos: test_pos(),
+                                        value: ObjectIdentifier {
+                                            parts: vec![Node {
+                                                pos: test_pos(),
+                                                value: Identifier {
+                                                    value: "A".to_string(),
+                                                },
+                                            }],
+                                        },
+                                    },
+                                    args: Node {
+                                        pos: test_pos(),
+                                        value: Expression::Tuple(Node {
+                                            pos: test_pos(),
+                                            value: TupleExpression { values: vec![] },
+                                        }),
+                                    },
+                                },
+                            })),
+                        },
+                    ],
+                },
+            }),
+        };
+
+        let compiled = expr.compile(&mut state).unwrap();
+        assert!(matches!(
+            &compiled.instructions[0].control,
+            InstructionType::Expression(LocalExpressionNode::Tuple(_))
+        ));
+        assert!(matches!(
+            &compiled.instructions[1].control,
+            InstructionType::RunCall { name, unstack_len }
+            if name == "A" && *unstack_len == 1
+        ));
+        assert!(matches!(
+            compiled.instructions.last().map(|i| &i.control),
+            Some(InstructionType::MakeTupleAndCleanup { unstack_len, .. }) if *unstack_len == 1
+        ));
     }
 }

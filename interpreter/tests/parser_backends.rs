@@ -1,9 +1,9 @@
 use althread::{
+    ast::statement::expression::primary_expression::PrimaryExpression,
     ast::statement::{
         expression::{CallChainSegment, Expression},
         Statement,
     },
-    ast::statement::expression::primary_expression::PrimaryExpression,
     parser::{chumsky_combinator, parse_ast, syntax::SyntaxSnippet},
 };
 
@@ -154,7 +154,10 @@ fn expression_parser_keeps_only_single_identifier_in_chain_base() {
 
     assert_eq!(identifier.value.parts.len(), 1);
     assert_eq!(identifier.value.parts[0].value.value, "a");
-    assert!(matches!(node.value.segments[0], CallChainSegment::Field { .. }));
+    assert!(matches!(
+        node.value.segments[0],
+        CallChainSegment::Field { .. }
+    ));
 }
 
 #[test]
