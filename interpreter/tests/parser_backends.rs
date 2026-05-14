@@ -1,5 +1,8 @@
 use althread::{
-    ast::statement::Statement,
+    ast::statement::{
+        expression::{CallChainSegment, Expression},
+        Statement,
+    },
     parser::{chumsky_combinator, parse_ast, syntax::SyntaxSnippet},
 };
 
@@ -76,6 +79,54 @@ fn expression_parser_accepts_function_calls_and_callchains() {
     );
 
     chumsky_combinator::parse_expression(source, &snippet, "").unwrap();
+}
+
+#[test]
+fn expression_parser_accepts_fields_and_tuple_indexes() {
+    let source = "C.f().c.d.g()";
+    let snippet = SyntaxSnippet::new(
+        althread::error::Pos::from_offsets(source, "", 0, source.len()),
+        source.to_string(),
+    );
+
+    let expr = chumsky_combinator::parse_expression(source, &snippet, "").unwrap();
+
+    let Expression::CallChain(node) = &expr.value else {
+        panic!("expected a call chain, got {:?}", expr.value);
+    };
+
+    assert!(matches!(
+        node.value.segments.last(),
+        Some(CallChainSegment::Call { .. } | CallChainSegment::Invoke { .. })
+    ));
+    assert_eq!(
+        node.value
+            .segments
+            .iter()
+            .filter(|segment| matches!(segment, CallChainSegment::Field { .. }))
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn expression_parser_accepts_tuple_field_style_indexes() {
+    let source = "a.0";
+    let snippet = SyntaxSnippet::new(
+        althread::error::Pos::from_offsets(source, "", 0, source.len()),
+        source.to_string(),
+    );
+
+    let expr = chumsky_combinator::parse_expression(source, &snippet, "").unwrap();
+
+    let Expression::CallChain(node) = &expr.value else {
+        panic!("expected a call chain, got {:?}", expr.value);
+    };
+
+    assert!(matches!(
+        node.value.segments.as_slice(),
+        [CallChainSegment::TupleIndex { index: 0 }]
+    ));
 }
 
 #[test]

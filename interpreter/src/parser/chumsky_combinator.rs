@@ -1,4 +1,10 @@
-use chumsky::{error::{RichPattern, RichReason}, extra, input::ValueInput, pratt::*, prelude::*};
+use chumsky::{
+    error::{RichPattern, RichReason},
+    extra,
+    input::ValueInput,
+    pratt::*,
+    prelude::*,
+};
 use logos::Logos;
 use ordered_float::OrderedFloat;
 use std::fmt;
@@ -10,18 +16,17 @@ use crate::{
         statement::{
             declaration::Declaration,
             expression::{
-                binary_expression::BinaryExpression,
-                primary_expression::PrimaryExpression, tuple_expression::TupleExpression,
-                unary_expression::UnaryExpression, BracketContent, BracketExpression,
-                CallChainExpression, CallChainSegment, Expression,
+                binary_expression::BinaryExpression, primary_expression::PrimaryExpression,
+                tuple_expression::TupleExpression, unary_expression::UnaryExpression,
+                BracketContent, BracketExpression, CallChainExpression, CallChainSegment,
+                Expression,
             },
-            fn_call::FnCall,
             Statement,
         },
         token::{
-            binary_operator::BinaryOperator,
-            datatype::DataType, declaration_keyword::DeclarationKeyword, identifier::Identifier,
-            literal::Literal, object_identifier::ObjectIdentifier, unary_operator::UnaryOperator,
+            binary_operator::BinaryOperator, datatype::DataType,
+            declaration_keyword::DeclarationKeyword, identifier::Identifier, literal::Literal,
+            object_identifier::ObjectIdentifier, unary_operator::UnaryOperator,
         },
         Ast,
     },
@@ -209,21 +214,6 @@ impl fmt::Display for Token {
             Token::Gt => write!(f, ">"),
         }
     }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-#[allow(dead_code)]
-enum PrototypeExpr {
-    Name(String),
-    Int(String),
-    Bool(bool),
-    Str(String),
-    Null,
-    Add(Box<Self>, Box<Self>),
-    Sub(Box<Self>, Box<Self>),
-    Mul(Box<Self>, Box<Self>),
-    Div(Box<Self>, Box<Self>),
-    Neg(Box<Self>),
 }
 
 #[derive(Debug)]
@@ -464,11 +454,7 @@ fn object_identifier_parser<'tokens, I>(
 where
     I: ValueInput<'tokens, Token = Token, Span = Span>,
 {
-    select! { Token::Ident(name) => name }
-        .map_with(|name, e| Node {
-            pos: pos_from_span_source(e.span()),
-            value: Identifier { value: name },
-        })
+    identifier_parser()
         .separated_by(just(Token::Dot))
         .at_least(1)
         .collect::<Vec<_>>()
@@ -476,6 +462,17 @@ where
             pos: pos_from_span_source(e.span()),
             value: ObjectIdentifier { parts },
         })
+}
+
+fn identifier_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, Node<Identifier>, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    select! { Token::Ident(name) => name }.map_with(|name, e| Node {
+        pos: pos_from_span_source(e.span()),
+        value: Identifier { value: name },
+    })
 }
 
 fn literal_parser<'tokens, I>(
@@ -519,12 +516,19 @@ where
             }),
         });
 
-        let ident = object_identifier_parser().map(|ident| Node {
-            pos: ident.pos.clone(),
-            value: Expression::Primary(Node {
-                pos: ident.pos.clone(),
-                value: PrimaryExpression::Identifier(ident),
-            }),
+        let ident = identifier_parser().map(|ident| Node {
+            let pos = ident.pos.clone();
+            let object_identifier = Node {
+                pos: pos.clone(),
+                value: ObjectIdentifier { parts: vec![ident] },
+            };
+            Node {
+                pos: pos.clone(),
+                value: Expression::Primary(Node {
+                    pos,
+                    value: PrimaryExpression::Identifier(object_identifier),
+                }),
+            }
         });
 
         let tuple = expr
@@ -562,34 +566,40 @@ where
                 }),
             });
 
-        let direct_call = object_identifier_parser()
-            .then(args_tuple.clone())
-            .map_with(|(fn_name, values), e| Node {
-                pos: pos_from_span_source(e.span()),
-                value: Expression::FnCall(Node {
-                    pos: pos_from_span_source(e.span()),
-                    value: FnCall {
-                        fn_name,
-                        values: Box::new(values),
-                    },
+        let atom = choice((literal, tuple, grouped, list, ident)).boxed();
+
+        let invoke_segment = args_tuple
+            .clone()
+            .map(|args| CallChainSegment::Invoke { args });
+
+        let field_segment = just(Token::Dot).ignore_then(choice((
+            select! { Token::IntLiteral(index) => index }
+                .try_map(|index, span| {
+                    index.parse::<usize>().map_err(|_| {
+                        Rich::custom(span, format!("tuple index '{}' is too large", index))
+                    })
+                })
+                .map(|index| CallChainSegment::TupleIndex { index }),
+            select! { Token::Ident(name) => name }
+                .then(args_tuple.clone().or_not())
+                .map_with(|(name, args), e| {
+                    let name = Node {
+                        pos: pos_from_span_source(e.span()),
+                        value: Identifier { value: name },
+                    };
+                    match args {
+                        Some(args) => CallChainSegment::Call { name, args },
+                        None => CallChainSegment::Field { name },
+                    }
                 }),
-            });
-
-        let atom = choice((direct_call, literal, tuple, grouped, list, ident)).boxed();
-
-        let chain_segment = just(Token::Dot)
-            .ignore_then(select! { Token::Ident(name) => name })
-            .then(args_tuple.clone())
-            .map_with(|(name, args), e| CallChainSegment::Call {
-                name: Node {
-                    pos: pos_from_span_source(e.span()),
-                    value: Identifier { value: name },
-                },
-                args,
-            });
+        )));
 
         let postfix = atom
-            .then(chain_segment.repeated().collect::<Vec<_>>())
+            .then(
+                choice((invoke_segment, field_segment))
+                    .repeated()
+                    .collect::<Vec<_>>(),
+            )
             .map_with(|(base, segments), e| {
                 if segments.is_empty() {
                     base
@@ -608,21 +618,15 @@ where
             });
 
         postfix.pratt((
-            prefix(7, just(Token::Bang), |_, rhs, e| unary_expression_node(
-                UnaryOperator::Not,
-                rhs,
-                e.span(),
-            )),
-            prefix(7, just(Token::Plus), |_, rhs, e| unary_expression_node(
-                UnaryOperator::Positive,
-                rhs,
-                e.span(),
-            )),
-            prefix(7, just(Token::Minus), |_, rhs, e| unary_expression_node(
-                UnaryOperator::Negative,
-                rhs,
-                e.span(),
-            )),
+            prefix(7, just(Token::Bang), |_, rhs, e| {
+                unary_expression_node(UnaryOperator::Not, rhs, e.span())
+            }),
+            prefix(7, just(Token::Plus), |_, rhs, e| {
+                unary_expression_node(UnaryOperator::Positive, rhs, e.span())
+            }),
+            prefix(7, just(Token::Minus), |_, rhs, e| {
+                unary_expression_node(UnaryOperator::Negative, rhs, e.span())
+            }),
             infix(left(6), just(Token::Star), |l, _, r, e| {
                 binary_expression_node(BinaryOperator::Multiply, l, r, e.span())
             }),
@@ -676,40 +680,6 @@ where
             }),
         ))
     })
-}
-
-#[allow(dead_code)]
-fn prototype_expression_parser<'tokens, I>(
-) -> impl Parser<'tokens, I, PrototypeExpr, ParserExtra<'tokens>> + Clone
-where
-    I: ValueInput<'tokens, Token = Token, Span = Span>,
-{
-    let atom = select! {
-        Token::Ident(name) => PrototypeExpr::Name(name),
-        Token::IntLiteral(value) => PrototypeExpr::Int(value),
-        Token::StringLiteral(value) => PrototypeExpr::Str(value),
-        Token::True => PrototypeExpr::Bool(true),
-        Token::False => PrototypeExpr::Bool(false),
-        Token::Null => PrototypeExpr::Null,
-    };
-
-    atom.pratt((
-        prefix(3, just(Token::Minus), |_, rhs, _| {
-            PrototypeExpr::Neg(Box::new(rhs))
-        }),
-        infix(left(2), just(Token::Star), |l, _, r, _| {
-            PrototypeExpr::Mul(Box::new(l), Box::new(r))
-        }),
-        infix(left(2), just(Token::Slash), |l, _, r, _| {
-            PrototypeExpr::Div(Box::new(l), Box::new(r))
-        }),
-        infix(left(1), just(Token::Plus), |l, _, r, _| {
-            PrototypeExpr::Add(Box::new(l), Box::new(r))
-        }),
-        infix(left(1), just(Token::Minus), |l, _, r, _| {
-            PrototypeExpr::Sub(Box::new(l), Box::new(r))
-        }),
-    ))
 }
 
 fn unsupported_block_parser<'tokens, I>(

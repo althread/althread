@@ -221,6 +221,9 @@ impl Ast {
                 Self::validate_shared_const_expression(&node.expression_start, pos)?;
                 Self::validate_shared_const_expression(&node.expression_end, pos)
             }
+            LocalExpressionNode::TupleIndex(node) => {
+                Self::validate_shared_const_expression(&node.base, pos)
+            }
             LocalExpressionNode::FnCall(_)
             | LocalExpressionNode::RunCall(_)
             | LocalExpressionNode::CallChain(_) => Err(

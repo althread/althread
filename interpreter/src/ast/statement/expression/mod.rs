@@ -16,7 +16,10 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node},
-        token::{datatype::DataType, identifier::Identifier, literal::Literal},
+        token::{
+            datatype::DataType, identifier::Identifier, literal::Literal,
+            object_identifier::ObjectIdentifier,
+        },
     },
     compiler::{
         stdlib::{invoke_interface_method, resolve_interface_method, validate_interface_call},
@@ -69,6 +72,15 @@ pub struct CallChainExpression {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum CallChainSegment {
+    Invoke {
+        args: Node<Expression>,
+    },
+    Field {
+        name: Node<Identifier>,
+    },
+    TupleIndex {
+        index: usize,
+    },
     Call {
         name: Node<Identifier>,
         args: Node<Expression>,
@@ -90,6 +102,7 @@ pub enum LocalExpressionNode {
     Primary(LocalPrimaryExpressionNode),
     Tuple(LocalTupleExpressionNode),
     Range(LocalRangeListExpressionNode),
+    TupleIndex(LocalTupleIndexNode),
     FnCall(Box<Node<FnCall>>),
     RunCall(Box<Node<RunCall>>),
     Reaches(LocalReachesNode),
@@ -108,12 +121,33 @@ pub struct LocalReachesNode {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct LocalCallChainNode {
-    pub base: Box<LocalExpressionNode>,
+    pub base: LocalCallChainBase,
     pub segments: Vec<LocalCallChainSegment>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum LocalCallChainBase {
+    Expr(Box<LocalExpressionNode>),
+    Name(String),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct LocalTupleIndexNode {
+    pub base: Box<LocalExpressionNode>,
+    pub index: usize,
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum LocalCallChainSegment {
+    Invoke {
+        args: Box<LocalExpressionNode>,
+    },
+    Field {
+        name: String,
+    },
+    TupleIndex {
+        index: usize,
+    },
     Call {
         name: String,
         args: Box<LocalExpressionNode>,
@@ -279,6 +313,7 @@ impl fmt::Display for LocalExpressionNode {
             Self::Primary(node) => write!(f, "{}", node),
             Self::Tuple(node) => write!(f, "{}", node),
             Self::Range(node) => write!(f, "{}", node),
+            Self::TupleIndex(node) => write!(f, "{}.{}", node.base, node.index),
             Self::FnCall(node) => write!(f, "{:?}", node),
             Self::RunCall(node) => write!(f, "{:?}", node),
             Self::Reaches(node) => {
@@ -296,12 +331,72 @@ impl fmt::Display for LocalExpressionNode {
     }
 }
 
-impl Expression {}
-
 fn tuple_arg_types(datatype: &DataType) -> Result<&[DataType], String> {
     match datatype {
         DataType::Tuple(types) => Ok(types),
         _ => Err("Method call expects tuple arguments".to_string()),
+    }
+}
+
+fn temp_fn_call_node(name: &str, values: Node<Expression>, pos: &Pos) -> Node<FnCall> {
+    Node {
+        pos: pos.clone(),
+        value: FnCall {
+            fn_name: Node {
+                pos: pos.clone(),
+                value: ObjectIdentifier {
+                    parts: name
+                        .split('.')
+                        .map(|part| Node {
+                            pos: pos.clone(),
+                            value: Identifier {
+                                value: part.to_string(),
+                            },
+                        })
+                        .collect(),
+                },
+            },
+            values: Box::new(values),
+        },
+    }
+}
+
+fn direct_function_return_type(
+    function_name: &str,
+    args: &LocalExpressionNode,
+    state: &CompilerState,
+) -> Result<DataType, String> {
+    if let Some(func_def) = state.user_functions().get(function_name) {
+        let provided_arg_types = args.datatype(state)?;
+        let provided_arg_types = tuple_arg_types(&provided_arg_types)?;
+
+        if func_def.arguments.len() != provided_arg_types.len() {
+            return Err(format!(
+                "Function '{}' expects {} arguments, but {} were provided.",
+                function_name,
+                func_def.arguments.len(),
+                provided_arg_types.len()
+            ));
+        }
+
+        for ((_, expected_type), provided_type) in
+            func_def.arguments.iter().zip(provided_arg_types.iter())
+        {
+            if expected_type != provided_type {
+                return Err(format!(
+                    "Function '{}' expects argument of type {}, but got {}.",
+                    function_name, expected_type, provided_type
+                ));
+            }
+        }
+
+        return Ok(func_def.return_type.clone());
+    }
+
+    match function_name {
+        "print" => Ok(DataType::Void),
+        "assert" => Ok(DataType::Void),
+        _ => Err(format!("Function {} not found", function_name)),
     }
 }
 
@@ -444,11 +539,45 @@ impl LocalExpressionNode {
                 }
             },
             Expression::CallChain(node) => {
-                let base =
-                    LocalExpressionNode::from_expression(&node.value.base.value, program_stack)?;
+                let base = match &node.value.base.value {
+                    Expression::Primary(primary_node) => match &primary_node.value {
+                        PrimaryExpression::Identifier(identifier)
+                            if matches!(
+                                node.value.segments.first(),
+                                Some(CallChainSegment::Invoke { .. })
+                            ) =>
+                        {
+                            let full_name = identifier
+                                .value
+                                .parts
+                                .iter()
+                                .map(|p| p.value.value.as_str())
+                                .collect::<Vec<_>>()
+                                .join(".");
+                            LocalCallChainBase::Name(full_name)
+                        }
+                        _ => LocalCallChainBase::Expr(Box::new(
+                            LocalExpressionNode::from_expression(
+                                &node.value.base.value,
+                                program_stack,
+                            )?,
+                        )),
+                    },
+                    _ => LocalCallChainBase::Expr(Box::new(LocalExpressionNode::from_expression(
+                        &node.value.base.value,
+                        program_stack,
+                    )?)),
+                };
                 let mut segments = Vec::new();
                 for segment in node.value.segments.iter() {
                     match segment {
+                        CallChainSegment::Invoke { args } => {
+                            let local_args =
+                                LocalExpressionNode::from_expression(&args.value, program_stack)?;
+                            segments.push(LocalCallChainSegment::Invoke {
+                                args: Box::new(local_args),
+                            });
+                        }
                         CallChainSegment::Call { name, args } => {
                             let local_args =
                                 LocalExpressionNode::from_expression(&args.value, program_stack)?;
@@ -457,6 +586,14 @@ impl LocalExpressionNode {
                                 args: Box::new(local_args),
                             });
                         }
+                        CallChainSegment::Field { name } => {
+                            segments.push(LocalCallChainSegment::Field {
+                                name: name.value.value.clone(),
+                            });
+                        }
+                        CallChainSegment::TupleIndex { index } => {
+                            segments.push(LocalCallChainSegment::TupleIndex { index: *index });
+                        }
                         CallChainSegment::Reaches { label } => {
                             segments.push(LocalCallChainSegment::Reaches {
                                 label: label.value.value.clone(),
@@ -464,10 +601,7 @@ impl LocalExpressionNode {
                         }
                     }
                 }
-                LocalExpressionNode::CallChain(LocalCallChainNode {
-                    base: Box::new(base),
-                    segments,
-                })
+                LocalExpressionNode::CallChain(LocalCallChainNode { base, segments })
             }
         };
         Ok(root)
@@ -486,11 +620,17 @@ impl LocalExpressionNode {
             LocalExpressionNode::Range(n) => {
                 n.expression_start.contains_call() || n.expression_end.contains_call()
             }
+            LocalExpressionNode::TupleIndex(n) => n.base.contains_call(),
             LocalExpressionNode::Reaches(_) => false,
             LocalExpressionNode::CallChain(n) => {
-                let mut has_call = n.base.contains_call();
+                let mut has_call = match &n.base {
+                    LocalCallChainBase::Expr(base) => base.contains_call(),
+                    LocalCallChainBase::Name(_) => false,
+                };
                 for seg in n.segments.iter() {
-                    if let LocalCallChainSegment::Call { args, .. } = seg {
+                    if let LocalCallChainSegment::Invoke { args }
+                    | LocalCallChainSegment::Call { args, .. } = seg
+                    {
                         has_call |= args.contains_call();
                     }
                 }
@@ -571,6 +711,22 @@ impl LocalExpressionNode {
             Self::Primary(node) => node.datatype(state),
             Self::Tuple(node) => node.datatype(state),
             Self::Range(node) => node.datatype(state),
+            Self::TupleIndex(node) => {
+                let base_type = node.base.datatype(state)?;
+                let DataType::Tuple(items) = base_type else {
+                    return Err(format!(
+                        "tuple index '.{}' requires a tuple, found {}",
+                        node.index, base_type
+                    ));
+                };
+                items.get(node.index).cloned().ok_or_else(|| {
+                    format!(
+                        "tuple index '.{}' is out of bounds for tuple of size {}",
+                        node.index,
+                        items.len()
+                    )
+                })
+            }
             Self::FnCall(node) => {
                 let full_name = node.value.fn_name_to_string();
 
@@ -676,23 +832,75 @@ impl LocalExpressionNode {
                 Ok(DataType::Boolean)
             }
             Self::CallChain(node) => {
-                let mut current_type = node.base.datatype(state)?;
+                let mut current_name = match &node.base {
+                    LocalCallChainBase::Name(name) => Some(name.clone()),
+                    LocalCallChainBase::Expr(_) => None,
+                };
+                let mut current_type = match &node.base {
+                    LocalCallChainBase::Expr(base) => Some(base.datatype(state)?),
+                    LocalCallChainBase::Name(_) => None,
+                };
                 for (idx, segment) in node.segments.iter().enumerate() {
                     match segment {
+                        LocalCallChainSegment::Invoke { args } => {
+                            let Some(function_name) = current_name.take() else {
+                                return Err("calling arbitrary expression values is not supported"
+                                    .to_string());
+                            };
+                            let ret = direct_function_return_type(&function_name, args, state)?;
+                            current_type = Some(ret);
+                        }
+                        LocalCallChainSegment::Field { name } => {
+                            if let Some(current_name) = current_name.as_mut() {
+                                current_name.push('.');
+                                current_name.push_str(name);
+                                continue;
+                            }
+
+                            let receiver_type = current_type.as_ref().ok_or_else(|| {
+                                "missing receiver before field access".to_string()
+                            })?;
+                            return Err(format!(
+                                "field access '.{}' is not supported yet on type {}",
+                                name, receiver_type
+                            ));
+                        }
+                        LocalCallChainSegment::TupleIndex { index } => {
+                            let receiver_type = current_type.as_ref().ok_or_else(|| {
+                                "missing receiver before tuple access".to_string()
+                            })?;
+                            let DataType::Tuple(items) = receiver_type else {
+                                return Err(format!(
+                                    "tuple index '.{}' requires a tuple, found {}",
+                                    index, receiver_type
+                                ));
+                            };
+                            let item = items.get(*index).ok_or_else(|| {
+                                format!(
+                                    "tuple index '.{}' is out of bounds for tuple of size {}",
+                                    index,
+                                    items.len()
+                                )
+                            })?;
+                            current_type = Some(item.clone());
+                        }
                         LocalCallChainSegment::Call { name, args } => {
+                            let receiver_type = current_type
+                                .as_ref()
+                                .ok_or_else(|| "missing receiver before method call".to_string())?;
                             let method =
-                                resolve_interface_method(&state.stdlib(), &current_type, name)?;
+                                resolve_interface_method(&state.stdlib(), receiver_type, name)?;
                             let args_type = args.datatype(state)?;
                             validate_interface_call(&method, tuple_arg_types(&args_type)?)?;
-                            current_type = method.ret.clone();
+                            current_type = Some(method.ret.clone());
                         }
                         LocalCallChainSegment::Reaches { label } => {
                             if idx + 1 != node.segments.len() {
                                 return Err("'reaches' must be the last segment in a call chain"
                                     .to_string());
                             }
-                            let program_name = match &current_type {
-                                DataType::Process(name) => name.clone(),
+                            let program_name = match current_type.as_ref() {
+                                Some(DataType::Process(name)) => name.clone(),
                                 _ => {
                                     return Err(
                                         "'reaches' must be called on a variable of type proc(<Program>)"
@@ -713,11 +921,11 @@ impl LocalExpressionNode {
                                 ));
                             }
 
-                            current_type = DataType::Boolean;
+                            current_type = Some(DataType::Boolean);
                         }
                     }
                 }
-                Ok(current_type)
+                current_type.ok_or_else(|| "postfix expression has no resulting value".to_string())
             }
             Self::IfExpr(node) => {
                 if !state.in_condition_block {
@@ -875,6 +1083,22 @@ impl LocalExpressionNode {
             },
             LocalExpressionNode::Tuple(tuple_exp) => tuple_exp.eval(mem),
             LocalExpressionNode::Range(list_exp) => list_exp.eval(mem),
+            LocalExpressionNode::TupleIndex(node) => {
+                let value = node.base.eval(mem)?;
+                let Literal::Tuple(items) = value else {
+                    return Err(format!(
+                        "tuple index '.{}' requires a tuple runtime value",
+                        node.index
+                    ));
+                };
+                items.get(node.index).cloned().ok_or_else(|| {
+                    format!(
+                        "tuple index '.{}' is out of bounds for tuple of size {}",
+                        node.index,
+                        items.len()
+                    )
+                })
+            }
             LocalExpressionNode::FnCall(node) => Err(format!(
                 "Cannot evaluate function call in this context: {:?}",
                 &node.value.fn_name
@@ -1011,6 +1235,22 @@ impl LocalExpressionNode {
                     .map(|v| v.eval_with_scope(mem, scope, vm))
                     .collect::<Result<Vec<Literal>, String>>()?,
             )),
+            LocalExpressionNode::TupleIndex(node) => {
+                let value = node.base.eval_with_scope(mem, scope, vm)?;
+                let Literal::Tuple(items) = value else {
+                    return Err(format!(
+                        "tuple index '.{}' requires a tuple runtime value",
+                        node.index
+                    ));
+                };
+                items.get(node.index).cloned().ok_or_else(|| {
+                    format!(
+                        "tuple index '.{}' is out of bounds for tuple of size {}",
+                        node.index,
+                        items.len()
+                    )
+                })
+            }
             LocalExpressionNode::Range(list_exp) => {
                 let start = list_exp.expression_start.eval_with_scope(mem, scope, vm)?;
                 let end = list_exp.expression_end.eval_with_scope(mem, scope, vm)?;
@@ -1122,32 +1362,71 @@ impl LocalExpressionNode {
                 Ok(Literal::Bool(reached))
             }
             LocalExpressionNode::CallChain(node) => {
-                let mut current = node.base.eval_with_scope(mem, scope, vm)?;
+                let mut current = match &node.base {
+                    LocalCallChainBase::Expr(base) => Some(base.eval_with_scope(mem, scope, vm)?),
+                    LocalCallChainBase::Name(_) => None,
+                };
                 for segment in node.segments.iter() {
                     match segment {
+                        LocalCallChainSegment::Invoke { .. } => {
+                            return Err(
+                                "Cannot evaluate direct function calls in this context".to_string()
+                            );
+                        }
+                        LocalCallChainSegment::Field { name } => {
+                            return Err(format!(
+                                "Field access '.{}' is not supported in evaluation yet",
+                                name
+                            ));
+                        }
+                        LocalCallChainSegment::TupleIndex { index } => {
+                            let current_value = current
+                                .take()
+                                .ok_or_else(|| "Missing receiver for tuple access".to_string())?;
+                            let Literal::Tuple(values) = current_value else {
+                                return Err(format!(
+                                    "tuple index '.{}' requires a tuple runtime value",
+                                    index
+                                ));
+                            };
+                            let value = values.get(*index).cloned().ok_or_else(|| {
+                                format!(
+                                    "tuple index '.{}' is out of bounds for tuple of size {}",
+                                    index,
+                                    values.len()
+                                )
+                            })?;
+                            current = Some(value);
+                        }
                         LocalCallChainSegment::Call { name, args } => {
                             let mut args_value = args.eval_with_scope(mem, scope, vm)?;
-                            current = LocalExpressionNode::evaluate_method_call(
+                            let receiver = current
+                                .as_mut()
+                                .ok_or_else(|| "Missing receiver for method call".to_string())?;
+                            current = Some(LocalExpressionNode::evaluate_method_call(
                                 vm,
-                                &mut current,
+                                receiver,
                                 name,
                                 &mut args_value,
                                 None,
-                            )?;
+                            )?);
                         }
                         LocalCallChainSegment::Reaches { label } => {
+                            let current_value = current
+                                .as_ref()
+                                .ok_or_else(|| "Missing receiver for reaches call".to_string())?;
                             log::debug!(
                                 "CallChain Reaches evaluation started for label '{}'",
                                 label
                             );
-                            let (program_name, pid) = match &current {
+                            let (program_name, pid) = match current_value {
                                 Literal::Process(name, pid) => {
                                     log::debug!("  Current is Process({}, {})", name, pid);
                                     (name.clone(), *pid)
                                 }
                                 _ => {
-                                    log::debug!("  Current is not a Process: {:?}", current);
-                                    current = Literal::Bool(false);
+                                    log::debug!("  Current is not a Process: {:?}", current_value);
+                                    current = Some(Literal::Bool(false));
                                     continue;
                                 }
                             };
@@ -1164,9 +1443,9 @@ impl LocalExpressionNode {
                                 None => {
                                     log::debug!("  Process {} (pid={}) NOT in running_programs (terminated)", program_name, pid);
                                     if label == "end" {
-                                        current = Literal::Bool(true);
+                                        current = Some(Literal::Bool(true));
                                     } else {
-                                        current = Literal::Bool(false);
+                                        current = Some(Literal::Bool(false));
                                     }
                                     continue;
                                 }
@@ -1178,7 +1457,7 @@ impl LocalExpressionNode {
                                     program_name,
                                     prog_state.name
                                 );
-                                current = Literal::Bool(false);
+                                current = Some(Literal::Bool(false));
                                 continue;
                             }
 
@@ -1186,7 +1465,7 @@ impl LocalExpressionNode {
                                 Some(code) => code,
                                 None => {
                                     log::debug!("  Program code for {} not found", program_name);
-                                    current = Literal::Bool(false);
+                                    current = Some(Literal::Bool(false));
                                     continue;
                                 }
                             };
@@ -1202,7 +1481,7 @@ impl LocalExpressionNode {
                                         label,
                                         program_name
                                     );
-                                    current = Literal::Bool(false);
+                                    current = Some(Literal::Bool(false));
                                     continue;
                                 }
                             };
@@ -1210,11 +1489,11 @@ impl LocalExpressionNode {
                             let (_, pc, _) = prog_state.current_state();
                             let reached = pc == *label_pc;
                             log::debug!("  pc={}, label_pc={}, reached={}", pc, label_pc, reached);
-                            current = Literal::Bool(reached);
+                            current = Some(Literal::Bool(reached));
                         }
                     }
                 }
-                Ok(current)
+                current.ok_or_else(|| "postfix expression has no runtime value".to_string())
             }
             LocalExpressionNode::IfExpr(node) => {
                 let cond = node.condition.eval_with_scope(mem, scope, vm)?;
@@ -1280,12 +1559,66 @@ impl CallChainExpression {
         pos: &Pos,
     ) -> AlthreadResult<InstructionBuilderOk> {
         let mut builder = InstructionBuilderOk::new();
+        let mut current_name = match &self.base.value {
+            Expression::Primary(primary_node) => match &primary_node.value {
+                PrimaryExpression::Identifier(identifier)
+                    if matches!(self.segments.first(), Some(CallChainSegment::Invoke { .. })) =>
+                {
+                    Some(
+                        identifier
+                            .value
+                            .parts
+                            .iter()
+                            .map(|part| part.value.value.as_str())
+                            .collect::<Vec<_>>()
+                            .join("."),
+                    )
+                }
+                _ => None,
+            },
+            _ => None,
+        };
 
-        let base_builder = self.base.compile(state)?;
-        builder.extend(base_builder);
+        if current_name.is_none() {
+            let base_builder = self.base.compile(state)?;
+            builder.extend(base_builder);
+        }
 
         for segment in &self.segments {
             match segment {
+                CallChainSegment::Invoke { args } => {
+                    let function_name = current_name.take().ok_or_else(|| {
+                        AlthreadError::new(
+                            ErrorType::ExpressionError,
+                            Some(pos.clone()),
+                            "calling arbitrary expression values is not supported".to_string(),
+                        )
+                    })?;
+                    let temp_call = temp_fn_call_node(&function_name, args.clone(), pos);
+                    builder.extend(temp_call.compile(state)?);
+                }
+                CallChainSegment::Field { name } => {
+                    if let Some(current_name) = current_name.as_mut() {
+                        current_name.push('.');
+                        current_name.push_str(&name.value.value);
+                    } else {
+                        return Err(AlthreadError::new(
+                            ErrorType::InstructionNotAllowed,
+                            Some(pos.clone()),
+                            format!(
+                                "field access '.{}' is not supported in compilation yet",
+                                name.value.value
+                            ),
+                        ));
+                    }
+                }
+                CallChainSegment::TupleIndex { index } => {
+                    return Err(AlthreadError::new(
+                        ErrorType::InstructionNotAllowed,
+                        Some(pos.clone()),
+                        format!("tuple access '.{}' is not supported in compilation yet", index),
+                    ));
+                }
                 CallChainSegment::Call { name, args } => {
                     let args_builder = args.compile(state)?;
                     builder.extend(args_builder);
@@ -1784,9 +2117,20 @@ impl Expression {
                 }
             },
             Self::CallChain(node) => {
-                node.value.base.value.add_dependencies(dependencies);
+                let skip_base = matches!(
+                    (&node.value.base.value, node.value.segments.first()),
+                    (
+                        Expression::Primary(primary_node),
+                        Some(CallChainSegment::Invoke { .. })
+                    ) if matches!(primary_node.value, PrimaryExpression::Identifier(_))
+                );
+                if !skip_base {
+                    node.value.base.value.add_dependencies(dependencies);
+                }
                 for segment in node.value.segments.iter() {
-                    if let CallChainSegment::Call { args, .. } = segment {
+                    if let CallChainSegment::Invoke { args } | CallChainSegment::Call { args, .. } =
+                        segment
+                    {
                         args.value.add_dependencies(dependencies);
                     }
                 }
@@ -1820,9 +2164,20 @@ impl Expression {
                 }
             },
             Self::CallChain(node) => {
-                node.value.base.value.get_vars(vars);
+                let skip_base = matches!(
+                    (&node.value.base.value, node.value.segments.first()),
+                    (
+                        Expression::Primary(primary_node),
+                        Some(CallChainSegment::Invoke { .. })
+                    ) if matches!(primary_node.value, PrimaryExpression::Identifier(_))
+                );
+                if !skip_base {
+                    node.value.base.value.get_vars(vars);
+                }
                 for segment in node.value.segments.iter() {
-                    if let CallChainSegment::Call { args, .. } = segment {
+                    if let CallChainSegment::Invoke { args } | CallChainSegment::Call { args, .. } =
+                        segment
+                    {
                         args.value.get_vars(vars);
                     }
                 }
@@ -1858,6 +2213,15 @@ impl AstDisplay for CallChainExpression {
         let mut seg_prefix = prefix.add_branch();
         for segment in &self.segments {
             match segment {
+                CallChainSegment::Invoke { .. } => {
+                    writeln!(f, "{}call", seg_prefix)?;
+                }
+                CallChainSegment::Field { name } => {
+                    writeln!(f, "{}field: {}", seg_prefix, name.value.value)?;
+                }
+                CallChainSegment::TupleIndex { index } => {
+                    writeln!(f, "{}tuple_index: {}", seg_prefix, index)?;
+                }
                 CallChainSegment::Call { name, .. } => {
                     writeln!(f, "{}call: {}", seg_prefix, name.value.value)?;
                 }
