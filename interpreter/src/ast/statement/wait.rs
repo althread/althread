@@ -38,6 +38,7 @@ impl InstructionBuilder for Node<Wait> {
                 "Wait blocks cannot be inside an atomic block (except if it is the first instruction)".to_string(),
             ));
         }
+        let previous_atomic = state.is_atomic;
         if self.value.start_atomic {
             state.is_atomic = true;
         }
@@ -125,6 +126,7 @@ impl InstructionBuilder for Node<Wait> {
             });
             // when the wait is over the variables declared in case are still on the stack and will be removed when the current scope ends
             // if the wait is not over, since there is only one case, we know that the variables declared will be eventually there.
+            state.is_atomic = previous_atomic;
             return Ok(builder);
         }
 
@@ -289,6 +291,7 @@ impl InstructionBuilder for Node<Wait> {
             }
         }
 
+        state.is_atomic = previous_atomic;
         Ok(builder)
     }
 }

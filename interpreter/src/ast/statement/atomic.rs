@@ -31,6 +31,16 @@ impl InstructionBuilder for Node<Atomic> {
         let mut builder = InstructionBuilderOk::new();
 
         if !self.value.delegated {
+            if let Some(special_builder) =
+                compile_block_with_leading_wait(self.value.statement.as_ref(), state)?
+            {
+                builder.extend(special_builder);
+                patch_atomic_jumps(&mut builder);
+                return Ok(builder);
+            }
+        }
+
+        if !self.value.delegated {
             builder.instructions.push(Instruction {
                 pos: Some(self.value.statement.as_ref().pos.clone()),
                 control: InstructionType::AtomicStart,
@@ -45,27 +55,76 @@ impl InstructionBuilder for Node<Atomic> {
             pos: Some(self.value.statement.as_ref().pos.clone()),
             control: InstructionType::AtomicEnd,
         });
-        if builder.contains_jump() {
-            for idx in builder.break_indexes.get("").unwrap_or(&Vec::new()) {
-                if let InstructionType::Break { stop_atomic, .. } =
-                    &mut builder.instructions[*idx as usize].control
-                {
-                    *stop_atomic = true;
-                } else {
-                    panic!("Expected Break instruction");
-                }
-            }
-            for idx in builder.continue_indexes.get("").unwrap_or(&Vec::new()) {
-                if let InstructionType::Break { stop_atomic, .. } =
-                    &mut builder.instructions[*idx as usize].control
-                {
-                    *stop_atomic = true;
-                } else {
-                    panic!("Expected Break instruction");
-                }
+        patch_atomic_jumps(&mut builder);
+        Ok(builder)
+    }
+}
+
+fn compile_block_with_leading_wait(
+    statement: &Node<Statement>,
+    state: &mut CompilerState,
+) -> AlthreadResult<Option<InstructionBuilderOk>> {
+    let Statement::Block(block_node) = &statement.value else {
+        return Ok(None);
+    };
+
+    let Some((first, rest)) = block_node.value.children.split_first() else {
+        return Ok(None);
+    };
+
+    let Statement::Wait(wait_node) = &first.value else {
+        return Ok(None);
+    };
+
+    let mut builder = InstructionBuilderOk::new();
+    state.current_stack_depth += 1;
+
+    let mut leading_wait = wait_node.clone();
+    leading_wait.value.start_atomic = true;
+    builder.extend(leading_wait.compile(state)?);
+
+    state.is_atomic = true;
+    for child in rest {
+        builder.extend(child.compile(state)?);
+    }
+
+    let unstack_len = state.unstack_current_depth_with_debug(&mut builder);
+    if unstack_len > 0 {
+        builder.instructions.push(Instruction {
+            control: InstructionType::Unstack { unstack_len },
+            pos: None,
+        });
+    }
+
+    state.is_atomic = false;
+    builder.instructions.push(Instruction {
+        pos: Some(statement.pos.clone()),
+        control: InstructionType::AtomicEnd,
+    });
+
+    Ok(Some(builder))
+}
+
+fn patch_atomic_jumps(builder: &mut InstructionBuilderOk) {
+    if builder.contains_jump() {
+        for idx in builder.break_indexes.get("").unwrap_or(&Vec::new()) {
+            if let InstructionType::Break { stop_atomic, .. } =
+                &mut builder.instructions[*idx as usize].control
+            {
+                *stop_atomic = true;
+            } else {
+                panic!("Expected Break instruction");
             }
         }
-        Ok(builder)
+        for idx in builder.continue_indexes.get("").unwrap_or(&Vec::new()) {
+            if let InstructionType::Break { stop_atomic, .. } =
+                &mut builder.instructions[*idx as usize].control
+            {
+                *stop_atomic = true;
+            } else {
+                panic!("Expected Break instruction");
+            }
+        }
     }
 }
 

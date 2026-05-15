@@ -802,6 +802,73 @@ main {
 }
 
 #[test]
+fn test_atomic_await_does_not_leak_atomic_state_to_following_statements() {
+    let input = r#"
+shared {
+    let Done = false;
+    let Leader = 0;
+}
+
+program A(my_id: int) {
+    let leader_id = my_id;
+
+    loop atomic await receive in (x) => {
+        if x > leader_id {
+            leader_id = x;
+        }
+    }
+
+    if my_id == leader_id {
+        atomic {
+            Done = true;
+            Leader = Leader + 1;
+        }
+    }
+}
+
+main {
+    let a = run A(1);
+    channel self.out (int)> a.in;
+    send out(2);
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+    let ast = althread::parser::parse_ast(input, "").unwrap();
+
+    ast.compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+}
+
+#[test]
+fn test_atomic_block_allows_leading_await_with_global_reads() {
+    let input = r#"
+shared {
+    let Cond = true;
+}
+
+program A() {
+    atomic {
+        await Cond;
+        print("Hello");
+    }
+}
+
+main {
+    let a = run A();
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+    let ast = althread::parser::parse_ast(input, "").unwrap();
+
+    ast.compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+}
+
+#[test]
 fn test_compiler_while() {
     let input = r#"
 main {
