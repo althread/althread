@@ -523,7 +523,7 @@ main {
 fn test_condition_quantifiers_and_if_expr() {
     let input = r#"
 shared {
-    let Xs = [1..4];
+    let Xs = 1..4;
     let Flag = true;
 }
 
@@ -589,7 +589,7 @@ main {
 fn test_always_condition_supports_shared_method_calls() {
     let input = r#"
 shared {
-    let Global = [1..3];
+    let Global = 1..3;
 }
 
 always {

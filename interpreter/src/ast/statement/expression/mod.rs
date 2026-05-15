@@ -472,12 +472,14 @@ impl LocalExpressionNode {
                 PrimaryExpression::ForAllExpr { var, list, body } => {
                     let list_local =
                         LocalExpressionNode::from_expression(&list.value, program_stack)?;
+                    let element_type =
+                        Self::quantified_element_type(&list_local, program_stack, &list.pos)?;
 
                     let mut temp_stack = program_stack.clone();
                     temp_stack.push(Variable {
                         mutable: false,
                         name: var.value.value.clone(),
-                        datatype: DataType::Void,
+                        datatype: element_type,
                         depth: 0,
                         declare_pos: Some(var.pos.clone()),
                     });
@@ -493,12 +495,14 @@ impl LocalExpressionNode {
                 PrimaryExpression::ExistsExpr { var, list, body } => {
                     let list_local =
                         LocalExpressionNode::from_expression(&list.value, program_stack)?;
+                    let element_type =
+                        Self::quantified_element_type(&list_local, program_stack, &list.pos)?;
 
                     let mut temp_stack = program_stack.clone();
                     temp_stack.push(Variable {
                         mutable: false,
                         name: var.value.value.clone(),
-                        datatype: DataType::Void,
+                        datatype: element_type,
                         depth: 0,
                         declare_pos: Some(var.pos.clone()),
                     });
@@ -541,37 +545,95 @@ impl LocalExpressionNode {
                 }
             },
             Expression::CallChain(node) => {
-                let base = match &node.value.base.value {
+                let (base, segment_start) = match &node.value.base.value {
                     Expression::Primary(primary_node) => match &primary_node.value {
-                        PrimaryExpression::Identifier(identifier)
-                            if matches!(
-                                node.value.segments.first(),
-                                Some(CallChainSegment::Invoke { .. })
-                            ) =>
-                        {
-                            let full_name = identifier
+                        PrimaryExpression::Identifier(identifier) => {
+                            let mut full_name = identifier
                                 .value
                                 .parts
                                 .iter()
                                 .map(|p| p.value.value.as_str())
                                 .collect::<Vec<_>>()
                                 .join(".");
-                            LocalCallChainBase::Name(full_name)
+                            if matches!(
+                                node.value.segments.first(),
+                                Some(CallChainSegment::Invoke { .. })
+                            ) {
+                                (LocalCallChainBase::Name(full_name), 0)
+                            } else {
+                                let mut idx = 0usize;
+                                while let Some(CallChainSegment::Field { name }) =
+                                    node.value.segments.get(idx)
+                                {
+                                    full_name.push('.');
+                                    full_name.push_str(&name.value.value);
+                                    idx += 1;
+                                }
+                                if idx > 0 {
+                                    if let Some(index) = program_stack
+                                        .iter()
+                                        .rev()
+                                        .position(|var| var.name == full_name)
+                                    {
+                                        if idx == node.value.segments.len() {
+                                            return Ok(LocalExpressionNode::Primary(
+                                                LocalPrimaryExpressionNode::Var(LocalVarNode {
+                                                    index,
+                                                }),
+                                            ));
+                                        }
+                                        (
+                                            LocalCallChainBase::Expr(Box::new(
+                                                LocalExpressionNode::Primary(
+                                                    LocalPrimaryExpressionNode::Var(LocalVarNode {
+                                                        index,
+                                                    }),
+                                                ),
+                                            )),
+                                            idx,
+                                        )
+                                    } else if idx == node.value.segments.len() {
+                                        return Err(AlthreadError::new(
+                                            ErrorType::VariableError,
+                                            Some(node.pos.clone()),
+                                            format!("Variable '{}' not found", full_name),
+                                        ));
+                                    } else {
+                                        (LocalCallChainBase::Name(full_name), idx)
+                                    }
+                                } else {
+                                    (
+                                        LocalCallChainBase::Expr(Box::new(
+                                            LocalExpressionNode::from_expression(
+                                                &node.value.base.value,
+                                                program_stack,
+                                            )?,
+                                        )),
+                                        0,
+                                    )
+                                }
+                            }
                         }
-                        _ => LocalCallChainBase::Expr(Box::new(
-                            LocalExpressionNode::from_expression(
-                                &node.value.base.value,
-                                program_stack,
-                            )?,
-                        )),
+                        _ => (
+                            LocalCallChainBase::Expr(Box::new(
+                                LocalExpressionNode::from_expression(
+                                    &node.value.base.value,
+                                    program_stack,
+                                )?,
+                            )),
+                            0,
+                        ),
                     },
-                    _ => LocalCallChainBase::Expr(Box::new(LocalExpressionNode::from_expression(
-                        &node.value.base.value,
-                        program_stack,
-                    )?)),
+                    _ => (
+                        LocalCallChainBase::Expr(Box::new(LocalExpressionNode::from_expression(
+                            &node.value.base.value,
+                            program_stack,
+                        )?)),
+                        0,
+                    ),
                 };
                 let mut segments = Vec::new();
-                for segment in node.value.segments.iter() {
+                for segment in node.value.segments.iter().skip(segment_start) {
                     match segment {
                         CallChainSegment::Invoke { args } => {
                             let local_args =
@@ -662,6 +724,34 @@ impl LocalExpressionNode {
                 declare_pos: None,
             })
             .collect()
+    }
+
+    fn quantified_element_type(
+        list: &LocalExpressionNode,
+        program_stack: &Vec<Variable>,
+        pos: &Pos,
+    ) -> AlthreadResult<DataType> {
+        let mut temp_state = CompilerState::new_with_context(std::rc::Rc::new(
+            std::cell::RefCell::new(crate::compiler::CompilationContext::new()),
+        ));
+        temp_state.program_stack = program_stack.clone();
+
+        let list_type = list.datatype(&temp_state).map_err(|err| {
+            AlthreadError::new(
+                ErrorType::TypeError,
+                Some(pos.clone()),
+                format!("Cannot determine quantified list type: {err}"),
+            )
+        })?;
+
+        match list_type {
+            DataType::List(inner) => Ok(*inner),
+            other => Err(AlthreadError::new(
+                ErrorType::TypeError,
+                Some(pos.clone()),
+                format!("Quantifier expects a list, found {other}"),
+            )),
+        }
     }
 
     fn localize_expression_for_scope(
@@ -3191,15 +3281,19 @@ impl Expression {
                 }
             },
             Self::CallChain(node) => {
-                let skip_base = matches!(
-                    (&node.value.base.value, node.value.segments.first()),
-                    (
-                        Expression::Primary(primary_node),
-                        Some(CallChainSegment::Invoke { .. })
-                    ) if matches!(primary_node.value, PrimaryExpression::Identifier(_))
-                );
-                if !skip_base {
-                    node.value.base.value.add_dependencies(dependencies);
+                if let Some(path) = named_call_chain_path(&node.value) {
+                    dependencies.variables.insert(path);
+                } else {
+                    let skip_base = matches!(
+                        (&node.value.base.value, node.value.segments.first()),
+                        (
+                            Expression::Primary(primary_node),
+                            Some(CallChainSegment::Invoke { .. })
+                        ) if matches!(primary_node.value, PrimaryExpression::Identifier(_))
+                    );
+                    if !skip_base {
+                        node.value.base.value.add_dependencies(dependencies);
+                    }
                 }
                 for segment in node.value.segments.iter() {
                     if let CallChainSegment::Invoke { args } | CallChainSegment::Call { args, .. } =
@@ -3238,15 +3332,19 @@ impl Expression {
                 }
             },
             Self::CallChain(node) => {
-                let skip_base = matches!(
-                    (&node.value.base.value, node.value.segments.first()),
-                    (
-                        Expression::Primary(primary_node),
-                        Some(CallChainSegment::Invoke { .. })
-                    ) if matches!(primary_node.value, PrimaryExpression::Identifier(_))
-                );
-                if !skip_base {
-                    node.value.base.value.get_vars(vars);
+                if let Some(path) = named_call_chain_path(&node.value) {
+                    vars.insert(path);
+                } else {
+                    let skip_base = matches!(
+                        (&node.value.base.value, node.value.segments.first()),
+                        (
+                            Expression::Primary(primary_node),
+                            Some(CallChainSegment::Invoke { .. })
+                        ) if matches!(primary_node.value, PrimaryExpression::Identifier(_))
+                    );
+                    if !skip_base {
+                        node.value.base.value.get_vars(vars);
+                    }
                 }
                 for segment in node.value.segments.iter() {
                     if let CallChainSegment::Invoke { args } | CallChainSegment::Call { args, .. } =
@@ -3277,6 +3375,33 @@ impl AstDisplay for Expression {
             }
         }
     }
+}
+
+fn named_call_chain_path(node: &CallChainExpression) -> Option<String> {
+    let Expression::Primary(primary) = &node.base.value else {
+        return None;
+    };
+    let PrimaryExpression::Identifier(identifier) = &primary.value else {
+        return None;
+    };
+    if matches!(node.segments.first(), Some(CallChainSegment::Invoke { .. })) {
+        return None;
+    }
+
+    let mut path = object_identifier_name(identifier);
+    for segment in &node.segments {
+        match segment {
+            CallChainSegment::Field { name } => {
+                path.push('.');
+                path.push_str(&name.value.value);
+            }
+            CallChainSegment::Call { .. }
+            | CallChainSegment::TupleIndex { .. }
+            | CallChainSegment::Reaches { .. }
+            | CallChainSegment::Invoke { .. } => break,
+        }
+    }
+    Some(path)
 }
 
 impl AstDisplay for CallChainExpression {

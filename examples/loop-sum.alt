@@ -4,8 +4,8 @@ shared {
 
 program A(my_id: int) {
   loop {
-    Sum = Sum + 1;
-    Sum = Sum - 1;
+    @ Sum = Sum + 1;
+    @ Sum = Sum - 1;
   }
 }
 

@@ -31,6 +31,34 @@ shared {
 }
 
 #[test]
+fn parse_ast_builds_import_block_directly() {
+    let source = r#"
+import std/io;
+import math/vector as Vec;
+
+main {
+}
+"#;
+
+    let ast = parse_ast(source, "").unwrap();
+    let import_block = ast.import_block.expect("import block should be present");
+
+    assert_eq!(import_block.value.imports.len(), 2);
+    assert_eq!(import_block.value.imports[0].value.path.segments, vec!["std", "io"]);
+    assert!(import_block.value.imports[0].value.alias.is_none());
+    assert_eq!(
+        import_block.value.imports[1]
+            .value
+            .alias
+            .as_ref()
+            .expect("alias should exist")
+            .value
+            .value,
+        "Vec"
+    );
+}
+
+#[test]
 fn combinator_parser_exposes_shared_ast_shape() {
     let source = r#"
 shared {
@@ -99,6 +127,45 @@ fn parse_ast_builds_program_blocks_with_args() {
     assert!(matches!(
         &block.value.children[0].value,
         Statement::Declaration(_)
+    ));
+}
+
+#[test]
+fn parse_ast_builds_function_blocks_with_return_type() {
+    let source = r#"
+@private fn add(a: int, b: int) -> int {
+    return a + b;
+}
+
+fn nop() -> void {
+    return;
+}
+"#;
+
+    let ast = parse_ast(source, "").unwrap();
+
+    let (args, return_type, block, is_private) = ast
+        .function_blocks
+        .get("add")
+        .expect("function add should exist");
+    assert!(*is_private);
+    assert_eq!(args.value.identifiers.len(), 2);
+    assert_eq!(return_type.to_string(), "int");
+    assert_eq!(block.value.children.len(), 1);
+    assert!(matches!(
+        &block.value.children[0].value,
+        Statement::FnReturn(_)
+    ));
+
+    let (_, return_type, block, is_private) = ast
+        .function_blocks
+        .get("nop")
+        .expect("function nop should exist");
+    assert!(!*is_private);
+    assert_eq!(return_type.to_string(), "void");
+    assert!(matches!(
+        &block.value.children[0].value,
+        Statement::FnReturn(_)
     ));
 }
 
@@ -226,6 +293,98 @@ main {
             .count()
             >= 3
     );
+}
+
+#[test]
+fn parse_ast_accepts_send_and_channel_statements() {
+    let source = r#"
+program Worker() {
+    send out(1, true);
+    send out.a.*(42);
+}
+
+main {
+    let a = run Worker();
+    channel self.out (int, bool)> a.in;
+    channel a.out.a.a (int)> self.in;
+}
+"#;
+
+    let ast = parse_ast(source, "").unwrap();
+    let (_, program_block, _) = ast
+        .process_blocks
+        .get("Worker")
+        .expect("program Worker should exist");
+    let (_, main_block, _) = ast
+        .process_blocks
+        .get("main")
+        .expect("main block should exist");
+
+    assert!(matches!(
+        program_block.value.children[0].value,
+        Statement::Send(_)
+    ));
+    assert!(matches!(
+        program_block.value.children[1].value,
+        Statement::Send(_)
+    ));
+    assert!(matches!(
+        main_block.value.children[1].value,
+        Statement::ChannelDeclaration(_)
+    ));
+    assert!(matches!(
+        main_block.value.children[2].value,
+        Statement::ChannelDeclaration(_)
+    ));
+}
+
+#[test]
+fn parse_ast_accepts_always_blocks() {
+    let source = r#"
+shared {
+    let Xs = 1..4;
+    let Flag = true;
+}
+
+always {
+    for x in Xs { x > 0 } && if Flag { exists y in Xs { y == 2 } } else { false };
+    Xs.len() > 0;
+}
+
+main {
+}
+"#;
+
+    let ast = parse_ast(source, "").unwrap();
+    let always = ast
+        .condition_blocks
+        .get(&althread::ast::token::condition_keyword::ConditionKeyword::Always)
+        .expect("always block should exist");
+
+    assert_eq!(always.value.children.len(), 2);
+}
+
+#[test]
+fn parse_ast_accepts_check_blocks() {
+    let source = r#"
+shared {
+    let Request = false;
+    let Granted = false;
+}
+
+check {
+    always (if Request { eventually Granted });
+    eventually (Granted == true);
+}
+
+main {
+}
+"#;
+
+    let ast = parse_ast(source, "").unwrap();
+
+    assert_eq!(ast.check_blocks.len(), 1);
+    assert_eq!(ast.check_blocks[0].value.formulas.len(), 2);
 }
 
 #[test]

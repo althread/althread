@@ -292,7 +292,7 @@ check {
     fn test_eventually_shared_list_updates_are_observed() -> AlthreadResult<()> {
         let source = r#"
 shared {
-    let Global = [0..2];
+    let Global = 0..2;
 }
 
 program A() {

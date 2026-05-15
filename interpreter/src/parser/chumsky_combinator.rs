@@ -13,11 +13,13 @@ use crate::{
     ast::statement::expression::list_expression::RangeListExpression,
     ast::{
         block::Block,
+        condition_block::ConditionBlock,
         node::Node,
         statement::{
             assignment::{binary_assignment::BinaryAssignment, Assignment},
             atomic::Atomic,
             break_loop::{BreakLoopControl, BreakLoopType},
+            channel_declaration::ChannelDeclaration,
             declaration::Declaration,
             expression::{
                 binary_expression::BinaryExpression, primary_expression::PrimaryExpression,
@@ -28,9 +30,11 @@ use crate::{
             fn_call::FnCall,
             for_control::ForControl,
             if_control::IfControl,
+            label::LabelStatement,
             loop_control::LoopControl,
             receive::ReceiveStatement,
             run_call::RunCall,
+            send::SendStatement,
             wait::{Wait, WaitingBlockKind},
             waiting_case::{WaitingBlockCase, WaitingBlockCaseRule},
             while_control::WhileControl,
@@ -38,19 +42,21 @@ use crate::{
         },
         token::{
             args_list::ArgsList, binary_assignment_operator::BinaryAssignmentOperator,
-            binary_operator::BinaryOperator, datatype::DataType,
-            declaration_keyword::DeclarationKeyword, identifier::Identifier, literal::Literal,
-            object_identifier::ObjectIdentifier, unary_operator::UnaryOperator,
+            binary_operator::BinaryOperator, condition_keyword::ConditionKeyword,
+            datatype::DataType, declaration_keyword::DeclarationKeyword, identifier::Identifier,
+            literal::Literal, object_identifier::ObjectIdentifier, unary_operator::UnaryOperator,
         },
         Ast,
     },
+    ast::import_block::{ImportBlock, ImportItem, ImportPath},
+    checker::ltl::ast::{CheckBlock, LtlExpression},
     error::{AlthreadError, ErrorType, Pos},
     parser::syntax::SyntaxSnippet,
 };
 
 pub type Span = SimpleSpan<usize>;
 type Spanned<T> = (T, Span);
-type ParserExtra<'a> = extra::Err<Rich<'a, Token, Span>>;
+pub(crate) type ParserExtra<'a> = extra::Err<Rich<'a, Token, Span>>;
 
 #[derive(Logos, Clone, Debug, PartialEq)]
 #[logos(skip r"[ \t\r\n\f]+")]
@@ -70,16 +76,30 @@ pub enum Token {
     Never,
     #[token("check")]
     Check,
+    #[token("eventually")]
+    Eventually,
+    #[token("until")]
+    Until,
+    #[token("next")]
+    Next,
     #[token("program")]
     Program,
     #[token("fn")]
     Fn,
+    #[token("import")]
+    Import,
+    #[token("as")]
+    As,
     #[token("let")]
     Let,
     #[token("const")]
     Const,
     #[token("run")]
     Run,
+    #[token("send")]
+    Send,
+    #[token("channel")]
+    Channel,
     #[token("await")]
     Await,
     #[token("first")]
@@ -96,6 +116,8 @@ pub enum Token {
     While,
     #[token("for")]
     For,
+    #[token("exists")]
+    Exists,
     #[token("in")]
     In,
     #[token("loop")]
@@ -106,6 +128,10 @@ pub enum Token {
     Break,
     #[token("continue")]
     Continue,
+    #[token("return")]
+    Return,
+    #[token("label")]
+    Label,
     #[token("proc")]
     Proc,
     #[token("list")]
@@ -128,6 +154,8 @@ pub enum Token {
     False,
     #[token("null")]
     Null,
+    #[token("$")]
+    Dollar,
     #[regex(r#""([^"\\]|\\.)*""#, |lex| lex.slice().to_string())]
     StringLiteral(String),
     #[regex(r"[0-9]+\.[0-9]+", |lex| lex.slice().to_string())]
@@ -212,11 +240,18 @@ impl fmt::Display for Token {
             Token::Always => write!(f, "always"),
             Token::Never => write!(f, "never"),
             Token::Check => write!(f, "check"),
+            Token::Eventually => write!(f, "eventually"),
+            Token::Until => write!(f, "until"),
+            Token::Next => write!(f, "next"),
             Token::Program => write!(f, "program"),
             Token::Fn => write!(f, "fn"),
+            Token::Import => write!(f, "import"),
+            Token::As => write!(f, "as"),
             Token::Let => write!(f, "let"),
             Token::Const => write!(f, "const"),
             Token::Run => write!(f, "run"),
+            Token::Send => write!(f, "send"),
+            Token::Channel => write!(f, "channel"),
             Token::Await => write!(f, "await"),
             Token::First => write!(f, "first"),
             Token::Seq => write!(f, "seq"),
@@ -225,11 +260,14 @@ impl fmt::Display for Token {
             Token::Else => write!(f, "else"),
             Token::While => write!(f, "while"),
             Token::For => write!(f, "for"),
+            Token::Exists => write!(f, "exists"),
             Token::In => write!(f, "in"),
             Token::Loop => write!(f, "loop"),
             Token::Atomic => write!(f, "atomic"),
             Token::Break => write!(f, "break"),
             Token::Continue => write!(f, "continue"),
+            Token::Return => write!(f, "return"),
+            Token::Label => write!(f, "label"),
             Token::Proc => write!(f, "proc"),
             Token::List => write!(f, "list"),
             Token::Tuple => write!(f, "tuple"),
@@ -241,6 +279,7 @@ impl fmt::Display for Token {
             Token::True => write!(f, "true"),
             Token::False => write!(f, "false"),
             Token::Null => write!(f, "null"),
+            Token::Dollar => write!(f, "$"),
             Token::StringLiteral(_) => write!(f, "string literal"),
             Token::FloatLiteral(_) => write!(f, "float literal"),
             Token::IntLiteral(_) => write!(f, "int literal"),
@@ -283,11 +322,24 @@ impl fmt::Display for Token {
 
 #[derive(Debug)]
 enum TopLevelBlock {
+    Import(Node<ImportItem>),
     Shared(Node<Block>),
     Main(Node<Block>),
+    Always(Node<ConditionBlock>),
+    Check {
+        pos: Pos,
+        body_span: Span,
+    },
     Program {
         name: Node<Identifier>,
         args: Node<ArgsList>,
+        block: Node<Block>,
+        is_private: bool,
+    },
+    Function {
+        name: Node<Identifier>,
+        args: Node<ArgsList>,
+        return_type: Node<DataType>,
         block: Node<Block>,
         is_private: bool,
     },
@@ -299,10 +351,67 @@ pub fn parse_program(source: &str, file_path: &str) -> Result<Ast, AlthreadError
     let parser = ast_parser(source, file_path);
     let input = tokens.as_slice().map(eoi, |(token, span)| (token, span));
 
-    parser
+    let blocks = parser
         .parse(input)
         .into_result()
-        .map_err(|errs| map_rich_errors(source, file_path, errs))
+        .map_err(|errs| map_rich_errors(source, file_path, errs))?;
+
+    let mut ast = Ast::new();
+    let mut imports = Vec::new();
+    for block in blocks {
+        match block {
+            TopLevelBlock::Import(import) => imports.push(import),
+            TopLevelBlock::Shared(block) => ast.global_block = Some(block),
+            TopLevelBlock::Main(block) => {
+                ast.process_blocks
+                    .insert("main".to_string(), (Node::new(), block, false));
+            }
+            TopLevelBlock::Always(block) => {
+                ast.condition_blocks.insert(ConditionKeyword::Always, block);
+            }
+            TopLevelBlock::Check { pos, body_span } => {
+                let formulas = parse_check_formulas(source, file_path, body_span)?;
+                ast.check_blocks.push(Node {
+                    pos,
+                    value: CheckBlock { formulas },
+                });
+            }
+            TopLevelBlock::Program {
+                name,
+                args,
+                block,
+                is_private,
+            } => {
+                ast.process_blocks
+                    .insert(name.value.value.clone(), (args, block, is_private));
+            }
+            TopLevelBlock::Function {
+                name,
+                args,
+                return_type,
+                block,
+                is_private,
+            } => {
+                ast.function_blocks.insert(
+                    name.value.value.clone(),
+                    (args, return_type.value, block, is_private),
+                );
+            }
+        }
+    }
+
+    if !imports.is_empty() {
+        ImportBlock::validate_import_names(&imports)?;
+        ast.import_block = Some(Node {
+            pos: imports
+                .first()
+                .map(|node| node.pos.clone())
+                .unwrap_or_else(Pos::default),
+            value: ImportBlock { imports },
+        });
+    }
+
+    Ok(ast)
 }
 
 pub fn parse_ast(source: &str, file_path: &str) -> Result<Ast, AlthreadError> {
@@ -362,6 +471,21 @@ pub fn parse_list_expression(
     parse_expression(source, snippet, file_path)
 }
 
+pub(crate) fn parse_ltl_expression_with_chumsky(
+    source: &str,
+    snippet: &SyntaxSnippet,
+    filepath: &str,
+) -> Result<LtlExpression, AlthreadError> {
+    let tokens = lex_snippet(snippet, filepath)?;
+    let eoi = Span::new((), snippet.pos.end..snippet.pos.end);
+    let input = tokens.as_slice().map(eoi, |(token, span)| (token, span));
+    let result = ltl_expression_parser()
+        .parse(input)
+        .into_result()
+        .map_err(|errs| map_ltl_errors(source, filepath, errs));
+    result
+}
+
 fn lex(source: &str, file_path: &str) -> Result<Vec<Spanned<Token>>, AlthreadError> {
     let mut lexer = Token::lexer(source);
     let mut tokens = Vec::new();
@@ -384,44 +508,43 @@ fn lex(source: &str, file_path: &str) -> Result<Vec<Spanned<Token>>, AlthreadErr
 fn ast_parser<'tokens, 'src: 'tokens, I>(
     source: &'src str,
     file_path: &'src str,
-) -> impl Parser<'tokens, I, Ast, ParserExtra<'tokens>> + Clone
+) -> impl Parser<'tokens, I, Vec<TopLevelBlock>, ParserExtra<'tokens>> + Clone
 where
     I: ValueInput<'tokens, Token = Token, Span = Span>,
 {
     choice((
+        import_item_parser(source, file_path).boxed(),
         shared_block_parser(source, file_path).boxed(),
         main_block_parser(source, file_path).boxed(),
-        unsupported_block_parser(Token::Always, "always").boxed(),
+        always_block_parser(source, file_path).boxed(),
+        check_block_parser(source, file_path).boxed(),
         unsupported_block_parser(Token::Never, "never").boxed(),
-        unsupported_block_parser(Token::Check, "check").boxed(),
         program_block_parser(source, file_path).boxed(),
-        unsupported_prefixed_block_parser(Token::Fn, "function").boxed(),
+        function_block_parser(source, file_path).boxed(),
     ))
     .repeated()
     .collect::<Vec<TopLevelBlock>>()
     .then_ignore(end())
-    .map(|blocks| {
-        let mut ast = Ast::new();
-        for block in blocks {
-            match block {
-                TopLevelBlock::Shared(block) => ast.global_block = Some(block),
-                TopLevelBlock::Main(block) => {
-                    ast.process_blocks
-                        .insert("main".to_string(), (Node::new(), block, false));
-                }
-                TopLevelBlock::Program {
-                    name,
-                    args,
-                    block,
-                    is_private,
-                } => {
-                    ast.process_blocks
-                        .insert(name.value.value.clone(), (args, block, is_private));
-                }
-            }
-        }
-        ast
-    })
+}
+
+fn import_item_parser<'tokens, 'src: 'tokens, I>(
+    source: &'src str,
+    file_path: &'src str,
+) -> impl Parser<'tokens, I, TopLevelBlock, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    just(Token::Import)
+        .ignore_then(import_path_parser())
+        .then(just(Token::As).ignore_then(identifier_parser()).or_not())
+        .then_ignore(just(Token::Semi))
+        .map_with(move |(path, alias), e| TopLevelBlock::Import(Node {
+            pos: pos_from_span(source, file_path, e.span()),
+            value: ImportItem {
+                path,
+                alias,
+            },
+        }))
 }
 
 fn shared_block_parser<'tokens, 'src: 'tokens, I>(
@@ -443,6 +566,48 @@ where
                 .delimited_by(just(Token::LBrace), just(Token::RBrace)),
         )
         .map(TopLevelBlock::Shared)
+}
+
+fn always_block_parser<'tokens, 'src: 'tokens, I>(
+    source: &'src str,
+    file_path: &'src str,
+) -> impl Parser<'tokens, I, TopLevelBlock, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    just(Token::Always)
+        .ignore_then(
+            expression_parser()
+                .then_ignore(just(Token::Semi))
+                .repeated()
+                .collect::<Vec<_>>()
+                .delimited_by(just(Token::LBrace), just(Token::RBrace))
+                .map_with(move |children, e| Node {
+                    pos: pos_from_span(source, file_path, e.span()),
+                    value: ConditionBlock { children },
+                }),
+        )
+        .map(TopLevelBlock::Always)
+}
+
+fn check_block_parser<'tokens, 'src: 'tokens, I>(
+    source: &'src str,
+    file_path: &'src str,
+) -> impl Parser<'tokens, I, TopLevelBlock, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    just(Token::Check)
+        .ignore_then(
+            balanced_token_item_parser()
+                .repeated()
+                .map_with(|_, e| e.span())
+                .delimited_by(just(Token::LBrace), just(Token::RBrace)),
+        )
+        .map_with(move |body_span, e| TopLevelBlock::Check {
+            pos: pos_from_span(source, file_path, e.span()),
+            body_span,
+        })
 }
 
 fn main_block_parser<'tokens, 'src: 'tokens, I>(
@@ -480,6 +645,32 @@ where
         )
 }
 
+fn function_block_parser<'tokens, 'src: 'tokens, I>(
+    source: &'src str,
+    file_path: &'src str,
+) -> impl Parser<'tokens, I, TopLevelBlock, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    just(Token::AtPrivate)
+        .or_not()
+        .then_ignore(just(Token::Fn))
+        .then(identifier_parser())
+        .then(args_list_parser())
+        .then_ignore(just(Token::Arrow))
+        .then(datatype_parser())
+        .then(block_parser(source, file_path))
+        .map(
+            |((((private_marker, name), args), return_type), block)| TopLevelBlock::Function {
+                name,
+                args,
+                return_type,
+                block,
+                is_private: private_marker.is_some(),
+            },
+        )
+}
+
 fn args_list_parser<'tokens, I>(
 ) -> impl Parser<'tokens, I, Node<ArgsList>, ParserExtra<'tokens>> + Clone
 where
@@ -502,6 +693,20 @@ where
                 },
             }
         })
+}
+
+fn import_path_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, ImportPath, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    select! {
+        Token::Ident(name) => name,
+    }
+    .separated_by(just(Token::Slash))
+    .at_least(1)
+    .collect::<Vec<_>>()
+    .map(|segments| ImportPath { segments })
 }
 
 fn block_parser<'tokens, 'src: 'tokens, I>(
@@ -656,6 +861,31 @@ where
                 }),
             });
 
+        let return_statement = just(Token::Return)
+            .ignore_then(expression_parser().or_not())
+            .then_ignore(just(Token::Semi))
+            .map_with(move |value, e| Node {
+                pos: pos_from_span(source, file_path, e.span()),
+                value: Statement::FnReturn(Node {
+                    pos: pos_from_span(source, file_path, e.span()),
+                    value: crate::ast::statement::fn_return::FnReturn {
+                        value,
+                        pos: pos_from_span(source, file_path, e.span()),
+                    },
+                }),
+            });
+
+        let label_statement = just(Token::Label)
+            .ignore_then(identifier_parser())
+            .then_ignore(just(Token::Semi))
+            .map_with(move |name, e| Node {
+                pos: pos_from_span(source, file_path, e.span()),
+                value: Statement::Label(Node {
+                    pos: pos_from_span(source, file_path, e.span()),
+                    value: LabelStatement { name },
+                }),
+            });
+
         choice((
             if_statement.boxed(),
             while_statement.boxed(),
@@ -665,11 +895,55 @@ where
             wait_statement.boxed(),
             break_statement.boxed(),
             continue_statement.boxed(),
+            return_statement.boxed(),
+            label_statement.boxed(),
+            send_statement_parser().boxed(),
+            channel_declaration_parser().boxed(),
             declaration_statement_parser().boxed(),
             assignment_statement_parser().boxed(),
             expression_statement_parser().boxed(),
             nested_block.boxed(),
         ))
+    })
+}
+
+fn balanced_token_item_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, (), ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    recursive(|item| {
+        let plain = any()
+            .filter(|tok| {
+                !matches!(
+                    tok,
+                    Token::LParen
+                        | Token::RParen
+                        | Token::LBrace
+                        | Token::RBrace
+                        | Token::LBracket
+                        | Token::RBracket
+                )
+            })
+            .ignored();
+
+        let paren = item
+            .clone()
+            .repeated()
+            .delimited_by(just(Token::LParen), just(Token::RParen))
+            .ignored();
+        let brace = item
+            .clone()
+            .repeated()
+            .delimited_by(just(Token::LBrace), just(Token::RBrace))
+            .ignored();
+        let bracket = item
+            .clone()
+            .repeated()
+            .delimited_by(just(Token::LBracket), just(Token::RBracket))
+            .ignored();
+
+        choice((plain, paren, brace, bracket))
     })
 }
 
@@ -734,6 +1008,98 @@ where
                     }),
                 }),
             }
+        })
+}
+
+fn send_statement_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, Node<Statement>, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    let args_tuple = expression_parser()
+        .separated_by(just(Token::Comma))
+        .allow_trailing()
+        .collect::<Vec<_>>()
+        .delimited_by(just(Token::LParen), just(Token::RParen))
+        .map_with(|values, e| tuple_expression_node(values, e.span()));
+
+    just(Token::Send)
+        .ignore_then(send_target_parser())
+        .then(args_tuple)
+        .then_ignore(just(Token::Semi))
+        .map_with(|((channel, is_broadcast), values), e| Node {
+            pos: pos_from_span_source(e.span()),
+            value: Statement::Send(Node {
+                pos: pos_from_span_source(e.span()),
+                value: SendStatement {
+                    channel,
+                    is_broadcast,
+                    values,
+                },
+            }),
+        })
+}
+
+fn channel_declaration_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, Node<Statement>, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    let endpoint = channel_endpoint_parser().try_map(|identifier, span| {
+        split_channel_endpoint(&identifier).map_err(|message| Rich::custom(span, message))
+    });
+
+    just(Token::Channel)
+        .ignore_then(endpoint.clone())
+        .then(
+            datatype_parser()
+                .separated_by(just(Token::Comma))
+                .allow_trailing()
+                .collect::<Vec<_>>()
+                .delimited_by(just(Token::LParen), just(Token::RParen)),
+        )
+        .then_ignore(just(Token::Gt))
+        .then(endpoint)
+        .then_ignore(just(Token::Semi))
+        .map_with(
+            |(((left_prog, left_name), datatypes), (right_prog, right_name)), e| Node {
+                pos: pos_from_span_source(e.span()),
+                value: Statement::ChannelDeclaration(Node {
+                    pos: pos_from_span_source(e.span()),
+                    value: ChannelDeclaration {
+                        ch_left_prog: left_prog,
+                        ch_left_name: left_name,
+                        ch_right_prog: right_prog,
+                        ch_right_name: right_name,
+                        datatypes: datatypes.into_iter().map(|dtype| dtype.value).collect(),
+                    },
+                }),
+            },
+        )
+}
+
+fn channel_endpoint_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, Node<ObjectIdentifier>, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    let endpoint_part = choice((
+        identifier_parser(),
+        just(Token::In).map_with(|_, e| Node {
+            pos: pos_from_span_source(e.span()),
+            value: Identifier {
+                value: "in".to_string(),
+            },
+        }),
+    ));
+
+    endpoint_part
+        .separated_by(just(Token::Dot))
+        .at_least(1)
+        .collect::<Vec<_>>()
+        .map_with(|parts, e| Node {
+            pos: pos_from_span_source(e.span()),
+            value: ObjectIdentifier { parts },
         })
 }
 
@@ -823,7 +1189,26 @@ fn identifier_parser<'tokens, I>(
 where
     I: ValueInput<'tokens, Token = Token, Span = Span>,
 {
-    select! { Token::Ident(name) => name }.map_with(|name, e| Node {
+    select! {
+        Token::Ident(name) => name,
+        Token::Dollar => "$".to_string(),
+    }
+    .map_with(|name, e| Node {
+        pos: pos_from_span_source(e.span()),
+        value: Identifier { value: name },
+    })
+}
+
+fn member_name_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, Node<Identifier>, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    select! {
+        Token::Ident(name) => name,
+        Token::Next => "next".to_string(),
+    }
+    .map_with(|name, e| Node {
         pos: pos_from_span_source(e.span()),
         value: Identifier { value: name },
     })
@@ -848,12 +1233,16 @@ where
     })
 }
 
-fn expression_parser<'tokens, I>(
+pub(crate) fn expression_parser<'tokens, I>(
 ) -> impl Parser<'tokens, I, Node<Expression>, ParserExtra<'tokens>> + Clone
 where
     I: ValueInput<'tokens, Token = Token, Span = Span>,
 {
     recursive(|expr| {
+        let expr_block = expr
+            .clone()
+            .delimited_by(just(Token::LBrace), just(Token::RBrace));
+
         let args_tuple = expr
             .clone()
             .separated_by(just(Token::Comma))
@@ -931,13 +1320,79 @@ where
                 }),
             });
 
-        let atom = choice((run_call, literal, tuple, grouped, list, ident)).boxed();
+        let if_expr = just(Token::If)
+            .ignore_then(expr.clone())
+            .then(expr_block.clone())
+            .then(just(Token::Else).ignore_then(expr_block.clone()).or_not())
+            .map_with(|((condition, then_expr), else_expr), e| Node {
+                pos: pos_from_span_source(e.span()),
+                value: Expression::Primary(Node {
+                    pos: pos_from_span_source(e.span()),
+                    value: PrimaryExpression::IfExpr {
+                        condition: Box::new(condition),
+                        then_expr: Box::new(then_expr),
+                        else_expr: else_expr.map(Box::new),
+                    },
+                }),
+            });
+
+        let forall_expr = just(Token::For)
+            .ignore_then(identifier_parser())
+            .then_ignore(just(Token::In))
+            .then(expr.clone())
+            .then(expr_block.clone())
+            .map_with(|((var, list), body), e| Node {
+                pos: pos_from_span_source(e.span()),
+                value: Expression::Primary(Node {
+                    pos: pos_from_span_source(e.span()),
+                    value: PrimaryExpression::ForAllExpr {
+                        var,
+                        list: Box::new(list),
+                        body: Box::new(body),
+                    },
+                }),
+            });
+
+        let exists_expr = just(Token::Exists)
+            .ignore_then(identifier_parser())
+            .then_ignore(just(Token::In))
+            .then(expr.clone())
+            .then(expr_block.clone())
+            .map_with(|((var, list), body), e| Node {
+                pos: pos_from_span_source(e.span()),
+                value: Expression::Primary(Node {
+                    pos: pos_from_span_source(e.span()),
+                    value: PrimaryExpression::ExistsExpr {
+                        var,
+                        list: Box::new(list),
+                        body: Box::new(body),
+                    },
+                }),
+            });
+
+        let atom = choice((
+            if_expr,
+            forall_expr,
+            exists_expr,
+            run_call,
+            literal,
+            tuple,
+            grouped,
+            list,
+            ident,
+        ))
+        .boxed();
 
         let invoke_segment = args_tuple
             .clone()
             .map(|args| CallChainSegment::Invoke { args });
 
         let field_segment = just(Token::Dot).ignore_then(choice((
+            just(Token::Ident("reaches".to_string()))
+                .ignore_then(
+                    identifier_parser().delimited_by(just(Token::LParen), just(Token::RParen)),
+                )
+                .map(|label| CallChainSegment::Reaches { label }),
             select! { Token::IntLiteral(index) => index }
                 .try_map(|index, span| {
                     index.parse::<usize>().map_err(|_| {
@@ -945,17 +1400,11 @@ where
                     })
                 })
                 .map(|index| CallChainSegment::TupleIndex { index }),
-            select! { Token::Ident(name) => name }
+            member_name_parser()
                 .then(args_tuple.clone().or_not())
-                .map_with(|(name, args), e| {
-                    let name = Node {
-                        pos: pos_from_span_source(e.span()),
-                        value: Identifier { value: name },
-                    };
-                    match args {
-                        Some(args) => CallChainSegment::Call { name, args },
-                        None => CallChainSegment::Field { name },
-                    }
+                .map(|(name, args)| match args {
+                    Some(args) => CallChainSegment::Call { name, args },
+                    None => CallChainSegment::Field { name },
                 }),
         )));
 
@@ -1061,6 +1510,309 @@ where
                 },
                 None => start,
             })
+    })
+}
+
+pub(crate) fn predicate_expression_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, Node<Expression>, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    recursive(|expr| {
+        let args_tuple = expr
+            .clone()
+            .separated_by(just(Token::Comma))
+            .allow_trailing()
+            .collect::<Vec<_>>()
+            .delimited_by(just(Token::LParen), just(Token::RParen))
+            .map_with(|values, e| tuple_expression_node(values, e.span()));
+
+        let run_call = just(Token::Run)
+            .ignore_then(object_identifier_parser())
+            .then(args_tuple.clone())
+            .map_with(|(identifier, args), e| Node {
+                pos: pos_from_span_source(e.span()),
+                value: Expression::RunCall(Box::new(Node {
+                    pos: pos_from_span_source(e.span()),
+                    value: RunCall { identifier, args },
+                })),
+            });
+
+        let literal = literal_parser().map(|literal| Node {
+            pos: literal.pos.clone(),
+            value: Expression::Primary(Node {
+                pos: literal.pos.clone(),
+                value: PrimaryExpression::Literal(literal),
+            }),
+        });
+
+        let ident = identifier_parser().map(|ident| {
+            let pos = ident.pos.clone();
+            let object_identifier = Node {
+                pos: pos.clone(),
+                value: ObjectIdentifier { parts: vec![ident] },
+            };
+            Node {
+                pos: pos.clone(),
+                value: Expression::Primary(Node {
+                    pos,
+                    value: PrimaryExpression::Identifier(object_identifier),
+                }),
+            }
+        });
+
+        let tuple = expr
+            .clone()
+            .separated_by(just(Token::Comma))
+            .at_least(2)
+            .collect::<Vec<_>>()
+            .delimited_by(just(Token::LParen), just(Token::RParen))
+            .map_with(|values, e| tuple_expression_node(values, e.span()));
+
+        let grouped = expr
+            .clone()
+            .delimited_by(just(Token::LParen), just(Token::RParen))
+            .map_with(|inner, e| Node {
+                pos: pos_from_span_source(e.span()),
+                value: Expression::Primary(Node {
+                    pos: pos_from_span_source(e.span()),
+                    value: PrimaryExpression::Expression(Box::new(inner)),
+                }),
+            });
+
+        let list = expr
+            .clone()
+            .separated_by(just(Token::Comma))
+            .allow_trailing()
+            .collect::<Vec<_>>()
+            .delimited_by(just(Token::LBracket), just(Token::RBracket))
+            .map_with(|items, e| Node {
+                pos: pos_from_span_source(e.span()),
+                value: Expression::Bracket(Node {
+                    pos: pos_from_span_source(e.span()),
+                    value: BracketExpression {
+                        content: BracketContent::ListLiteral(items),
+                    },
+                }),
+            });
+
+        let atom = choice((run_call, literal, tuple, grouped, list, ident)).boxed();
+
+        let invoke_segment = args_tuple
+            .clone()
+            .map(|args| CallChainSegment::Invoke { args });
+
+        let field_segment = just(Token::Dot).ignore_then(choice((
+            just(Token::Ident("reaches".to_string()))
+                .ignore_then(
+                    identifier_parser().delimited_by(just(Token::LParen), just(Token::RParen)),
+                )
+                .map(|label| CallChainSegment::Reaches { label }),
+            select! { Token::IntLiteral(index) => index }
+                .try_map(|index, span| {
+                    index.parse::<usize>().map_err(|_| {
+                        Rich::custom(span, format!("tuple index '{}' is too large", index))
+                    })
+                })
+                .map(|index| CallChainSegment::TupleIndex { index }),
+            member_name_parser()
+                .then(args_tuple.clone().or_not())
+                .map(|(name, args)| match args {
+                    Some(args) => CallChainSegment::Call { name, args },
+                    None => CallChainSegment::Field { name },
+                }),
+        )));
+
+        let postfix = atom
+            .then(
+                choice((invoke_segment, field_segment))
+                    .repeated()
+                    .collect::<Vec<_>>(),
+            )
+            .map_with(|(base, segments), e| {
+                if segments.is_empty() {
+                    base
+                } else {
+                    Node {
+                        pos: pos_from_span_source(e.span()),
+                        value: Expression::CallChain(Node {
+                            pos: pos_from_span_source(e.span()),
+                            value: CallChainExpression {
+                                base: Box::new(base),
+                                segments,
+                            },
+                        }),
+                    }
+                }
+            });
+
+        let non_range = postfix.pratt((
+            prefix(7, just(Token::Plus), |_, rhs, e| {
+                unary_expression_node(UnaryOperator::Positive, rhs, e.span())
+            }),
+            prefix(7, just(Token::Minus), |_, rhs, e| {
+                unary_expression_node(UnaryOperator::Negative, rhs, e.span())
+            }),
+            infix(left(6), just(Token::Star), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::Multiply, l, r, e.span())
+            }),
+            infix(left(6), just(Token::Slash), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::Divide, l, r, e.span())
+            }),
+            infix(left(6), just(Token::Percent), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::Modulo, l, r, e.span())
+            }),
+            infix(left(5), just(Token::Plus), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::Add, l, r, e.span())
+            }),
+            infix(left(5), just(Token::Minus), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::Subtract, l, r, e.span())
+            }),
+            infix(left(4), just(Token::ShiftLeft), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::ShiftLeft, l, r, e.span())
+            }),
+            infix(left(4), just(Token::ShiftRight), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::ShiftRight, l, r, e.span())
+            }),
+            infix(left(3), just(Token::LtEq), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::LessThanOrEqual, l, r, e.span())
+            }),
+            infix(left(3), just(Token::GtEq), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::GreaterThanOrEqual, l, r, e.span())
+            }),
+            infix(left(3), just(Token::Lt), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::LessThan, l, r, e.span())
+            }),
+            infix(left(3), just(Token::Gt), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::GreaterThan, l, r, e.span())
+            }),
+            infix(left(2), just(Token::EqEq), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::Equals, l, r, e.span())
+            }),
+            infix(left(2), just(Token::NotEq), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::NotEquals, l, r, e.span())
+            }),
+            infix(left(1), just(Token::Amp), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::BitAnd, l, r, e.span())
+            }),
+            infix(left(1), just(Token::Pipe), |l, _, r, e| {
+                binary_expression_node(BinaryOperator::BitOr, l, r, e.span())
+            }),
+        ));
+
+        non_range
+            .clone()
+            .then(just(Token::DotDot).ignore_then(expr.clone()).or_not())
+            .map_with(|(start, end), e| match end {
+                Some(end) => Node {
+                    pos: pos_from_span_source(e.span()),
+                    value: Expression::Range(Node {
+                        pos: pos_from_span_source(e.span()),
+                        value: RangeListExpression {
+                            expression_start: Box::new(start),
+                            expression_end: Box::new(end),
+                        },
+                    }),
+                },
+                None => start,
+            })
+    })
+}
+
+type LtlParserExtra<'a> = extra::Err<Rich<'a, Token, Span>>;
+
+fn ltl_expression_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, LtlExpression, LtlParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    recursive(|ltl| {
+        let predicate_expr = predicate_expression_parser().map(normalize_ltl_predicate_expression);
+        let condition_formula = recursive(|cond| {
+            let grouped = cond
+                .clone()
+                .delimited_by(just(Token::LParen), just(Token::RParen));
+            let predicate = predicate_expr.clone().map(LtlExpression::Predicate);
+            choice((grouped, predicate)).pratt((
+                prefix(3, just(Token::Bang), |_, rhs, _| {
+                    LtlExpression::Not(Box::new(rhs))
+                }),
+                infix(left(2), just(Token::AndAnd), |lhs, _, rhs, _| {
+                    LtlExpression::And(Box::new(lhs), Box::new(rhs))
+                }),
+                infix(left(1), just(Token::OrOr), |lhs, _, rhs, _| {
+                    LtlExpression::Or(Box::new(lhs), Box::new(rhs))
+                }),
+            ))
+        });
+
+        let ltl_block = ltl
+            .clone()
+            .then_ignore(just(Token::Semi).or_not())
+            .delimited_by(just(Token::LBrace), just(Token::RBrace));
+
+        let grouped = ltl
+            .clone()
+            .delimited_by(just(Token::LParen), just(Token::RParen));
+
+        let if_formula = just(Token::If)
+            .ignore_then(condition_formula)
+            .then(ltl_block.clone())
+            .then(just(Token::Else).ignore_then(ltl_block.clone()).or_not())
+            .map(|((condition, then_expr), else_expr)| {
+                if let Some(else_expr) = else_expr {
+                    let condition_box = Box::new(condition);
+                    let implies_then =
+                        LtlExpression::Implies(condition_box.clone(), Box::new(then_expr));
+                    let implies_else = LtlExpression::Implies(
+                        Box::new(LtlExpression::Not(condition_box)),
+                        Box::new(else_expr),
+                    );
+                    LtlExpression::And(Box::new(implies_then), Box::new(implies_else))
+                } else {
+                    LtlExpression::Implies(Box::new(condition), Box::new(then_expr))
+                }
+            });
+
+        let for_formula = just(Token::For)
+            .ignore_then(select! { Token::Ident(name) => name })
+            .then_ignore(just(Token::In))
+            .then(predicate_expr.clone())
+            .then(ltl_block.clone())
+            .map(|((var_name, list), body)| LtlExpression::ForLoop {
+                var_name,
+                list,
+                body: Box::new(body),
+            });
+
+        let predicate = predicate_expr.map(LtlExpression::Predicate);
+
+        choice((if_formula, for_formula, grouped, predicate)).pratt((
+            prefix(4, just(Token::Always), |_, rhs, _| {
+                LtlExpression::Always(Box::new(rhs))
+            }),
+            prefix(4, just(Token::Eventually), |_, rhs, _| {
+                LtlExpression::Eventually(Box::new(rhs))
+            }),
+            prefix(4, just(Token::Next), |_, rhs, _| {
+                LtlExpression::Next(Box::new(rhs))
+            }),
+            prefix(4, just(Token::Bang), |_, rhs, _| {
+                LtlExpression::Not(Box::new(rhs))
+            }),
+            infix(right(3), just(Token::Until), |lhs, _, rhs, _| {
+                LtlExpression::Until(Box::new(lhs), Box::new(rhs))
+            }),
+            infix(left(2), just(Token::AndAnd), |lhs, _, rhs, _| {
+                LtlExpression::And(Box::new(lhs), Box::new(rhs))
+            }),
+            infix(left(1), just(Token::OrOr), |lhs, _, rhs, _| {
+                LtlExpression::Or(Box::new(lhs), Box::new(rhs))
+            }),
+            infix(right(0), just(Token::Arrow), |lhs, _, rhs, _| {
+                LtlExpression::Implies(Box::new(lhs), Box::new(rhs))
+            }),
+        ))
     })
 }
 
@@ -1319,6 +2071,59 @@ where
         })
 }
 
+fn send_target_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, (String, bool), ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    identifier_parser()
+        .separated_by(just(Token::Dot))
+        .at_least(1)
+        .collect::<Vec<_>>()
+        .then(
+            just(Token::Dot)
+                .ignore_then(just(Token::Star))
+                .to(true)
+                .or_not(),
+        )
+        .map_with(|(parts, is_broadcast), e| {
+            let channel = parts
+                .into_iter()
+                .map(|part| part.value.value)
+                .collect::<Vec<_>>()
+                .join(".");
+            let pos = pos_from_span_source(e.span());
+            if channel.is_empty() {
+                Err(Rich::custom(
+                    span_from_pos(&pos),
+                    "send target must include a channel name",
+                ))
+            } else {
+                Ok((channel, is_broadcast.unwrap_or(false)))
+            }
+        })
+        .try_map(|result, _| result)
+}
+
+fn split_channel_endpoint(identifier: &Node<ObjectIdentifier>) -> Result<(String, String), String> {
+    if identifier.value.parts.len() < 2 {
+        return Err("channel endpoint must look like `process.channel`".to_string());
+    }
+
+    let prog = identifier.value.parts[0].value.value.clone();
+    let channel = identifier.value.parts[1..]
+        .iter()
+        .map(|part| part.value.value.as_str())
+        .collect::<Vec<_>>()
+        .join(".");
+
+    if channel.is_empty() {
+        Err("channel endpoint must include a channel name".to_string())
+    } else {
+        Ok((prog, channel))
+    }
+}
+
 fn apply_atomic_prefix(statement: Node<Statement>, pos: Pos) -> Node<Statement> {
     match statement.value {
         Statement::Wait(mut wait) => {
@@ -1362,29 +2167,10 @@ where
         })
 }
 
-fn unsupported_prefixed_block_parser<'tokens, I>(
-    token: Token,
-    block_name: &'static str,
-) -> impl Parser<'tokens, I, TopLevelBlock, ParserExtra<'tokens>> + Clone
-where
-    I: ValueInput<'tokens, Token = Token, Span = Span>,
-{
-    just(Token::AtPrivate)
-        .or_not()
-        .ignore_then(just(token))
-        .map_with(move |_, e| e.span())
-        .try_map(move |span, _| {
-            Err(Rich::custom(
-                span,
-                format!("{block_name} blocks are not implemented yet"),
-            ))
-        })
-}
-
-fn lex_snippet(
+pub(crate) fn lex_snippet(
     snippet: &SyntaxSnippet,
     file_path: &str,
-) -> Result<Vec<Spanned<Token>>, AlthreadError> {
+) -> Result<Vec<(Token, Span)>, AlthreadError> {
     let mut lexer = Token::lexer(snippet.text.as_str());
     let mut tokens = Vec::new();
     while let Some(result) = lexer.next() {
@@ -1511,6 +2297,58 @@ fn map_rich_errors(
     )
 }
 
+fn map_ltl_errors(
+    source: &str,
+    file_path: &str,
+    errs: Vec<Rich<'_, Token, Span>>,
+) -> AlthreadError {
+    let err = errs.into_iter().next().expect("chumsky returned no errors");
+    let message = match err.reason() {
+        RichReason::Custom(message) => message.clone(),
+        RichReason::ExpectedFound { .. } => {
+            let expected = err
+                .expected()
+                .map(|pattern| format_pattern(pattern))
+                .collect::<Vec<_>>();
+            let found = err
+                .found()
+                .map(|token| format!("'{}'", token))
+                .unwrap_or_else(|| "end of input".to_string());
+            if expected.is_empty() {
+                format!("unexpected {found}")
+            } else if expected.len() == 1 {
+                format!("expected {}, found {found}", expected[0])
+            } else {
+                format!("expected one of {}, found {found}", expected.join(", "))
+            }
+        }
+    };
+
+    AlthreadError::new(
+        ErrorType::SyntaxError,
+        Some(Pos::from_offsets(
+            source,
+            file_path,
+            err.span().start,
+            err.span().end.max(err.span().start + 1),
+        )),
+        message,
+    )
+}
+
+fn normalize_ltl_predicate_expression(expr: Node<Expression>) -> Node<Expression> {
+    match expr.value {
+        Expression::Primary(primary) => match primary.value {
+            PrimaryExpression::Expression(inner) => *inner,
+            _ => Node {
+                pos: expr.pos,
+                value: Expression::Primary(primary),
+            },
+        },
+        _ => expr,
+    }
+}
+
 fn format_rich_reason(err: &Rich<'_, Token, Span>) -> String {
     match err.reason() {
         RichReason::Custom(message) => message.clone(),
@@ -1583,4 +2421,81 @@ fn is_datatype_pattern(pattern: &RichPattern<'_, Token>) -> bool {
                     | Token::Tuple
             )
     )
+}
+
+fn parse_check_formulas(
+    source: &str,
+    file_path: &str,
+    body_span: Span,
+) -> Result<Vec<crate::checker::ltl::ast::LtlExpression>, AlthreadError> {
+    let body = &source[body_span.start..body_span.end];
+    let mut formulas = Vec::new();
+    let mut formula_start = 0usize;
+    let mut paren_depth = 0usize;
+    let mut brace_depth = 0usize;
+    let mut bracket_depth = 0usize;
+
+    for (idx, ch) in body.char_indices() {
+        match ch {
+            '(' => paren_depth += 1,
+            ')' => paren_depth = paren_depth.saturating_sub(1),
+            '{' => brace_depth += 1,
+            '}' => brace_depth = brace_depth.saturating_sub(1),
+            '[' => bracket_depth += 1,
+            ']' => bracket_depth = bracket_depth.saturating_sub(1),
+            ';' if paren_depth == 0 && brace_depth == 0 && bracket_depth == 0 => {
+                if let Some(snippet) =
+                    trimmed_snippet_from_offsets(source, file_path, body_span, formula_start, idx)
+                {
+                    formulas.push(parse_ltl_expression_with_chumsky(
+                        source, &snippet, file_path,
+                    )?);
+                }
+                formula_start = idx + ch.len_utf8();
+            }
+            _ => {}
+        }
+    }
+
+    if trimmed_snippet_from_offsets(source, file_path, body_span, formula_start, body.len())
+        .is_some()
+    {
+        return Err(AlthreadError::new(
+            ErrorType::SyntaxError,
+            Some(Pos::from_offsets(
+                source,
+                file_path,
+                body_span.start + formula_start,
+                body_span.end,
+            )),
+            "expected ';' after LTL formula".to_string(),
+        ));
+    }
+
+    Ok(formulas)
+}
+
+fn trimmed_snippet_from_offsets(
+    source: &str,
+    file_path: &str,
+    body_span: Span,
+    local_start: usize,
+    local_end: usize,
+) -> Option<SyntaxSnippet> {
+    let text = &source[body_span.start + local_start..body_span.start + local_end];
+    let leading_ws = text.len() - text.trim_start().len();
+    let trailing_ws = text.len() - text.trim_end().len();
+    let trimmed_start = local_start + leading_ws;
+    let trimmed_end = local_end.saturating_sub(trailing_ws);
+
+    if trimmed_start >= trimmed_end {
+        return None;
+    }
+
+    let abs_start = body_span.start + trimmed_start;
+    let abs_end = body_span.start + trimmed_end;
+    Some(SyntaxSnippet::new(
+        Pos::from_offsets(source, file_path, abs_start, abs_end),
+        source[abs_start..abs_end].to_string(),
+    ))
 }
