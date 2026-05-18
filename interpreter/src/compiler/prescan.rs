@@ -150,10 +150,18 @@ impl Ast {
         var_to_program: &HashMap<String, String>,
     ) -> AlthreadResult<()> {
         // Resolve program names for both sides of the channel
-        let left_prog =
-            self.prescan_get_prog_name(&channel_decl.ch_left_prog.value.value, module_prefix, var_to_program)?;
-        let right_prog =
-            self.prescan_get_prog_name(&channel_decl.ch_right_prog.value.value, module_prefix, var_to_program)?;
+        let left_prog = self.prescan_get_prog_name(
+            &channel_decl.ch_left_prog.value.value,
+            &channel_decl.ch_left_prog.pos,
+            module_prefix,
+            var_to_program,
+        )?;
+        let right_prog = self.prescan_get_prog_name(
+            &channel_decl.ch_right_prog.value.value,
+            &channel_decl.ch_right_prog.pos,
+            module_prefix,
+            var_to_program,
+        )?;
 
         // Create channel keys for both sender and receiver
         let left_key = (left_prog, channel_decl.ch_left_name.clone());
@@ -179,6 +187,7 @@ impl Ast {
     fn prescan_get_prog_name(
         &self,
         var_name: &str,
+        pos: &crate::error::Pos,
         module_prefix: &str,
         var_to_program: &HashMap<String, String>,
     ) -> AlthreadResult<String> {
@@ -196,9 +205,9 @@ impl Ast {
         } else {
             Err(AlthreadError::new(
                 ErrorType::VariableError,
-                None,
+                Some(pos.clone()),
                 format!(
-                    "Variable '{}' not found in run statements during prescan",
+                    "Variable '{}' does not point to a known program.",
                     var_name
                 ),
             ))

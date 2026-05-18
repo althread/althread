@@ -161,6 +161,27 @@ main {
 }
 
 #[test]
+fn test_channel_prescan_unknown_process_uses_identifier_span() {
+    let input = r#"
+main {
+    channel p.out (int)> self.in;
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let ast = althread::parser::parse_ast(input, "").unwrap();
+    let err = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap_err();
+
+    let pos = err.pos.expect("prescan error should carry a position");
+    assert_eq!(&input[pos.start..pos.end], "p");
+    assert!(err.message.contains("Variable 'p'"));
+}
+
+#[test]
 fn test_shared_method_call_in_expression() {
     let input = r#"
 shared {

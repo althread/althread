@@ -811,9 +811,17 @@ where
                     pos: pos_from_span_source(e.span()),
                     value: ChannelDeclaration {
                         ch_left_prog: left_prog,
-                        ch_left_name: left_name.into_iter().map(|node: Node<Identifier>| node.value.value).collect::<Vec<_>>().join("."),
+                        ch_left_name: left_name
+                            .into_iter()
+                            .map(|node: Node<Identifier>| node.value.value)
+                            .collect::<Vec<_>>()
+                            .join("."),
                         ch_right_prog: right_prog,
-                        ch_right_name: right_name.into_iter().map(|node: Node<Identifier>| node.value.value).collect::<Vec<_>>().join("."),
+                        ch_right_name: right_name
+                            .into_iter()
+                            .map(|node: Node<Identifier>| node.value.value)
+                            .collect::<Vec<_>>()
+                            .join("."),
                         datatypes: datatypes.into_iter().map(|dtype| dtype.value).collect(),
                     },
                 }),
@@ -1867,25 +1875,6 @@ where
             .collect::<Vec<_>>()
             .join(".")
     })
-}
-
-fn split_channel_endpoint(parts: &[Node<Identifier>]) -> Result<(String, String), String> {
-    if parts.len() < 2 {
-        return Err("channel endpoint must look like `process.channel`".to_string());
-    }
-
-    let prog = parts[0].value.value.clone();
-    let channel = parts[1..]
-        .iter()
-        .map(|part| part.value.value.as_str())
-        .collect::<Vec<_>>()
-        .join(".");
-
-    if channel.is_empty() {
-        Err("channel endpoint must include a channel name".to_string())
-    } else {
-        Ok((prog, channel))
-    }
 }
 
 fn apply_atomic_prefix(statement: Node<Statement>, pos: Pos) -> Node<Statement> {
