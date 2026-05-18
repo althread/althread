@@ -4,7 +4,7 @@ use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node},
-        token::datatype::DataType,
+        token::{datatype::DataType, identifier::Identifier},
     },
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
@@ -13,9 +13,9 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct ChannelDeclaration {
-    pub ch_left_prog: String,
+    pub ch_left_prog: Node<Identifier>,
     pub ch_left_name: String,
-    pub ch_right_prog: String,
+    pub ch_right_prog: Node<Identifier>,
     pub ch_right_name: String,
     pub datatypes: Vec<DataType>,
     // todo: direction
@@ -69,8 +69,8 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         let dec = &self.value;
 
-        let left_prog = get_prog_name(&dec.ch_left_prog, state, &self.pos)?;
-        let right_prog = get_prog_name(&dec.ch_right_prog, state, &self.pos)?;
+        let left_prog = get_prog_name(&dec.ch_left_prog.value.value, state, &self.pos)?;
+        let right_prog = get_prog_name(&dec.ch_right_prog.value.value, state, &self.pos)?;
 
         // check if a channel with the same name already exists on this program
         let left_key = (left_prog.clone(), dec.ch_left_name.clone());
@@ -163,8 +163,8 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
 
         Ok(InstructionBuilderOk::from_instructions(vec![Instruction {
             control: InstructionType::Connect {
-                sender_pid: get_var_id(&dec.ch_left_prog, state, &self.pos)?,
-                receiver_pid: get_var_id(&dec.ch_right_prog, state, &self.pos)?,
+                sender_pid: get_var_id(&dec.ch_left_prog.value.value, state, &self.pos)?,
+                receiver_pid: get_var_id(&dec.ch_right_prog.value.value, state, &self.pos)?,
                 sender_channel: dec.ch_left_name.clone(),
                 receiver_channel: dec.ch_right_name.clone(),
             },

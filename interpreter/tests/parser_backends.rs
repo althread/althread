@@ -306,12 +306,14 @@ fn parse_ast_accepts_send_and_channel_statements() {
 program Worker() {
     send out(1, true);
     send out.a.*(42);
+    await receive in.local(msg);
 }
 
 main {
     let a = run Worker();
     channel self.out (int, bool)> a.in;
     channel a.out.a.a (int)> self.in;
+    channel self.out.a (int)> a.in.local;
 }
 "#;
 
@@ -334,11 +336,19 @@ main {
         Statement::Send(_)
     ));
     assert!(matches!(
+        program_block.value.children[2].value,
+        Statement::Wait(_)
+    ));
+    assert!(matches!(
         main_block.value.children[1].value,
         Statement::ChannelDeclaration(_)
     ));
     assert!(matches!(
         main_block.value.children[2].value,
+        Statement::ChannelDeclaration(_)
+    ));
+    assert!(matches!(
+        main_block.value.children[3].value,
         Statement::ChannelDeclaration(_)
     ));
 }

@@ -430,11 +430,12 @@ fn import_path_parser<'tokens, I>(
 where
     I: ValueInput<'tokens, Token = Token, Span = Span>,
 {
-    identifier_parser().map_with(|node, _e| node.value.value)
-    .separated_by(just(Token::Slash))
-    .at_least(1)
-    .collect::<Vec<_>>()
-    .map(|segments| ImportPath { segments })
+    identifier_parser()
+        .map_with(|node, _e| node.value.value)
+        .separated_by(just(Token::Slash))
+        .at_least(1)
+        .collect::<Vec<_>>()
+        .map(|segments| ImportPath { segments })
 }
 
 fn import_entry_parser<'tokens, I>(
@@ -787,9 +788,9 @@ fn channel_declaration_parser<'tokens, I>(
 where
     I: ValueInput<'tokens, Token = Token, Span = Span>,
 {
-    let endpoint = channel_endpoint_parser().try_map(|identifier, span| {
-        split_channel_endpoint(&identifier).map_err(|message| Rich::custom(span, message))
-    });
+    let endpoint = identifier_parser()
+        .then_ignore(just(Token::Dot))
+        .then(channel_path_parts_parser());
 
     just(Token::Channel)
         .ignore_then(endpoint.clone())
@@ -810,39 +811,14 @@ where
                     pos: pos_from_span_source(e.span()),
                     value: ChannelDeclaration {
                         ch_left_prog: left_prog,
-                        ch_left_name: left_name,
+                        ch_left_name: left_name.into_iter().map(|node: Node<Identifier>| node.value.value).collect::<Vec<_>>().join("."),
                         ch_right_prog: right_prog,
-                        ch_right_name: right_name,
+                        ch_right_name: right_name.into_iter().map(|node: Node<Identifier>| node.value.value).collect::<Vec<_>>().join("."),
                         datatypes: datatypes.into_iter().map(|dtype| dtype.value).collect(),
                     },
                 }),
             },
         )
-}
-
-fn channel_endpoint_parser<'tokens, I>(
-) -> impl Parser<'tokens, I, Node<ObjectIdentifier>, ParserExtra<'tokens>> + Clone
-where
-    I: ValueInput<'tokens, Token = Token, Span = Span>,
-{
-    let endpoint_part = choice((
-        identifier_parser(),
-        just(Token::In).map_with(|_, e| Node {
-            pos: pos_from_span_source(e.span()),
-            value: Identifier {
-                value: "in".to_string(),
-            },
-        }),
-    ));
-
-    endpoint_part
-        .separated_by(just(Token::Dot))
-        .at_least(1)
-        .collect::<Vec<_>>()
-        .map_with(|parts, e| Node {
-            pos: pos_from_span_source(e.span()),
-            value: ObjectIdentifier { parts },
-        })
 }
 
 fn expression_statement_parser<'tokens, I>(
@@ -937,7 +913,7 @@ where
         Token::Dollar => "$".to_string(),
         Token::First => "first".to_string(),
         Token::Seq => "seq".to_string(),
-        
+
     }
     .labelled("identifier")
     .map_with(|name, e| Node {
@@ -1150,7 +1126,7 @@ where
                     })
                 })
                 .map(|index| CallChainSegment::TupleIndex { index }),
-                identifier_parser()
+            identifier_parser()
                 .then(args_tuple.clone().or_not())
                 .map(|(name, args)| match args {
                     Some(args) => CallChainSegment::Call { name, args },
@@ -1808,13 +1784,8 @@ fn receive_rule_parser<'tokens, I>(
 where
     I: ValueInput<'tokens, Token = Token, Span = Span>,
 {
-    let channel_name = choice((
-        identifier_parser().map_with(|ident, e| ident.value.value),
-        just(Token::In).to("in".to_string()),
-    ));
-
     just(Token::Receive)
-        .ignore_then(channel_name)
+        .ignore_then(channel_path_string_parser())
         .then(
             identifier_parser()
                 .separated_by(just(Token::Comma))
@@ -1836,22 +1807,14 @@ fn send_target_parser<'tokens, I>(
 where
     I: ValueInput<'tokens, Token = Token, Span = Span>,
 {
-    identifier_parser()
-        .separated_by(just(Token::Dot))
-        .at_least(1)
-        .collect::<Vec<_>>()
+    channel_path_string_parser()
         .then(
             just(Token::Dot)
                 .ignore_then(just(Token::Star))
                 .to(true)
                 .or_not(),
         )
-        .map_with(|(parts, is_broadcast), e| {
-            let channel = parts
-                .into_iter()
-                .map(|part| part.value.value)
-                .collect::<Vec<_>>()
-                .join(".");
+        .map_with(|(channel, is_broadcast), e| {
             let pos = pos_from_span_source(e.span());
             if channel.is_empty() {
                 Err(Rich::custom(
@@ -1865,13 +1828,54 @@ where
         .try_map(|result, _| result)
 }
 
-fn split_channel_endpoint(identifier: &Node<ObjectIdentifier>) -> Result<(String, String), String> {
-    if identifier.value.parts.len() < 2 {
+fn channel_path_part_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, Node<Identifier>, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    choice((
+        identifier_parser(),
+        just(Token::In).map_with(|_, e| Node {
+            pos: pos_from_span_source(e.span()),
+            value: Identifier {
+                value: "in".to_string(),
+            },
+        }),
+    ))
+}
+
+fn channel_path_parts_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, Vec<Node<Identifier>>, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    channel_path_part_parser()
+        .separated_by(just(Token::Dot))
+        .at_least(1)
+        .collect::<Vec<_>>()
+}
+
+fn channel_path_string_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, String, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    channel_path_parts_parser().map(|parts| {
+        parts
+            .into_iter()
+            .map(|part| part.value.value)
+            .collect::<Vec<_>>()
+            .join(".")
+    })
+}
+
+fn split_channel_endpoint(parts: &[Node<Identifier>]) -> Result<(String, String), String> {
+    if parts.len() < 2 {
         return Err("channel endpoint must look like `process.channel`".to_string());
     }
 
-    let prog = identifier.value.parts[0].value.value.clone();
-    let channel = identifier.value.parts[1..]
+    let prog = parts[0].value.value.clone();
+    let channel = parts[1..]
         .iter()
         .map(|part| part.value.value.as_str())
         .collect::<Vec<_>>()
@@ -2142,27 +2146,28 @@ fn format_found_token(found: Option<&Token>) -> String {
     match found {
         Some(token) => match token {
             Token::StringLiteral(value) => format!("\"{value}\""),
-            Token::First |
-            Token::Seq |
-            Token::Await |
-            Token::Atomic |
-            Token::Receive |
-            Token::Send |
-            Token::In |
-            Token::If |
-            Token::Else |
-            Token::For |
-            Token::Always |
-            Token::Eventually |
-            Token::Until => format!("keyword '{}'", token),
-            Token::Proc |
-            Token::List |
-            Token::Tuple |
-            Token::BoolType |
-            Token::IntType |
-            Token::FloatType |
-            Token::StringType |
-            Token::VoidType => format!("datatype '{}'", token),
+            Token::First
+            | Token::Seq
+            | Token::Await
+            | Token::Atomic
+            | Token::Receive
+            | Token::Send
+            | Token::In
+            | Token::If
+            | Token::Else
+            | Token::For
+            | Token::Loop
+            | Token::Always
+            | Token::Eventually
+            | Token::Until => format!("keyword '{}'", token),
+            Token::Proc
+            | Token::List
+            | Token::Tuple
+            | Token::BoolType
+            | Token::IntType
+            | Token::FloatType
+            | Token::StringType
+            | Token::VoidType => format!("datatype '{}'", token),
             _ => format!("'{}'", token),
         },
         None => "end of input".to_string(),

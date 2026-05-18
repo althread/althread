@@ -151,9 +151,9 @@ impl Ast {
     ) -> AlthreadResult<()> {
         // Resolve program names for both sides of the channel
         let left_prog =
-            self.prescan_get_prog_name(&channel_decl.ch_left_prog, module_prefix, var_to_program)?;
+            self.prescan_get_prog_name(&channel_decl.ch_left_prog.value.value, module_prefix, var_to_program)?;
         let right_prog =
-            self.prescan_get_prog_name(&channel_decl.ch_right_prog, module_prefix, var_to_program)?;
+            self.prescan_get_prog_name(&channel_decl.ch_right_prog.value.value, module_prefix, var_to_program)?;
 
         // Create channel keys for both sender and receiver
         let left_key = (left_prog, channel_decl.ch_left_name.clone());
