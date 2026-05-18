@@ -16,11 +16,11 @@ avec des fichiers `mod.alt`, voir le guide
 [Modules & Packages](./packages-modules)) :
 
 ```althread
-import [
+import {
     math,
     cool/fib,
     display
-]
+}
 ```
 
 Chaque élément de la liste d’import est un chemin relatif. Lorsqu’on importe
@@ -33,11 +33,11 @@ Une fois importés, vous accédez aux éléments des modules en utilisant la
 notation par points :
 
 ```althread
-import [
+import {
     math,
     cool/fib,
     display
-]
+}
 
 main {
     // Appeler une fonction de 'math'
@@ -64,11 +64,11 @@ En cas de conflits de noms ou si vous préférez des noms plus courts, vous pouv
 utiliser des alias avec le mot-clé `as` :
 
 ```althread
-import [
+import {
     math,
     cool/fib as fibonacci,
     display as d
-]
+}
 
 main {
     print(math.max(7, 3));
@@ -87,7 +87,7 @@ d’un module :
 - Les blocs `program` peuvent aussi être marqués comme `@private`
 - Plusieurs blocs `main` peuvent coexister s’ils sont marqués `@private`
 - Les variables partagées sont toujours importables et modifiables
-- Les conditions (always/never/eventually) sont importées mais en lecture seule
+- Les conditions (always/eventually) sont importées mais en lecture seule
 
 ```althread
 // Dans math.alt
@@ -107,7 +107,7 @@ fn max(a: int, b: int) -> int {
 
 ```althread
 // Dans main.alt
-import [math]
+import {math}
 
 main {
     print(math.max(5, 10));      // OK - fonction publique
@@ -135,7 +135,7 @@ Lorsqu’un module est importé, vous avez accès à :
 - **Fonctions publiques** : celles sans directive `@private`
 - **Programmes publics** : blocs `program` sans directive `@private`
 - **Variables partagées** : toujours importables et modifiables
-- **Conditions** : always/never/eventually (importées en lecture seule)
+- **Conditions** : always/eventually (importées en lecture seule)
 
 ## Imports de canaux
 
@@ -159,11 +159,11 @@ Voici un exemple complet montrant différentes fonctionnalités d’import :
 
 ```althread
 // main.alt
-import [
+import {
     utils/math,
     algorithms/sorting as sort,
     display
-]
+}
 
 main {
     // Utiliser des fonctions importées

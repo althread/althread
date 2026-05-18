@@ -1,17 +1,13 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
-        token::{datatype::DataType, literal::Literal, object_identifier::ObjectIdentifier},
+        node::{InstructionBuilder, Node},
+        token::{datatype::DataType, literal::Literal},
     },
     compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
-    no_rule,
-    parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };
 
@@ -21,42 +17,6 @@ use super::waiting_case::WaitDependency;
 pub struct ReceiveStatement {
     pub channel: String,
     pub variables: Vec<String>,
-}
-
-impl NodeBuilder for ReceiveStatement {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let mut pair = pairs.next().unwrap();
-
-        let mut channel = "".to_string();
-
-        if pair.as_rule() == Rule::object_identifier {
-            // Parse the object_identifier and convert it to a string
-            let object_id = Node::<ObjectIdentifier>::build(pair, filepath)?;
-            channel = object_id
-                .value
-                .parts
-                .iter()
-                .map(|p| p.value.value.as_str())
-                .collect::<Vec<_>>()
-                .join(".");
-            pair = pairs.next().unwrap();
-        }
-
-        if pair.as_rule() != Rule::pattern_list {
-            return Err(no_rule!(pair, "ReceiveStatement", filepath));
-        }
-
-        let mut variables = Vec::new();
-        let sub_pairs: Pairs<'_, Rule> = pair.into_inner();
-        for pair in sub_pairs {
-            variables.push(String::from(pair.as_str()));
-        }
-
-        Ok(Self {
-            channel,
-            variables,
-        })
-    }
 }
 
 impl ReceiveStatement {
@@ -90,7 +50,7 @@ impl InstructionBuilder for Node<ReceiveStatement> {
                 format!(
                     "Channel {}, bound at line {}, expects {} values, but {} variables are given",
                     self.value.channel,
-                    pos.line,
+                    pos.line(),
                     channel_types.len(),
                     self.value.variables.len()
                 ),
@@ -103,7 +63,7 @@ impl InstructionBuilder for Node<ReceiveStatement> {
             control: InstructionType::ChannelPeek(channel_name.clone()),
             pos: Some(self.pos.clone()),
         }); // Peek has the effect of adding the values of the tuple to the stack and a boolean
-        // We must push default values if the channel is empty, just so that the stack is consistent
+            // We must push default values if the channel is empty, just so that the stack is consistent
 
         for (i, variable) in self.value.variables.iter().enumerate() {
             state.program_stack.push(Variable {
@@ -125,7 +85,7 @@ impl InstructionBuilder for Node<ReceiveStatement> {
 
         builder.instructions.push(Instruction {
             control: InstructionType::JumpIf {
-                jump_false: 3, // If the channel is empty, ignore the channel pop
+                jump_false: 3,  // If the channel is empty, ignore the channel pop
                 unstack_len: 0, // we keep the boolean value on the stack
             },
             pos: Some(self.pos.clone()),
@@ -137,23 +97,18 @@ impl InstructionBuilder for Node<ReceiveStatement> {
         });
         // now we jump over the push of default values
         builder.instructions.push(Instruction {
-            control: InstructionType::Jump (5),
+            control: InstructionType::Jump(5),
             pos: Some(self.pos.clone()),
         });
         // remove the false boolean
         builder.instructions.push(Instruction {
-            control: InstructionType::Unstack{
-                unstack_len: 1,
-            },
+            control: InstructionType::Unstack { unstack_len: 1 },
             pos: Some(self.pos.clone()),
         });
         // push default values, by pushing a tuple and the descructuring it
         builder.instructions.push(Instruction {
             control: InstructionType::Push(Literal::Tuple(
-                channel_types
-                    .iter()
-                    .map(|dt| dt.default())
-                    .collect(),
+                channel_types.iter().map(|dt| dt.default()).collect(),
             )),
             pos: Some(self.pos.clone()),
         });
@@ -166,7 +121,7 @@ impl InstructionBuilder for Node<ReceiveStatement> {
             control: InstructionType::Push(Literal::Bool(false)),
             pos: Some(self.pos.clone()),
         });
-        
+
         Ok(builder)
     }
 }

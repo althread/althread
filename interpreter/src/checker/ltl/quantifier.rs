@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::{statement::expression::LocalExpressionNode, token::{datatype::DataType, literal::Literal}},
+    ast::{
+        statement::expression::LocalExpressionNode,
+        token::{datatype::DataType, literal::Literal},
+    },
     checker::ltl::{
         automaton::BuchiAutomaton, compiled::CompiledLtlExpression, monitor::MonitoringState,
     },
@@ -95,12 +98,7 @@ pub fn initialize_monitoring(
             for element in elements {
                 let mut bindings = HashMap::new();
                 bindings.insert(quantifier.var_name.clone(), element);
-                monitoring.add_monitors_for_enabled_initial_states(
-                    idx,
-                    automaton,
-                    bindings,
-                    vm,
-                )?;
+                monitoring.add_monitors_for_enabled_initial_states(idx, automaton, bindings, vm)?;
             }
 
             println!(
@@ -124,10 +122,7 @@ pub fn initialize_monitoring(
 }
 
 /// Prepares memory for evaluating list expressions
-fn prepare_list_memory(
-    read_variables: &[String],
-    vm: &VM,
-) -> AlthreadResult<crate::vm::Memory> {
+fn prepare_list_memory(read_variables: &[String], vm: &VM) -> AlthreadResult<crate::vm::Memory> {
     let mut memory = Vec::new();
 
     for var_name in read_variables {

@@ -1,7 +1,5 @@
 use std::{collections::HashSet, fmt};
 
-use pest::iterators::Pair;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
@@ -10,8 +8,7 @@ use crate::{
         token::{datatype::DataType, literal::Literal, unary_operator::UnaryOperator},
     },
     compiler::{CompilerState, Variable},
-    error::{AlthreadResult, Pos},
-    parser::Rule,
+    error::AlthreadResult,
     vm::Memory,
 };
 
@@ -34,27 +31,7 @@ impl fmt::Display for LocalUnaryExpressionNode {
     }
 }
 
-impl UnaryExpression {
-    pub fn build(
-        operator: Pair<Rule>,
-        operand: Node<Expression>,
-        filepath: &str,
-    ) -> AlthreadResult<Node<Self>> {
-        Ok(Node {
-            pos: Pos {
-                line: operator.line_col().0,
-                col: operator.line_col().1,
-                start: operator.as_span().start(),
-                end: operand.pos.end,
-                file_path: filepath.to_string(),
-            },
-            value: Self {
-                operator: Node::build(operator, filepath)?,
-                operand: Box::new(operand),
-            },
-        })
-    }
-}
+impl UnaryExpression {}
 
 impl LocalUnaryExpressionNode {
     pub fn from_unary(

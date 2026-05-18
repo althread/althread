@@ -16,14 +16,7 @@ use condition_block::ConditionBlock;
 use display::{AstDisplay, Prefix};
 use import_block::ImportBlock;
 use node::Node;
-use pest::iterators::Pairs;
 use token::{args_list::ArgsList, condition_keyword::ConditionKeyword, datatype::DataType};
-
-use crate::{
-    error::{AlthreadError, AlthreadResult, ErrorType, Pos},
-    no_rule,
-    parser::Rule,
-};
 
 use crate::checker::ltl::ast::CheckBlock;
 
@@ -48,121 +41,75 @@ impl Ast {
             import_block: None,
         }
     }
-    /// Builds an AST from the given pairs of rules.
-    pub fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let mut ast = Self::new();
-        for pair in pairs {
-            match pair.as_rule() {
-                Rule::import_block => {
-                    if ast.import_block.is_some() {
-                        return Err(AlthreadError::new(
-                            ErrorType::SyntaxError,
-                            Some(Pos::from_span(pair.as_span(), filepath)),
-                            "Only one import block is allowed per file.".to_string(),
-                        ));
-                    }
 
-                    let import_block = Node::build(pair, filepath)?;
-                    ast.import_block = Some(import_block);
+    pub fn diff_summary(&self, other: &Self) -> Option<String> {
+        let lhs = self.canonical_repr();
+        let rhs = other.canonical_repr();
+        if lhs == rhs {
+            return None;
+        }
+
+        let mut lhs_lines = lhs.lines();
+        let mut rhs_lines = rhs.lines();
+        for line_number in 1.. {
+            match (lhs_lines.next(), rhs_lines.next()) {
+                (Some(left), Some(right)) if left == right => continue,
+                (Some(left), Some(right)) => {
+                    return Some(format!(
+                        "AST mismatch at line {line_number}: expected `{left}`, got `{right}`"
+                    ));
                 }
-                Rule::main_block => {
-                    let mut pairs = pair.into_inner();
-
-                    // check for directive
-                    let mut is_private = false;
-                    let first = pairs.peek().unwrap();
-                    if first.as_rule() == Rule::private_directive {
-                        is_private = true;
-                        pairs.next(); // consume the private directive
-                    };
-
-                    let main_block = Node::build(pairs.next().unwrap(), filepath)?;
-                    ast.process_blocks.insert(
-                        "main".to_string(),
-                        (Node::<ArgsList>::new(), main_block, is_private),
-                    );
+                (Some(left), None) => {
+                    return Some(format!(
+                        "AST mismatch at line {line_number}: unexpected extra line `{left}`"
+                    ));
                 }
-                Rule::global_block => {
-                    let mut pairs = pair.into_inner();
-
-                    let global_block = Node::build(pairs.next().unwrap(), filepath)?;
-                    ast.global_block = Some(global_block);
+                (None, Some(right)) => {
+                    return Some(format!(
+                        "AST mismatch at line {line_number}: missing line, got `{right}`"
+                    ));
                 }
-                Rule::condition_block => {
-                    let mut pairs = pair.into_inner();
-
-                    let keyword_pair = pairs.next().unwrap();
-                    let condition_keyword = match keyword_pair.as_rule() {
-                        Rule::ALWAYS_KW => ConditionKeyword::Always,
-                        Rule::NEVER_KW => ConditionKeyword::Never,
-                        _ => return Err(no_rule!(keyword_pair, "condition keyword", filepath)),
-                    };
-                    let condition_block = Node::build(pairs.next().unwrap(), filepath)?;
-                    ast.condition_blocks
-                        .insert(condition_keyword, condition_block);
-                }
-                Rule::check_block => {
-                    let check_block: Node<CheckBlock> = Node::build(pair, filepath)?;
-                    ast.check_blocks.push(check_block);
-                }
-                Rule::program_block => {
-                    let mut pairs = pair.into_inner();
-
-                    // check for directive
-                    let mut is_private = false;
-                    let first = pairs.peek().unwrap();
-                    if first.as_rule() == Rule::private_directive {
-                        is_private = true;
-                        pairs.next(); // consume the private directive
-                    }
-
-                    let process_identifier = pairs.next().unwrap().as_str().to_string();
-                    let args_list: Node<token::args_list::ArgsList> =
-                        Node::build(pairs.next().unwrap(), filepath)?;
-                    let program_block = Node::build(pairs.next().unwrap(), filepath)?;
-                    ast.process_blocks
-                        .insert(process_identifier, (args_list, program_block, is_private));
-                }
-                Rule::function_block => {
-                    let mut pairs = pair.into_inner();
-
-                    // check for directive
-                    let mut is_private = false;
-                    let first = pairs.peek().unwrap();
-                    if first.as_rule() == Rule::private_directive {
-                        is_private = true;
-                        pairs.next(); // consume the private directive
-                    }
-
-                    let function_identifier = pairs.next().unwrap().as_str().to_string();
-
-                    let args_list: Node<token::args_list::ArgsList> =
-                        Node::build(pairs.next().unwrap(), filepath)?;
-                    pairs.next(); // skip the "->" token
-                    let return_datatype = DataType::from_str(pairs.next().unwrap().as_str());
-
-                    let function_block: Node<Block> = Node::build(pairs.next().unwrap(), filepath)?;
-
-                    // check if function definition is already defined
-                    if ast.function_blocks.contains_key(&function_identifier) {
-                        return Err(AlthreadError::new(
-                            ErrorType::FunctionAlreadyDefined,
-                            Some(function_block.pos),
-                            format!("Function '{}' is already defined", function_identifier),
-                        ));
-                    }
-
-                    ast.function_blocks.insert(
-                        function_identifier,
-                        (args_list, return_datatype, function_block, is_private),
-                    );
-                }
-                Rule::EOI => (),
-                _ => return Err(no_rule!(pair, "root ast", filepath)),
+                (None, None) => break,
             }
         }
 
-        Ok(ast)
+        Some("AST mismatch".to_string())
+    }
+
+    fn canonical_repr(&self) -> String {
+        let mut out = String::new();
+        if let Some(import_block) = &self.import_block {
+            out.push_str("import\n");
+            out.push_str(&format!("{import_block:?}\n"));
+        }
+        if let Some(global_block) = &self.global_block {
+            out.push_str("shared\n");
+            out.push_str(&format!("{global_block:?}\n"));
+        }
+
+        let mut condition_entries = self.condition_blocks.iter().collect::<Vec<_>>();
+        condition_entries.sort_by_key(|(keyword, _)| format!("{keyword:?}"));
+        for (keyword, block) in condition_entries {
+            out.push_str(&format!("condition:{keyword:?}\n{block:?}\n"));
+        }
+
+        for check_block in &self.check_blocks {
+            out.push_str(&format!("check:{check_block:?}\n"));
+        }
+
+        let mut process_entries = self.process_blocks.iter().collect::<Vec<_>>();
+        process_entries.sort_by_key(|(name, _)| (*name).clone());
+        for (name, value) in process_entries {
+            out.push_str(&format!("process:{name}:{value:?}\n"));
+        }
+
+        let mut function_entries = self.function_blocks.iter().collect::<Vec<_>>();
+        function_entries.sort_by_key(|(name, _)| (*name).clone());
+        for (name, value) in function_entries {
+            out.push_str(&format!("function:{name}:{value:?}\n"));
+        }
+
+        out
     }
 }
 

@@ -1,17 +1,14 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         block::Block,
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
+        node::{InstructionBuilder, Node},
         token::datatype::DataType,
     },
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType},
-    parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };
 
@@ -21,18 +18,6 @@ use super::expression::Expression;
 pub struct WhileControl {
     pub condition: Node<Expression>,
     pub then_block: Box<Node<Block>>,
-}
-
-impl NodeBuilder for WhileControl {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let condition = Node::build(pairs.next().unwrap(), filepath)?;
-        let then_block = Node::build(pairs.next().unwrap(), filepath)?;
-
-        Ok(Self {
-            condition,
-            then_block: Box::new(then_block),
-        })
-    }
 }
 
 impl InstructionBuilder for Node<WhileControl> {

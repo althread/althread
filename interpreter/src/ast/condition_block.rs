@@ -1,34 +1,18 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
 use crate::compiler::{CompilerState, InstructionBuilderOk};
 use crate::error::AlthreadResult;
-use crate::parser::Rule;
 use crate::vm::instruction::{Instruction, InstructionType};
 
 use super::statement::expression::Expression;
 use super::{
     display::{AstDisplay, Prefix},
-    node::{InstructionBuilder, Node, NodeBuilder},
+    node::{InstructionBuilder, Node},
 };
 
 #[derive(Debug)]
 pub struct ConditionBlock {
     pub children: Vec<Node<Expression>>,
-}
-
-impl NodeBuilder for ConditionBlock {
-    fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let mut block = Self::new();
-
-        for pair in pairs {
-            let node = Node::build(pair, filepath)?;
-            block.children.push(node);
-        }
-
-        Ok(block)
-    }
 }
 
 impl InstructionBuilder for ConditionBlock {

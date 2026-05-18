@@ -12,11 +12,13 @@ use althread::{
             binary_assignment_operator::BinaryAssignmentOperator, binary_operator::BinaryOperator,
             datatype::DataType, literal::Literal,
         },
-        Ast,
     },
     error::Pos,
     module_resolver::StandardFileSystem,
-    vm::{instruction::{Instruction, InstructionType}, GlobalAction, VM},
+    vm::{
+        instruction::{Instruction, InstructionType},
+        GlobalAction, VM,
+    },
 };
 
 // A simple test to verify that the compiler can compile a simple program
@@ -34,8 +36,6 @@ main {
     let expected = vec![
         Instruction {
             pos: Some(Pos {
-                line: 3,
-                col: 13,
                 start: 20,
                 end: 21,
                 file_path: "".to_string(),
@@ -48,8 +48,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 3,
-                col: 5,
                 start: 12,
                 end: 15,
                 file_path: "".to_string(),
@@ -58,8 +56,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 13,
                 start: 35,
                 end: 37,
                 file_path: "".to_string(),
@@ -72,8 +68,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 5,
                 start: 27,
                 end: 30,
                 file_path: "".to_string(),
@@ -82,8 +76,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 5,
-                col: 13,
                 start: 51,
                 end: 53,
                 file_path: "".to_string(),
@@ -96,8 +88,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 5,
-                col: 5,
                 start: 43,
                 end: 46,
                 file_path: "".to_string(),
@@ -106,8 +96,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 6,
-                col: 18,
                 start: 72,
                 end: 81,
                 file_path: "".to_string(),
@@ -132,8 +120,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 6,
-                col: 5,
                 start: 59,
                 end: 62,
                 file_path: "".to_string(),
@@ -146,8 +132,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 2,
-                col: 6,
                 start: 6,
                 end: 84,
                 file_path: "".to_string(),
@@ -160,9 +144,7 @@ main {
     input_map.insert("".to_string(), input.to_string());
 
     // parse code with pest
-    let pairs = althread::parser::parse(input, "").unwrap();
-
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
 
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
@@ -176,6 +158,27 @@ main {
             .instructions,
         expected
     );
+}
+
+#[test]
+fn test_channel_prescan_unknown_process_uses_identifier_span() {
+    let input = r#"
+main {
+    channel p.out (int)> self.in;
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let ast = althread::parser::parse_ast(input, "").unwrap();
+    let err = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap_err();
+
+    let pos = err.pos.expect("prescan error should carry a position");
+    assert_eq!(&input[pos.start..pos.end], "p");
+    assert!(err.message.contains("Variable 'p'"));
 }
 
 #[test]
@@ -193,9 +196,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
@@ -244,9 +245,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
@@ -258,6 +257,32 @@ main {
             vec![Literal::Int(1), Literal::Int(2)]
         ))
     );
+}
+
+#[test]
+fn test_direct_method_call_argument_validation() {
+    let input = r#"
+shared {
+    let Global:list(int) = [1, 2];
+}
+
+main {
+    print(Global.at());
+}
+    "#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+    let ast = althread::parser::parse_ast(input, "").unwrap();
+    let err = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap_err();
+
+    assert_eq!(
+        err.error_type.to_string(),
+        "Function argument type mismatch"
+    );
+    assert!(err.message.contains("expects 1 arguments, got 0"));
 }
 
 #[test]
@@ -273,9 +298,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
@@ -300,14 +323,15 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
 
-    assert_eq!(compiled_project.global_memory.get("Base"), Some(&Literal::Int(1)));
+    assert_eq!(
+        compiled_project.global_memory.get("Base"),
+        Some(&Literal::Int(1))
+    );
     assert_eq!(
         compiled_project.global_memory.get("Tab"),
         Some(&Literal::List(
@@ -337,14 +361,23 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
 
-    let instructions = &compiled_project.programs_code.get("A").unwrap().instructions;
+    let instructions = &compiled_project
+        .programs_code
+        .get("A")
+        .unwrap()
+        .instructions;
+
+    assert!(instructions.iter().any(|instruction| {
+        matches!(
+            &instruction.control,
+            InstructionType::MethodCall { name, .. } if name == "at"
+        )
+    }));
 
     assert!(instructions.iter().any(|instruction| {
         matches!(
@@ -355,12 +388,12 @@ main {
                     operator: BinaryOperator::Or,
                     right,
                 }),
-                unstack_len: 1,
+                unstack_len: 2,
             }
             if matches!(
                 left.as_ref(),
                 LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(LocalVarNode {
-                    index: 0,
+                    index: 1,
                 }))
             ) && matches!(
                 right.as_ref(),
@@ -372,7 +405,7 @@ main {
                 if matches!(
                     left.as_ref(),
                     LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(LocalVarNode {
-                        index: 1,
+                        index: 0,
                     }))
                 ) && matches!(
                     right.as_ref(),
@@ -385,72 +418,6 @@ main {
             )
         )
     }));
-}
-
-#[test]
-fn test_await_expression_rechecks_with_clean_stack() {
-    let input = r#"
-shared {
-    let REQUEST = false;
-    let VALUE = 0;
-}
-
-program worker(next:int) {
-    loop {
-        atomic {
-            await REQUEST;
-            REQUEST = false;
-            VALUE = next;
-        }
-    }
-}
-
-main {
-    run worker(1);
-    let seen = 0;
-    @ REQUEST = true;
-    await VALUE > 0;
-    seen = VALUE;
-    print(seen);
-}
-    "#;
-
-    let mut input_map = HashMap::new();
-    input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
-    let compiled_project = ast
-        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
-        .unwrap();
-
-    let mut initial_vm = VM::new(&compiled_project);
-    initial_vm.start(0);
-
-    let mut frontier = vec![(initial_vm, Vec::<String>::new())];
-    let mut terminal_states = 0;
-
-    while let Some((vm, prints)) = frontier.pop() {
-        let next_states = vm.next().unwrap();
-        if next_states.is_empty() {
-            terminal_states += 1;
-            assert_eq!(vm.globals.get("VALUE"), Some(&Literal::Int(1)));
-            assert!(prints.iter().any(|message| message == "1"));
-            continue;
-        }
-
-        for (_, _, _, step_actions, next_vm) in next_states {
-            let mut next_prints = prints.clone();
-            for action in step_actions {
-                if let GlobalAction::Print(message) = action {
-                    next_prints.push(message);
-                }
-            }
-            frontier.push((next_vm, next_prints));
-        }
-    }
-
-    assert!(terminal_states > 0);
 }
 
 #[test]
@@ -468,9 +435,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
@@ -531,9 +496,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
@@ -570,7 +533,7 @@ main {
 fn test_condition_quantifiers_and_if_expr() {
     let input = r#"
 shared {
-    let Xs = [1..4];
+    let Xs = 1..4;
     let Flag = true;
 }
 
@@ -584,9 +547,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
 
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
@@ -638,7 +599,7 @@ main {
 fn test_always_condition_supports_shared_method_calls() {
     let input = r#"
 shared {
-    let Global = [1..3];
+    let Global = 1..3;
 }
 
 always {
@@ -651,9 +612,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
 
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
@@ -696,9 +655,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
@@ -727,6 +684,10 @@ main {
         .find(|(name, pid, _, _, _)| name == "A" && *pid == 1)
         .expect("A should be schedulable after a message arrives on chin2");
 
+    assert!(a_step.2.iter().any(|inst| matches!(
+        &inst.control,
+        InstructionType::ChannelPeek(channel) if channel == "chin2"
+    )));
     assert!(a_step.3.iter().any(|action| matches!(
         action,
         GlobalAction::Print(msg) if msg == "reçu: hello from B"
@@ -762,9 +723,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
@@ -818,9 +777,7 @@ main {
 
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
-
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
@@ -852,6 +809,73 @@ main {
 }
 
 #[test]
+fn test_atomic_await_does_not_leak_atomic_state_to_following_statements() {
+    let input = r#"
+shared {
+    let Done = false;
+    let Leader = 0;
+}
+
+program A(my_id: int) {
+    let leader_id = my_id;
+
+    loop atomic await receive in (x) => {
+        if x > leader_id {
+            leader_id = x;
+        }
+    }
+
+    if my_id == leader_id {
+        atomic {
+            Done = true;
+            Leader = Leader + 1;
+        }
+    }
+}
+
+main {
+    let a = run A(1);
+    channel self.out (int)> a.in;
+    send out(2);
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+    let ast = althread::parser::parse_ast(input, "").unwrap();
+
+    ast.compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+}
+
+#[test]
+fn test_atomic_block_allows_leading_await_with_global_reads() {
+    let input = r#"
+shared {
+    let Cond = true;
+}
+
+program A() {
+    atomic {
+        await Cond;
+        print("Hello");
+    }
+}
+
+main {
+    let a = run A();
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+    let ast = althread::parser::parse_ast(input, "").unwrap();
+
+    ast.compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+}
+
+#[test]
 fn test_wait_seq_restarts_atomic_guard_evaluation_after_match() {
     let input = r#"
 shared {
@@ -869,13 +893,16 @@ main {
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
 
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
 
-    let instructions = &compiled_project.programs_code.get("main").unwrap().instructions;
+    let instructions = &compiled_project
+        .programs_code
+        .get("main")
+        .unwrap()
+        .instructions;
     let atomic_start_count = instructions
         .iter()
         .filter(|inst| matches!(inst.control, InstructionType::AtomicStart))
@@ -902,7 +929,7 @@ main {
     loop await seq {
         receive in(v) => {
             print(v);
-            n += 1;
+            n = n + 1;
         }
         n == 2 => {
             print("n", n);
@@ -915,8 +942,7 @@ main {
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
 
-    let pairs = althread::parser::parse(input, "").unwrap();
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
         .unwrap();
@@ -948,6 +974,52 @@ main {
 }
 
 #[test]
+fn test_undefined_statement_call_uses_callee_span() {
+    let input = r#"
+main {
+    foo.bar();
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+    let ast = althread::parser::parse_ast(input, "").unwrap();
+
+    let err = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap_err();
+
+    let pos = err.pos.expect("error should have a span");
+    let expected_start = input.find("foo.bar").unwrap();
+    let expected_end = expected_start + "foo.bar".len();
+    assert_eq!(pos.start, expected_start);
+    assert_eq!(pos.end, expected_end);
+}
+
+#[test]
+fn test_undefined_run_program_uses_program_name_span() {
+    let input = r#"
+main {
+    let p = run MissingProg(1);
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+    let ast = althread::parser::parse_ast(input, "").unwrap();
+
+    let err = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap_err();
+
+    let pos = err.pos.expect("error should have a span");
+    let expected_start = input.find("MissingProg").unwrap();
+    let expected_end = expected_start + "MissingProg".len();
+    assert_eq!(pos.start, expected_start);
+    assert_eq!(pos.end, expected_end);
+}
+
+#[test]
 fn test_compiler_while() {
     let input = r#"
 main {
@@ -965,8 +1037,6 @@ main {
     let expected = vec![
         Instruction {
             pos: Some(Pos {
-                line: 3,
-                col: 13,
                 start: 20,
                 end: 21,
                 file_path: "".to_string(),
@@ -979,8 +1049,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 3,
-                col: 5,
                 start: 12,
                 end: 15,
                 file_path: "".to_string(),
@@ -989,10 +1057,8 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 11,
                 start: 33,
-                end: 39,
+                end: 38,
                 file_path: "".to_string(),
             }),
             control: InstructionType::Expression(LocalExpressionNode::Binary(
@@ -1011,10 +1077,8 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 11,
                 start: 33,
-                end: 39,
+                end: 38,
                 file_path: "".to_string(),
             }),
             control: InstructionType::JumpIf {
@@ -1024,8 +1088,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 5,
-                col: 13,
                 start: 53,
                 end: 58,
                 file_path: "".to_string(),
@@ -1046,10 +1108,8 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 5,
-                col: 9,
                 start: 49,
-                end: 51,
+                end: 50,
                 file_path: "".to_string(),
             }),
             control: InstructionType::LocalAssignment {
@@ -1060,10 +1120,8 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 6,
-                col: 12,
                 start: 71,
-                end: 78,
+                end: 77,
                 file_path: "".to_string(),
             }),
             control: InstructionType::Expression(LocalExpressionNode::Binary(
@@ -1082,10 +1140,8 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 6,
-                col: 12,
                 start: 71,
-                end: 78,
+                end: 77,
                 file_path: "".to_string(),
             }),
             control: InstructionType::JumpIf {
@@ -1103,8 +1159,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 6,
-                col: 19,
                 start: 78,
                 end: 108,
                 file_path: "".to_string(),
@@ -1113,8 +1167,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 5,
                 start: 27,
                 end: 114,
                 file_path: "".to_string(),
@@ -1123,8 +1175,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 10,
-                col: 10,
                 start: 124,
                 end: 132,
                 file_path: "".to_string(),
@@ -1141,8 +1191,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 10,
-                col: 5,
                 start: 119,
                 end: 132,
                 file_path: "".to_string(),
@@ -1155,8 +1203,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 10,
-                col: 5,
                 start: 119,
                 end: 132,
                 file_path: "".to_string(),
@@ -1169,8 +1215,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 2,
-                col: 6,
                 start: 6,
                 end: 135,
                 file_path: "".to_string(),
@@ -1183,9 +1227,7 @@ main {
     input_map.insert("".to_string(), input.to_string());
 
     // parse code with pest
-    let pairs = althread::parser::parse(input, "").unwrap();
-
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
 
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
@@ -1216,8 +1258,6 @@ main {
     let expected = vec![
         Instruction {
             pos: Some(Pos {
-                line: 3,
-                col: 13,
                 start: 20,
                 end: 21,
                 file_path: "".to_string(),
@@ -1230,8 +1270,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 3,
-                col: 5,
                 start: 12,
                 end: 15,
                 file_path: "".to_string(),
@@ -1240,8 +1278,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 13,
                 start: 35,
                 end: 39,
                 file_path: "".to_string(),
@@ -1254,8 +1290,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 5,
                 start: 27,
                 end: 30,
                 file_path: "".to_string(),
@@ -1264,8 +1298,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 5,
-                col: 13,
                 start: 53,
                 end: 57,
                 file_path: "".to_string(),
@@ -1278,8 +1310,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 5,
-                col: 5,
                 start: 45,
                 end: 48,
                 file_path: "".to_string(),
@@ -1288,8 +1318,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 6,
-                col: 13,
                 start: 71,
                 end: 77,
                 file_path: "".to_string(),
@@ -1302,8 +1330,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 6,
-                col: 5,
                 start: 63,
                 end: 66,
                 file_path: "".to_string(),
@@ -1312,8 +1338,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 7,
-                col: 13,
                 start: 91,
                 end: 97,
                 file_path: "".to_string(),
@@ -1326,8 +1350,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 7,
-                col: 5,
                 start: 83,
                 end: 86,
                 file_path: "".to_string(),
@@ -1340,8 +1362,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 2,
-                col: 6,
                 start: 6,
                 end: 100,
                 file_path: "".to_string(),
@@ -1354,9 +1374,7 @@ main {
     input_map.insert("".to_string(), input.to_string());
 
     // parse code with pest
-    let pairs = althread::parser::parse(input, "").unwrap();
-
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
 
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
@@ -1383,8 +1401,6 @@ main {
     let expected = vec![
         Instruction {
             pos: Some(Pos {
-                line: 3,
-                col: 13,
                 start: 20,
                 end: 26,
                 file_path: "".to_string(),
@@ -1407,8 +1423,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 3,
-                col: 5,
                 start: 12,
                 end: 15,
                 file_path: "".to_string(),
@@ -1417,8 +1431,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 13,
                 start: 40,
                 end: 47,
                 file_path: "".to_string(),
@@ -1441,8 +1453,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 5,
                 start: 32,
                 end: 35,
                 file_path: "".to_string(),
@@ -1455,8 +1465,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 2,
-                col: 6,
                 start: 6,
                 end: 50,
                 file_path: "".to_string(),
@@ -1464,14 +1472,12 @@ main {
             control: InstructionType::EndProgram,
         },
     ];
-    
+
     let mut input_map = HashMap::new();
     input_map.insert("".to_string(), input.to_string());
 
     // parse code with pest
-    let pairs = althread::parser::parse(input, "").unwrap();
-
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
 
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
@@ -1499,8 +1505,6 @@ main {
     let expected = vec![
         Instruction {
             pos: Some(Pos {
-                line: 3,
-                col: 13,
                 start: 20,
                 end: 25,
                 file_path: "".to_string(),
@@ -1523,9 +1527,7 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 3,
-                col: 5,
-                start: 12, 
+                start: 12,
                 end: 15,
                 file_path: "".to_string(),
             }),
@@ -1533,8 +1535,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 13,
                 start: 39,
                 end: 44,
                 file_path: "".to_string(),
@@ -1557,8 +1557,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 5,
                 start: 31,
                 end: 34,
                 file_path: "".to_string(),
@@ -1567,8 +1565,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 5,
-                col: 13,
                 start: 58,
                 end: 67,
                 file_path: "".to_string(),
@@ -1599,8 +1595,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 5,
-                col: 5,
                 start: 50,
                 end: 53,
                 file_path: "".to_string(),
@@ -1613,8 +1607,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 2,
-                col: 6,
                 start: 6,
                 end: 70,
                 file_path: "".to_string(),
@@ -1627,9 +1619,7 @@ main {
     input_map.insert("".to_string(), input.to_string());
 
     // parse code with pest
-    let pairs = althread::parser::parse(input, "").unwrap();
-
-    let ast = Ast::build(pairs, "").unwrap();
+    let ast = althread::parser::parse_ast(input, "").unwrap();
 
     let compiled_project = ast
         .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)

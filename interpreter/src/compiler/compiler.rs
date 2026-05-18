@@ -9,10 +9,7 @@ use crate::{
     ast::{
         node::{InstructionBuilder, Node},
         statement::{
-            expression::{
-                BracketContent, BracketExpression, Expression, LocalExpressionNode,
-                SideEffectExpression,
-            },
+            expression::{BracketContent, BracketExpression, Expression, LocalExpressionNode},
             Statement,
         },
         token::{
@@ -224,11 +221,16 @@ impl Ast {
                 Self::validate_shared_const_expression(&node.expression_start, pos)?;
                 Self::validate_shared_const_expression(&node.expression_end, pos)
             }
-            LocalExpressionNode::FnCall(_) | LocalExpressionNode::CallChain(_) => Err(
+            LocalExpressionNode::TupleIndex(node) => {
+                Self::validate_shared_const_expression(&node.base, pos)
+            }
+            LocalExpressionNode::FnCall(_)
+            | LocalExpressionNode::RunCall(_)
+            | LocalExpressionNode::CallChain(_) => Err(
                 AlthreadError::new(
                     ErrorType::InstructionNotAllowed,
                     Some(pos.clone()),
-                    "Shared initializers do not allow function or method calls".to_string(),
+                    "Shared initializers do not allow function, method, or run calls".to_string(),
                 ),
             ),
             LocalExpressionNode::Reaches(_) => Err(AlthreadError::new(
@@ -284,11 +286,7 @@ impl Ast {
                 let mut element_type = DataType::Void;
 
                 for (index, element) in elements.iter().enumerate() {
-                    let literal = Self::evaluate_shared_side_effect_expression(
-                        element,
-                        scope,
-                        memory,
-                    )?;
+                    let literal = Self::evaluate_shared_expression_node(element, scope, memory)?;
                     let literal_type = literal.get_datatype();
 
                     if index == 0 {
@@ -312,40 +310,38 @@ impl Ast {
         }
     }
 
-    fn evaluate_shared_side_effect_expression(
-        expression: &Node<SideEffectExpression>,
+    fn evaluate_shared_expression_node(
+        expression: &Node<Expression>,
         scope: &[Variable],
         memory: &[Literal],
     ) -> AlthreadResult<Literal> {
         match &expression.value {
-            SideEffectExpression::Expression(node) => {
-                Self::evaluate_shared_expression(node, scope, memory)
-            }
-            SideEffectExpression::Bracket(node) => {
+            Expression::Bracket(node) => {
                 Self::evaluate_shared_bracket_expression(node, scope, memory)
             }
-            SideEffectExpression::FnCall(_) => Err(AlthreadError::new(
+            Expression::FnCall(_) | Expression::CallChain(_) => Err(AlthreadError::new(
                 ErrorType::InstructionNotAllowed,
                 Some(expression.pos.clone()),
                 "Shared initializers do not allow function or method calls".to_string(),
             )),
-            SideEffectExpression::RunCall(_) => Err(AlthreadError::new(
+            Expression::RunCall(_) => Err(AlthreadError::new(
                 ErrorType::InstructionNotAllowed,
                 Some(expression.pos.clone()),
                 "Shared initializers do not allow run calls".to_string(),
             )),
+            _ => Self::evaluate_shared_expression(expression, scope, memory),
         }
     }
 
     fn evaluate_shared_initializer(
-        value: Option<&Node<SideEffectExpression>>,
+        value: Option<&Node<Expression>>,
         datatype: &DataType,
         global_table: &HashMap<String, Variable>,
         global_memory: &BTreeMap<String, Literal>,
     ) -> AlthreadResult<Literal> {
         let literal = if let Some(value) = value {
             let (scope, memory) = Self::build_shared_const_scope(global_table, global_memory)?;
-            Self::evaluate_shared_side_effect_expression(value, &scope, &memory)?
+            Self::evaluate_shared_expression_node(value, &scope, &memory)?
         } else {
             datatype.default()
         };
@@ -410,11 +406,6 @@ impl Ast {
             module_prefix,
             same_level_module_names
         );
-
-        // scan everything for channel declarations in the current file
-        if let Err(e) = self.prescan_channel_declarations(&mut state, module_prefix) {
-            return Err(e);
-        }
 
         let mut next_level_module_names = Vec::<String>::new();
 
@@ -516,9 +507,7 @@ impl Ast {
                         state
                             .global_table_mut()
                             .insert(var_name.clone(), last_program_stack);
-                        state
-                            .global_memory_mut()
-                            .insert(var_name.clone(), literal);
+                        state.global_memory_mut().insert(var_name.clone(), literal);
                     }
                     _ => {
                         return Err(AlthreadError::new(
@@ -605,6 +594,12 @@ impl Ast {
         // Update context instead of state
         state.program_arguments_mut().extend(program_args);
 
+        // With globals, imported symbols, stdlib interfaces, function signatures, and program
+        // arguments all registered, prescan can infer process-typed expressions reliably.
+        if let Err(e) = self.prescan_channel_declarations(&mut state, module_prefix) {
+            return Err(e);
+        }
+
         // Compile all the programs
         state.is_shared = false;
 
@@ -648,7 +643,9 @@ impl Ast {
                 Some(pos.clone()),
                 format!(
                     "Channel '{}' used in program '{}' at line {} has not been declared",
-                    channel_name.1, channel_name.0, pos.line
+                    channel_name.1,
+                    channel_name.0,
+                    pos.line()
                 ),
             ));
         }
@@ -1246,11 +1243,11 @@ impl Ast {
         // Capture argument names for debug info
         let mut argument_names = Vec::new();
         let mut debug_variables = Vec::new();
-        
+
         for (i, var) in args.value.identifiers.iter().enumerate() {
             let var_name = var.value.value.clone();
             argument_names.push(var_name.clone());
-            
+
             state.program_stack.push(Variable {
                 name: var_name.clone(),
                 depth: state.current_stack_depth,
@@ -1258,7 +1255,7 @@ impl Ast {
                 datatype: args.value.datatypes[i].value.clone(),
                 declare_pos: Some(var.pos.clone()),
             });
-            
+
             // Add debug variable for program arguments (available from the start)
             debug_variables.push(crate::compiler::LocalVariableDebugInfo {
                 name: var_name,
@@ -1277,10 +1274,10 @@ impl Ast {
         if compiled.contains_jump() {
             unimplemented!("breaks or return statements in programs are not yet implemented");
         }
-        
+
         // Collect debug variables from the compiled builder
         debug_variables.extend(compiled.debug_variables);
-        
+
         if !args.value.identifiers.is_empty() {
             process_code.instructions.push(Instruction {
                 control: InstructionType::Destruct,
@@ -1318,7 +1315,7 @@ impl Ast {
         label_map.insert("end".to_string(), end_index);
         process_code.labels = label_map;
         process_code.argument_names = argument_names.clone();
-        
+
         // Store debug info for this program
         state.program_debug_info.insert(
             state.current_program_name.clone(),
@@ -1327,10 +1324,10 @@ impl Ast {
                 local_variables: debug_variables,
             },
         );
-        
+
         // Clear debug variables for next program
         state.debug_variables.clear();
-        
+
         Ok(process_code)
     }
 }

@@ -1,16 +1,16 @@
 use std::{collections::HashSet, fmt};
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
+        node::{InstructionBuilder, Node},
         token::{datatype::DataType, object_identifier::ObjectIdentifier},
     },
-    compiler::{CompilerState, InstructionBuilderOk, Variable},
+    compiler::{
+        stdlib::{resolve_interface_method, validate_interface_call},
+        CompilerState, InstructionBuilderOk, Variable,
+    },
     error::{AlthreadError, AlthreadResult, ErrorType},
-    parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };
 
@@ -67,22 +67,11 @@ impl FnCall {
     }
 }
 
-impl NodeBuilder for FnCall {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let fn_name = Node::<ObjectIdentifier>::build(pairs.next().unwrap(), filepath)?;
-        let values = Box::new(Expression::build_top_level(
-            pairs.next().unwrap(),
-            filepath,
-        )?);
-
-        Ok(Self { fn_name, values })
-    }
-}
-
 impl InstructionBuilder for Node<FnCall> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         let mut builder = InstructionBuilderOk::new();
         let full_name = self.value.fn_name_to_string();
+        let callee_pos = self.value.fn_name.pos.clone();
         state.current_stack_depth += 1;
 
         builder.extend(self.value.values.compile(state).map_err(|mut e| {
@@ -123,7 +112,7 @@ impl InstructionBuilder for Node<FnCall> {
                     state.unstack_current_depth();
                     return Err(AlthreadError::new(
                         ErrorType::FunctionArgumentCountError,
-                        Some(self.pos.clone()),
+                        Some(callee_pos.clone()),
                         format!(
                             "Function '{}' expects {} arguments, but {} were provided.",
                             basename,
@@ -143,7 +132,7 @@ impl InstructionBuilder for Node<FnCall> {
                         state.unstack_current_depth();
                         return Err(AlthreadError::new(
                             ErrorType::FunctionArgumentTypeMismatch,
-                            Some(self.pos.clone()),
+                            Some(callee_pos.clone()),
                             format!(
                                 "Function '{}' expects argument {} ('{}') to be of type {}, but got {}.",
                                 basename,
@@ -185,7 +174,7 @@ impl InstructionBuilder for Node<FnCall> {
                                 state.unstack_current_depth();
                                 return Err(AlthreadError::new(
                                     ErrorType::FunctionArgumentTypeMismatch,
-                                    Some(self.pos.clone()),
+                                    Some(callee_pos.clone()),
                                     format!(
                                         "Function 'print' can't accept argument {} of type Void.",
                                         idx + 1
@@ -202,7 +191,7 @@ impl InstructionBuilder for Node<FnCall> {
                             state.unstack_current_depth();
                             return Err(AlthreadError::new(
                                 ErrorType::FunctionArgumentCountError,
-                                Some(self.pos.clone()),
+                                Some(callee_pos.clone()),
                                 "Function 'assert' expects exactly 2 arguments.".to_string(),
                             ));
                         }
@@ -211,7 +200,7 @@ impl InstructionBuilder for Node<FnCall> {
                             state.unstack_current_depth();
                             return Err(AlthreadError::new(
                                 ErrorType::FunctionArgumentTypeMismatch,
-                                Some(self.pos.clone()),
+                                Some(callee_pos.clone()),
                                 format!("Function 'assert' expects the first argument to be of type bool, but got {}.", provided_arg_types[0]),
                             ));
                         }
@@ -220,7 +209,7 @@ impl InstructionBuilder for Node<FnCall> {
                             state.unstack_current_depth();
                             return Err(AlthreadError::new(
                                 ErrorType::FunctionArgumentTypeMismatch,
-                                Some(self.pos.clone()),
+                                Some(callee_pos.clone()),
                                 format!("Function 'assert' expects the second argument to be of type string, but got {}.", provided_arg_types[1]),
                             ));
                         }
@@ -229,7 +218,7 @@ impl InstructionBuilder for Node<FnCall> {
                     _ => {
                         return Err(AlthreadError::new(
                             ErrorType::UndefinedFunction,
-                            Some(self.pos.clone()),
+                            Some(callee_pos.clone()),
                             format!("undefined function {}", basename),
                         ));
                     }
@@ -258,7 +247,7 @@ impl InstructionBuilder for Node<FnCall> {
             // Handle method calls (e.g., obj.method())
             let receiver_name = self.value.receiver_name().ok_or(AlthreadError::new(
                 ErrorType::UndefinedFunction,
-                Some(self.pos.clone()),
+                Some(callee_pos.clone()),
                 format!(
                     "Method call receiver is missing in {}",
                     self.value.fn_name_to_string()
@@ -266,7 +255,7 @@ impl InstructionBuilder for Node<FnCall> {
             ))?;
             let method_name = self.value.method_name().ok_or(AlthreadError::new(
                 ErrorType::UndefinedFunction,
-                Some(self.pos.clone()),
+                Some(callee_pos.clone()),
                 format!(
                     "Method name is missing in {}",
                     self.value.fn_name_to_string()
@@ -298,29 +287,34 @@ impl InstructionBuilder for Node<FnCall> {
                 } else {
                     return Err(AlthreadError::new(
                         ErrorType::VariableError,
-                        Some(self.pos.clone()),
+                        Some(callee_pos.clone()),
                         format!("Variable '{}' not found", receiver_name),
                     ));
                 };
 
-            let interfaces = state.stdlib().interfaces(&receiver_type);
-
-            let fn_idx = interfaces.iter().position(|i| i.name == method_name);
-            if fn_idx.is_none() {
-                return Err(AlthreadError::new(
+            let fn_info = resolve_interface_method(&state.stdlib(), &receiver_type, &method_name)
+                .map_err(|message| {
+                AlthreadError::new(
                     ErrorType::UndefinedFunction,
-                    Some(self.pos.clone()),
-                    format!("No method {} found on variable of type {}", method_name, receiver_type),
-                ));
-            }
-            let fn_idx = fn_idx.unwrap();
-            let fn_info = &interfaces[fn_idx];
+                    Some(callee_pos.clone()),
+                    message,
+                )
+            })?;
             let ret_type = fn_info.ret.clone();
+
+            let provided_arg_types = args_on_stack_var.datatype.tuple_unwrap();
+            validate_interface_call(&fn_info, &provided_arg_types).map_err(|message| {
+                AlthreadError::new(
+                    ErrorType::FunctionArgumentTypeMismatch,
+                    Some(callee_pos.clone()),
+                    message,
+                )
+            })?;
 
             if fn_info.mutates_receiver && !receiver_is_mutable {
                 return Err(AlthreadError::new(
                     ErrorType::VariableError,
-                    Some(self.pos.clone()),
+                    Some(callee_pos.clone()),
                     format!(
                         "Cannot call mutating method '{}' on immutable global variable {}",
                         method_name, receiver_name

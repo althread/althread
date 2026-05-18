@@ -29,7 +29,6 @@ use for_control::ForControl;
 use if_control::IfControl;
 use label::LabelStatement;
 use loop_control::LoopControl;
-use pest::iterators::Pairs;
 use run_call::RunCall;
 use send::SendStatement;
 use wait::Wait;
@@ -37,16 +36,14 @@ use while_control::WhileControl;
 
 use crate::{
     compiler::{CompilerState, InstructionBuilderOk},
-    error::{AlthreadResult, Pos},
-    no_rule,
-    parser::Rule,
+    error::AlthreadResult,
     vm::instruction::{Instruction, InstructionType},
 };
 
 use super::{
     block::Block,
     display::{AstDisplay, Prefix},
-    node::{InstructionBuilder, Node, NodeBuilder},
+    node::{InstructionBuilder, Node},
 };
 
 #[derive(Debug, Clone)]
@@ -67,51 +64,6 @@ pub enum Statement {
     Atomic(Node<atomic::Atomic>),
     Wait(Node<Wait>),
     Block(Node<Block>),
-}
-
-impl NodeBuilder for Statement {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let pair = pairs.next().unwrap();
-
-        match pair.as_rule() {
-            Rule::assignment => Ok(Self::Assignment(Node::build(pair, filepath)?)),
-            Rule::declaration => Ok(Self::Declaration(Node::build(pair, filepath)?)),
-            Rule::wait_statement => Ok(Self::Wait(Node::build(pair, filepath)?)),
-            Rule::fn_call => Ok(Self::FnCall(Node::build(pair, filepath)?)),
-            Rule::return_statement => {
-                // build the node in here
-                // we need to set the position here because
-                // the node is built from the inner pairs
-                // and the position of the return statement is lost
-
-                let pos = Pos::from_span(pair.as_span(), filepath);
-                let inner_pairs = pair.into_inner();
-
-                let mut fn_return_node = FnReturn::build(inner_pairs, filepath)?;
-
-                fn_return_node.pos = pos.clone();
-
-                let node = Node {
-                    value: fn_return_node,
-                    pos,
-                };
-
-                Ok(Self::FnReturn(node))
-            }
-            Rule::run_call => Ok(Self::Run(Node::build(pair, filepath)?)),
-            Rule::if_control => Ok(Self::If(Node::build(pair, filepath)?)),
-            Rule::while_control => Ok(Self::While(Node::build(pair, filepath)?)),
-            Rule::atomic_statement => Ok(Self::Atomic(Node::build(pair, filepath)?)),
-            Rule::loop_control => Ok(Self::Loop(Node::build(pair, filepath)?)),
-            Rule::for_control => Ok(Self::For(Node::build(pair, filepath)?)),
-            Rule::break_loop_statement => Ok(Self::BreakLoop(Node::build(pair, filepath)?)),
-            Rule::label_statement => Ok(Self::Label(Node::build(pair, filepath)?)),
-            Rule::code_block => Ok(Self::Block(Node::build(pair, filepath)?)),
-            Rule::send_call => Ok(Self::Send(Node::build(pair, filepath)?)),
-            Rule::channel_declaration => Ok(Self::ChannelDeclaration(Node::build(pair, filepath)?)),
-            _ => Err(no_rule!(pair, "Statement", filepath)),
-        }
-    }
 }
 
 impl InstructionBuilder for Statement {

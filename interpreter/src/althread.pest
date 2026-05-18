@@ -2,6 +2,23 @@
 /// This file defines the grammar for the Althread programming language,
 
 program = _{ SOI ~ blocks* ~ EOI }
+statement_root = { SOI ~ statement ~ EOI }
+statement_prefix = { SOI ~ statement }
+expression_root = { SOI ~ expression ~ EOI }
+expression_statement_root = { SOI ~ expression_statement ~ EOI }
+expression_statement_prefix = { SOI ~ expression_statement }
+side_effect_expression_root = { SOI ~ side_effect_expression ~ EOI }
+fn_call_root = { SOI ~ fn_call ~ EOI }
+run_call_root = { SOI ~ run_call ~ EOI }
+send_call_root = { SOI ~ send_call ~ EOI }
+channel_declaration_root = { SOI ~ channel_declaration ~ EOI }
+object_identifier_root = { SOI ~ object_identifier ~ EOI }
+list_expression_root = { SOI ~ list_expression ~ EOI }
+ltl_expression_root = { SOI ~ ltl_expression ~ EOI }
+ltl_statement_root = { SOI ~ ltl_statement ~ EOI }
+ltl_statement_prefix = { SOI ~ ltl_statement }
+arg_list_root = { SOI ~ arg_list ~ EOI }
+datatype_root = { SOI ~ datatype ~ EOI }
 
 /// Directives
 private_directive = { "@" ~ PRIVATE_KW }

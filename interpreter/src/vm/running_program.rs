@@ -6,7 +6,10 @@ use std::{
 
 use crate::{
     ast::token::{datatype::DataType, literal::Literal},
-    compiler::{stdlib::{invoke_interface_method, Stdlib}, FunctionDefinition},
+    compiler::{
+        stdlib::{invoke_interface_method, Stdlib},
+        FunctionDefinition,
+    },
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
 };
 
@@ -153,12 +156,12 @@ impl<'a> RunningProgramState<'a> {
     pub fn current_state(&self) -> (&Memory, usize, usize) {
         (&self.memory, self.instruction_pointer, self.clock)
     }
-    
+
     /// Get call stack information for debugging
     /// Returns a vector of (frame_pointer, instruction_pointer, source_position)
     pub fn get_call_stack_info(&self) -> Vec<(usize, usize, Option<Pos>)> {
         let mut stack_info = Vec::new();
-        
+
         // Add current frame
         stack_info.push((
             self.frame_pointer,
@@ -167,19 +170,15 @@ impl<'a> RunningProgramState<'a> {
                 .get(self.instruction_pointer)
                 .and_then(|inst| inst.pos.clone()),
         ));
-        
+
         // Add caller frames
         for frame in self.call_stack.iter().rev() {
-            stack_info.push((
-                frame.caller_fp,
-                frame.return_ip,
-                frame.pos.clone(),
-            ));
+            stack_info.push((frame.caller_fp, frame.return_ip, frame.pos.clone()));
         }
-        
+
         stack_info
     }
-    
+
     /// Get the frame pointer (base of current function's local variables)
     pub fn get_frame_pointer(&self) -> usize {
         self.frame_pointer
@@ -300,7 +299,7 @@ impl<'a> RunningProgramState<'a> {
         let mut action = None;
 
         // debug current instruction
-       //println!("Program '{}' (pid {}) executing instruction at {}: {}", self.name, self.id, self.instruction_pointer, cur_inst.control);
+        //println!("Program '{}' (pid {}) executing instruction at {}: {}", self.name, self.id, self.instruction_pointer, cur_inst.control);
 
         let pos_inc = match &cur_inst.control {
             InstructionType::Empty => 1,
@@ -790,7 +789,7 @@ impl<'a> RunningProgramState<'a> {
                         targets.push(name.clone());
                     }
                 }
-                
+
                 let waiting = channels.get_waiting_send();
                 for (from_pid, name) in waiting.keys() {
                     if *from_pid == self.id && name.starts_with(pattern) {
@@ -805,21 +804,18 @@ impl<'a> RunningProgramState<'a> {
 
                 for name in targets {
                     self.clock += 1;
-                    let _receiver =
-                        channels.send(self.id, name.clone(), value.clone(), self.clock);
+                    let _receiver = channels.send(self.id, name.clone(), value.clone(), self.clock);
                     send_infos.push(crate::vm::SendInfo {
                         from: crate::vm::ProcessInfo {
                             process_id: self.id,
                             process_name: self.name.clone(),
                         },
-                        to: crate::vm::ChannelInfo {
-                            channel_name: name,
-                        },
+                        to: crate::vm::ChannelInfo { channel_name: name },
                         message: value.clone(),
                         n_msg: self.clock,
                     });
                 }
-                
+
                 action = Some(GlobalAction::Broadcast(send_infos));
                 1
             }
@@ -828,7 +824,11 @@ impl<'a> RunningProgramState<'a> {
                 match values {
                     Some(value) => {
                         // value must be a tuple, and we destructure it on the stack
-                        for v in value.clone().into_tuple().expect("Panic: cannot convert peeked value to tuple") {
+                        for v in value
+                            .clone()
+                            .into_tuple()
+                            .expect("Panic: cannot convert peeked value to tuple")
+                        {
                             self.memory.push(v);
                         }
                         self.memory.push(Literal::Bool(true));

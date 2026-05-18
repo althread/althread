@@ -1,16 +1,13 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
+        node::{InstructionBuilder, Node},
         token::{datatype::DataType, object_identifier::ObjectIdentifier},
     },
     compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
-    parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };
 
@@ -34,26 +31,11 @@ impl RunCall {
     }
 }
 
-impl NodeBuilder for RunCall {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let identifier = Node::build(pairs.next().unwrap(), filepath)?;
-        let args: Node<Expression> = Expression::build_top_level(pairs.next().unwrap(), filepath)?;
-
-        if !args.value.is_tuple() {
-            return Err(AlthreadError::new(
-                ErrorType::TypeError,
-                Some(args.pos),
-                "Run statement expects a tuple of arguments (possibly empty)".to_string(),
-            ));
-        }
-        Ok(Self { identifier, args })
-    }
-}
-
 impl InstructionBuilder for Node<RunCall> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         let mut builder = InstructionBuilderOk::new();
         let full_program_name = self.value.program_name_to_string();
+        let callee_pos = self.value.identifier.pos.clone();
 
         // push the args to the stack
         state.current_stack_depth += 1;
@@ -78,7 +60,7 @@ impl InstructionBuilder for Node<RunCall> {
             if prog_args.len() != call_datatype.len() {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(self.pos.clone()),
+                    Some(callee_pos.clone()),
                     format!(
                         "Expected {} argument(s), got {}",
                         prog_args.len(),
@@ -90,7 +72,7 @@ impl InstructionBuilder for Node<RunCall> {
                 if arg != &call_datatype[i] {
                     return Err(AlthreadError::new(
                         ErrorType::TypeError,
-                        Some(self.pos.clone()),
+                        Some(callee_pos.clone()),
                         format!(
                             "Expected argument {} to be of type {:?}, got {:?}",
                             i + 1,
@@ -103,7 +85,7 @@ impl InstructionBuilder for Node<RunCall> {
         } else {
             return Err(AlthreadError::new(
                 ErrorType::TypeError,
-                Some(self.pos.clone()),
+                Some(callee_pos.clone()),
                 format!("Program {} does not exist", full_program_name),
             ));
         }

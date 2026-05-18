@@ -1,8 +1,6 @@
 use std::collections::HashSet;
 use std::fmt;
 
-use pest::iterators::Pairs;
-
 use crate::ast::statement::waiting_case::WaitDependency;
 use crate::ast::token::datatype::DataType;
 use crate::ast::token::literal::Literal;
@@ -10,13 +8,11 @@ use crate::compiler::Variable;
 use crate::error::{AlthreadError, ErrorType, Pos};
 use crate::vm::instruction::InstructionType;
 use crate::vm::Memory;
-use crate::{
-    compiler::CompilerState, error::AlthreadResult, parser::Rule, vm::instruction::Instruction,
-};
+use crate::{compiler::CompilerState, error::AlthreadResult, vm::instruction::Instruction};
 
 use crate::ast::{
     display::{AstDisplay, Prefix},
-    node::{Node, NodeBuilder},
+    node::Node,
     statement::expression::Expression,
 };
 
@@ -43,16 +39,6 @@ impl fmt::Display for LocalTupleExpressionNode {
                 .collect::<Vec<String>>()
                 .join(", ")
         )
-    }
-}
-
-impl NodeBuilder for TupleExpression {
-    fn build(pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let mut values = Vec::new();
-        for pair in pairs {
-            values.push(Node::build(pair, filepath)?);
-        }
-        Ok(Self { values })
     }
 }
 

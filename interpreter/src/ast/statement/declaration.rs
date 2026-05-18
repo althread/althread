@@ -1,11 +1,9 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
+        node::{InstructionBuilder, Node},
         token::{
             datatype::DataType, declaration_keyword::DeclarationKeyword,
             object_identifier::ObjectIdentifier,
@@ -13,47 +11,17 @@ use crate::{
     },
     compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
-    no_rule,
-    parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };
 
-use super::expression::SideEffectExpression;
+use super::expression::Expression;
 
 #[derive(Debug, Clone)]
 pub struct Declaration {
     pub keyword: Node<DeclarationKeyword>,
     pub identifier: Node<ObjectIdentifier>,
     pub datatype: Option<Node<DataType>>,
-    pub value: Option<Node<SideEffectExpression>>,
-}
-
-impl NodeBuilder for Declaration {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let keyword = Node::build(pairs.next().unwrap(), filepath)?;
-        let identifier = Node::build(pairs.next().unwrap(), filepath)?;
-        let mut datatype = None;
-        let mut value = None;
-
-        for pair in pairs {
-            match pair.as_rule() {
-                Rule::datatype => {
-                    datatype = Some(Node::build(pair, filepath)?);
-                }
-                Rule::side_effect_expression => {
-                    value = Some(Node::build(pair, filepath)?);
-                }
-                _ => return Err(no_rule!(pair, "declaration", filepath)),
-            }
-        }
-
-        Ok(Self {
-            keyword,
-            identifier,
-            datatype,
-            value,
-        })
-    }
+    pub value: Option<Node<Expression>>,
 }
 
 impl InstructionBuilder for Declaration {
@@ -195,7 +163,7 @@ impl InstructionBuilder for Declaration {
         let stack_index = state.program_stack.len();
         // Variable becomes valid at the next instruction (after the declaration instruction)
         let scope_start_ip = builder.instructions.len();
-        
+
         state.program_stack.push(Variable {
             mutable: self.keyword.value == DeclarationKeyword::Let,
             name: var_name.clone(), // Use the simple variable name, not the full qualified name
@@ -203,16 +171,18 @@ impl InstructionBuilder for Declaration {
             depth: state.current_stack_depth,
             declare_pos: Some(self.identifier.pos.clone()),
         });
-        
+
         // Add debug info to the builder (will be adjusted when builders are extended)
-        builder.debug_variables.push(crate::compiler::LocalVariableDebugInfo {
-            name: var_name.clone(),
-            datatype,
-            stack_index,
-            scope_start_ip,
-            scope_end_ip: None,
-            declare_pos: Some(self.identifier.pos.clone()),
-        });
+        builder
+            .debug_variables
+            .push(crate::compiler::LocalVariableDebugInfo {
+                name: var_name.clone(),
+                datatype,
+                stack_index,
+                scope_start_ip,
+                scope_end_ip: None,
+                declare_pos: Some(self.identifier.pos.clone()),
+            });
 
         Ok(builder)
     }

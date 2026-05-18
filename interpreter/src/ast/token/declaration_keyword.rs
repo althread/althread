@@ -1,24 +1,9 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
-use crate::{ast::node::NodeBuilder, error::AlthreadResult, no_rule, parser::Rule};
-
 #[derive(Debug, PartialEq, Clone)]
 pub enum DeclarationKeyword {
     Let,
     Const,
-}
-
-impl NodeBuilder for DeclarationKeyword {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let pair = pairs.next().unwrap();
-        match pair.as_rule() {
-            Rule::LET_KW => Ok(Self::Let),
-            Rule::CONST_KW => Ok(Self::Const),
-            _ => Err(no_rule!(pair, "DeclarationKeyword", filepath)),
-        }
-    }
 }
 
 impl fmt::Display for DeclarationKeyword {

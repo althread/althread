@@ -1,15 +1,12 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
+        node::{InstructionBuilder, Node},
     },
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
-    parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };
 
@@ -19,23 +16,6 @@ use super::expression::Expression;
 pub struct FnReturn {
     pub value: Option<Node<Expression>>,
     pub pos: Pos,
-}
-
-impl NodeBuilder for FnReturn {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        // return statement doesn't necessarily have a value
-        let value = if let Some(pair) = pairs.next() {
-            Some(Expression::build_top_level(pair, filepath)?)
-        } else {
-            None
-        };
-
-        // the caller takes care of setting the proper position
-        Ok(Self {
-            value,
-            pos: Pos::default(),
-        })
-    }
 }
 
 impl InstructionBuilder for FnReturn {

@@ -96,34 +96,38 @@ pub fn format_negated_formula(formula: &CompiledLtlExpression) -> String {
 /// Generates a report of all negated formulas
 pub fn generate_negated_formulas_report(formulas: &[CompiledLtlExpression]) -> String {
     let mut report = String::new();
-    writeln!(report, "=== Negated LTL Formulas (for counter-example search) ===").unwrap();
+    writeln!(
+        report,
+        "=== Negated LTL Formulas (for counter-example search) ==="
+    )
+    .unwrap();
     writeln!(report).unwrap();
-    
+
     for (i, formula) in formulas.iter().enumerate() {
         writeln!(report, "Formula #{}: {}", i + 1, format_formula(formula)).unwrap();
         writeln!(report, "Negated:    {}", format_negated_formula(formula)).unwrap();
         writeln!(report).unwrap();
     }
-    
+
     report
 }
 
 /// Generates a DOT representation of a Büchi automaton
 pub fn automaton_to_dot(automaton: &BuchiAutomaton, formula_index: usize) -> String {
     let mut dot = String::new();
-    
+
     writeln!(dot, "digraph BuchiAutomaton{} {{", formula_index).unwrap();
     writeln!(dot, "  rankdir=LR;").unwrap();
     writeln!(dot, "  node [shape=circle];").unwrap();
     writeln!(dot).unwrap();
-    
+
     // Initial states - add invisible start nodes
     for &init_id in &automaton.initial_states {
         writeln!(dot, "  _init_{} [shape=point];", init_id).unwrap();
         writeln!(dot, "  _init_{} -> S{};", init_id, init_id).unwrap();
     }
     writeln!(dot).unwrap();
-    
+
     // States
     for state in &automaton.states {
         let shape = if !state.acceptance_sets.is_empty() {
@@ -131,25 +135,21 @@ pub fn automaton_to_dot(automaton: &BuchiAutomaton, formula_index: usize) -> Str
         } else {
             "circle"
         };
-        
+
         // Format formulas for label
-        let formulas_str: Vec<String> = state
-            .formulas
-            .iter()
-            .map(|f| format_formula(f))
-            .collect();
+        let formulas_str: Vec<String> = state.formulas.iter().map(|f| format_formula(f)).collect();
         let label = if formulas_str.is_empty() {
             "true".to_string()
         } else {
             formulas_str.join("\\n")
         };
-        
+
         let accept_label = if !state.acceptance_sets.is_empty() {
             format!(" (acc: {:?})", state.acceptance_sets)
         } else {
             String::new()
         };
-        
+
         writeln!(
             dot,
             "  S{} [shape={}, label=\"S{}\\n{}{}\\n\"];",
@@ -158,29 +158,34 @@ pub fn automaton_to_dot(automaton: &BuchiAutomaton, formula_index: usize) -> Str
         .unwrap();
     }
     writeln!(dot).unwrap();
-    
+
     // Transitions
     for state in &automaton.states {
         for &target_id in &state.transitions {
             writeln!(dot, "  S{} -> S{};", state.id, target_id).unwrap();
         }
     }
-    
+
     writeln!(dot, "}}").unwrap();
-    
+
     dot
 }
 
 /// Generates a text summary of a Büchi automaton
 pub fn automaton_summary(automaton: &BuchiAutomaton, formula_index: usize) -> String {
     let mut summary = String::new();
-    
+
     writeln!(summary, "=== Büchi Automaton #{} ===", formula_index + 1).unwrap();
     writeln!(summary, "States: {}", automaton.states.len()).unwrap();
     writeln!(summary, "Initial states: {:?}", automaton.initial_states).unwrap();
-    writeln!(summary, "Acceptance sets: {}", automaton.num_acceptance_sets).unwrap();
+    writeln!(
+        summary,
+        "Acceptance sets: {}",
+        automaton.num_acceptance_sets
+    )
+    .unwrap();
     writeln!(summary).unwrap();
-    
+
     for state in &automaton.states {
         let is_initial = automaton.initial_states.contains(&state.id);
         let initial_marker = if is_initial { " [INIT]" } else { "" };
@@ -189,23 +194,23 @@ pub fn automaton_summary(automaton: &BuchiAutomaton, formula_index: usize) -> St
         } else {
             String::new()
         };
-        
+
         writeln!(
             summary,
             "State {}{}{}:",
             state.id, initial_marker, accept_marker
         )
         .unwrap();
-        
+
         writeln!(summary, "  Formulas:").unwrap();
         for f in &state.formulas {
             writeln!(summary, "    - {}", format_formula(f)).unwrap();
         }
-        
+
         writeln!(summary, "  Transitions: {:?}", state.transitions).unwrap();
         writeln!(summary).unwrap();
     }
-    
+
     summary
 }
 
@@ -215,20 +220,20 @@ pub fn generate_automaton_report(
     automatons: &[BuchiAutomaton],
 ) -> String {
     let mut report = String::new();
-    
+
     writeln!(report, "=== Büchi Automatons Report ===").unwrap();
     writeln!(report).unwrap();
-    
+
     for (i, automaton) in automatons.iter().enumerate() {
         writeln!(report, "--- Formula #{} ---", i + 1).unwrap();
         writeln!(report, "Original: {}", format_formula(&formulas[i])).unwrap();
         writeln!(report, "Negated:  {}", format_negated_formula(&formulas[i])).unwrap();
         writeln!(report).unwrap();
-        
+
         report.push_str(&automaton_summary(automaton, i));
         writeln!(report).unwrap();
     }
-    
+
     report
 }
 
@@ -278,7 +283,7 @@ pub fn evaluate_predicates_on_state(
     bindings: &HashMap<String, Literal>,
 ) -> HashMap<String, bool> {
     let mut values = HashMap::new();
-    
+
     for pred in predicates {
         if let CompiledLtlExpression::Predicate { read_variables, .. } = pred {
             let key = format!("P[{}]", read_variables.join(", "));
@@ -293,7 +298,7 @@ pub fn evaluate_predicates_on_state(
             }
         }
     }
-    
+
     values
 }
 
@@ -304,7 +309,7 @@ pub fn format_vm_state_with_predicates(
     state_id: usize,
 ) -> String {
     let mut output = String::new();
-    
+
     // Collect all predicates from all formulas
     let mut all_predicates = Vec::new();
     for formula in formulas {
@@ -314,16 +319,16 @@ pub fn format_vm_state_with_predicates(
             }
         }
     }
-    
+
     // Format state header
     writeln!(output, "State S{}:", state_id).unwrap();
-    
+
     // Global variables
     writeln!(output, "  Globals:").unwrap();
     for (name, value) in vm.globals.iter() {
         writeln!(output, "    {}: {:?}", name, value).unwrap();
     }
-    
+
     // Predicate values
     let pred_values = evaluate_predicates_on_state(&all_predicates, vm, &HashMap::new());
     if !pred_values.is_empty() {
@@ -332,7 +337,7 @@ pub fn format_vm_state_with_predicates(
             writeln!(output, "    {} = {}", pred_name, value).unwrap();
         }
     }
-    
+
     output
 }
 
@@ -342,12 +347,12 @@ pub fn format_monitoring_state(
     automatons: &[BuchiAutomaton],
 ) -> String {
     let mut output = String::new();
-    
+
     writeln!(output, "Monitoring State:").unwrap();
-    
+
     for (formula_idx, formula_monitors) in monitors.monitors_per_formula.iter().enumerate() {
         writeln!(output, "  Formula #{}:", formula_idx + 1).unwrap();
-        
+
         if formula_monitors.is_empty() {
             writeln!(output, "    (no active monitors)").unwrap();
         } else {
@@ -355,7 +360,7 @@ pub fn format_monitoring_state(
                 let automaton = &automatons[formula_idx];
                 let is_accepting = monitor.is_accepting(automaton);
                 let accept_marker = if is_accepting { " [ACCEPTING]" } else { "" };
-                
+
                 writeln!(
                     output,
                     "    Monitor {}: state={}{}, bindings={:?}",
@@ -365,7 +370,7 @@ pub fn format_monitoring_state(
             }
         }
     }
-    
+
     output
 }
 
@@ -381,7 +386,11 @@ pub struct SearchStep {
 #[derive(Debug, Clone)]
 pub enum SearchAction {
     Expand,
-    Transition { from: usize, to: usize, edge_label: String },
+    Transition {
+        from: usize,
+        to: usize,
+        edge_label: String,
+    },
     AcceptingCycleFound,
     Backtrack,
     TerminalState,
@@ -397,17 +406,17 @@ impl SearchTrace {
     pub fn new() -> Self {
         Self { steps: Vec::new() }
     }
-    
+
     pub fn add_step(&mut self, step: SearchStep) {
         self.steps.push(step);
     }
-    
+
     pub fn to_string(&self) -> String {
         let mut output = String::new();
-        
+
         writeln!(output, "=== Search Trace ===").unwrap();
         writeln!(output).unwrap();
-        
+
         for step in &self.steps {
             writeln!(output, "Step {}:", step.step_number).unwrap();
             writeln!(output, "  VM State: {}", step.vm_state_id).unwrap();
@@ -415,7 +424,7 @@ impl SearchTrace {
             writeln!(output, "  Monitors: {}", step.monitors_summary).unwrap();
             writeln!(output).unwrap();
         }
-        
+
         output
     }
 }
@@ -458,7 +467,7 @@ mod tests {
             Box::new(CompiledLtlExpression::Boolean(true)),
             Box::new(CompiledLtlExpression::Boolean(false)),
         )));
-        
+
         // No Predicate variants, so should return empty
         let predicates = extract_predicates(&formula);
         assert_eq!(predicates.len(), 0);
@@ -466,11 +475,12 @@ mod tests {
 
     #[test]
     fn test_automaton_to_dot() {
-        let formula = CompiledLtlExpression::Eventually(Box::new(CompiledLtlExpression::Boolean(true)));
+        let formula =
+            CompiledLtlExpression::Eventually(Box::new(CompiledLtlExpression::Boolean(true)));
         let automaton = BuchiAutomaton::new(formula);
-        
+
         let dot = automaton_to_dot(&automaton, 0);
-        
+
         // Basic structure checks
         assert!(dot.contains("digraph BuchiAutomaton0"));
         assert!(dot.contains("rankdir=LR"));

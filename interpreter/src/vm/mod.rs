@@ -129,6 +129,58 @@ impl<'a> VM<'a> {
         }
     }
 
+    fn process_runtime_actions(&mut self, actions: &[GlobalAction]) -> bool {
+        let mut need_to_check_invariants = false;
+
+        for action in actions {
+            match action {
+                GlobalAction::Wait => {
+                    unreachable!("await action should not be in the list of actions");
+                }
+                GlobalAction::Deliver(_) => {
+                    unreachable!("Deliver is VM-generated and cannot come from a program step")
+                }
+                GlobalAction::Connect(sender_id, sender_channel) => {
+                    if let Some(dependency) = self.waiting_programs.get(sender_id) {
+                        if dependency.channels_connection.contains(sender_channel) {
+                            self.waiting_programs.remove(sender_id);
+                            self.executable_programs.insert(*sender_id);
+                        }
+                    }
+                }
+                GlobalAction::Write(var_name) => {
+                    self.waiting_programs.retain(|prog_id, dependencies| {
+                        if dependencies.variables.contains(var_name) {
+                            self.executable_programs.insert(*prog_id);
+                            return false;
+                        }
+                        true
+                    });
+
+                    need_to_check_invariants = true;
+                }
+                GlobalAction::StartProgram(name, pid, args, caller_program_id, call_site_pos) => {
+                    self.run_program(
+                        name,
+                        *pid,
+                        args.clone(),
+                        *caller_program_id,
+                        call_site_pos.clone(),
+                    );
+                }
+                GlobalAction::EndProgram => {
+                    panic!("EndProgram action should not be in the list of actions");
+                }
+                GlobalAction::Exit => self.running_programs.clear(),
+                GlobalAction::Print(_) => {}
+                GlobalAction::Send(_) => {}
+                GlobalAction::Broadcast(_) => {}
+            }
+        }
+
+        need_to_check_invariants
+    }
+
     fn run_program(
         &mut self,
         program_name: &str,
@@ -175,9 +227,10 @@ impl<'a> VM<'a> {
             .channels_state
             .iter()
             .any(|channel_name| self.channels.has_buffered_message(program_id, channel_name))
-            || dependencies.channels_connection.iter().any(|channel_name| {
-                self.channels.has_connection_from(program_id, channel_name)
-            })
+            || dependencies
+                .channels_connection
+                .iter()
+                .any(|channel_name| self.channels.has_connection_from(program_id, channel_name))
     }
 
     pub fn next_random(&mut self) -> AlthreadResult<ExecutionStepInfo> {
@@ -220,7 +273,7 @@ impl<'a> VM<'a> {
                                 .pos
                                 .as_ref()
                                 .unwrap()
-                                .line,
+                                .line(),
                             dep
                         ))
                         .collect::<Vec<_>>()
@@ -312,11 +365,13 @@ impl<'a> VM<'a> {
         )?;
         // maybe should be replace to avoid recurrent calls
         if actions.wait {
-            // actually nothing happened
-            assert!(
-                actions.actions.is_empty(),
-                "a process returning await should means that no actions have been performed..."
-            );
+            if !actions.actions.is_empty() {
+                return Err(AlthreadError::new(
+                    ErrorType::RuntimeError,
+                    None,
+                    "A process reached `wait` after producing global actions in the same step. Wait guards must stay side-effect free, and successful wait branches must complete before a later wait is reported.".to_string(),
+                ));
+            }
 
             let dependencies = match &self
                 .running_programs
@@ -339,56 +394,7 @@ impl<'a> VM<'a> {
             return self.next_random();
         }
 
-        let mut need_to_check_invariants = false;
-
-        for action in actions.actions.iter() {
-            match action {
-                GlobalAction::Wait => {
-                    unreachable!("await action should not be in the list of actions");
-                }
-                GlobalAction::Deliver(_) => {
-                    unreachable!("Deliver is VM-generated and cannot come from a program step")
-                }
-                GlobalAction::Connect(sender_id, sender_channel) => {
-                    // Connect is only relevant if the sender is currently blocked on that
-                    // specific connection. Otherwise it can be safely ignored.
-                    if let Some(dependency) = self.waiting_programs.get(sender_id) {
-                        if dependency.channels_connection.contains(sender_channel) {
-                            self.waiting_programs.remove(sender_id);
-                            self.executable_programs.insert(*sender_id);
-                        }
-                    }
-                }
-                GlobalAction::Write(var_name) => {
-                    // Check if the variable appears in the conditions of a waiting program
-                    self.waiting_programs.retain(|prog_id, dependencies| {
-                        if dependencies.variables.contains(var_name) {
-                            self.executable_programs.insert(*prog_id);
-                            return false;
-                        }
-                        true
-                    });
-
-                    need_to_check_invariants = true;
-                }
-                GlobalAction::StartProgram(name, pid, args, caller_program_id, call_site_pos) => {
-                    self.run_program(
-                        name,
-                        *pid,
-                        args.clone(),
-                        *caller_program_id,
-                        call_site_pos.clone(),
-                    );
-                }
-                GlobalAction::EndProgram => {
-                    panic!("EndProgram action should not be in the list of actions");
-                }
-                GlobalAction::Exit => self.running_programs.clear(),
-                GlobalAction::Print(_) => {} // do nothing, this is just a print action
-                GlobalAction::Send(_) => {}  // do nothing, sending is already handled
-                GlobalAction::Broadcast(_) => {} 
-            }
-        }
+        let need_to_check_invariants = self.process_runtime_actions(&actions.actions);
         if actions.end {
             let remove_id = program_id;
             self.executable_programs.remove(&remove_id);
@@ -432,11 +438,13 @@ impl<'a> VM<'a> {
         )?;
         // maybe should be replace to avoid recurrent calls
         if actions.wait {
-            // actually nothing happened
-            assert!(
-                actions.actions.is_empty(),
-                "a process returning await should means that no actions have been performed..."
-            );
+            if !actions.actions.is_empty() {
+                return Err(AlthreadError::new(
+                    ErrorType::RuntimeError,
+                    None,
+                    "A process reached `wait` after producing global actions in the same step. Wait guards must stay side-effect free, and successful wait branches must complete before a later wait is reported.".to_string(),
+                ));
+            }
 
             let dependencies = match &self
                 .running_programs
@@ -461,47 +469,7 @@ impl<'a> VM<'a> {
 
         // Store actions before processing them
         exec_info.actions = actions.actions.clone();
-
-        for action in actions.actions {
-            match action {
-                GlobalAction::Wait => {
-                    unreachable!("await action should not be in the list of actions");
-                }
-                GlobalAction::Deliver(_) => {
-                    unreachable!("Deliver is VM-generated and cannot come from a program step")
-                }
-                GlobalAction::Connect(sender_id, sender_channel) => {
-                    // Connect is only relevant if the sender is currently blocked on that
-                    // specific connection. Otherwise it can be safely ignored.
-                    if let Some(dependency) = self.waiting_programs.get(&sender_id) {
-                        if dependency.channels_connection.contains(&sender_channel) {
-                            self.waiting_programs.remove(&sender_id);
-                            self.executable_programs.insert(sender_id);
-                        }
-                    }
-                }
-                GlobalAction::Write(var_name) => {
-                    // Check if the variable appears in the conditions of a waiting program
-                    self.waiting_programs.retain(|prog_id, dependencies| {
-                        if dependencies.variables.contains(&var_name) {
-                            self.executable_programs.insert(*prog_id);
-                            return false;
-                        }
-                        true
-                    });
-                }
-                GlobalAction::StartProgram(name, pid, args, caller_program_id, call_site_pos) => {
-                    self.run_program(&name, pid, args, caller_program_id, call_site_pos);
-                }
-                GlobalAction::EndProgram => {
-                    panic!("EndProgram action should not be in the list of actions");
-                }
-                GlobalAction::Exit => self.running_programs.clear(),
-                GlobalAction::Print(_) => {} // do nothing, this is just a print action
-                GlobalAction::Send(_) => {}  // do nothing, sending is already handled
-                GlobalAction::Broadcast(_) => {} 
-            }
-        }
+        let need_to_check_invariants = self.process_runtime_actions(&actions.actions);
         if actions.end {
             let remove_id = pid;
             self.executable_programs.remove(&remove_id);
@@ -509,6 +477,9 @@ impl<'a> VM<'a> {
         }
 
         exec_info.instructions = executed_instructions;
+        if need_to_check_invariants {
+            exec_info.invariant_error = self.check_invariants();
+        }
 
         Ok(Some(exec_info))
     }
@@ -764,7 +735,7 @@ impl std::cmp::Eq for VM<'_> {}
 mod tests {
     use std::{collections::HashMap, path::Path};
 
-    use crate::{ast::Ast, module_resolver::VirtualFileSystem, parser};
+    use crate::{module_resolver::VirtualFileSystem, parser};
 
     use super::*;
 
@@ -772,8 +743,7 @@ mod tests {
         let mut input_map = HashMap::new();
         input_map.insert("main.alt".to_string(), source.to_string());
 
-        let pairs = parser::parse(source, "main.alt").unwrap();
-        let ast = Ast::build(pairs, "main.alt").unwrap();
+        let ast = parser::parse_ast(source, "main.alt").unwrap();
         let compiled_project = Box::new(
             ast.compile(
                 Path::new("main.alt"),
@@ -791,7 +761,12 @@ mod tests {
 
     fn step_program_to_wait_start(vm: &mut VM<'_>, pid: usize) {
         loop {
-            let instruction = vm.get_program(pid).current_instruction().unwrap().control.clone();
+            let instruction = vm
+                .get_program(pid)
+                .current_instruction()
+                .unwrap()
+                .control
+                .clone();
             if matches!(instruction, InstructionType::WaitStart { .. }) {
                 break;
             }
@@ -845,12 +820,12 @@ main {
 
         assert!(actions.wait);
         assert!(actions.actions.is_empty());
-        assert!(executed_instructions.iter().any(|inst| {
-            inst.control == InstructionType::ChannelPeek("fromA".to_string())
-        }));
-        assert!(executed_instructions.iter().any(|inst| {
-            inst.control == InstructionType::ChannelPeek("fromB".to_string())
-        }));
+        assert!(executed_instructions
+            .iter()
+            .any(|inst| { inst.control == InstructionType::ChannelPeek("fromA".to_string()) }));
+        assert!(executed_instructions
+            .iter()
+            .any(|inst| { inst.control == InstructionType::ChannelPeek("fromB".to_string()) }));
     }
 
     #[test]
@@ -893,9 +868,9 @@ main {
             .any(|action| matches!(action, GlobalAction::Print(message) if message == "A 1")));
     }
 
-        #[test]
-        fn wait_seq_restarts_atomic_evaluation_after_a_successful_block() {
-                let source = r#"
+    #[test]
+    fn wait_seq_restarts_atomic_evaluation_after_a_successful_block() {
+        let source = r#"
 shared {
     let Ready = true;
 }
@@ -916,42 +891,46 @@ main {
 }
                 "#;
 
-                let mut vm = compile_vm(source);
-                step_program_to_wait_start(&mut vm, 0);
-                deliver_pending_message(&mut vm, 0, "in");
+        let mut vm = compile_vm(source);
+        step_program_to_wait_start(&mut vm, 0);
+        deliver_pending_message(&mut vm, 0, "in");
 
-                let first_step = vm.next_step_pid(0).unwrap().unwrap();
+        let first_step = vm.next_step_pid(0).unwrap().unwrap();
 
-                assert!(first_step.actions.iter().any(|action| matches!(
-                    action,
-                    GlobalAction::Print(message) if message == "CASE 1"
-                )));
+        assert!(first_step.actions.iter().any(|action| matches!(
+            action,
+            GlobalAction::Print(message) if message == "CASE 1"
+        )));
 
-                let mut saw_tail = first_step.actions.iter().any(|action| matches!(
+        let mut saw_tail = first_step.actions.iter().any(|action| {
+            matches!(
+                action,
+                GlobalAction::Print(message) if message == "TAIL tail"
+            )
+        });
+        for _ in 0..4 {
+            if saw_tail {
+                break;
+            }
+            let Some(step) = vm.next_step_pid(0).unwrap() else {
+                break;
+            };
+            if step.actions.iter().any(|action| {
+                matches!(
                     action,
                     GlobalAction::Print(message) if message == "TAIL tail"
-                ));
-                for _ in 0..4 {
-                    if saw_tail {
-                        break;
-                    }
-                    let Some(step) = vm.next_step_pid(0).unwrap() else {
-                        break;
-                    };
-                    if step.actions.iter().any(|action| matches!(
-                        action,
-                        GlobalAction::Print(message) if message == "TAIL tail"
-                    )) {
-                        saw_tail = true;
-                    }
-                }
-
-                assert!(saw_tail);
+                )
+            }) {
+                saw_tail = true;
+            }
         }
 
-        #[test]
-        fn wait_seq_does_not_skip_a_blocked_matched_case() {
-                let source = r#"
+        assert!(saw_tail);
+    }
+
+    #[test]
+    fn wait_seq_does_not_skip_a_blocked_matched_case() {
+        let source = r#"
 shared {
     let Ready = true;
 }
@@ -975,64 +954,64 @@ main {
 }
                 "#;
 
-                let mut vm = compile_vm(source);
-                step_program_to_wait_start(&mut vm, 0);
-                deliver_pending_message(&mut vm, 0, "tail_in");
+        let mut vm = compile_vm(source);
+        step_program_to_wait_start(&mut vm, 0);
+        deliver_pending_message(&mut vm, 0, "tail_in");
 
-                let mut observed_actions = Vec::new();
-                let mut blocked = false;
-                for _ in 0..4 {
-                    match vm.next_step_pid(0).unwrap() {
-                        Some(step) => observed_actions.extend(step.actions),
-                        None => {
-                            blocked = true;
-                            break;
-                        }
-                    }
+        let mut observed_actions = Vec::new();
+        let mut blocked = false;
+        for _ in 0..4 {
+            match vm.next_step_pid(0).unwrap() {
+                Some(step) => observed_actions.extend(step.actions),
+                None => {
+                    blocked = true;
+                    break;
                 }
-
-                assert!(blocked);
-                assert!(vm.waiting_programs.contains_key(&0));
-                assert!(!observed_actions.iter().any(|action| matches!(
-                    action,
-                    GlobalAction::Print(message) if message == "TAIL tail"
-                )));
-
-                let _ = vm.channels.send(
-                    0,
-                    "block_out".to_string(),
-                    Literal::Tuple(vec![Literal::String("go".to_string())]),
-                    1,
-                );
-                deliver_pending_message(&mut vm, 0, "block_in");
-
-                let mut resumed_actions = Vec::new();
-                for _ in 0..8 {
-                    let Some(step) = vm.next_step_pid(0).unwrap() else {
-                        break;
-                    };
-                    resumed_actions.extend(step.actions);
-                }
-
-                let print_messages = resumed_actions
-                    .iter()
-                    .filter_map(|action| match action {
-                        GlobalAction::Print(message) => Some(message.as_str()),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>();
-
-                let block_index = print_messages
-                    .iter()
-                    .position(|message| *message == "BLOCK go")
-                    .unwrap();
-                let tail_index = print_messages
-                    .iter()
-                    .position(|message| *message == "TAIL tail")
-                    .unwrap();
-
-                assert!(block_index < tail_index);
+            }
         }
+
+        assert!(blocked);
+        assert!(vm.waiting_programs.contains_key(&0));
+        assert!(!observed_actions.iter().any(|action| matches!(
+            action,
+            GlobalAction::Print(message) if message == "TAIL tail"
+        )));
+
+        let _ = vm.channels.send(
+            0,
+            "block_out".to_string(),
+            Literal::Tuple(vec![Literal::String("go".to_string())]),
+            1,
+        );
+        deliver_pending_message(&mut vm, 0, "block_in");
+
+        let mut resumed_actions = Vec::new();
+        for _ in 0..8 {
+            let Some(step) = vm.next_step_pid(0).unwrap() else {
+                break;
+            };
+            resumed_actions.extend(step.actions);
+        }
+
+        let print_messages = resumed_actions
+            .iter()
+            .filter_map(|action| match action {
+                GlobalAction::Print(message) => Some(message.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        let block_index = print_messages
+            .iter()
+            .position(|message| *message == "BLOCK go")
+            .unwrap();
+        let tail_index = print_messages
+            .iter()
+            .position(|message| *message == "TAIL tail")
+            .unwrap();
+
+        assert!(block_index < tail_index);
+    }
 }
 
 #[derive(Serialize)]
@@ -1069,7 +1048,7 @@ impl<'a> Serialize for VM<'a> {
                     .get(&prog_state.name)
                     .and_then(|code| code.instructions.get(instruction_pointer))
                     .and_then(|inst| inst.pos.as_ref())
-                    .map(|pos| pos.line)
+                    .map(|pos| pos.line())
                     .unwrap_or(0);
 
                 SerializableRunningProgramStateForJs {
@@ -1084,7 +1063,10 @@ impl<'a> Serialize for VM<'a> {
             .collect();
 
         s.serialize_field("locals", &serializable_program_states)?;
-        s.serialize_field("pending_deliveries", &self.channels.get_pending_deliveries())?;
+        s.serialize_field(
+            "pending_deliveries",
+            &self.channels.get_pending_deliveries(),
+        )?;
         s.serialize_field("waiting_send", &self.channels.get_waiting_send())?;
         s.serialize_field("channel_connections", &self.channels.get_connections())?;
 
