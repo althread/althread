@@ -8,15 +8,25 @@ use crate::{
         statement::{
             assignment::Assignment,
             channel_declaration::ChannelDeclaration,
-            expression::{primary_expression::PrimaryExpression, Expression},
+            expression::{Expression, LocalExpressionNode},
             Statement,
         },
         token::datatype::DataType,
         Ast,
     },
-    compiler::CompilerState,
+    compiler::{CompilerState, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
 };
+
+fn known_channel_types_for_receive(
+    receive: &crate::ast::statement::receive::ReceiveStatement,
+    state: &CompilerState,
+) -> Option<Vec<DataType>> {
+    state
+        .channels()
+        .get(&(state.current_program_name.clone(), receive.channel.clone()))
+        .map(|(types, _)| types.clone())
+}
 
 impl Ast {
     pub fn check_function_returns(
@@ -98,6 +108,22 @@ impl Ast {
             Statement::Block(block) => {
                 self.extract_channel_declarations_from_block(
                     &block.value,
+                    state,
+                    module_prefix,
+                    var_to_program,
+                )?;
+            }
+            Statement::For(for_statement) => {
+                self.extract_channel_declarations_from_statement(
+                    &for_statement.value.statement.value,
+                    state,
+                    module_prefix,
+                    var_to_program,
+                )?;
+            }
+            Statement::While(while_statement) => {
+                self.extract_channel_declarations_from_block(
+                    &while_statement.value.then_block.value,
                     state,
                     module_prefix,
                     var_to_program,
@@ -199,216 +225,277 @@ impl Ast {
 
     fn build_variable_program_mapping(
         &self,
+        state: &mut CompilerState,
         var_to_program: &mut HashMap<String, String>,
     ) -> AlthreadResult<()> {
-        let mut process_lists: HashMap<String, String> = HashMap::new();
+        for (_, (args, program_block, _)) in &self.process_blocks {
+            let stack_len = state.program_stack.len();
+            let depth = state.current_stack_depth;
+            state.current_stack_depth += 1;
 
-        // Scan all process blocks, not just main
-        for (program_name, (_, program_block, _)) in &self.process_blocks {
-            self.scan_block_for_run_statements(
-                &program_block.value,
-                var_to_program,
-                &mut process_lists,
-                program_name,
-            )?;
+            for (identifier, datatype) in args.value.identifiers.iter().zip(args.value.datatypes.iter()) {
+                state.program_stack.push(Variable {
+                    mutable: true,
+                    name: identifier.value.value.clone(),
+                    datatype: datatype.value.clone(),
+                    depth: state.current_stack_depth,
+                    declare_pos: Some(identifier.pos.clone()),
+                });
+            }
+
+            self.scan_block_for_typed_processes(&program_block.value, state, var_to_program)?;
+            state.program_stack.truncate(stack_len);
+            state.current_stack_depth = depth;
         }
-        // Scan all function blocks
-        for (function_name, (_, _, function_block, _)) in &self.function_blocks {
-            self.scan_block_for_run_statements(
-                &function_block.value,
-                var_to_program,
-                &mut process_lists,
-                &format!("function_{}", function_name),
-            )?;
+
+        for (_, (args, _, function_block, _)) in &self.function_blocks {
+            let stack_len = state.program_stack.len();
+            let depth = state.current_stack_depth;
+            state.current_stack_depth += 1;
+
+            for (identifier, datatype) in args.value.identifiers.iter().zip(args.value.datatypes.iter()) {
+                state.program_stack.push(Variable {
+                    mutable: true,
+                    name: identifier.value.value.clone(),
+                    datatype: datatype.value.clone(),
+                    depth: state.current_stack_depth,
+                    declare_pos: Some(identifier.pos.clone()),
+                });
+            }
+
+            self.scan_block_for_typed_processes(&function_block.value, state, var_to_program)?;
+            state.program_stack.truncate(stack_len);
+            state.current_stack_depth = depth;
         }
 
         Ok(())
     }
 
-    fn scan_block_for_run_statements(
+    fn scan_block_for_typed_processes(
         &self,
         block: &Block,
+        state: &mut CompilerState,
         var_to_program: &mut HashMap<String, String>,
-        process_lists: &mut HashMap<String, String>,
-        current_program: &str,
     ) -> AlthreadResult<()> {
+        let stack_len = state.program_stack.len();
+        let depth = state.current_stack_depth;
+        state.current_stack_depth += 1;
+
         for statement in &block.children {
-            self.scan_statement_for_run_statements(
-                &statement.value,
-                var_to_program,
-                process_lists,
-                current_program,
-            )?;
+            self.scan_statement_for_typed_processes(&statement.value, state, var_to_program)?;
         }
+
+        state.program_stack.truncate(stack_len);
+        state.current_stack_depth = depth;
         Ok(())
     }
 
-    fn scan_statement_for_run_statements(
+    fn scan_statement_for_typed_processes(
         &self,
         statement: &Statement,
+        state: &mut CompilerState,
         var_to_program: &mut HashMap<String, String>,
-        process_lists: &mut HashMap<String, String>,
-        current_program: &str,
     ) -> AlthreadResult<()> {
         match statement {
             Statement::Declaration(var_decl) => {
-                let var_name = &var_decl.value.identifier.value.parts[0].value.value;
+                let Some(identifier_node) = var_decl.value.identifier.value.parts.first() else {
+                    return Ok(());
+                };
+                let var_name = identifier_node.value.value.clone();
 
-                // Check if this is a list
-                if let Some(list_type) = var_decl.value.datatype.as_ref() {
-                    let (is_process, element_type) = list_type.value.is_process();
-                    if is_process {
-                        process_lists.insert(var_name.clone(), element_type);
-                    }
-                }
-
-                // check for run calls
-                if let Some(side_effect_node) = var_decl.value.value.as_ref() {
-                    if let Some(program_name) =
-                        self.extract_run_program_name(&side_effect_node.value)
-                    {
-                        var_to_program.insert(
-                            var_decl.value.identifier.value.parts[0].value.value.clone(),
-                            program_name,
-                        );
-                    }
-                    // check for reference assignments (let b = a;)
-                    else if let Some(ref_var) =
-                        self.extract_variable_reference(&side_effect_node.value)
-                    {
-                        if let Some(program_type) = var_to_program.get(&ref_var) {
-                            var_to_program.insert(var_name.clone(), program_type.clone());
-                        }
-
-                        if let Some(element_type) = process_lists.get(&ref_var).cloned() {
-                            process_lists.insert(var_name.clone(), element_type);
+                let datatype = if let Some(explicit) = &var_decl.value.datatype {
+                    explicit.value.clone()
+                } else if let Some(value) = &var_decl.value.value {
+                    match Self::prescan_expression_datatype(&value.value, state) {
+                        Ok(datatype) => datatype,
+                        Err(message) => {
+                            log::debug!(
+                                "Skipping declaration type inference during prescan for '{}': {}",
+                                var_name,
+                                message
+                            );
+                            return Ok(());
                         }
                     }
-                    // check for .at() calls
-                    else if let Some((list_var, _index)) =
-                        self.extract_list_at_call(&side_effect_node.value)
-                    {
-                        if let Some(element_type) = process_lists.get(&list_var).cloned() {
-                            var_to_program.insert(var_name.clone(), element_type);
-                        }
-                    }
-                }
+                } else {
+                    return Ok(());
+                };
+
+                self.record_process_type(&var_name, &datatype, var_to_program);
+
+                state.program_stack.push(Variable {
+                    mutable: true,
+                    name: var_name,
+                    datatype,
+                    depth: state.current_stack_depth,
+                    declare_pos: Some(var_decl.pos.clone()),
+                });
             }
             Statement::Assignment(assignment) => {
-                // handle assignments like: p1 = a.at(i);
                 let Assignment::Binary(binary) = &assignment.value;
-
-                // Only handle identifier assignments for prescan
-                let var_name = &binary.value.identifier.value.parts[0].value.value;
-
-                // Get the right-hand side expression
-                let rhs = &binary.value.value;
-
-                // Check for reference assignment (p1 = b;)
-                if let Some(ref_var) = self.extract_variable_reference(&rhs.value) {
-                    if let Some(program_type) = var_to_program.get(&ref_var) {
-                        var_to_program.insert(var_name.clone(), program_type.clone());
-                    }
-                    if let Some(list_info) = process_lists.get(&ref_var).cloned() {
-                        process_lists.insert(var_name.clone(), list_info);
-                    }
-                }
-                // Check for .at() calls (p1 = a.at(i);)
-                else if let Some((list_var, _index)) = self.extract_list_at_call(&rhs.value) {
-                    if let Some(element_type) = process_lists.get(&list_var).cloned() {
-                        var_to_program.insert(var_name.clone(), element_type);
-                    }
-                }
+                let Some(identifier_node) = binary.value.identifier.value.parts.first() else {
+                    return Ok(());
+                };
+                let datatype =
+                    match Self::prescan_expression_datatype(&binary.value.value.value, state) {
+                        Ok(datatype) => datatype,
+                        Err(message) => {
+                            log::debug!(
+                                "Skipping assignment type inference during prescan for '{}': {}",
+                                identifier_node.value.value,
+                                message
+                            );
+                            return Ok(());
+                        }
+                    };
+                self.record_process_type(&identifier_node.value.value, &datatype, var_to_program);
             }
             Statement::Atomic(atomic_statement) => {
-                self.scan_statement_for_run_statements(
+                self.scan_statement_for_typed_processes(
                     &atomic_statement.value.statement.value,
+                    state,
                     var_to_program,
-                    process_lists,
-                    current_program,
                 )?;
             }
             Statement::If(if_statement) => {
-                self.scan_block_for_run_statements(
+                self.scan_block_for_typed_processes(
                     &if_statement.value.then_block.value,
+                    state,
                     var_to_program,
-                    process_lists,
-                    current_program,
                 )?;
                 if let Some(else_block) = &if_statement.value.else_block {
-                    self.scan_block_for_run_statements(
+                    self.scan_block_for_typed_processes(
                         &else_block.value,
+                        state,
                         var_to_program,
-                        process_lists,
-                        current_program,
                     )?;
                 }
             }
             Statement::Block(block) => {
-                self.scan_block_for_run_statements(
-                    &block.value,
-                    var_to_program,
-                    process_lists,
-                    current_program,
-                )?;
+                self.scan_block_for_typed_processes(&block.value, state, var_to_program)?;
             }
             Statement::For(for_statement) => {
-                self.scan_statement_for_run_statements(
+                let stack_len = state.program_stack.len();
+                let depth = state.current_stack_depth;
+                state.current_stack_depth += 1;
+
+                let item_type = Self::prescan_expression_datatype(
+                    &for_statement.value.expression.value,
+                    state,
+                )
+                    .ok()
+                    .and_then(|dtype| match dtype {
+                        DataType::List(inner) => Some(*inner),
+                        _ => None,
+                    })
+                    .unwrap_or(DataType::Integer);
+
+                state.program_stack.push(Variable {
+                    mutable: true,
+                    name: for_statement.value.identifier.value.value.clone(),
+                    datatype: item_type,
+                    depth: state.current_stack_depth,
+                    declare_pos: Some(for_statement.value.identifier.pos.clone()),
+                });
+
+                self.scan_statement_for_typed_processes(
                     &for_statement.value.statement.value,
+                    state,
                     var_to_program,
-                    process_lists,
-                    current_program,
                 )?;
+
+                state.program_stack.truncate(stack_len);
+                state.current_stack_depth = depth;
             }
             Statement::Loop(loop_statement) => {
-                self.scan_statement_for_run_statements(
+                let stack_len = state.program_stack.len();
+                let depth = state.current_stack_depth;
+                state.current_stack_depth += 1;
+                self.scan_statement_for_typed_processes(
                     &loop_statement.value.statement.value,
+                    state,
                     var_to_program,
-                    process_lists,
-                    current_program,
                 )?;
+                state.program_stack.truncate(stack_len);
+                state.current_stack_depth = depth;
+            }
+            Statement::While(while_statement) => {
+                self.scan_block_for_typed_processes(
+                    &while_statement.value.then_block.value,
+                    state,
+                    var_to_program,
+                )?;
+            }
+            Statement::Wait(wait_statement) => {
+                for case in &wait_statement.value.waiting_cases {
+                    let stack_len = state.program_stack.len();
+                    let depth = state.current_stack_depth;
+                    state.current_stack_depth += 1;
+
+                    if let crate::ast::statement::waiting_case::WaitingBlockCaseRule::Receive(
+                        receive,
+                    ) = &case.value.rule
+                    {
+                        if let Some(channel_types) =
+                            known_channel_types_for_receive(&receive.value, state)
+                        {
+                            for (idx, variable) in receive.value.variables.iter().enumerate() {
+                                if let Some(datatype) = channel_types.get(idx) {
+                                    state.program_stack.push(Variable {
+                                        mutable: true,
+                                        name: variable.clone(),
+                                        datatype: datatype.clone(),
+                                        depth: state.current_stack_depth,
+                                        declare_pos: Some(receive.pos.clone()),
+                                    });
+                                }
+                            }
+                        }
+                    }
+
+                    if let Some(statement) = &case.value.statement {
+                        self.scan_statement_for_typed_processes(
+                            &statement.value,
+                            state,
+                            var_to_program,
+                        )?;
+                    }
+
+                    state.program_stack.truncate(stack_len);
+                    state.current_stack_depth = depth;
+                }
             }
             _ => {}
         }
         Ok(())
     }
 
-    fn extract_variable_reference(&self, expression: &Expression) -> Option<String> {
-        if let Expression::Primary(primary_expr) = expression {
-            if let PrimaryExpression::Identifier(identifier) = &primary_expr.value {
-                if identifier.value.parts.len() == 1 {
-                    return Some(identifier.value.parts[0].value.value.clone());
-                }
-            }
+    fn record_process_type(
+        &self,
+        var_name: &str,
+        datatype: &DataType,
+        var_to_program: &mut HashMap<String, String>,
+    ) {
+        if let DataType::Process(program_name) = datatype {
+            var_to_program.insert(var_name.to_string(), program_name.clone());
         }
-        None
     }
 
-    fn extract_list_at_call(&self, expression: &Expression) -> Option<(String, String)> {
-        match expression {
-            Expression::FnCall(fn_call_node) => {
-                let fn_call = &fn_call_node.value;
+    fn prescan_expression_datatype(
+        expression: &Expression,
+        state: &mut CompilerState,
+    ) -> Result<DataType, String> {
+        let original_stack = state.program_stack.clone();
+        let mut scope: Vec<Variable> = state.global_table().values().cloned().collect();
+        scope.extend(original_stack.clone());
+        state.program_stack = scope;
 
-                if let (Some(receiver_name), Some(method_name)) =
-                    (fn_call.receiver_name(), fn_call.method_name())
-                {
-                    if method_name == "at" {
-                        return Some((receiver_name, "index".to_string()));
-                    }
-                }
-            }
-            _ => {}
-        }
-        None
-    }
+        let result = LocalExpressionNode::from_expression(expression, &state.program_stack)
+            .map_err(|e| e.message)
+            .and_then(|expr| expr.datatype(state));
 
-    fn extract_run_program_name(&self, expression: &Expression) -> Option<String> {
-        match expression {
-            Expression::RunCall(run_call_node) => {
-                Some(run_call_node.value.program_name_to_string())
-            }
-            _ => None,
-        }
+        state.program_stack = original_stack;
+        result
     }
 
     pub fn prescan_channel_declarations(
@@ -418,7 +505,7 @@ impl Ast {
     ) -> AlthreadResult<()> {
         // Build variable-to-program mapping first
         let mut var_to_program: HashMap<String, String> = HashMap::new();
-        self.build_variable_program_mapping(&mut var_to_program)?;
+        self.build_variable_program_mapping(state, &mut var_to_program)?;
 
         log::debug!("[{}] Prescanning for channel declarations", module_prefix);
 

@@ -5,9 +5,7 @@ use chumsky::{
     pratt::*,
     prelude::*,
 };
-use logos::Logos;
 use ordered_float::OrderedFloat;
-use std::fmt;
 
 use crate::{
     ast::statement::expression::list_expression::RangeListExpression,
@@ -51,278 +49,17 @@ use crate::{
     ast::import_block::{ImportBlock, ImportItem, ImportPath},
     checker::ltl::ast::{CheckBlock, LtlExpression},
     error::{AlthreadError, ErrorType, Pos},
-    parser::syntax::SyntaxSnippet,
+    parser::{
+        lexer::{lex, lex_snippet, Span, Token},
+        syntax::SyntaxSnippet,
+    },
 };
 
-pub type Span = SimpleSpan<usize>;
-type Spanned<T> = (T, Span);
 pub(crate) type ParserExtra<'a> = extra::Err<Rich<'a, Token, Span>>;
-
-#[derive(Logos, Clone, Debug, PartialEq)]
-#[logos(skip r"[ \t\r\n\f]+")]
-#[logos(skip r"//[^\n]*")]
-pub enum Token {
-    #[token("@private")]
-    AtPrivate,
-    #[token("@")]
-    At,
-    #[token("shared")]
-    Shared,
-    #[token("main")]
-    Main,
-    #[token("always")]
-    Always,
-    #[token("never")]
-    Never,
-    #[token("check")]
-    Check,
-    #[token("eventually")]
-    Eventually,
-    #[token("until")]
-    Until,
-    #[token("next")]
-    Next,
-    #[token("program")]
-    Program,
-    #[token("fn")]
-    Fn,
-    #[token("import")]
-    Import,
-    #[token("as")]
-    As,
-    #[token("let")]
-    Let,
-    #[token("const")]
-    Const,
-    #[token("run")]
-    Run,
-    #[token("send")]
-    Send,
-    #[token("channel")]
-    Channel,
-    #[token("await")]
-    Await,
-    #[token("first")]
-    First,
-    #[token("seq")]
-    Seq,
-    #[token("receive")]
-    Receive,
-    #[token("if")]
-    If,
-    #[token("else")]
-    Else,
-    #[token("while")]
-    While,
-    #[token("for")]
-    For,
-    #[token("exists")]
-    Exists,
-    #[token("in")]
-    In,
-    #[token("loop")]
-    Loop,
-    #[token("atomic")]
-    Atomic,
-    #[token("break")]
-    Break,
-    #[token("continue")]
-    Continue,
-    #[token("return")]
-    Return,
-    #[token("label")]
-    Label,
-    #[token("proc")]
-    Proc,
-    #[token("list")]
-    List,
-    #[token("tuple")]
-    Tuple,
-    #[token("bool")]
-    BoolType,
-    #[token("int")]
-    IntType,
-    #[token("float")]
-    FloatType,
-    #[token("string")]
-    StringType,
-    #[token("void")]
-    VoidType,
-    #[token("true")]
-    True,
-    #[token("false")]
-    False,
-    #[token("null")]
-    Null,
-    #[token("$")]
-    Dollar,
-    #[regex(r#""([^"\\]|\\.)*""#, |lex| lex.slice().to_string())]
-    StringLiteral(String),
-    #[regex(r"[0-9]+\.[0-9]+", |lex| lex.slice().to_string())]
-    FloatLiteral(String),
-    #[regex(r"[0-9]+", |lex| lex.slice().to_string())]
-    IntLiteral(String),
-    #[regex(r"[A-Za-z_][A-Za-z0-9_]*", |lex| lex.slice().to_string())]
-    Ident(String),
-    #[token("->")]
-    Arrow,
-    #[token("=>")]
-    FatArrow,
-    #[token("==")]
-    EqEq,
-    #[token("!=")]
-    NotEq,
-    #[token("<=")]
-    LtEq,
-    #[token(">=")]
-    GtEq,
-    #[token("<<")]
-    ShiftLeft,
-    #[token(">>")]
-    ShiftRight,
-    #[token("..")]
-    DotDot,
-    #[token("&&")]
-    AndAnd,
-    #[token("||")]
-    OrOr,
-    #[token("!")]
-    Bang,
-    #[token("+")]
-    Plus,
-    #[token("-")]
-    Minus,
-    #[token("*")]
-    Star,
-    #[token("/")]
-    Slash,
-    #[token("%")]
-    Percent,
-    #[token("&")]
-    Amp,
-    #[token("|")]
-    Pipe,
-    #[token("=")]
-    Eq,
-    #[token(".")]
-    Dot,
-    #[token(",")]
-    Comma,
-    #[token(":")]
-    Colon,
-    #[token(";")]
-    Semi,
-    #[token("(")]
-    LParen,
-    #[token(")")]
-    RParen,
-    #[token("{")]
-    LBrace,
-    #[token("}")]
-    RBrace,
-    #[token("[")]
-    LBracket,
-    #[token("]")]
-    RBracket,
-    #[token("<")]
-    Lt,
-    #[token(">")]
-    Gt,
-}
-
-impl fmt::Display for Token {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Token::AtPrivate => write!(f, "@private"),
-            Token::At => write!(f, "@"),
-            Token::Shared => write!(f, "shared"),
-            Token::Main => write!(f, "main"),
-            Token::Always => write!(f, "always"),
-            Token::Never => write!(f, "never"),
-            Token::Check => write!(f, "check"),
-            Token::Eventually => write!(f, "eventually"),
-            Token::Until => write!(f, "until"),
-            Token::Next => write!(f, "next"),
-            Token::Program => write!(f, "program"),
-            Token::Fn => write!(f, "fn"),
-            Token::Import => write!(f, "import"),
-            Token::As => write!(f, "as"),
-            Token::Let => write!(f, "let"),
-            Token::Const => write!(f, "const"),
-            Token::Run => write!(f, "run"),
-            Token::Send => write!(f, "send"),
-            Token::Channel => write!(f, "channel"),
-            Token::Await => write!(f, "await"),
-            Token::First => write!(f, "first"),
-            Token::Seq => write!(f, "seq"),
-            Token::Receive => write!(f, "receive"),
-            Token::If => write!(f, "if"),
-            Token::Else => write!(f, "else"),
-            Token::While => write!(f, "while"),
-            Token::For => write!(f, "for"),
-            Token::Exists => write!(f, "exists"),
-            Token::In => write!(f, "in"),
-            Token::Loop => write!(f, "loop"),
-            Token::Atomic => write!(f, "atomic"),
-            Token::Break => write!(f, "break"),
-            Token::Continue => write!(f, "continue"),
-            Token::Return => write!(f, "return"),
-            Token::Label => write!(f, "label"),
-            Token::Proc => write!(f, "proc"),
-            Token::List => write!(f, "list"),
-            Token::Tuple => write!(f, "tuple"),
-            Token::BoolType => write!(f, "bool"),
-            Token::IntType => write!(f, "int"),
-            Token::FloatType => write!(f, "float"),
-            Token::StringType => write!(f, "string"),
-            Token::VoidType => write!(f, "void"),
-            Token::True => write!(f, "true"),
-            Token::False => write!(f, "false"),
-            Token::Null => write!(f, "null"),
-            Token::Dollar => write!(f, "$"),
-            Token::StringLiteral(_) => write!(f, "string literal"),
-            Token::FloatLiteral(_) => write!(f, "float literal"),
-            Token::IntLiteral(_) => write!(f, "int literal"),
-            Token::Ident(name) => write!(f, "{name}"),
-            Token::Arrow => write!(f, "->"),
-            Token::FatArrow => write!(f, "=>"),
-            Token::EqEq => write!(f, "=="),
-            Token::NotEq => write!(f, "!="),
-            Token::LtEq => write!(f, "<="),
-            Token::GtEq => write!(f, ">="),
-            Token::ShiftLeft => write!(f, "<<"),
-            Token::ShiftRight => write!(f, ">>"),
-            Token::DotDot => write!(f, ".."),
-            Token::AndAnd => write!(f, "&&"),
-            Token::OrOr => write!(f, "||"),
-            Token::Bang => write!(f, "!"),
-            Token::Plus => write!(f, "+"),
-            Token::Minus => write!(f, "-"),
-            Token::Star => write!(f, "*"),
-            Token::Slash => write!(f, "/"),
-            Token::Percent => write!(f, "%"),
-            Token::Amp => write!(f, "&"),
-            Token::Pipe => write!(f, "|"),
-            Token::Eq => write!(f, "="),
-            Token::Dot => write!(f, "."),
-            Token::Comma => write!(f, ","),
-            Token::Colon => write!(f, ":"),
-            Token::Semi => write!(f, ";"),
-            Token::LParen => write!(f, "("),
-            Token::RParen => write!(f, ")"),
-            Token::LBrace => write!(f, "{{"),
-            Token::RBrace => write!(f, "}}"),
-            Token::LBracket => write!(f, "["),
-            Token::RBracket => write!(f, "]"),
-            Token::Lt => write!(f, "<"),
-            Token::Gt => write!(f, ">"),
-        }
-    }
-}
 
 #[derive(Debug)]
 enum TopLevelBlock {
-    Import(Node<ImportItem>),
+    Import(Node<ImportBlock>),
     Shared(Node<Block>),
     Main(Node<Block>),
     Always(Node<ConditionBlock>),
@@ -357,10 +94,9 @@ pub fn parse_program(source: &str, file_path: &str) -> Result<Ast, AlthreadError
         .map_err(|errs| map_rich_errors(source, file_path, errs))?;
 
     let mut ast = Ast::new();
-    let mut imports = Vec::new();
     for block in blocks {
         match block {
-            TopLevelBlock::Import(import) => imports.push(import),
+            TopLevelBlock::Import(import) => ast.import_block = Some(import),
             TopLevelBlock::Shared(block) => ast.global_block = Some(block),
             TopLevelBlock::Main(block) => {
                 ast.process_blocks
@@ -398,17 +134,6 @@ pub fn parse_program(source: &str, file_path: &str) -> Result<Ast, AlthreadError
                 );
             }
         }
-    }
-
-    if !imports.is_empty() {
-        ImportBlock::validate_import_names(&imports)?;
-        ast.import_block = Some(Node {
-            pos: imports
-                .first()
-                .map(|node| node.pos.clone())
-                .unwrap_or_else(Pos::default),
-            value: ImportBlock { imports },
-        });
     }
 
     Ok(ast)
@@ -486,25 +211,6 @@ pub(crate) fn parse_ltl_expression_with_chumsky(
     result
 }
 
-fn lex(source: &str, file_path: &str) -> Result<Vec<Spanned<Token>>, AlthreadError> {
-    let mut lexer = Token::lexer(source);
-    let mut tokens = Vec::new();
-    while let Some(result) = lexer.next() {
-        let span = lexer.span();
-        match result {
-            Ok(token) => tokens.push((token, Span::new((), span.start..span.end))),
-            Err(()) => {
-                return Err(AlthreadError::new(
-                    ErrorType::SyntaxError,
-                    Some(Pos::from_offsets(source, file_path, span.start, span.end)),
-                    format!("invalid token '{}'", &source[span.start..span.end]),
-                ));
-            }
-        }
-    }
-    Ok(tokens)
-}
-
 fn ast_parser<'tokens, 'src: 'tokens, I>(
     source: &'src str,
     file_path: &'src str,
@@ -513,7 +219,7 @@ where
     I: ValueInput<'tokens, Token = Token, Span = Span>,
 {
     choice((
-        import_item_parser(source, file_path).boxed(),
+        import_block_parser(source, file_path).boxed(),
         shared_block_parser(source, file_path).boxed(),
         main_block_parser(source, file_path).boxed(),
         always_block_parser(source, file_path).boxed(),
@@ -527,7 +233,7 @@ where
     .then_ignore(end())
 }
 
-fn import_item_parser<'tokens, 'src: 'tokens, I>(
+fn import_block_parser<'tokens, 'src: 'tokens, I>(
     source: &'src str,
     file_path: &'src str,
 ) -> impl Parser<'tokens, I, TopLevelBlock, ParserExtra<'tokens>> + Clone
@@ -535,16 +241,21 @@ where
     I: ValueInput<'tokens, Token = Token, Span = Span>,
 {
     just(Token::Import)
-        .ignore_then(import_path_parser())
-        .then(just(Token::As).ignore_then(identifier_parser()).or_not())
-        .then_ignore(just(Token::Semi))
-        .map_with(move |(path, alias), e| TopLevelBlock::Import(Node {
-            pos: pos_from_span(source, file_path, e.span()),
-            value: ImportItem {
-                path,
-                alias,
-            },
-        }))
+        .ignore_then(
+            import_entry_parser()
+                .repeated()
+                .collect::<Vec<_>>()
+                .delimited_by(just(Token::LBrace), just(Token::RBrace)),
+        )
+        .try_map(move |imports, span| {
+            ImportBlock::validate_import_names(&imports)
+                .map_err(|err| Rich::custom(span, err.message.clone()))?;
+
+            Ok(TopLevelBlock::Import(Node {
+                pos: pos_from_span(source, file_path, span),
+                value: ImportBlock { imports },
+            }))
+        })
 }
 
 fn shared_block_parser<'tokens, 'src: 'tokens, I>(
@@ -707,6 +418,20 @@ where
     .at_least(1)
     .collect::<Vec<_>>()
     .map(|segments| ImportPath { segments })
+}
+
+fn import_entry_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, Node<ImportItem>, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    import_path_parser()
+        .then(just(Token::As).ignore_then(identifier_parser()).or_not())
+        .then_ignore(just(Token::Semi))
+        .map_with(|(path, alias), e| Node {
+            pos: pos_from_span_source(e.span()),
+            value: ImportItem { path, alias },
+        })
 }
 
 fn block_parser<'tokens, 'src: 'tokens, I>(
@@ -1192,6 +917,8 @@ where
     select! {
         Token::Ident(name) => name,
         Token::Dollar => "$".to_string(),
+        Token::First => "first".to_string(),
+        Token::Seq => "seq".to_string(),
     }
     .map_with(|name, e| Node {
         pos: pos_from_span_source(e.span()),
@@ -1207,6 +934,8 @@ where
     select! {
         Token::Ident(name) => name,
         Token::Next => "next".to_string(),
+        Token::First => "first".to_string(),
+        Token::Seq => "seq".to_string(),
     }
     .map_with(|name, e| Node {
         pos: pos_from_span_source(e.span()),
@@ -1911,13 +1640,15 @@ fn call_chain_to_statement(
         ));
     };
 
+    let fn_name_pos = object_identifier_parts_pos(&parts).unwrap_or_else(|| expr_pos.clone());
+
     Ok(Node {
         pos: expr_pos.clone(),
         value: Statement::FnCall(Node {
             pos: expr_pos.clone(),
             value: FnCall {
                 fn_name: Node {
-                    pos: expr_pos.clone(),
+                    pos: fn_name_pos,
                     value: ObjectIdentifier { parts },
                 },
                 values: Box::new(values),
@@ -2043,6 +1774,18 @@ where
     )))
 }
 
+fn object_identifier_parts_pos(parts: &[Node<Identifier>]) -> Option<Pos> {
+    let first = parts.first()?;
+    let last = parts.last()?;
+    Some(Pos {
+        line: first.pos.line,
+        col: first.pos.col,
+        start: first.pos.start,
+        end: last.pos.end,
+        file_path: first.pos.file_path.clone(),
+    })
+}
+
 fn receive_rule_parser<'tokens, I>(
 ) -> impl Parser<'tokens, I, Node<ReceiveStatement>, ParserExtra<'tokens>> + Clone
 where
@@ -2125,28 +1868,39 @@ fn split_channel_endpoint(identifier: &Node<ObjectIdentifier>) -> Result<(String
 }
 
 fn apply_atomic_prefix(statement: Node<Statement>, pos: Pos) -> Node<Statement> {
-    match statement.value {
-        Statement::Wait(mut wait) => {
-            wait.pos = pos.clone();
-            wait.value.start_atomic = true;
-            Node {
-                pos,
-                value: Statement::Wait(wait),
-            }
-        }
+    let statement_pos = statement.pos.clone();
+    let atomic_statement = match statement.value {
+        Statement::Block(block) => Node {
+            pos: statement_pos,
+            value: Statement::Block(block),
+        },
         other => Node {
-            pos: pos.clone(),
-            value: Statement::Atomic(Node {
-                pos,
-                value: Atomic {
-                    statement: Box::new(Node {
-                        pos: statement.pos,
+            pos: statement_pos.clone(),
+            value: Statement::Block(Node {
+                pos: statement_pos,
+                value: Block {
+                    children: vec![Node {
+                        pos: pos.clone(),
                         value: other,
-                    }),
-                    delegated: false,
+                    }],
                 },
             }),
         },
+    };
+
+    Node {
+        pos: pos.clone(),
+        value: Statement::Atomic(Node {
+            pos: pos.clone(),
+            value: Atomic {
+                // Keep `atomic await ...` on the same compilation path as
+                // `atomic { await ...; ... }`. That way the atomic region is
+                // explicitly closed with `AtomicEnd`, and a later re-wait in a
+                // loop cannot be merged into the same VM step.
+                statement: Box::new(atomic_statement),
+                delegated: false,
+            },
+        }),
     }
 }
 
@@ -2165,39 +1919,6 @@ where
                 format!("{block_name} blocks are not implemented yet"),
             ))
         })
-}
-
-pub(crate) fn lex_snippet(
-    snippet: &SyntaxSnippet,
-    file_path: &str,
-) -> Result<Vec<(Token, Span)>, AlthreadError> {
-    let mut lexer = Token::lexer(snippet.text.as_str());
-    let mut tokens = Vec::new();
-    while let Some(result) = lexer.next() {
-        let span = lexer.span();
-        match result {
-            Ok(token) => tokens.push((
-                token,
-                Span::new(
-                    (),
-                    (snippet.pos.start + span.start)..(snippet.pos.start + span.end),
-                ),
-            )),
-            Err(()) => {
-                return Err(AlthreadError::new(
-                    ErrorType::SyntaxError,
-                    Some(Pos::from_offsets(
-                        &snippet.text,
-                        file_path,
-                        span.start,
-                        span.end,
-                    )),
-                    format!("invalid token '{}'", &snippet.text[span.start..span.end]),
-                ));
-            }
-        }
-    }
-    Ok(tokens)
 }
 
 fn unquote_string(value: &str) -> String {

@@ -17,7 +17,6 @@ althread = { path = "interpreter" }
 clap = { version = "4.5.11", features = ["cargo", "derive", "error-context"] }
 lazy_static = "1.5.0"
 chumsky = { version = "0.12.0", features = ["pratt"] }
-logos = "0.15"
 ariadne = "0.5"
 fastrand = { version = "2.1.1", features = ["js"] }
 wasm-bindgen = "0.2"

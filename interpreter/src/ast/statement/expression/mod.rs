@@ -2298,13 +2298,14 @@ fn lower_runtime_expression(
             })
         }
         Expression::FnCall(node) => {
+            let callee_pos = node.value.fn_name.pos.clone();
             let args = lower_runtime_expression(node.value.values.as_ref(), state)?;
             let args_type = args.result_type.clone();
             let ret_type = validate_direct_function_call(
                 &node.value.fn_name_to_string(),
                 &args_type,
                 state,
-                &expression.pos,
+                &callee_pos,
             )?;
             let mut setup = materialize_lowered_expression(args, 0, &expression.pos);
             setup.instructions.push(Instruction {
@@ -2318,23 +2319,24 @@ fn lower_runtime_expression(
             Ok(LoweredRuntimeExpression::extracted(setup, ret_type))
         }
         Expression::RunCall(node) => {
+            let callee_pos = node.value.identifier.pos.clone();
             let args = lower_runtime_expression(&node.value.args, state)?;
             let args_type = args.result_type.clone();
             let call_datatype = tuple_arg_types(&args_type).map_err(|message| {
-                AlthreadError::new(ErrorType::TypeError, Some(expression.pos.clone()), message)
+                AlthreadError::new(ErrorType::TypeError, Some(callee_pos.clone()), message)
             })?;
             let full_program_name = node.value.program_name_to_string();
             let Some((prog_args, _)) = state.program_arguments().get(&full_program_name) else {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(expression.pos.clone()),
+                    Some(callee_pos.clone()),
                     format!("Program {} does not exist", full_program_name),
                 ));
             };
             if prog_args.len() != call_datatype.len() {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(expression.pos.clone()),
+                    Some(callee_pos.clone()),
                     format!(
                         "Expected {} argument(s), got {}",
                         prog_args.len(),
@@ -2346,7 +2348,7 @@ fn lower_runtime_expression(
                 if arg != &call_datatype[idx] {
                     return Err(AlthreadError::new(
                         ErrorType::TypeError,
-                        Some(expression.pos.clone()),
+                        Some(callee_pos.clone()),
                         format!(
                             "Expected argument {} to be of type {:?}, got {:?}",
                             idx + 1,

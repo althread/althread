@@ -129,6 +129,58 @@ impl<'a> VM<'a> {
         }
     }
 
+    fn process_runtime_actions(&mut self, actions: &[GlobalAction]) -> bool {
+        let mut need_to_check_invariants = false;
+
+        for action in actions {
+            match action {
+                GlobalAction::Wait => {
+                    unreachable!("await action should not be in the list of actions");
+                }
+                GlobalAction::Deliver(_) => {
+                    unreachable!("Deliver is VM-generated and cannot come from a program step")
+                }
+                GlobalAction::Connect(sender_id, sender_channel) => {
+                    if let Some(dependency) = self.waiting_programs.get(sender_id) {
+                        if dependency.channels_connection.contains(sender_channel) {
+                            self.waiting_programs.remove(sender_id);
+                            self.executable_programs.insert(*sender_id);
+                        }
+                    }
+                }
+                GlobalAction::Write(var_name) => {
+                    self.waiting_programs.retain(|prog_id, dependencies| {
+                        if dependencies.variables.contains(var_name) {
+                            self.executable_programs.insert(*prog_id);
+                            return false;
+                        }
+                        true
+                    });
+
+                    need_to_check_invariants = true;
+                }
+                GlobalAction::StartProgram(name, pid, args, caller_program_id, call_site_pos) => {
+                    self.run_program(
+                        name,
+                        *pid,
+                        args.clone(),
+                        *caller_program_id,
+                        call_site_pos.clone(),
+                    );
+                }
+                GlobalAction::EndProgram => {
+                    panic!("EndProgram action should not be in the list of actions");
+                }
+                GlobalAction::Exit => self.running_programs.clear(),
+                GlobalAction::Print(_) => {}
+                GlobalAction::Send(_) => {}
+                GlobalAction::Broadcast(_) => {}
+            }
+        }
+
+        need_to_check_invariants
+    }
+
     fn run_program(
         &mut self,
         program_name: &str,
@@ -299,11 +351,13 @@ impl<'a> VM<'a> {
         )?;
         // maybe should be replace to avoid recurrent calls
         if actions.wait {
-            // actually nothing happened
-            assert!(
-                actions.actions.is_empty(),
-                "a process returning await should means that no actions have been performed..."
-            );
+            if !actions.actions.is_empty() {
+                return Err(AlthreadError::new(
+                    ErrorType::RuntimeError,
+                    None,
+                    "A process reached `wait` after producing global actions in the same step. Wait guards must stay side-effect free, and successful wait branches must complete before a later wait is reported.".to_string(),
+                ));
+            }
 
             let program = self
                 .running_programs
@@ -321,59 +375,12 @@ impl<'a> VM<'a> {
                 }
                 _ => unreachable!("waiting on an instruction that is not a WaitStart instruction"),
             }
+            exec_info.instructions = executed_instructions;
+            exec_info.actions = actions.actions;
             return self.next_random();
         }
 
-        let mut need_to_check_invariants = false;
-
-        for action in actions.actions.iter() {
-            match action {
-                GlobalAction::Wait => {
-                    unreachable!("await action should not be in the list of actions");
-                }
-                GlobalAction::Deliver(_) => {
-                    unreachable!("Deliver is VM-generated and cannot come from a program step")
-                }
-                GlobalAction::Connect(sender_id, sender_channel) => {
-                    // Connect is only relevant if the sender is currently blocked on that
-                    // specific connection. Otherwise it can be safely ignored.
-                    if let Some(dependency) = self.waiting_programs.get(sender_id) {
-                        if dependency.channels_connection.contains(sender_channel) {
-                            self.waiting_programs.remove(sender_id);
-                            self.executable_programs.insert(*sender_id);
-                        }
-                    }
-                }
-                GlobalAction::Write(var_name) => {
-                    // Check if the variable appears in the conditions of a waiting program
-                    self.waiting_programs.retain(|prog_id, dependencies| {
-                        if dependencies.variables.contains(var_name) {
-                            self.executable_programs.insert(*prog_id);
-                            return false;
-                        }
-                        true
-                    });
-
-                    need_to_check_invariants = true;
-                }
-                GlobalAction::StartProgram(name, pid, args, caller_program_id, call_site_pos) => {
-                    self.run_program(
-                        name,
-                        *pid,
-                        args.clone(),
-                        *caller_program_id,
-                        call_site_pos.clone(),
-                    );
-                }
-                GlobalAction::EndProgram => {
-                    panic!("EndProgram action should not be in the list of actions");
-                }
-                GlobalAction::Exit => self.running_programs.clear(),
-                GlobalAction::Print(_) => {} // do nothing, this is just a print action
-                GlobalAction::Send(_) => {}  // do nothing, sending is already handled
-                GlobalAction::Broadcast(_) => {}
-            }
-        }
+        let need_to_check_invariants = self.process_runtime_actions(&actions.actions);
         if actions.end {
             let remove_id = program_id;
             self.executable_programs.remove(&remove_id);
@@ -417,11 +424,13 @@ impl<'a> VM<'a> {
         )?;
         // maybe should be replace to avoid recurrent calls
         if actions.wait {
-            // actually nothing happened
-            assert!(
-                actions.actions.is_empty(),
-                "a process returning await should means that no actions have been performed..."
-            );
+            if !actions.actions.is_empty() {
+                return Err(AlthreadError::new(
+                    ErrorType::RuntimeError,
+                    None,
+                    "A process reached `wait` after producing global actions in the same step. Wait guards must stay side-effect free, and successful wait branches must complete before a later wait is reported.".to_string(),
+                ));
+            }
 
             let program = self
                 .running_programs
@@ -438,52 +447,17 @@ impl<'a> VM<'a> {
                 }
                 _ => unreachable!("waiting on an instruction that is not a WaitStart instruction"),
             }
-            return Ok(None);
+            exec_info.instructions = executed_instructions;
+            exec_info.actions = actions.actions;
+            if exec_info.actions.is_empty() {
+                return Ok(None);
+            }
+            return Ok(Some(exec_info));
         }
 
         // Store actions before processing them
         exec_info.actions = actions.actions.clone();
-
-        for action in actions.actions {
-            match action {
-                GlobalAction::Wait => {
-                    unreachable!("await action should not be in the list of actions");
-                }
-                GlobalAction::Deliver(_) => {
-                    unreachable!("Deliver is VM-generated and cannot come from a program step")
-                }
-                GlobalAction::Connect(sender_id, sender_channel) => {
-                    // Connect is only relevant if the sender is currently blocked on that
-                    // specific connection. Otherwise it can be safely ignored.
-                    if let Some(dependency) = self.waiting_programs.get(&sender_id) {
-                        if dependency.channels_connection.contains(&sender_channel) {
-                            self.waiting_programs.remove(&sender_id);
-                            self.executable_programs.insert(sender_id);
-                        }
-                    }
-                }
-                GlobalAction::Write(var_name) => {
-                    // Check if the variable appears in the conditions of a waiting program
-                    self.waiting_programs.retain(|prog_id, dependencies| {
-                        if dependencies.variables.contains(&var_name) {
-                            self.executable_programs.insert(*prog_id);
-                            return false;
-                        }
-                        true
-                    });
-                }
-                GlobalAction::StartProgram(name, pid, args, caller_program_id, call_site_pos) => {
-                    self.run_program(&name, pid, args, caller_program_id, call_site_pos);
-                }
-                GlobalAction::EndProgram => {
-                    panic!("EndProgram action should not be in the list of actions");
-                }
-                GlobalAction::Exit => self.running_programs.clear(),
-                GlobalAction::Print(_) => {} // do nothing, this is just a print action
-                GlobalAction::Send(_) => {}  // do nothing, sending is already handled
-                GlobalAction::Broadcast(_) => {}
-            }
-        }
+        let need_to_check_invariants = self.process_runtime_actions(&actions.actions);
         if actions.end {
             let remove_id = pid;
             self.executable_programs.remove(&remove_id);
@@ -491,6 +465,9 @@ impl<'a> VM<'a> {
         }
 
         exec_info.instructions = executed_instructions;
+        if need_to_check_invariants {
+            exec_info.invariant_error = self.check_invariants();
+        }
 
         Ok(Some(exec_info))
     }

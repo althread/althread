@@ -33,8 +33,10 @@ shared {
 #[test]
 fn parse_ast_builds_import_block_directly() {
     let source = r#"
-import std/io;
-import math/vector as Vec;
+import {
+    std/io;
+    math/vector as Vec;
+}
 
 main {
 }
@@ -335,6 +337,64 @@ main {
     assert!(matches!(
         main_block.value.children[2].value,
         Statement::ChannelDeclaration(_)
+    ));
+}
+
+#[test]
+fn parse_ast_accepts_first_and_seq_as_identifiers() {
+    let source = r#"
+main {
+    let first = p.at(0);
+    let seq = p.at(1);
+}
+"#;
+
+    let ast = parse_ast(source, "").unwrap();
+    let (_, main_block, _) = ast
+        .process_blocks
+        .get("main")
+        .expect("main block should exist");
+
+    assert!(matches!(
+        &main_block.value.children[0].value,
+        Statement::Declaration(_)
+    ));
+    assert!(matches!(
+        &main_block.value.children[1].value,
+        Statement::Declaration(_)
+    ));
+}
+
+#[test]
+fn parse_ast_ignores_multiline_comments() {
+    let source = r#"
+/* top level comment
+   with fake syntax: await first { receive in(x) => run A(); }
+*/
+main {
+    /* declaration comment */
+    let x = 1;
+    /*
+      another comment
+    */
+    print(x);
+}
+"#;
+
+    let ast = parse_ast(source, "").unwrap();
+    let (_, main_block, _) = ast
+        .process_blocks
+        .get("main")
+        .expect("main block should exist");
+
+    assert_eq!(main_block.value.children.len(), 2);
+    assert!(matches!(
+        &main_block.value.children[0].value,
+        Statement::Declaration(_)
+    ));
+    assert!(matches!(
+        &main_block.value.children[1].value,
+        Statement::FnCall(_)
     ));
 }
 

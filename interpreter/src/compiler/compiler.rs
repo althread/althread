@@ -407,11 +407,6 @@ impl Ast {
             same_level_module_names
         );
 
-        // scan everything for channel declarations in the current file
-        if let Err(e) = self.prescan_channel_declarations(&mut state, module_prefix) {
-            return Err(e);
-        }
-
         let mut next_level_module_names = Vec::<String>::new();
 
         // if there's an import block, resolve the imports
@@ -598,6 +593,12 @@ impl Ast {
 
         // Update context instead of state
         state.program_arguments_mut().extend(program_args);
+
+        // With globals, imported symbols, stdlib interfaces, function signatures, and program
+        // arguments all registered, prescan can infer process-typed expressions reliably.
+        if let Err(e) = self.prescan_channel_declarations(&mut state, module_prefix) {
+            return Err(e);
+        }
 
         // Compile all the programs
         state.is_shared = false;

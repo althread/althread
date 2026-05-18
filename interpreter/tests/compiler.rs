@@ -869,6 +869,52 @@ main {
 }
 
 #[test]
+fn test_undefined_statement_call_uses_callee_span() {
+    let input = r#"
+main {
+    foo.bar();
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+    let ast = althread::parser::parse_ast(input, "").unwrap();
+
+    let err = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap_err();
+
+    let pos = err.pos.expect("error should have a span");
+    let expected_start = input.find("foo.bar").unwrap();
+    let expected_end = expected_start + "foo.bar".len();
+    assert_eq!(pos.start, expected_start);
+    assert_eq!(pos.end, expected_end);
+}
+
+#[test]
+fn test_undefined_run_program_uses_program_name_span() {
+    let input = r#"
+main {
+    let p = run MissingProg(1);
+}
+"#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+    let ast = althread::parser::parse_ast(input, "").unwrap();
+
+    let err = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap_err();
+
+    let pos = err.pos.expect("error should have a span");
+    let expected_start = input.find("MissingProg").unwrap();
+    let expected_end = expected_start + "MissingProg".len();
+    assert_eq!(pos.start, expected_start);
+    assert_eq!(pos.end, expected_end);
+}
+
+#[test]
 fn test_compiler_while() {
     let input = r#"
 main {

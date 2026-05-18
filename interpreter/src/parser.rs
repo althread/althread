@@ -2,6 +2,8 @@ use crate::{ast::Ast, error::AlthreadResult};
 
 #[path = "parser/chumsky_combinator.rs"]
 pub mod chumsky_backend;
+#[path = "parser/lexer.rs"]
+pub mod lexer;
 #[path = "parser/syntax.rs"]
 pub mod syntax;
 pub use chumsky_backend as chumsky_combinator;

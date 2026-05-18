@@ -35,6 +35,7 @@ impl InstructionBuilder for Node<RunCall> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         let mut builder = InstructionBuilderOk::new();
         let full_program_name = self.value.program_name_to_string();
+        let callee_pos = self.value.identifier.pos.clone();
 
         // push the args to the stack
         state.current_stack_depth += 1;
@@ -59,7 +60,7 @@ impl InstructionBuilder for Node<RunCall> {
             if prog_args.len() != call_datatype.len() {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(self.pos.clone()),
+                    Some(callee_pos.clone()),
                     format!(
                         "Expected {} argument(s), got {}",
                         prog_args.len(),
@@ -71,7 +72,7 @@ impl InstructionBuilder for Node<RunCall> {
                 if arg != &call_datatype[i] {
                     return Err(AlthreadError::new(
                         ErrorType::TypeError,
-                        Some(self.pos.clone()),
+                        Some(callee_pos.clone()),
                         format!(
                             "Expected argument {} to be of type {:?}, got {:?}",
                             i + 1,
@@ -84,7 +85,7 @@ impl InstructionBuilder for Node<RunCall> {
         } else {
             return Err(AlthreadError::new(
                 ErrorType::TypeError,
-                Some(self.pos.clone()),
+                Some(callee_pos.clone()),
                 format!("Program {} does not exist", full_program_name),
             ));
         }
