@@ -11,11 +11,11 @@ As your Althread projects grow, you'll want to organize code into multiple files
 ## Syntax
 
 \`\`\`althread
-import [
+import {
     math,
     cool/fib,
     display
-]
+}
 \`\`\`
 
 - Each item in the list is a relative filepath (e.g., \`directory/file\`), without the \`.alt\` extension.
@@ -92,16 +92,16 @@ main {
 6.  Finally, run the \`Hello()\` program from the \`display\` module.
 
   `,
-  defaultCode: `import [
+  defaultCode: `import {
     // Import modules here
-]
+}
 
 main {
     // Call imported functions and run programs
 }`,
   validate: (code: string) => {
     // 1. Validate the import statement
-    const importMatch = code.match(/import\s*\[([\s\S]*?)\]/s);
+    const importMatch = code.match(/import\s*\{([\s\S]*?)\}/s);
     let isImportCorrect = false;
     if (importMatch) {
         const importList = importMatch[1];

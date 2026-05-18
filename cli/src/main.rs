@@ -623,7 +623,7 @@ pub fn add_command(cli_args: &AddCommand) {
             "Local dependency '{}' doesn't need to be added to alt.toml",
             dep_info.url
         );
-        println!("Just use: import [{}] in your code", dep_info.url);
+        println!("Just use: import {{{}}}] in your code", dep_info.url);
         return;
     }
 

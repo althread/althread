@@ -26,11 +26,11 @@ The `mod.alt` file imports and re-exports the module's components:
 
 ```althread
 // math/mod.alt
-import [
+import {
     integers,
     floats,
     constants
-]
+}
 
 // Re-export specific functions or use them directly
 // The module system automatically makes imported items available
@@ -42,9 +42,9 @@ Instead of importing individual files, you can import the entire module by its d
 
 ```althread
 // main.alt
-import [
+import {
     math  // Imports math/mod.alt and its contents
-]
+}
 
 main {
     // Access functions from the math module
@@ -112,10 +112,10 @@ This downloads and caches the dependencies locally, making them available for im
 You can import from remote packages using their full path or specific modules:
 
 ```althread
-import [
+import {
     github.com/lucianmocan/math-alt/algebra/integers,  // Specific file
     github.com/lucianmocan/math-alt/algebra            // Module (if it has mod.alt)
-]
+}
 
 main {
     // Using specific file import
@@ -153,17 +153,17 @@ In Althread, the namespace identifier is the last segment of the import path:
 ### 1. Clean Organization
 ```althread
 // Instead of importing many individual files
-import [
+import {
     utils/math/integers,
     utils/math/floats,
     utils/math/constants,
     utils/math/geometry
-]
+}
 
 // Import the entire math module
-import [
+import {
     utils/math
-]
+}
 ```
 
 ### 2. Controlled Exports
@@ -209,10 +209,10 @@ althread-cli install
 
 ```althread
 // main.alt
-import [
+import {
     github.com/lucianmocan/math-alt/algebra,
     github.com/lucianmocan/math-alt/geometry as geo
-]
+}
 
 main {
     let sum = algebra.add(5, 3);

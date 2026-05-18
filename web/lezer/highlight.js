@@ -13,7 +13,7 @@ export const althreadHighlight = styleTags({
   "LtlIfExpression/if LtlIfExpression/else LtlForExpression/for LtlForExpression/in": t.special(t.keyword),
 
   // Block declaration keywords (Bolder/Distinct)
-  "MainBlock/main ProgramBlock/program GlobalBlock/shared ImportBlock/import FunctionBlock/fn ConditionBlock/Condition/always ConditionBlock/Condition/check ConditionBlock/Condition/never": t.moduleKeyword,
+  "MainBlock/main ProgramBlock/program GlobalBlock/shared ImportBlock/import FunctionBlock/fn ConditionBlock/Condition/always ConditionBlock/Condition/check": t.moduleKeyword,
 
   "PrivateDirective": t.moduleKeyword,
   "PrivateDirective/private": t.moduleKeyword,

@@ -78,7 +78,6 @@ pub enum SyntaxBlockKind {
     Main,
     Global,
     Always,
-    Never,
     Check,
     Program,
     Function,
