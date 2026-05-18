@@ -684,10 +684,14 @@ main {
         .find(|(name, pid, _, _, _)| name == "A" && *pid == 1)
         .expect("A should be schedulable after a message arrives on chin2");
 
-    assert!(matches!(
-        &a_step.4.get_program(1).current_instruction().unwrap().control,
+    assert!(a_step.2.iter().any(|inst| matches!(
+        &inst.control,
         InstructionType::ChannelPeek(channel) if channel == "chin2"
-    ));
+    )));
+    assert!(a_step.3.iter().any(|action| matches!(
+        action,
+        GlobalAction::Print(msg) if msg == "reçu: hello from B"
+    )));
 }
 
 #[test]
@@ -742,14 +746,7 @@ main {
         .find(|(name, _, _, _, _)| name == "__deliver__ chin2#1")
         .unwrap();
 
-    let (_, _, _, _, after_a_ready) = after_b_delivery
-        .next()
-        .unwrap()
-        .into_iter()
-        .find(|(name, pid, _, _, _)| name == "A" && *pid == 1)
-        .unwrap();
-
-    let (_, _, _, actions, _) = after_a_ready
+    let (_, _, _, actions, _) = after_b_delivery
         .next()
         .unwrap()
         .into_iter()
@@ -932,7 +929,7 @@ main {
     loop await seq {
         receive in(v) => {
             print(v);
-            n += 1;
+            n = n + 1;
         }
         n == 2 => {
             print("n", n);
