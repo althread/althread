@@ -1,9 +1,9 @@
-import { type TutorialStep } from '@components/tutorial/Tutorial';
+import type { TutorialStep } from "@components/tutorial/Tutorial";
 
 export const tutorial: TutorialStep = {
-  name: "ifElse",
-  displayName: "2. Conditional Logic (if/else)",
-  content: `
+	name: "ifElse",
+	displayName: "2. Conditional Logic (if/else)",
+	content: `
 # 2. Conditional Logic: \`if\`, \`else if\`, \`else\`
 
 Althread uses \`if\`, \`else if\`, and \`else\` statements for conditional execution, similar to many other programming languages.
@@ -39,25 +39,37 @@ If \`x\` is greater than 10, print "x is greater than 10".
 Otherwise, print "x is not greater than 10".
 Initialize \`x\` to 7.
   `,
-  defaultCode: `main {
+	defaultCode: `main {
     let x = 7;
 
     // Add your if/else statement here
 }`,
-  validate: (code: string) => {
-    const hasLetX = /let\s+x\s*=\s*7;/.test(code);
-    const hasIfCondition = /if\s+x\s*>\s*10\s*{/.test(code);
-    const hasPrintGreaterInIf = /if\s+x\s*>\s*10\s*{[^}]*print\("x is greater than 10"\);[^}]*}/s.test(code);
-    const hasElseWithPrintNotGreater = /}\s*else\s*{[^}]*print\("x is not greater than 10"\);[^}]*}/s.test(code);
+	validate: (code: string) => {
+		const hasLetX = /let\s+x\s*=\s*7;/.test(code);
+		const hasIfCondition = /if\s+x\s*>\s*10\s*{/.test(code);
+		const hasPrintGreaterInIf =
+			/if\s+x\s*>\s*10\s*{[^}]*print\("x is greater than 10"\);[^}]*}/s.test(
+				code,
+			);
+		const hasElseWithPrintNotGreater =
+			/}\s*else\s*{[^}]*print\("x is not greater than 10"\);[^}]*}/s.test(code);
 
-    if (hasLetX && hasPrintGreaterInIf && hasElseWithPrintNotGreater) {
-        return { success: true, message: "Great job with the if/else statement!" };
-    }
-    let issues = [];
-    if (!hasLetX) issues.push("initialize 'x' to 7");
-    if (!hasIfCondition) issues.push("if condition 'x > 10'");
-    if (!hasPrintGreaterInIf) issues.push("print statement 'x is greater than 10' inside the if block");
-    if (!hasElseWithPrintNotGreater) issues.push("else block with print statement 'x is not greater than 10'");
-    return { success: false, message: `Check the following: ${issues.join(', ')}.` };
-  }
+		if (hasLetX && hasPrintGreaterInIf && hasElseWithPrintNotGreater) {
+			return {
+				success: true,
+				message: "Great job with the if/else statement!",
+			};
+		}
+		const issues = [];
+		if (!hasLetX) issues.push("initialize 'x' to 7");
+		if (!hasIfCondition) issues.push("if condition 'x > 10'");
+		if (!hasPrintGreaterInIf)
+			issues.push("print statement 'x is greater than 10' inside the if block");
+		if (!hasElseWithPrintNotGreater)
+			issues.push("else block with print statement 'x is not greater than 10'");
+		return {
+			success: false,
+			message: `Check the following: ${issues.join(", ")}.`,
+		};
+	},
 };

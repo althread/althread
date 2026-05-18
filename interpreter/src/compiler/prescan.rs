@@ -206,10 +206,7 @@ impl Ast {
             Err(AlthreadError::new(
                 ErrorType::VariableError,
                 Some(pos.clone()),
-                format!(
-                    "Variable '{}' does not point to a known program.",
-                    var_name
-                ),
+                format!("Variable '{}' does not point to a known program.", var_name),
             ))
         }
     }

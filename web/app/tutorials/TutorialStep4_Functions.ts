@@ -1,9 +1,9 @@
-import { type TutorialStep } from '@components/tutorial/Tutorial';
+import type { TutorialStep } from "@components/tutorial/Tutorial";
 
 export const tutorial: TutorialStep = {
-  name: "functions",
-  displayName: "4. Functions",
-  content: `
+	name: "functions",
+	displayName: "4. Functions",
+	content: `
 # 4. Functions
 
 Functions are reusable blocks of code that perform a specific task. In Althread, you define them using the \`fn\` keyword. They can also call themselves, which is known as recursion.
@@ -54,60 +54,78 @@ main {
 2.  The function should return the product of these two numbers.
 3.  In the \`main\` block, call your \`multiply\` function with two numbers (e.g., 7 and 6) and print the result.
   `,
-  defaultCode: `// Define the 'multiply' function here
+	defaultCode: `// Define the 'multiply' function here
 
 main {
     // Call the function and print the result
 }`,
-  validate: (code: string) => {
-    const funcRegex = /fn\s+multiply\s*\(\s*(\w+)\s*:\s*int\s*,\s*(\w+)\s*:\s*int\s*\)\s*->\s*int\s*\{([\s\S]*?)\}/s;
-    const funcMatch = code.match(funcRegex);
+	validate: (code: string) => {
+		const funcRegex =
+			/fn\s+multiply\s*\(\s*(\w+)\s*:\s*int\s*,\s*(\w+)\s*:\s*int\s*\)\s*->\s*int\s*\{([\s\S]*?)\}/s;
+		const funcMatch = code.match(funcRegex);
 
-    let isFuncCorrect = false;
-    if (funcMatch) {
-        const param1 = funcMatch[1];
-        const param2 = funcMatch[2];
-        const body = funcMatch[3];
-        const returnRegex = new RegExp(`return\\s+${param1}\\s*\\*\\s*${param2}\\s*;|return\\s+${param2}\\s*\\*\\s*${param1}\\s*;`, 's');
-        if (returnRegex.test(body)) {
-            isFuncCorrect = true;
-        }
-    }
+		let isFuncCorrect = false;
+		if (funcMatch) {
+			const param1 = funcMatch[1];
+			const param2 = funcMatch[2];
+			const body = funcMatch[3];
+			const returnRegex = new RegExp(
+				`return\\s+${param1}\\s*\\*\\s*${param2}\\s*;|return\\s+${param2}\\s*\\*\\s*${param1}\\s*;`,
+				"s",
+			);
+			if (returnRegex.test(body)) {
+				isFuncCorrect = true;
+			}
+		}
 
-    const mainContentMatch = code.match(/main\s*\{([\s\S]*?)\}/s);
-    let isMainCorrect = false;
-    if (mainContentMatch) {
-        const mainContent = mainContentMatch[1];
-        // Case 1: print(multiply(x, y))
-        const directPrint = /print\([\s\S]*multiply\(\s*\d+\s*,\s*\d+\s*\)[\s\S]*\)/s.test(mainContent);
-        // Case 2: let result = multiply(x, y); print(result)
-        const varPrintMatch = mainContent.match(/let\s+(\w+)\s*=\s*multiply\(\s*\d+\s*,\s*\d+\s*\)\s*;/s);
-        let indirectPrint = false;
-        if (varPrintMatch) {
-            const varName = varPrintMatch[1];
-            const printVarRegex = new RegExp(`print\\([\\s\\S]*${varName}[\\s\\S]*\\)`, 's');
-            indirectPrint = printVarRegex.test(mainContent);
-        }
-        if (directPrint || indirectPrint) {
-            isMainCorrect = true;
-        }
-    }
+		const mainContentMatch = code.match(/main\s*\{([\s\S]*?)\}/s);
+		let isMainCorrect = false;
+		if (mainContentMatch) {
+			const mainContent = mainContentMatch[1];
+			// Case 1: print(multiply(x, y))
+			const directPrint =
+				/print\([\s\S]*multiply\(\s*\d+\s*,\s*\d+\s*\)[\s\S]*\)/s.test(
+					mainContent,
+				);
+			// Case 2: let result = multiply(x, y); print(result)
+			const varPrintMatch = mainContent.match(
+				/let\s+(\w+)\s*=\s*multiply\(\s*\d+\s*,\s*\d+\s*\)\s*;/s,
+			);
+			let indirectPrint = false;
+			if (varPrintMatch) {
+				const varName = varPrintMatch[1];
+				const printVarRegex = new RegExp(
+					`print\\([\\s\\S]*${varName}[\\s\\S]*\\)`,
+					"s",
+				);
+				indirectPrint = printVarRegex.test(mainContent);
+			}
+			if (directPrint || indirectPrint) {
+				isMainCorrect = true;
+			}
+		}
 
+		if (isFuncCorrect && isMainCorrect) {
+			return {
+				success: true,
+				message: "Function defined and called correctly!",
+			};
+		}
 
-    if (isFuncCorrect && isMainCorrect) {
-        return { success: true, message: "Function defined and called correctly!" };
-    }
+		const issues = [];
+		if (!funcMatch) {
+			issues.push("defining a function 'multiply(a: int, b: int) -> int'");
+		} else if (!isFuncCorrect) {
+			issues.push(
+				"the body of 'multiply' to return the product of its parameters (e.g., 'return a * b;')",
+			);
+		}
+		if (!isMainCorrect) {
+			issues.push(
+				"calling 'multiply' from the main block and printing its result",
+			);
+		}
 
-    let issues = [];
-    if (!funcMatch) {
-        issues.push("defining a function 'multiply(a: int, b: int) -> int'");
-    } else if (!isFuncCorrect) {
-        issues.push("the body of 'multiply' to return the product of its parameters (e.g., 'return a * b;')");
-    }
-    if (!isMainCorrect) {
-        issues.push("calling 'multiply' from the main block and printing its result");
-    }
-    
-    return { success: false, message: `Please check: ${issues.join(', ')}.` };
-  }
+		return { success: false, message: `Please check: ${issues.join(", ")}.` };
+	},
 };

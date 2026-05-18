@@ -1,40 +1,40 @@
 /* Literal Display Styles */
 
 .literal-null {
-    color: var(--vscode-debugTokenExpression-number, #b5cea8);
-    font-style: italic;
-    opacity: 0.8;
+	color: var(--app-syntax-number);
+	font-style: italic;
+	opacity: 0.8;
 }
 
 .literal-int {
-    color: var(--vscode-debugTokenExpression-number, #b5cea8);
-    font-weight: 500;
+	color: var(--app-syntax-number);
+	font-weight: 500;
 }
 
 .literal-float {
-    color: var(--vscode-debugTokenExpression-number, #b5cea8);
-    font-weight: 500;
+	color: var(--app-syntax-number);
+	font-weight: 500;
 }
 
 .literal-string {
-    color: var(--vscode-debugTokenExpression-string, #ce9178);
+	color: var(--app-syntax-string);
 }
 
 .literal-bool {
-    color: var(--vscode-debugTokenExpression-boolean, #569cd6);
-    font-weight: 500;
+	color: var(--app-syntax-keyword);
+	font-weight: 500;
 }
 
 .literal-list {
-    color: var(--vscode-foreground);
+	color: var(--app-text);
 }
 
 .literal-tuple {
-    color: var(--vscode-foreground);
+	color: var(--app-text);
 }
 
 .literal-process {
-    color: var(--vscode-symbolIcon-classForeground, #4ec9b0);
-    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-    font-size: 0.95em;
+	color: var(--app-syntax-type);
+	font-family: "Consolas", "Monaco", "Courier New", monospace;
+	font-size: 0.95em;
 }

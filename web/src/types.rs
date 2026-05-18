@@ -196,6 +196,7 @@ pub struct RunResult {
     pub message_flow_events: Vec<MessageFlowEvent>,
     pub nodes: Vec<GraphNode>,
     pub step_lines: Vec<Vec<usize>>,
+    pub max_steps_reached: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub runtime_error: Option<RuntimeErrorInfo>,
 }

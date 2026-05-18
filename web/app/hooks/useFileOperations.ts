@@ -1,548 +1,638 @@
-import type { FileSystemEntry } from '@components/fileexplorer/FileExplorer';
-import { STORAGE_KEYS, saveFileSystem, saveFileContent, getDefaultContentForFile } from '@utils/storage';
-import { findTargetDirectory, findEntryAndParent, collectDeletedFileIds, findEntryById, getPathFromId } from '@utils/fileSystemUtils';
+import type { FileSystemEntry } from "@components/fileexplorer/FileExplorer";
+import {
+	collectDeletedFileIds,
+	findEntryAndParent,
+	findEntryById,
+	findTargetDirectory,
+	getPathFromId,
+} from "@utils/fileSystemUtils";
+import {
+	getDefaultContentForFile,
+	STORAGE_KEYS,
+	saveFileContent,
+	saveFileSystem,
+} from "@utils/storage";
 
 export const createFileOperationsHandlers = (
-  mockFileSystem: () => FileSystemEntry[],
-  setMockFileSystem: (fs: FileSystemEntry[]) => void,
-  setCreationError: (error: string | null) => void,
-  openFiles: () => FileSystemEntry[],
-  setOpenFiles: (files: FileSystemEntry[]) => void,
-  activeFile: () => FileSystemEntry | null,
-  setActiveFile: (file: FileSystemEntry | null) => void,
-  selectedFiles: () => string[],
-  setSelectedFiles: (files: string[]) => void,
-  editor: any,
-  loadFileContent: (path: string) => string
+	mockFileSystem: () => FileSystemEntry[],
+	setMockFileSystem: (fs: FileSystemEntry[]) => void,
+	setCreationError: (error: string | null) => void,
+	openFiles: () => FileSystemEntry[],
+	setOpenFiles: (files: FileSystemEntry[]) => void,
+	activeFile: () => FileSystemEntry | null,
+	setActiveFile: (file: FileSystemEntry | null) => void,
+	selectedFiles: () => string[],
+	setSelectedFiles: (files: string[]) => void,
+	editor: any,
+	loadFileContent: (path: string) => string,
 ) => {
-  const handleNewFile = (name: string, targetPath?: string) => {
-    const newFile: FileSystemEntry = { id: crypto.randomUUID(), name, type: 'file' };
+	const handleNewFile = (
+		name: string,
+		targetPath?: string,
+		initialContent?: string,
+	) => {
+		const newFile: FileSystemEntry = {
+			id: crypto.randomUUID(),
+			name,
+			type: "file",
+		};
 
-    // Determine where to create the file
-    const createInPath = targetPath || '';
-    
-    // Deep copy to avoid mutation
-    let newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
+		// Determine where to create the file
+		const createInPath = targetPath || "";
 
-    const targetDir = findTargetDirectory(newFileSystem, createInPath);
-    if (!targetDir) {
-      setCreationError("Target directory not found.");
-      return;
-    }
+		// Deep copy to avoid mutation
+		const newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
 
-    // Check if file already exists in the target directory
-    const existingFile = targetDir.find((f: FileSystemEntry) => f.name === name);
-    if (existingFile) {
-      setCreationError("A file or folder with this name already exists.");
-      return;
-    }
-    setCreationError(null);
+		const targetDir = findTargetDirectory(newFileSystem, createInPath);
+		if (!targetDir) {
+			setCreationError("Target directory not found.");
+			return;
+		}
 
-    // Add the new file to the target directory
-    targetDir.push(newFile);
-    setMockFileSystem(newFileSystem);
-    saveFileSystem(newFileSystem);
-    
-    // Save empty content for new file with full path
-    const fullPath = createInPath === '' ? name : `${createInPath}/${name}`;
-    const defaultContent = getDefaultContentForFile(name);
-    saveFileContent(fullPath, defaultContent);
-    
-    // Automatically open the new file
-    setOpenFiles([...openFiles(), newFile]);
-    setActiveFile(newFile);
-    
-    // Load content using safe method
-    if (editor && editor.safeUpdateContent) {
-      editor.safeUpdateContent(defaultContent);
-      
-      // Then update language
-      setTimeout(() => {
-        if (editor && editor.updateLanguage) {
-          editor.updateLanguage(name);
-        }
-      }, 10);
-    }
-  };
+		// Check if file already exists in the target directory
+		const existingFile = targetDir.find(
+			(f: FileSystemEntry) => f.name === name,
+		);
+		if (existingFile) {
+			setCreationError("A file or folder with this name already exists.");
+			return;
+		}
+		setCreationError(null);
 
-  const handleNewFolder = (name: string, targetPath?: string) => {
-    const newFolder: FileSystemEntry = { id: crypto.randomUUID(), name, type: 'directory', children: [] };
+		// Add the new file to the target directory
+		targetDir.push(newFile);
+		setMockFileSystem(newFileSystem);
+		saveFileSystem(newFileSystem);
 
-    // Determine where to create the folder
-    const createInPath = targetPath || '';
-    
-    // Deep copy to avoid mutation
-    let newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
+		// Save empty content for new file with full path
+		const fullPath = createInPath === "" ? name : `${createInPath}/${name}`;
+		const fileContent = initialContent ?? getDefaultContentForFile(name);
+		saveFileContent(fullPath, fileContent);
 
-    const targetDir = findTargetDirectory(newFileSystem, createInPath);
-    if (!targetDir) {
-      setCreationError("Target directory not found.");
-      return;
-    }
+		// Automatically open the new file
+		setOpenFiles([...openFiles(), newFile]);
+		setActiveFile(newFile);
 
-    // Check if folder already exists in the target directory
-    const existingFolder = targetDir.find((f: FileSystemEntry) => f.name === name);
-    if (existingFolder) {
-      setCreationError("A file or folder with this name already exists.");
-      return;
-    }
-    setCreationError(null);
+		// Load content using safe method
+		if (editor && editor.safeUpdateContent) {
+			editor.safeUpdateContent(fileContent);
 
-    // Add the new folder to the target directory
-    targetDir.push(newFolder);
-    setMockFileSystem(newFileSystem);
-    saveFileSystem(newFileSystem);
-  };
+			// Then update language
+			setTimeout(() => {
+				if (editor && editor.updateLanguage) {
+					editor.updateLanguage(name);
+				}
+			}, 10);
+		}
+	};
 
-  const moveFileContent = (entry: FileSystemEntry, oldPath: string, newPath: string) => {
-    if (entry.type === 'file') {
-      const oldKey = STORAGE_KEYS.FILE_CONTENT_PREFIX + oldPath;
-      const newKey = STORAGE_KEYS.FILE_CONTENT_PREFIX + newPath;
-      const content = localStorage.getItem(oldKey);
-      if (content !== null) {
-        localStorage.setItem(newKey, content);
-        localStorage.removeItem(oldKey);
-      }
-    } else if (entry.type === 'directory' && entry.children) {
-      entry.children.forEach(child => {
-        const childOldPath = oldPath + '/' + child.name;
-        const childNewPath = newPath + '/' + child.name;
-        moveFileContent(child, childOldPath, childNewPath);
-      });
-    }
-  };
+	const handleNewFolder = (name: string, targetPath?: string) => {
+		const newFolder: FileSystemEntry = {
+			id: crypto.randomUUID(),
+			name,
+			type: "directory",
+			children: [],
+		};
 
-  const handleMoveEntry = (sourcePath: string, destPath: string) => {
-    console.log(`Moving ${sourcePath} to ${destPath}`);
-    
-    // Prevent moving into itself
-    if (sourcePath === destPath) {
-      console.warn('Cannot move into itself');
-      return;
-    }
+		// Determine where to create the folder
+		const createInPath = targetPath || "";
 
-    // Prevent moving into a child directory (would create a cycle)
-    if (destPath.startsWith(sourcePath + '/')) {
-      console.warn('Cannot move into child directory');
-      return;
-    }
-    
-    // Deep copy the file system to avoid mutation issues
-    let newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
+		// Deep copy to avoid mutation
+		const newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
 
-    // Find and remove the source entry
-    const sourceInfo = findEntryAndParent(newFileSystem, sourcePath);
-    if (!sourceInfo) {
-      console.error("Source not found:", sourcePath);
-      return;
-    }
+		const targetDir = findTargetDirectory(newFileSystem, createInPath);
+		if (!targetDir) {
+			setCreationError("Target directory not found.");
+			return;
+		}
 
-    const [movedEntry] = sourceInfo.parent.splice(sourceInfo.index, 1);
+		// Check if folder already exists in the target directory
+		const existingFolder = targetDir.find(
+			(f: FileSystemEntry) => f.name === name,
+		);
+		if (existingFolder) {
+			setCreationError("A file or folder with this name already exists.");
+			return;
+		}
+		setCreationError(null);
 
-    // Find destination and add the entry
-    if (destPath === '') { 
-      // Moving to root
-      newFileSystem.push(movedEntry);
-    } else {
-      const destInfo = findEntryAndParent(newFileSystem, destPath);
-      if (!destInfo || destInfo.entry.type !== 'directory') {
-        console.error("Destination not found or is not a directory:", destPath);
-        // Re-add the entry to its original position if dest is invalid
-        sourceInfo.parent.splice(sourceInfo.index, 0, movedEntry);
-        return;
-      }
-      
-      if (!destInfo.entry.children) {
-        destInfo.entry.children = [];
-      }
-      destInfo.entry.children.push(movedEntry);
-    }
+		// Add the new folder to the target directory
+		targetDir.push(newFolder);
+		setMockFileSystem(newFileSystem);
+		saveFileSystem(newFileSystem);
+	};
 
-    // Only move content if the path actually changed
-    const newPath = destPath === '' ? movedEntry.name : `${destPath}/${movedEntry.name}`;
-    if (sourcePath !== newPath) {
-      moveFileContent(movedEntry, sourcePath, newPath);
-    }
+	const moveFileContent = (
+		entry: FileSystemEntry,
+		oldPath: string,
+		newPath: string,
+	) => {
+		if (entry.type === "file") {
+			const oldKey = STORAGE_KEYS.FILE_CONTENT_PREFIX + oldPath;
+			const newKey = STORAGE_KEYS.FILE_CONTENT_PREFIX + newPath;
+			const content = localStorage.getItem(oldKey);
+			if (content !== null) {
+				localStorage.setItem(newKey, content);
+				localStorage.removeItem(oldKey);
+			}
+		} else if (entry.type === "directory" && entry.children) {
+			entry.children.forEach((child) => {
+				const childOldPath = oldPath + "/" + child.name;
+				const childNewPath = newPath + "/" + child.name;
+				moveFileContent(child, childOldPath, childNewPath);
+			});
+		}
+	};
 
-    console.log("File system after move:", newFileSystem);
-    saveFileSystem(newFileSystem);
-    
-    // Get IDs of open files and active file before the move
-    const openFileIds = openFiles().map(f => f.id);
-    const activeFileId = activeFile()?.id;
+	const handleMoveEntry = (sourcePath: string, destPath: string) => {
+		console.log(`Moving ${sourcePath} to ${destPath}`);
 
-    // Update the file system state
-    setMockFileSystem(newFileSystem);
+		// Prevent moving into itself
+		if (sourcePath === destPath) {
+			console.warn("Cannot move into itself");
+			return;
+		}
 
-    // Re-find open files in the new file system using their IDs
-    const newOpenFiles = openFileIds
-      .map(id => findEntryById(newFileSystem, id))
-      .filter(Boolean) as FileSystemEntry[];
-    
-    setOpenFiles(newOpenFiles);
+		// Prevent moving into a child directory (would create a cycle)
+		if (destPath.startsWith(sourcePath + "/")) {
+			console.warn("Cannot move into child directory");
+			return;
+		}
 
-    // Re-find active file
-    if (activeFileId) {
-      const newActiveFile = findEntryById(newFileSystem, activeFileId);
-      setActiveFile(newActiveFile);
-    }
-  };
+		// Deep copy the file system to avoid mutation issues
+		const newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
 
-  const handleFileUpload = async (files: File[], destPath: string) => {
-    let newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
+		// Find and remove the source entry
+		const sourceInfo = findEntryAndParent(newFileSystem, sourcePath);
+		if (!sourceInfo) {
+			console.error("Source not found:", sourcePath);
+			return;
+		}
 
-    for (const file of files) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const content = e.target?.result as string;
-        const newFile: FileSystemEntry = { id: crypto.randomUUID(), name: file.name, type: 'file' };
-        
-        // Save content with full path as key
-        const fullPath = destPath === '' ? file.name : `${destPath}/${file.name}`;
-        saveFileContent(fullPath, content);
+		const [movedEntry] = sourceInfo.parent.splice(sourceInfo.index, 1);
 
-        // Helper to find destination directory recursively
-        const findDestinationDir = (fs: FileSystemEntry[], path: string): FileSystemEntry[] | null => {
-          if (path === '') return fs; // Root directory
-          
-          const parts = path.split('/');
-          let currentLevel = fs;
-          
-          for (const part of parts) {
-            const dir = currentLevel.find(e => e.name === part && e.type === 'directory');
-            if (!dir || !dir.children) return null;
-            currentLevel = dir.children;
-          }
-          return currentLevel;
-        };
+		// Find destination and add the entry
+		if (destPath === "") {
+			// Moving to root
+			newFileSystem.push(movedEntry);
+		} else {
+			const destInfo = findEntryAndParent(newFileSystem, destPath);
+			if (!destInfo || destInfo.entry.type !== "directory") {
+				console.error("Destination not found or is not a directory:", destPath);
+				// Re-add the entry to its original position if dest is invalid
+				sourceInfo.parent.splice(sourceInfo.index, 0, movedEntry);
+				return;
+			}
 
-        const destDir = findDestinationDir(newFileSystem, destPath);
-        if (destDir) {
-          destDir.push(newFile);
-          setMockFileSystem([...newFileSystem]);
-          saveFileSystem(newFileSystem);
-        }
-      };
-      reader.readAsText(file);
-    }
-  };
+			if (!destInfo.entry.children) {
+				destInfo.entry.children = [];
+			}
+			destInfo.entry.children.push(movedEntry);
+		}
 
-  const handleRenameEntry = (oldPath: string, newName: string) => {
-    console.log(`Renaming ${oldPath} to ${newName}`);
-    
-    // Deep copy the file system to avoid mutation issues
-    let newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
+		// Only move content if the path actually changed
+		const newPath =
+			destPath === "" ? movedEntry.name : `${destPath}/${movedEntry.name}`;
+		if (sourcePath !== newPath) {
+			moveFileContent(movedEntry, sourcePath, newPath);
+		}
 
-    // Find the entry to rename
-    const entryInfo = findEntryAndParent(newFileSystem, oldPath);
-    if (!entryInfo) {
-      console.error("Entry not found for rename:", oldPath);
-      return;
-    }
+		console.log("File system after move:", newFileSystem);
+		saveFileSystem(newFileSystem);
 
-    // Update the name (conflict checking is done in FileExplorer)
-    entryInfo.entry.name = newName;
+		// Get IDs of open files and active file before the move
+		const openFileIds = openFiles().map((f) => f.id);
+		const activeFileId = activeFile()?.id;
 
-    // Calculate new path
-    const pathParts = oldPath.split('/');
-    pathParts[pathParts.length - 1] = newName;
-    const newPath = pathParts.join('/');
+		// Update the file system state
+		setMockFileSystem(newFileSystem);
 
-    // Move content if path changed
-    if (oldPath !== newPath) {
-      moveFileContent(entryInfo.entry, oldPath, newPath);
-    }
+		// Re-find open files in the new file system using their IDs
+		const newOpenFiles = openFileIds
+			.map((id) => findEntryById(newFileSystem, id))
+			.filter(Boolean) as FileSystemEntry[];
 
-    // Update the file system
-    setMockFileSystem(newFileSystem);
-    saveFileSystem(newFileSystem);
+		setOpenFiles(newOpenFiles);
 
-    // Update open files and active file using IDs
-    const openFileIds = openFiles().map(f => f.id);
-    const activeFileId = activeFile()?.id;
+		// Re-find active file
+		if (activeFileId) {
+			const newActiveFile = findEntryById(newFileSystem, activeFileId);
+			setActiveFile(newActiveFile);
+		}
+	};
 
-    // Re-find open files in the new file system using their IDs
-    const newOpenFiles = openFileIds
-      .map(id => findEntryById(newFileSystem, id))
-      .filter(Boolean) as FileSystemEntry[];
-    
-    setOpenFiles(newOpenFiles);
+	const handleFileUpload = async (files: File[], destPath: string) => {
+		const newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
 
-    // Re-find active file
-    if (activeFileId) {
-      const newActiveFile = findEntryById(newFileSystem, activeFileId);
-      setActiveFile(newActiveFile);
-    }
-  };
+		for (const file of files) {
+			const reader = new FileReader();
+			reader.onload = (e) => {
+				const content = e.target?.result as string;
+				const newFile: FileSystemEntry = {
+					id: crypto.randomUUID(),
+					name: file.name,
+					type: "file",
+				};
 
-  const removeFileContent = (entry: FileSystemEntry, path: string) => {
-    if (entry.type === 'file') {
-      const key = STORAGE_KEYS.FILE_CONTENT_PREFIX + path;
-      localStorage.removeItem(key);
-    } else if (entry.type === 'directory' && entry.children) {
-      entry.children.forEach(child => {
-        const childPath = path + '/' + child.name;
-        removeFileContent(child, childPath);
-      });
-    }
-  };
+				// Save content with full path as key
+				const fullPath =
+					destPath === "" ? file.name : `${destPath}/${file.name}`;
+				saveFileContent(fullPath, content);
 
-  const handleDeleteEntry = (path: string) => {
-    console.log(`Deleting ${path}`);
-    
-    // Deep copy the file system to avoid mutation issues
-    let newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
+				// Helper to find destination directory recursively
+				const findDestinationDir = (
+					fs: FileSystemEntry[],
+					path: string,
+				): FileSystemEntry[] | null => {
+					if (path === "") return fs; // Root directory
 
-    // Find and remove the entry
-    const entryInfo = findEntryAndParent(newFileSystem, path);
-    if (!entryInfo) {
-      console.error("Entry not found for deletion:", path);
-      return;
-    }
+					const parts = path.split("/");
+					let currentLevel = fs;
 
-    // Remove from file system
-    entryInfo.parent.splice(entryInfo.index, 1);
+					for (const part of parts) {
+						const dir = currentLevel.find(
+							(e) => e.name === part && e.type === "directory",
+						);
+						if (!dir || !dir.children) return null;
+						currentLevel = dir.children;
+					}
+					return currentLevel;
+				};
 
-    // Remove file content from localStorage
-    removeFileContent(entryInfo.entry, path);
+				const destDir = findDestinationDir(newFileSystem, destPath);
+				if (destDir) {
+					destDir.push(newFile);
+					setMockFileSystem([...newFileSystem]);
+					saveFileSystem(newFileSystem);
+				}
+			};
+			reader.readAsText(file);
+		}
+	};
 
-    // Update the file system
-    setMockFileSystem(newFileSystem);
-    saveFileSystem(newFileSystem);
+	const handleRenameEntry = (oldPath: string, newName: string) => {
+		console.log(`Renaming ${oldPath} to ${newName}`);
 
-    // Remove deleted files from open files and update active file
-    const deletedFileIds = collectDeletedFileIds(entryInfo.entry);
-    const newOpenFiles = openFiles().filter(f => !deletedFileIds.includes(f.id!));
-    setOpenFiles(newOpenFiles);
+		// Deep copy the file system to avoid mutation issues
+		const newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
 
-    // If the deleted file (or any file in a deleted directory) was active, switch to another file or null
-    const wasActiveFileDeleted = activeFile() && deletedFileIds.includes(activeFile()!.id!);
-    if (wasActiveFileDeleted) {
-      const newActiveFile = newOpenFiles.length > 0 ? newOpenFiles[newOpenFiles.length - 1] : null;
-      setActiveFile(newActiveFile);
-      
-      if (newActiveFile && editor && editor.safeUpdateContent) {
-        // Load the new active file's content
-        const newFilePath = getPathFromId(newFileSystem, newActiveFile.id) || newActiveFile.name;
-        const content = loadFileContent(newFilePath);
-        editor.safeUpdateContent(content);
-        
-        // Update language
-        setTimeout(() => {
-          if (editor && editor.updateLanguage) {
-            editor.updateLanguage(newActiveFile.name);
-          }
-        }, 10);
-      }
-    }
+		// Find the entry to rename
+		const entryInfo = findEntryAndParent(newFileSystem, oldPath);
+		if (!entryInfo) {
+			console.error("Entry not found for rename:", oldPath);
+			return;
+		}
 
-    // Clear selection if deleted items were selected
-    const newSelection = selectedFiles().filter(selectedPath => selectedPath !== path);
-    setSelectedFiles(newSelection);
-  };
+		// Update the name (conflict checking is done in FileExplorer)
+		entryInfo.entry.name = newName;
 
-  const handleMoveWithReplacement = (sourcePath: string, destPath: string, conflictingName: string) => {
-    console.log(`Moving ${sourcePath} to ${destPath} with replacement of ${conflictingName}`);
-    
-    // Prevent moving into itself
-    if (sourcePath === destPath) {
-      console.warn('Cannot move into itself');
-      return;
-    }
+		// Calculate new path
+		const pathParts = oldPath.split("/");
+		pathParts[pathParts.length - 1] = newName;
+		const newPath = pathParts.join("/");
 
-    // Prevent moving into a child directory (would create a cycle)
-    if (destPath.startsWith(sourcePath + '/')) {
-      console.warn('Cannot move into child directory');
-      return;
-    }
-    
-    // Deep copy the file system to avoid mutation issues
-    let newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
+		// Move content if path changed
+		if (oldPath !== newPath) {
+			moveFileContent(entryInfo.entry, oldPath, newPath);
+		}
 
-    // Find and remove the source entry
-    const sourceInfo = findEntryAndParent(newFileSystem, sourcePath);
-    if (!sourceInfo) {
-      console.error("Source not found:", sourcePath);
-      return;
-    }
+		// Update the file system
+		setMockFileSystem(newFileSystem);
+		saveFileSystem(newFileSystem);
 
-    const [movedEntry] = sourceInfo.parent.splice(sourceInfo.index, 1);
+		// Update open files and active file using IDs
+		const openFileIds = openFiles().map((f) => f.id);
+		const activeFileId = activeFile()?.id;
 
-    let removedFileIds: string[] = [];
+		// Re-find open files in the new file system using their IDs
+		const newOpenFiles = openFileIds
+			.map((id) => findEntryById(newFileSystem, id))
+			.filter(Boolean) as FileSystemEntry[];
 
-    // Find destination and handle replacement
-    if (destPath === '') { 
-      // Moving to root - remove ALL existing conflicting items first
-      for (let i = newFileSystem.length - 1; i >= 0; i--) {
-        if (newFileSystem[i].name === conflictingName) {
-          // Collect IDs of files that will be removed
-          removedFileIds.push(...collectDeletedFileIds(newFileSystem[i]));
-          newFileSystem.splice(i, 1);
-          // Remove conflicting item's content from localStorage
-          localStorage.removeItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + conflictingName);
-        }
-      }
-      newFileSystem.push(movedEntry);
-    } else {
-      const destInfo = findEntryAndParent(newFileSystem, destPath);
-      if (!destInfo || destInfo.entry.type !== 'directory') {
-        console.error("Destination not found or is not a directory:", destPath);
-        // Re-add the entry to its original position if dest is invalid
-        sourceInfo.parent.splice(sourceInfo.index, 0, movedEntry);
-        return;
-      }
-      
-      if (!destInfo.entry.children) {
-        destInfo.entry.children = [];
-      }
-      
-      // Remove ALL existing conflicting items from destination directory
-      for (let i = destInfo.entry.children.length - 1; i >= 0; i--) {
-        if (destInfo.entry.children[i].name === conflictingName) {
-          // Collect IDs of files that will be removed
-          removedFileIds.push(...collectDeletedFileIds(destInfo.entry.children[i]));
-          destInfo.entry.children.splice(i, 1);
-          // Remove conflicting item's content from localStorage
-          const conflictingPath = `${destPath}/${conflictingName}`;
-          localStorage.removeItem(STORAGE_KEYS.FILE_CONTENT_PREFIX + conflictingPath);
-        }
-      }
-      
-      destInfo.entry.children.push(movedEntry);
-    }
+		setOpenFiles(newOpenFiles);
 
-    // Only move content if the path actually changed
-    const newPath = destPath === '' ? movedEntry.name : `${destPath}/${movedEntry.name}`;
-    if (sourcePath !== newPath) {
-      moveFileContent(movedEntry, sourcePath, newPath);
-    }
+		// Re-find active file
+		if (activeFileId) {
+			const newActiveFile = findEntryById(newFileSystem, activeFileId);
+			setActiveFile(newActiveFile);
+		}
+	};
 
-    console.log("File system after move with replacement:", newFileSystem);
-    saveFileSystem(newFileSystem);
-    
-    // Get IDs of open files and active file before the move
-    const openFileIds = openFiles().map(f => f.id);
-    const activeFileId = activeFile()?.id;
+	const removeFileContent = (entry: FileSystemEntry, path: string) => {
+		if (entry.type === "file") {
+			const key = STORAGE_KEYS.FILE_CONTENT_PREFIX + path;
+			localStorage.removeItem(key);
+		} else if (entry.type === "directory" && entry.children) {
+			entry.children.forEach((child) => {
+				const childPath = path + "/" + child.name;
+				removeFileContent(child, childPath);
+			});
+		}
+	};
 
-    // Update the file system state
-    setMockFileSystem(newFileSystem);
+	const handleDeleteEntry = (path: string) => {
+		console.log(`Deleting ${path}`);
 
-    // Re-find open files in the new file system using their IDs, excluding removed files
-    const newOpenFiles = openFileIds
-      .filter(id => !removedFileIds.includes(id!)) // Filter out removed files
-      .map(id => findEntryById(newFileSystem, id))
-      .filter(Boolean) as FileSystemEntry[];
-    
-    setOpenFiles(newOpenFiles);
+		// Deep copy the file system to avoid mutation issues
+		const newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
 
-    // Re-find active file, or switch to another if the active file was removed
-    if (activeFileId) {
-      if (removedFileIds.includes(activeFileId)) {
-        // Active file was removed, switch to another file or null
-        const newActiveFile = newOpenFiles.length > 0 ? newOpenFiles[newOpenFiles.length - 1] : null;
-        setActiveFile(newActiveFile);
-        
-        if (newActiveFile && editor && editor.safeUpdateContent) {
-          // Load the new active file's content
-          const newFilePath = getPathFromId(newFileSystem, newActiveFile.id) || newActiveFile.name;
-          const content = loadFileContent(newFilePath);
-          editor.safeUpdateContent(content);
-          
-          // Update language
-          setTimeout(() => {
-            if (editor && editor.updateLanguage) {
-              editor.updateLanguage(newActiveFile.name);
-            }
-          }, 10);
-        }
-      } else {
-        const newActiveFile = findEntryById(newFileSystem, activeFileId);
-        setActiveFile(newActiveFile);
-      }
-    }
-  };
+		// Find and remove the entry
+		const entryInfo = findEntryAndParent(newFileSystem, path);
+		if (!entryInfo) {
+			console.error("Entry not found for deletion:", path);
+			return;
+		}
 
-  const handleCopyEntry = (sourcePath: string, destPath: string, newName: string) => {
-    console.log(`Copying ${sourcePath} to ${destPath}/${newName}`);
-    
-    // Deep copy the file system to avoid mutation issues
-    let newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
+		// Remove from file system
+		entryInfo.parent.splice(entryInfo.index, 1);
 
-    // Find the source entry to copy
-    const sourceInfo = findEntryAndParent(newFileSystem, sourcePath);
-    if (!sourceInfo) {
-      console.error("Source not found for copy:", sourcePath);
-      return;
-    }
+		// Remove file content from localStorage
+		removeFileContent(entryInfo.entry, path);
 
-    // Create a deep copy of the source entry with new ID and name
-    const copyEntry = (entry: FileSystemEntry, name: string): FileSystemEntry => {
-      const newEntry: FileSystemEntry = {
-        id: crypto.randomUUID(),
-        name: name,
-        type: entry.type,
-        children: entry.type === 'directory' && entry.children 
-          ? entry.children.map(child => copyEntry(child, child.name))
-          : undefined
-      };
-      return newEntry;
-    };
+		// Update the file system
+		setMockFileSystem(newFileSystem);
+		saveFileSystem(newFileSystem);
 
-    const copiedEntry = copyEntry(sourceInfo.entry, newName);
+		// Remove deleted files from open files and update active file
+		const deletedFileIds = collectDeletedFileIds(entryInfo.entry);
+		const newOpenFiles = openFiles().filter(
+			(f) => !deletedFileIds.includes(f.id!),
+		);
+		setOpenFiles(newOpenFiles);
 
-    // Find destination and add the copied entry
-    if (destPath === '') {
-      // Copying to root
-      newFileSystem.push(copiedEntry);
-    } else {
-      const destInfo = findEntryAndParent(newFileSystem, destPath);
-      if (!destInfo || destInfo.entry.type !== 'directory') {
-        console.error("Destination not found or is not a directory:", destPath);
-        return;
-      }
-      
-      if (!destInfo.entry.children) {
-        destInfo.entry.children = [];
-      }
-      destInfo.entry.children.push(copiedEntry);
-    }
+		// If the deleted file (or any file in a deleted directory) was active, switch to another file or null
+		const wasActiveFileDeleted =
+			activeFile() && deletedFileIds.includes(activeFile()!.id!);
+		if (wasActiveFileDeleted) {
+			const newActiveFile =
+				newOpenFiles.length > 0 ? newOpenFiles[newOpenFiles.length - 1] : null;
+			setActiveFile(newActiveFile);
 
-    // Copy file content recursively
-    const copyFileContent = (originalEntry: FileSystemEntry, copiedEntry: FileSystemEntry, originalPath: string, copiedPath: string) => {
-      if (originalEntry.type === 'file') {
-        const originalKey = STORAGE_KEYS.FILE_CONTENT_PREFIX + originalPath;
-        const copiedKey = STORAGE_KEYS.FILE_CONTENT_PREFIX + copiedPath;
-        const content = localStorage.getItem(originalKey);
-        if (content !== null) {
-          localStorage.setItem(copiedKey, content);
-        }
-      } else if (originalEntry.type === 'directory' && originalEntry.children && copiedEntry.children) {
-        for (let i = 0; i < originalEntry.children.length; i++) {
-          const originalChild = originalEntry.children[i];
-          const copiedChild = copiedEntry.children[i];
-          const originalChildPath = originalPath + '/' + originalChild.name;
-          const copiedChildPath = copiedPath + '/' + copiedChild.name;
-          copyFileContent(originalChild, copiedChild, originalChildPath, copiedChildPath);
-        }
-      }
-    };
+			if (newActiveFile && editor && editor.safeUpdateContent) {
+				// Load the new active file's content
+				const newFilePath =
+					getPathFromId(newFileSystem, newActiveFile.id) || newActiveFile.name;
+				const content = loadFileContent(newFilePath);
+				editor.safeUpdateContent(content);
 
-    const copiedPath = destPath === '' ? newName : `${destPath}/${newName}`;
-    copyFileContent(sourceInfo.entry, copiedEntry, sourcePath, copiedPath);
+				// Update language
+				setTimeout(() => {
+					if (editor && editor.updateLanguage) {
+						editor.updateLanguage(newActiveFile.name);
+					}
+				}, 10);
+			}
+		}
 
-    console.log("File system after copy:", newFileSystem);
-    saveFileSystem(newFileSystem);
-    setMockFileSystem(newFileSystem);
-  };
+		// Clear selection if deleted items were selected
+		const newSelection = selectedFiles().filter(
+			(selectedPath) => selectedPath !== path,
+		);
+		setSelectedFiles(newSelection);
+	};
 
-  return {
-    handleNewFile,
-    handleNewFolder,
-    handleMoveEntry,
-    handleFileUpload,
-    handleRenameEntry,
-    handleDeleteEntry,
-    handleMoveWithReplacement,
-    handleCopyEntry
-  };
+	const handleMoveWithReplacement = (
+		sourcePath: string,
+		destPath: string,
+		conflictingName: string,
+	) => {
+		console.log(
+			`Moving ${sourcePath} to ${destPath} with replacement of ${conflictingName}`,
+		);
+
+		// Prevent moving into itself
+		if (sourcePath === destPath) {
+			console.warn("Cannot move into itself");
+			return;
+		}
+
+		// Prevent moving into a child directory (would create a cycle)
+		if (destPath.startsWith(sourcePath + "/")) {
+			console.warn("Cannot move into child directory");
+			return;
+		}
+
+		// Deep copy the file system to avoid mutation issues
+		const newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
+
+		// Find and remove the source entry
+		const sourceInfo = findEntryAndParent(newFileSystem, sourcePath);
+		if (!sourceInfo) {
+			console.error("Source not found:", sourcePath);
+			return;
+		}
+
+		const [movedEntry] = sourceInfo.parent.splice(sourceInfo.index, 1);
+
+		const removedFileIds: string[] = [];
+
+		// Find destination and handle replacement
+		if (destPath === "") {
+			// Moving to root - remove ALL existing conflicting items first
+			for (let i = newFileSystem.length - 1; i >= 0; i--) {
+				if (newFileSystem[i].name === conflictingName) {
+					// Collect IDs of files that will be removed
+					removedFileIds.push(...collectDeletedFileIds(newFileSystem[i]));
+					newFileSystem.splice(i, 1);
+					// Remove conflicting item's content from localStorage
+					localStorage.removeItem(
+						STORAGE_KEYS.FILE_CONTENT_PREFIX + conflictingName,
+					);
+				}
+			}
+			newFileSystem.push(movedEntry);
+		} else {
+			const destInfo = findEntryAndParent(newFileSystem, destPath);
+			if (!destInfo || destInfo.entry.type !== "directory") {
+				console.error("Destination not found or is not a directory:", destPath);
+				// Re-add the entry to its original position if dest is invalid
+				sourceInfo.parent.splice(sourceInfo.index, 0, movedEntry);
+				return;
+			}
+
+			if (!destInfo.entry.children) {
+				destInfo.entry.children = [];
+			}
+
+			// Remove ALL existing conflicting items from destination directory
+			for (let i = destInfo.entry.children.length - 1; i >= 0; i--) {
+				if (destInfo.entry.children[i].name === conflictingName) {
+					// Collect IDs of files that will be removed
+					removedFileIds.push(
+						...collectDeletedFileIds(destInfo.entry.children[i]),
+					);
+					destInfo.entry.children.splice(i, 1);
+					// Remove conflicting item's content from localStorage
+					const conflictingPath = `${destPath}/${conflictingName}`;
+					localStorage.removeItem(
+						STORAGE_KEYS.FILE_CONTENT_PREFIX + conflictingPath,
+					);
+				}
+			}
+
+			destInfo.entry.children.push(movedEntry);
+		}
+
+		// Only move content if the path actually changed
+		const newPath =
+			destPath === "" ? movedEntry.name : `${destPath}/${movedEntry.name}`;
+		if (sourcePath !== newPath) {
+			moveFileContent(movedEntry, sourcePath, newPath);
+		}
+
+		console.log("File system after move with replacement:", newFileSystem);
+		saveFileSystem(newFileSystem);
+
+		// Get IDs of open files and active file before the move
+		const openFileIds = openFiles().map((f) => f.id);
+		const activeFileId = activeFile()?.id;
+
+		// Update the file system state
+		setMockFileSystem(newFileSystem);
+
+		// Re-find open files in the new file system using their IDs, excluding removed files
+		const newOpenFiles = openFileIds
+			.filter((id) => !removedFileIds.includes(id!)) // Filter out removed files
+			.map((id) => findEntryById(newFileSystem, id))
+			.filter(Boolean) as FileSystemEntry[];
+
+		setOpenFiles(newOpenFiles);
+
+		// Re-find active file, or switch to another if the active file was removed
+		if (activeFileId) {
+			if (removedFileIds.includes(activeFileId)) {
+				// Active file was removed, switch to another file or null
+				const newActiveFile =
+					newOpenFiles.length > 0
+						? newOpenFiles[newOpenFiles.length - 1]
+						: null;
+				setActiveFile(newActiveFile);
+
+				if (newActiveFile && editor && editor.safeUpdateContent) {
+					// Load the new active file's content
+					const newFilePath =
+						getPathFromId(newFileSystem, newActiveFile.id) ||
+						newActiveFile.name;
+					const content = loadFileContent(newFilePath);
+					editor.safeUpdateContent(content);
+
+					// Update language
+					setTimeout(() => {
+						if (editor && editor.updateLanguage) {
+							editor.updateLanguage(newActiveFile.name);
+						}
+					}, 10);
+				}
+			} else {
+				const newActiveFile = findEntryById(newFileSystem, activeFileId);
+				setActiveFile(newActiveFile);
+			}
+		}
+	};
+
+	const handleCopyEntry = (
+		sourcePath: string,
+		destPath: string,
+		newName: string,
+	) => {
+		console.log(`Copying ${sourcePath} to ${destPath}/${newName}`);
+
+		// Deep copy the file system to avoid mutation issues
+		const newFileSystem = JSON.parse(JSON.stringify(mockFileSystem()));
+
+		// Find the source entry to copy
+		const sourceInfo = findEntryAndParent(newFileSystem, sourcePath);
+		if (!sourceInfo) {
+			console.error("Source not found for copy:", sourcePath);
+			return;
+		}
+
+		// Create a deep copy of the source entry with new ID and name
+		const copyEntry = (
+			entry: FileSystemEntry,
+			name: string,
+		): FileSystemEntry => {
+			const newEntry: FileSystemEntry = {
+				id: crypto.randomUUID(),
+				name: name,
+				type: entry.type,
+				children:
+					entry.type === "directory" && entry.children
+						? entry.children.map((child) => copyEntry(child, child.name))
+						: undefined,
+			};
+			return newEntry;
+		};
+
+		const copiedEntry = copyEntry(sourceInfo.entry, newName);
+
+		// Find destination and add the copied entry
+		if (destPath === "") {
+			// Copying to root
+			newFileSystem.push(copiedEntry);
+		} else {
+			const destInfo = findEntryAndParent(newFileSystem, destPath);
+			if (!destInfo || destInfo.entry.type !== "directory") {
+				console.error("Destination not found or is not a directory:", destPath);
+				return;
+			}
+
+			if (!destInfo.entry.children) {
+				destInfo.entry.children = [];
+			}
+			destInfo.entry.children.push(copiedEntry);
+		}
+
+		// Copy file content recursively
+		const copyFileContent = (
+			originalEntry: FileSystemEntry,
+			copiedEntry: FileSystemEntry,
+			originalPath: string,
+			copiedPath: string,
+		) => {
+			if (originalEntry.type === "file") {
+				const originalKey = STORAGE_KEYS.FILE_CONTENT_PREFIX + originalPath;
+				const copiedKey = STORAGE_KEYS.FILE_CONTENT_PREFIX + copiedPath;
+				const content = localStorage.getItem(originalKey);
+				if (content !== null) {
+					localStorage.setItem(copiedKey, content);
+				}
+			} else if (
+				originalEntry.type === "directory" &&
+				originalEntry.children &&
+				copiedEntry.children
+			) {
+				for (let i = 0; i < originalEntry.children.length; i++) {
+					const originalChild = originalEntry.children[i];
+					const copiedChild = copiedEntry.children[i];
+					const originalChildPath = originalPath + "/" + originalChild.name;
+					const copiedChildPath = copiedPath + "/" + copiedChild.name;
+					copyFileContent(
+						originalChild,
+						copiedChild,
+						originalChildPath,
+						copiedChildPath,
+					);
+				}
+			}
+		};
+
+		const copiedPath = destPath === "" ? newName : `${destPath}/${newName}`;
+		copyFileContent(sourceInfo.entry, copiedEntry, sourcePath, copiedPath);
+
+		console.log("File system after copy:", newFileSystem);
+		saveFileSystem(newFileSystem);
+		setMockFileSystem(newFileSystem);
+	};
+
+	return {
+		handleNewFile,
+		handleNewFolder,
+		handleMoveEntry,
+		handleFileUpload,
+		handleRenameEntry,
+		handleDeleteEntry,
+		handleMoveWithReplacement,
+		handleCopyEntry,
+	};
 };

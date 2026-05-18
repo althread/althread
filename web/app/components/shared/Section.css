@@ -1,0 +1,196 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Shared Section System — used by GlobalsDisplay, InFlightMessagesDisplay
+   and (as a base) VMStateInspector's Processes panel.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Base section card ─────────────────────────────────────────────────── */
+
+.section {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 0;
+	min-width: 0;
+	border: 1px solid var(--app-border-strong);
+	background-color: var(--app-surface-muted);
+	border-radius: 4px;
+	overflow: hidden;
+	transition:
+		flex 0.25s ease,
+		min-width 0.25s ease,
+		max-width 0.25s ease;
+}
+
+/* ── Horizontally collapsed ────────────────────────────────────────────── */
+
+.section.section-collapsed {
+	flex: 0 0 26px;
+	min-width: 26px;
+	max-width: 26px;
+}
+
+/* ── Collapsible header ────────────────────────────────────────────────── */
+
+.collapsible-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 8px;
+	cursor: pointer;
+	user-select: none;
+	background-color: var(--app-surface-hover);
+	flex-shrink: 0;
+	transition: background-color 0.15s ease;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.collapsible-header:hover {
+	background-color: var(--app-border-strong);
+}
+
+.collapsible-header:active {
+	background-color: var(--app-border-strong);
+}
+
+/* ── Header icons & text ───────────────────────────────────────────────── */
+
+.header-toggle-icon {
+	color: var(--app-icon-muted);
+	font-size: 13px;
+	flex-shrink: 0;
+	transition: transform 0.2s ease;
+	order: 0;
+}
+
+.header-section-icon {
+	color: var(--app-icon-color);
+	font-size: 13px;
+	flex-shrink: 0;
+	order: 1;
+}
+
+/* Unified section title — same font as Processes */
+.section-label {
+	font-size: 10px;
+	font-weight: bold;
+	text-transform: uppercase;
+	color: var(--app-text-soft);
+	letter-spacing: 0.5px;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.header-count {
+	margin-left: auto;
+	background: var(--app-surface-hover);
+	color: var(--app-icon-muted);
+	font-size: 10px;
+	font-weight: 600;
+	padding: 1px 6px;
+	border-radius: 8px;
+	min-width: 16px;
+	text-align: center;
+	flex-shrink: 0;
+	display: inline-block;
+}
+
+/* Last-open lock: mute the toggle icon, keep normal cursor */
+.collapsible-header.header-locked {
+	cursor: default;
+}
+
+.collapsible-header.header-locked .header-toggle-icon {
+	opacity: 0.25;
+}
+
+/* ── Collapsed-state header: becomes a thin vertical strip ─────────────── */
+
+.section.section-collapsed .collapsible-header {
+	flex-direction: column;
+	padding: 10px 1px;
+	gap: 8px;
+	height: 100%;
+	align-items: center;
+	justify-content: flex-start;
+	overflow: visible;
+}
+
+/* Count badge moves below icons */
+.section.section-collapsed .header-count {
+	margin-left: 0;
+	margin-top: 0;
+	writing-mode: horizontal-tb;
+	padding: 1px 0;
+	min-width: 18px;
+	max-width: 22px;
+	font-size: 8px;
+	gap: 1px;
+	justify-content: center;
+	order: 2;
+	display: flex;
+	align-items: center;
+}
+
+/* Label rotates to read bottom-up */
+.section.section-collapsed .section-label {
+	writing-mode: vertical-rl;
+	text-orientation: mixed;
+	transform: rotate(180deg);
+	flex: 1;
+	text-align: center;
+	letter-spacing: 1.5px;
+	overflow: hidden;
+	font-size: 10px;
+	order: 3;
+}
+
+.header-count.changed {
+	background-color: var(--app-accent-orange);
+	color: var(--app-text);
+	animation: pulse-orange 2s infinite;
+	display: flex;
+	align-items: center;
+	padding: 1px 5px;
+	gap: 3px;
+}
+
+.change-indicator {
+	font-weight: 900;
+	font-size: 11px;
+	color: var(--app-text);
+}
+
+@keyframes pulse-orange {
+	0% {
+		box-shadow: 0 0 0 0 var(--app-accent-orange-glow);
+	}
+
+	70% {
+		box-shadow: 0 0 0 4px rgba(255, 157, 0, 0);
+	}
+
+	100% {
+		box-shadow: 0 0 0 0 rgba(255, 157, 0, 0);
+	}
+}
+
+/* ── Section body ─────────────────────────────────────────────────────── */
+
+.section-body {
+	padding: 8px;
+	overflow-y: auto;
+	flex: 1;
+	min-height: 0;
+}
+
+.section-body-hidden {
+	display: none;
+}
+
+.empty-state {
+	color: var(--app-icon-muted);
+	font-style: italic;
+	font-size: 11px;
+	text-align: center;
+	padding: 12px;
+}

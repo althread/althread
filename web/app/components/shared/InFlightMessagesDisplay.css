@@ -1,102 +1,93 @@
-.inflight-section {
-    margin-bottom: 16px;
-}
-
-.section-header {
-    font-weight: 600;
-    font-size: 14px;
-    margin-bottom: 8px;
-    color: #cccccc;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.section-body {
-    background: #252526;
-    border: 1px solid #3e3e42;
-    border-radius: 4px;
-    padding: 12px;
-}
+/* ── Subsection ───────────────────────────────────────────────────────── */
 
 .subsection {
-    margin-bottom: 12px;
+	margin-bottom: 12px;
 }
 
 .subsection:last-child {
-    margin-bottom: 0;
+	margin-bottom: 0;
 }
 
 .subsection-title {
-    font-size: 12px;
-    font-weight: 600;
-    color: #858585;
-    margin-bottom: 8px;
-    text-transform: uppercase;
+	font-size: 10px;
+	font-weight: 600;
+	color: var(--app-icon-muted);
+	margin-bottom: 8px;
+	text-transform: uppercase;
+	letter-spacing: 0.4px;
+	border-bottom: 1px solid var(--app-border-strong);
+	padding-bottom: 4px;
 }
 
+/* ── Message list ─────────────────────────────────────────────────────── */
+
 .message-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
 }
 
 .message-card {
-    background: #1e1e1e;
-    border: 1px solid #3e3e42;
-    border-left: 3px solid #007acc;
-    border-radius: 4px;
-    padding: 10px;
+	background: var(--app-surface);
+	border: 1px solid var(--app-border-strong);
+	border-left: 3px solid var(--app-accent-blue);
+	border-radius: 4px;
+	padding: 10px;
 }
 
 .message-card.waiting {
-    border-left-color: #f48771;
+	border-left-color: var(--app-accent-red);
 }
 
 .message-route {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 6px;
-    font-size: 13px;
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px 8px;
+	margin-bottom: 6px;
+	font-size: 13px;
+	row-gap: 4px;
+}
+
+/* Keep the arrow icon glued to the endpoint before it */
+.route-arrow {
+	flex-shrink: 0;
+	color: var(--app-icon-muted);
 }
 
 .message-endpoint {
-    font-family: 'Consolas', 'Monaco', monospace;
-    padding: 2px 6px;
-    border-radius: 3px;
+	font-family: "Consolas", "Monaco", monospace;
+	padding: 2px 6px;
+	border-radius: 3px;
 }
 
 .message-endpoint.from {
-    background: #0e639c;
-    color: #ffffff;
+	background: var(--app-accent-blue-light);
+	color: var(--app-tooltip-text);
 }
 
 .message-endpoint.to {
-    background: #16825d;
-    color: #ffffff;
+	background: var(--app-accent-green);
+	color: var(--app-tooltip-text);
 }
 
 .message-status {
-    color: #f48771;
-    font-size: 12px;
-    font-style: italic;
+	color: var(--app-accent-red);
+	font-size: 12px;
+	font-style: italic;
 }
 
 .message-payload {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-family: 'Consolas', 'Monaco', monospace;
-    font-size: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-family: "Consolas", "Monaco", monospace;
+	font-size: 12px;
 }
 
 .payload-item {
-    padding: 4px 8px;
-    background: #2d2d30;
-    border-radius: 3px;
-    color: #ce9178;
-}
-
-.codicon {
-    color: #858585;
+	padding: 4px 8px;
+	background: var(--app-code-bg);
+	border-radius: 3px;
+	color: var(--app-syntax-string);
 }
