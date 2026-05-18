@@ -46,7 +46,10 @@ main {
     let import_block = ast.import_block.expect("import block should be present");
 
     assert_eq!(import_block.value.imports.len(), 2);
-    assert_eq!(import_block.value.imports[0].value.path.segments, vec!["std", "io"]);
+    assert_eq!(
+        import_block.value.imports[0].value.path.segments,
+        vec!["std", "io"]
+    );
     assert!(import_block.value.imports[0].value.alias.is_none());
     assert_eq!(
         import_block.value.imports[1]

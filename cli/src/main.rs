@@ -264,7 +264,7 @@ pub fn run_interactive(
                 if first.pos.is_some() {
                     source
                         .lines()
-                        .nth(first.pos.as_ref().unwrap().line)
+                        .nth(first.pos.as_ref().unwrap().line())
                         .unwrap_or_default()
                         .to_string()
                 } else {
@@ -397,16 +397,16 @@ pub fn run_command(cli_args: &RunCommand) {
         if cli_args.verbose || cli_args.debug {
             let mut prev_line = 0;
             for inst in info.instructions.iter() {
-                if inst.pos.clone().unwrap_or_default().line != 0
-                    && prev_line != inst.pos.clone().unwrap_or_default().line
+                if inst.pos.clone().unwrap_or_default().line() != 0
+                    && prev_line != inst.pos.clone().unwrap_or_default().line()
                 {
                     println!(
                         "#{}:{} {}",
                         info.prog_id,
-                        inst.pos.clone().unwrap_or_default().line,
+                        inst.pos.clone().unwrap_or_default().line(),
                         source
                             .lines()
-                            .nth(inst.pos.clone().unwrap_or_default().line - 1)
+                            .nth(inst.pos.clone().unwrap_or_default().line() - 1)
                             .unwrap_or_default()
                             .style(if info.prog_id == 0 {
                                 MAIN_STYLE
@@ -415,7 +415,7 @@ pub fn run_command(cli_args: &RunCommand) {
                                     [((info.prog_id - 1) as usize) % PROCESS_PALETTE.len()]
                             })
                     );
-                    prev_line = inst.pos.clone().unwrap_or_default().line;
+                    prev_line = inst.pos.clone().unwrap_or_default().line();
                 }
                 if cli_args.verbose {
                     println!("\t\t\t#{}:{}", info.prog_id, inst);

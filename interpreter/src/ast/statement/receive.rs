@@ -50,7 +50,7 @@ impl InstructionBuilder for Node<ReceiveStatement> {
                 format!(
                     "Channel {}, bound at line {}, expects {} values, but {} variables are given",
                     self.value.channel,
-                    pos.line,
+                    pos.line(),
                     channel_types.len(),
                     self.value.variables.len()
                 ),

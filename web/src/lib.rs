@@ -58,13 +58,13 @@ fn message_payload_string(message: &Literal) -> String {
 }
 
 fn error_to_js(err: AlthreadError) -> JsValue {
-    to_js(&err)
+    to_js(&runtime_error_info(err))
 }
 
 fn web_pos_from_rc(pos: &std::rc::Rc<althread::error::Pos>) -> WebPos {
     WebPos {
-        line: pos.line,
-        col: pos.col,
+        line: pos.line(),
+        col: pos.column(),
         start: pos.start,
         end: pos.end,
         file_path: pos.file_path.clone(),
@@ -178,7 +178,7 @@ fn create_vm_state(vm: &althread::vm::VM) -> VMState {
                 .get(&prog_name)
                 .and_then(|code| code.instructions.get(*instruction_pointer))
                 .and_then(|inst| inst.pos.as_ref())
-                .map(|pos| pos.line);
+                .map(|pos| pos.line());
 
             let debug_info = vm.program_debug_info.get(&prog_name);
             let call_stack_info = vm
@@ -219,7 +219,7 @@ fn create_vm_state(vm: &althread::vm::VM) -> VMState {
                     function: prog_name.clone(),
                     frame_pointer: *fp,
                     instruction_pointer: *ip,
-                    line: pos.as_ref().map(|p| p.line),
+                    line: pos.as_ref().map(|p| p.line()),
                     variables,
                 });
             }
@@ -333,7 +333,7 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
         let lines: Vec<usize> = info
             .instructions
             .iter()
-            .filter_map(|inst| inst.pos.as_ref().map(|p| p.line))
+            .filter_map(|inst| inst.pos.as_ref().map(|p| p.line()))
             .collect();
 
         let new_vm_state = create_vm_state(&vm);
@@ -367,7 +367,7 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
         let instruction_lines: Vec<usize> = info
             .instructions
             .iter()
-            .filter_map(|inst| inst.pos.as_ref().map(|p| p.line))
+            .filter_map(|inst| inst.pos.as_ref().map(|p| p.line()))
             .collect();
 
         for action in info.actions.iter() {
@@ -432,7 +432,7 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
             let err = info.invariant_error.unwrap_err();
             result.push_str(&format!(
                 "Invariant error at line {}: {}\n",
-                err.pos.unwrap().line,
+                err.pos.unwrap().line(),
                 err.message
             ));
             break;
@@ -700,7 +700,7 @@ pub fn start_interactive_session(
         .map(|(name, pid, instructions, _actions, _nvm)| {
             let lines: Vec<usize> = instructions
                 .iter()
-                .filter_map(|inst| inst.pos.as_ref().map(|p| p.line))
+                .filter_map(|inst| inst.pos.as_ref().map(|p| p.line()))
                 .collect();
 
             let instruction_strings: Vec<String> =
@@ -783,7 +783,7 @@ pub fn get_next_interactive_states(
         .map(|(name, pid, instructions, _actions, _nvm)| {
             let lines: Vec<usize> = instructions
                 .iter()
-                .filter_map(|inst| inst.pos.as_ref().map(|p| p.line))
+                .filter_map(|inst| inst.pos.as_ref().map(|p| p.line()))
                 .collect();
 
             let instruction_strings: Vec<String> =
@@ -910,7 +910,7 @@ pub fn execute_interactive_step(
 
     let step_lines: Vec<usize> = instructions
         .iter()
-        .filter_map(|inst| inst.pos.as_ref().map(|p| p.line))
+        .filter_map(|inst| inst.pos.as_ref().map(|p| p.line()))
         .collect();
 
     // Capture debug info from the instructions

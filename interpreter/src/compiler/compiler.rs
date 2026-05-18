@@ -643,7 +643,9 @@ impl Ast {
                 Some(pos.clone()),
                 format!(
                     "Channel '{}' used in program '{}' at line {} has not been declared",
-                    channel_name.1, channel_name.0, pos.line
+                    channel_name.1,
+                    channel_name.0,
+                    pos.line()
                 ),
             ));
         }

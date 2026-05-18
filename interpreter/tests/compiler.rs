@@ -36,8 +36,6 @@ main {
     let expected = vec![
         Instruction {
             pos: Some(Pos {
-                line: 3,
-                col: 13,
                 start: 20,
                 end: 21,
                 file_path: "".to_string(),
@@ -50,8 +48,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 3,
-                col: 5,
                 start: 12,
                 end: 15,
                 file_path: "".to_string(),
@@ -60,8 +56,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 13,
                 start: 35,
                 end: 37,
                 file_path: "".to_string(),
@@ -74,8 +68,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 5,
                 start: 27,
                 end: 30,
                 file_path: "".to_string(),
@@ -84,8 +76,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 5,
-                col: 13,
                 start: 51,
                 end: 53,
                 file_path: "".to_string(),
@@ -98,8 +88,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 5,
-                col: 5,
                 start: 43,
                 end: 46,
                 file_path: "".to_string(),
@@ -108,8 +96,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 6,
-                col: 18,
                 start: 72,
                 end: 81,
                 file_path: "".to_string(),
@@ -134,8 +120,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 6,
-                col: 5,
                 start: 59,
                 end: 62,
                 file_path: "".to_string(),
@@ -148,8 +132,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 2,
-                col: 6,
                 start: 6,
                 end: 84,
                 file_path: "".to_string(),
@@ -939,8 +921,6 @@ main {
     let expected = vec![
         Instruction {
             pos: Some(Pos {
-                line: 3,
-                col: 13,
                 start: 20,
                 end: 21,
                 file_path: "".to_string(),
@@ -953,8 +933,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 3,
-                col: 5,
                 start: 12,
                 end: 15,
                 file_path: "".to_string(),
@@ -963,8 +941,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 11,
                 start: 33,
                 end: 38,
                 file_path: "".to_string(),
@@ -985,8 +961,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 11,
                 start: 33,
                 end: 38,
                 file_path: "".to_string(),
@@ -998,8 +972,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 5,
-                col: 13,
                 start: 53,
                 end: 58,
                 file_path: "".to_string(),
@@ -1020,8 +992,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 5,
-                col: 9,
                 start: 49,
                 end: 50,
                 file_path: "".to_string(),
@@ -1034,8 +1004,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 6,
-                col: 12,
                 start: 71,
                 end: 77,
                 file_path: "".to_string(),
@@ -1056,8 +1024,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 6,
-                col: 12,
                 start: 71,
                 end: 77,
                 file_path: "".to_string(),
@@ -1077,8 +1043,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 6,
-                col: 19,
                 start: 78,
                 end: 108,
                 file_path: "".to_string(),
@@ -1087,8 +1051,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 5,
                 start: 27,
                 end: 114,
                 file_path: "".to_string(),
@@ -1097,8 +1059,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 10,
-                col: 10,
                 start: 124,
                 end: 132,
                 file_path: "".to_string(),
@@ -1115,8 +1075,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 10,
-                col: 5,
                 start: 119,
                 end: 132,
                 file_path: "".to_string(),
@@ -1129,8 +1087,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 10,
-                col: 5,
                 start: 119,
                 end: 132,
                 file_path: "".to_string(),
@@ -1143,8 +1099,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 2,
-                col: 6,
                 start: 6,
                 end: 135,
                 file_path: "".to_string(),
@@ -1188,8 +1142,6 @@ main {
     let expected = vec![
         Instruction {
             pos: Some(Pos {
-                line: 3,
-                col: 13,
                 start: 20,
                 end: 21,
                 file_path: "".to_string(),
@@ -1202,8 +1154,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 3,
-                col: 5,
                 start: 12,
                 end: 15,
                 file_path: "".to_string(),
@@ -1212,8 +1162,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 13,
                 start: 35,
                 end: 39,
                 file_path: "".to_string(),
@@ -1226,8 +1174,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 5,
                 start: 27,
                 end: 30,
                 file_path: "".to_string(),
@@ -1236,8 +1182,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 5,
-                col: 13,
                 start: 53,
                 end: 57,
                 file_path: "".to_string(),
@@ -1250,8 +1194,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 5,
-                col: 5,
                 start: 45,
                 end: 48,
                 file_path: "".to_string(),
@@ -1260,8 +1202,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 6,
-                col: 13,
                 start: 71,
                 end: 77,
                 file_path: "".to_string(),
@@ -1274,8 +1214,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 6,
-                col: 5,
                 start: 63,
                 end: 66,
                 file_path: "".to_string(),
@@ -1284,8 +1222,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 7,
-                col: 13,
                 start: 91,
                 end: 97,
                 file_path: "".to_string(),
@@ -1298,8 +1234,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 7,
-                col: 5,
                 start: 83,
                 end: 86,
                 file_path: "".to_string(),
@@ -1312,8 +1246,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 2,
-                col: 6,
                 start: 6,
                 end: 100,
                 file_path: "".to_string(),
@@ -1353,8 +1285,6 @@ main {
     let expected = vec![
         Instruction {
             pos: Some(Pos {
-                line: 3,
-                col: 13,
                 start: 20,
                 end: 26,
                 file_path: "".to_string(),
@@ -1377,8 +1307,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 3,
-                col: 5,
                 start: 12,
                 end: 15,
                 file_path: "".to_string(),
@@ -1387,8 +1315,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 13,
                 start: 40,
                 end: 47,
                 file_path: "".to_string(),
@@ -1411,8 +1337,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 5,
                 start: 32,
                 end: 35,
                 file_path: "".to_string(),
@@ -1425,8 +1349,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 2,
-                col: 6,
                 start: 6,
                 end: 50,
                 file_path: "".to_string(),
@@ -1467,8 +1389,6 @@ main {
     let expected = vec![
         Instruction {
             pos: Some(Pos {
-                line: 3,
-                col: 13,
                 start: 20,
                 end: 25,
                 file_path: "".to_string(),
@@ -1491,8 +1411,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 3,
-                col: 5,
                 start: 12,
                 end: 15,
                 file_path: "".to_string(),
@@ -1501,8 +1419,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 13,
                 start: 39,
                 end: 44,
                 file_path: "".to_string(),
@@ -1525,8 +1441,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 4,
-                col: 5,
                 start: 31,
                 end: 34,
                 file_path: "".to_string(),
@@ -1535,8 +1449,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 5,
-                col: 13,
                 start: 58,
                 end: 67,
                 file_path: "".to_string(),
@@ -1567,8 +1479,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 5,
-                col: 5,
                 start: 50,
                 end: 53,
                 file_path: "".to_string(),
@@ -1581,8 +1491,6 @@ main {
         },
         Instruction {
             pos: Some(Pos {
-                line: 2,
-                col: 6,
                 start: 6,
                 end: 70,
                 file_path: "".to_string(),

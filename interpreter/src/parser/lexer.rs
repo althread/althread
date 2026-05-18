@@ -537,7 +537,10 @@ fn lex_internal_with_base(
             }
         };
 
-        tokens.push((token, Span::new((), (base_offset + start)..(base_offset + i))));
+        tokens.push((
+            token,
+            Span::new((), (base_offset + start)..(base_offset + i)),
+        ));
     }
 
     Ok(tokens)

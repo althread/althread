@@ -90,7 +90,7 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
                             .map(|d| d.to_string())
                             .collect::<Vec<_>>()
                             .join(","),
-                        used.1.line
+                        used.1.line()
                     ),
                 ));
             }
@@ -106,7 +106,8 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
                     Some(self.pos.clone()),
                     format!(
                         "Channel already attached to program '{}' with different types at line {}",
-                        left_prog, pos.line
+                        left_prog,
+                        pos.line()
                     ),
                 ));
             }
@@ -133,7 +134,7 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
                             .map(|d| d.to_string())
                             .collect::<Vec<_>>()
                             .join(","),
-                        used.1.line
+                        used.1.line()
                     ),
                 ));
             }
@@ -149,7 +150,8 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
                     Some(self.pos.clone()),
                     format!(
                         "Channel already attached to program '{}' with different types at line {}",
-                        right_prog, pos.line
+                        right_prog,
+                        pos.line()
                     ),
                 ));
             }

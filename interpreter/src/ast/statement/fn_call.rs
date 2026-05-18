@@ -110,12 +110,12 @@ impl InstructionBuilder for Node<FnCall> {
                 // check if the number of arguments is correct
                 if expected_arg_count != provided_arg_types.len() {
                     state.unstack_current_depth();
-                        return Err(AlthreadError::new(
-                            ErrorType::FunctionArgumentCountError,
-                            Some(callee_pos.clone()),
-                            format!(
-                                "Function '{}' expects {} arguments, but {} were provided.",
-                                basename,
+                    return Err(AlthreadError::new(
+                        ErrorType::FunctionArgumentCountError,
+                        Some(callee_pos.clone()),
+                        format!(
+                            "Function '{}' expects {} arguments, but {} were provided.",
+                            basename,
                             expected_arg_count,
                             provided_arg_types.len()
                         ),

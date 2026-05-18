@@ -164,7 +164,7 @@ impl<'a> StateGraph<'a> {
 fn collect_instruction_lines(instructions: &[Instruction]) -> Vec<usize> {
     let mut lines: Vec<usize> = instructions
         .iter()
-        .map(|instruction| instruction.pos.clone().unwrap_or_default().line)
+        .map(|instruction| instruction.pos.clone().unwrap_or_default().line())
         .filter(|line| *line > 0)
         .collect();
     lines.sort();
@@ -254,7 +254,7 @@ pub fn check_program<'a>(
 
             if state_graph.nodes[back_node].predecessor.is_none() {
                 let lines = if let Some(pos) = &e.pos {
-                    vec![pos.line]
+                    vec![pos.line()]
                 } else {
                     vec![]
                 };
@@ -699,7 +699,7 @@ fn check_program_with_ltl<'a>(
             if violation_path.is_empty() {
                 // Initial state violation
                 let lines = if let Some(pos) = &e.pos {
-                    vec![pos.line]
+                    vec![pos.line()]
                 } else {
                     vec![]
                 };

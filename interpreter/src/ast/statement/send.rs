@@ -78,7 +78,7 @@ impl InstructionBuilder for Node<SendStatement> {
                             format!(
                                 "Channel {}, bound at line {}, expects {} values, but {} were given",
                                 ch_name,
-                                pos.line,
+                                pos.line(),
                                 ch_types.len(),
                                 tuple.values.len()
                             ),
@@ -91,7 +91,7 @@ impl InstructionBuilder for Node<SendStatement> {
                             Some(self.pos.clone()),
                             format!(
                                 "Channel {}, bound at line {}, expects values of types {}, but {} were given",
-                                ch_name, pos.line, channel_types, rdatatype
+                                ch_name, pos.line(), channel_types, rdatatype
                             ),
                         ));
                     }
@@ -133,7 +133,7 @@ impl InstructionBuilder for Node<SendStatement> {
                         format!(
                             "Channel {}, bound at line {}, expects {} values, but {} were given",
                             self.value.channel,
-                            pos.line,
+                            pos.line(),
                             channel_types.len(),
                             tuple.values.len()
                         ),
@@ -146,7 +146,7 @@ impl InstructionBuilder for Node<SendStatement> {
                     return Err(AlthreadError::new(
                     ErrorType::TypeError,
                     Some(self.pos.clone()),
-                    format!("Channel {}, bound at line {}, expects values of types {}, but {} were given", self.value.channel, pos.line, channel_types, rdatatype)
+                    format!("Channel {}, bound at line {}, expects values of types {}, but {} were given", self.value.channel, pos.line(), channel_types, rdatatype)
                 ));
                 }
             }

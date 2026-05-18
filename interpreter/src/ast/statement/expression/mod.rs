@@ -3449,8 +3449,6 @@ mod tests {
 
     fn test_pos() -> Pos {
         Pos {
-            line: 0,
-            col: 0,
             start: 0,
             end: 0,
             file_path: "test".to_string(),
@@ -3498,8 +3496,6 @@ mod tests {
     fn test_literal_expression() {
         let litteral_node = Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3508,8 +3504,6 @@ mod tests {
         };
         let primary_node = Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3524,8 +3518,6 @@ mod tests {
     fn test_binary_expression() {
         let litteral_node = Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3534,8 +3526,6 @@ mod tests {
         };
         let primary_node = Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3547,8 +3537,6 @@ mod tests {
 
         let binary_node = Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3556,8 +3544,6 @@ mod tests {
             value: BinaryExpression {
                 left: Box::new(Node {
                     pos: Pos {
-                        line: 0,
-                        col: 0,
                         start: 0,
                         end: 0,
                         file_path: "test".to_string(),
@@ -3566,8 +3552,6 @@ mod tests {
                 }),
                 right: Box::new(Node {
                     pos: Pos {
-                        line: 0,
-                        col: 0,
                         start: 0,
                         end: 0,
                         file_path: "test".to_string(),
@@ -3576,8 +3560,6 @@ mod tests {
                 }),
                 operator: Node {
                     pos: Pos {
-                        line: 0,
-                        col: 0,
                         start: 0,
                         end: 0,
                         file_path: "test".to_string(),
@@ -3598,8 +3580,6 @@ mod tests {
     fn test_shift_left_expression() {
         let literal_node = Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3608,8 +3588,6 @@ mod tests {
         };
         let shift_node = Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3619,8 +3597,6 @@ mod tests {
 
         let left_expr = Expression::Primary(Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3630,8 +3606,6 @@ mod tests {
 
         let right_expr = Expression::Primary(Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3641,8 +3615,6 @@ mod tests {
 
         let expr = Expression::Binary(Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3650,8 +3622,6 @@ mod tests {
             value: BinaryExpression {
                 left: Box::new(Node {
                     pos: Pos {
-                        line: 0,
-                        col: 0,
                         start: 0,
                         end: 0,
                         file_path: "test".to_string(),
@@ -3660,8 +3630,6 @@ mod tests {
                 }),
                 right: Box::new(Node {
                     pos: Pos {
-                        line: 0,
-                        col: 0,
                         start: 0,
                         end: 0,
                         file_path: "test".to_string(),
@@ -3670,8 +3638,6 @@ mod tests {
                 }),
                 operator: Node {
                     pos: Pos {
-                        line: 0,
-                        col: 0,
                         start: 0,
                         end: 0,
                         file_path: "test".to_string(),
@@ -3689,8 +3655,6 @@ mod tests {
     fn test_shift_right_expression() {
         let literal_node = Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3699,8 +3663,6 @@ mod tests {
         };
         let shift_node = Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3710,8 +3672,6 @@ mod tests {
 
         let left_expr = Expression::Primary(Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3721,8 +3681,6 @@ mod tests {
 
         let right_expr = Expression::Primary(Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3732,8 +3690,6 @@ mod tests {
 
         let expr = Expression::Binary(Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3741,8 +3697,6 @@ mod tests {
             value: BinaryExpression {
                 left: Box::new(Node {
                     pos: Pos {
-                        line: 0,
-                        col: 0,
                         start: 0,
                         end: 0,
                         file_path: "test".to_string(),
@@ -3751,8 +3705,6 @@ mod tests {
                 }),
                 right: Box::new(Node {
                     pos: Pos {
-                        line: 0,
-                        col: 0,
                         start: 0,
                         end: 0,
                         file_path: "test".to_string(),
@@ -3761,8 +3713,6 @@ mod tests {
                 }),
                 operator: Node {
                     pos: Pos {
-                        line: 0,
-                        col: 0,
                         start: 0,
                         end: 0,
                         file_path: "test".to_string(),
@@ -3788,8 +3738,6 @@ mod tests {
     fn test_bitwise_and_expression() {
         let literal_node = Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3798,8 +3746,6 @@ mod tests {
         };
         let and_node = Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3809,8 +3755,6 @@ mod tests {
 
         let left_expr = Expression::Primary(Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3820,8 +3764,6 @@ mod tests {
 
         let right_expr = Expression::Primary(Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3831,8 +3773,6 @@ mod tests {
 
         let expr = Expression::Binary(Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3840,8 +3780,6 @@ mod tests {
             value: BinaryExpression {
                 left: Box::new(Node {
                     pos: Pos {
-                        line: 0,
-                        col: 0,
                         start: 0,
                         end: 0,
                         file_path: "test".to_string(),
@@ -3850,8 +3788,6 @@ mod tests {
                 }),
                 right: Box::new(Node {
                     pos: Pos {
-                        line: 0,
-                        col: 0,
                         start: 0,
                         end: 0,
                         file_path: "test".to_string(),
@@ -3860,8 +3796,6 @@ mod tests {
                 }),
                 operator: Node {
                     pos: Pos {
-                        line: 0,
-                        col: 0,
                         start: 0,
                         end: 0,
                         file_path: "test".to_string(),
@@ -3879,8 +3813,6 @@ mod tests {
     fn test_bitwise_or_expression() {
         let literal_node = Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3889,8 +3821,6 @@ mod tests {
         };
         let or_node = Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3899,8 +3829,6 @@ mod tests {
         };
         let left_expr = Expression::Primary(Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3909,8 +3837,6 @@ mod tests {
         });
         let right_expr = Expression::Primary(Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3920,8 +3846,6 @@ mod tests {
 
         let expression = Expression::Binary(Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3929,8 +3853,6 @@ mod tests {
             value: BinaryExpression {
                 left: Box::new(Node {
                     pos: Pos {
-                        line: 0,
-                        col: 0,
                         start: 0,
                         end: 0,
                         file_path: "test".to_string(),
@@ -3939,8 +3861,6 @@ mod tests {
                 }),
                 right: Box::new(Node {
                     pos: Pos {
-                        line: 0,
-                        col: 0,
                         start: 0,
                         end: 0,
                         file_path: "test".to_string(),
@@ -3949,8 +3869,6 @@ mod tests {
                 }),
                 operator: Node {
                     pos: Pos {
-                        line: 0,
-                        col: 0,
                         start: 0,
                         end: 0,
                         file_path: "test".to_string(),
@@ -3967,8 +3885,6 @@ mod tests {
     fn test_bitwise_operation_type_error() {
         let literal_node = Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3977,8 +3893,6 @@ mod tests {
         };
         let float_node = Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3988,8 +3902,6 @@ mod tests {
 
         let left_expr = Expression::Primary(Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -3999,8 +3911,6 @@ mod tests {
 
         let right_expr = Expression::Primary(Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -4010,8 +3920,6 @@ mod tests {
 
         let expr = Expression::Binary(Node {
             pos: Pos {
-                line: 0,
-                col: 0,
                 start: 0,
                 end: 0,
                 file_path: "test".to_string(),
@@ -4019,8 +3927,6 @@ mod tests {
             value: BinaryExpression {
                 left: Box::new(Node {
                     pos: Pos {
-                        line: 0,
-                        col: 0,
                         start: 0,
                         end: 0,
                         file_path: "test".to_string(),
@@ -4029,8 +3935,6 @@ mod tests {
                 }),
                 right: Box::new(Node {
                     pos: Pos {
-                        line: 0,
-                        col: 0,
                         start: 0,
                         end: 0,
                         file_path: "test".to_string(),
@@ -4039,8 +3943,6 @@ mod tests {
                 }),
                 operator: Node {
                     pos: Pos {
-                        line: 0,
-                        col: 0,
                         start: 0,
                         end: 0,
                         file_path: "test".to_string(),

@@ -258,7 +258,7 @@ impl<'a> VM<'a> {
                                 .pos
                                 .as_ref()
                                 .unwrap()
-                                .line,
+                                .line(),
                             dep
                         ))
                         .collect::<Vec<_>>()
@@ -753,7 +753,7 @@ impl<'a> Serialize for VM<'a> {
                     .get(&prog_state.name)
                     .and_then(|code| code.instructions.get(instruction_pointer))
                     .and_then(|inst| inst.pos.as_ref())
-                    .map(|pos| pos.line)
+                    .map(|pos| pos.line())
                     .unwrap_or(0);
 
                 SerializableRunningProgramStateForJs {

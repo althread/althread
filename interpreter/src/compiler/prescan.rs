@@ -57,7 +57,7 @@ impl Ast {
             Some(missing_return_pos.clone()), // Use the specific Pos found by the CFG analysis
             format!(
                 "Function '{}' does not return a value on all code paths. Problem detected in construct starting at line {}.",
-                func_name, missing_return_pos.line
+                func_name, missing_return_pos.line()
             ),
         ));
         }
@@ -233,7 +233,12 @@ impl Ast {
             let depth = state.current_stack_depth;
             state.current_stack_depth += 1;
 
-            for (identifier, datatype) in args.value.identifiers.iter().zip(args.value.datatypes.iter()) {
+            for (identifier, datatype) in args
+                .value
+                .identifiers
+                .iter()
+                .zip(args.value.datatypes.iter())
+            {
                 state.program_stack.push(Variable {
                     mutable: true,
                     name: identifier.value.value.clone(),
@@ -253,7 +258,12 @@ impl Ast {
             let depth = state.current_stack_depth;
             state.current_stack_depth += 1;
 
-            for (identifier, datatype) in args.value.identifiers.iter().zip(args.value.datatypes.iter()) {
+            for (identifier, datatype) in args
+                .value
+                .identifiers
+                .iter()
+                .zip(args.value.datatypes.iter())
+            {
                 state.program_stack.push(Variable {
                     mutable: true,
                     name: identifier.value.value.clone(),
@@ -364,11 +374,7 @@ impl Ast {
                     var_to_program,
                 )?;
                 if let Some(else_block) = &if_statement.value.else_block {
-                    self.scan_block_for_typed_processes(
-                        &else_block.value,
-                        state,
-                        var_to_program,
-                    )?;
+                    self.scan_block_for_typed_processes(&else_block.value, state, var_to_program)?;
                 }
             }
             Statement::Block(block) => {
@@ -379,16 +385,14 @@ impl Ast {
                 let depth = state.current_stack_depth;
                 state.current_stack_depth += 1;
 
-                let item_type = Self::prescan_expression_datatype(
-                    &for_statement.value.expression.value,
-                    state,
-                )
-                    .ok()
-                    .and_then(|dtype| match dtype {
-                        DataType::List(inner) => Some(*inner),
-                        _ => None,
-                    })
-                    .unwrap_or(DataType::Integer);
+                let item_type =
+                    Self::prescan_expression_datatype(&for_statement.value.expression.value, state)
+                        .ok()
+                        .and_then(|dtype| match dtype {
+                            DataType::List(inner) => Some(*inner),
+                            _ => None,
+                        })
+                        .unwrap_or(DataType::Integer);
 
                 state.program_stack.push(Variable {
                     mutable: true,
