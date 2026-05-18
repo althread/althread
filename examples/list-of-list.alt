@@ -1,12 +1,13 @@
+shared {
+  let N = 8;
+  let Global = 1..9;
+  let Global2 = [1..3, 1..7, Global];
+}
 
 main {
   let s: list(list(int));
-  for i in 0..10 {
-    let a : list(int);
-    for j in 0..i+1 {
-      a.push(j);
-    }
-    s.push(a);
+  for i in 0..Global2.at(2).at(6) {
+    s.push(1..i+1);
   }
 
   for i in s {
