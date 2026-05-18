@@ -311,22 +311,79 @@ fn lex_internal_with_base(
                 Token::StringLiteral(source[start..i].to_string())
             }
             b'0'..=b'9' => {
-                i += 1;
-                while i < bytes.len() && bytes[i].is_ascii_digit() {
-                    i += 1;
-                }
-                if i < bytes.len()
-                    && bytes[i] == b'.'
-                    && i + 1 < bytes.len()
-                    && bytes[i + 1].is_ascii_digit()
-                {
-                    i += 2;
+                if b == b'0' && i + 1 < bytes.len() {
+                    match bytes[i + 1] {
+                        b'x' | b'X' => {
+                            i += 2;
+                            let hex_start = i;
+                            while i < bytes.len() && bytes[i].is_ascii_hexdigit() {
+                                i += 1;
+                            }
+                            if i == hex_start {
+                                return Err(invalid_token_error(
+                                    source,
+                                    file_path,
+                                    local_error_base.unwrap_or(base_offset),
+                                    start,
+                                    i.min(bytes.len()),
+                                ));
+                            }
+                            Token::IntLiteral(source[start..i].to_string())
+                        }
+                        b'b' | b'B' => {
+                            i += 2;
+                            let bin_start = i;
+                            while i < bytes.len() && matches!(bytes[i], b'0' | b'1') {
+                                i += 1;
+                            }
+                            if i == bin_start {
+                                return Err(invalid_token_error(
+                                    source,
+                                    file_path,
+                                    local_error_base.unwrap_or(base_offset),
+                                    start,
+                                    i.min(bytes.len()),
+                                ));
+                            }
+                            Token::IntLiteral(source[start..i].to_string())
+                        }
+                        _ => {
+                            i += 1;
+                            while i < bytes.len() && bytes[i].is_ascii_digit() {
+                                i += 1;
+                            }
+                            if i < bytes.len()
+                                && bytes[i] == b'.'
+                                && i + 1 < bytes.len()
+                                && bytes[i + 1].is_ascii_digit()
+                            {
+                                i += 2;
+                                while i < bytes.len() && bytes[i].is_ascii_digit() {
+                                    i += 1;
+                                }
+                                Token::FloatLiteral(source[start..i].to_string())
+                            } else {
+                                Token::IntLiteral(source[start..i].to_string())
+                            }
+                        }
+                    }
+                } else {
                     while i < bytes.len() && bytes[i].is_ascii_digit() {
                         i += 1;
                     }
-                    Token::FloatLiteral(source[start..i].to_string())
-                } else {
-                    Token::IntLiteral(source[start..i].to_string())
+                    if i < bytes.len()
+                        && bytes[i] == b'.'
+                        && i + 1 < bytes.len()
+                        && bytes[i + 1].is_ascii_digit()
+                    {
+                        i += 2;
+                        while i < bytes.len() && bytes[i].is_ascii_digit() {
+                            i += 1;
+                        }
+                        Token::FloatLiteral(source[start..i].to_string())
+                    } else {
+                        Token::IntLiteral(source[start..i].to_string())
+                    }
                 }
             }
             b'a'..=b'z' | b'A'..=b'Z' | b'_' => {

@@ -6,6 +6,7 @@ use chumsky::{
     prelude::*,
 };
 use ordered_float::OrderedFloat;
+use std::{cell::RefCell, thread_local};
 
 use crate::{
     ast::statement::expression::list_expression::RangeListExpression,
@@ -57,6 +58,16 @@ use crate::{
 
 pub(crate) type ParserExtra<'a> = extra::Err<Rich<'a, Token, Span>>;
 
+#[derive(Clone, Debug)]
+struct ParserPosContext {
+    line_starts: Vec<usize>,
+    file_path: String,
+}
+
+thread_local! {
+    static PARSER_POS_CONTEXT: RefCell<Option<ParserPosContext>> = const { RefCell::new(None) };
+}
+
 #[derive(Debug)]
 enum TopLevelBlock {
     Import(Node<ImportBlock>),
@@ -83,15 +94,17 @@ enum TopLevelBlock {
 }
 
 pub fn parse_program(source: &str, file_path: &str) -> Result<Ast, AlthreadError> {
-    let tokens = lex(source, file_path)?;
-    let eoi = Span::new((), source.len()..source.len());
-    let parser = ast_parser(source, file_path);
-    let input = tokens.as_slice().map(eoi, |(token, span)| (token, span));
+    let blocks = with_parser_pos_context(source, file_path, || {
+        let tokens = lex(source, file_path)?;
+        let eoi = Span::new((), source.len()..source.len());
+        let parser = ast_parser(source, file_path);
+        let input = tokens.as_slice().map(eoi, |(token, span)| (token, span));
 
-    let blocks = parser
-        .parse(input)
-        .into_result()
-        .map_err(|errs| map_rich_errors(source, file_path, errs))?;
+        parser
+            .parse(input)
+            .into_result()
+            .map_err(|errs| map_rich_errors(source, file_path, errs))
+    })?;
 
     let mut ast = Ast::new();
     for block in blocks {
@@ -148,14 +161,16 @@ pub fn parse_datatype(
     snippet: &SyntaxSnippet,
     file_path: &str,
 ) -> Result<Node<DataType>, AlthreadError> {
-    let tokens = lex_snippet(snippet, file_path)?;
-    let eoi = Span::new((), snippet.pos.end..snippet.pos.end);
-    let parser = datatype_parser();
-    let input = tokens.as_slice().map(eoi, |(token, span)| (token, span));
-    parser
-        .parse(input)
-        .into_result()
-        .map_err(|errs| map_rich_errors(source, file_path, errs))
+    with_parser_pos_context(source, file_path, || {
+        let tokens = lex_snippet(snippet, file_path)?;
+        let eoi = Span::new((), snippet.pos.end..snippet.pos.end);
+        let parser = datatype_parser();
+        let input = tokens.as_slice().map(eoi, |(token, span)| (token, span));
+        parser
+            .parse(input)
+            .into_result()
+            .map_err(|errs| map_rich_errors(source, file_path, errs))
+    })
 }
 
 pub fn parse_object_identifier(
@@ -163,14 +178,16 @@ pub fn parse_object_identifier(
     snippet: &SyntaxSnippet,
     file_path: &str,
 ) -> Result<Node<ObjectIdentifier>, AlthreadError> {
-    let tokens = lex_snippet(snippet, file_path)?;
-    let eoi = Span::new((), snippet.pos.end..snippet.pos.end);
-    let parser = object_identifier_parser();
-    let input = tokens.as_slice().map(eoi, |(token, span)| (token, span));
-    parser
-        .parse(input)
-        .into_result()
-        .map_err(|errs| map_rich_errors(source, file_path, errs))
+    with_parser_pos_context(source, file_path, || {
+        let tokens = lex_snippet(snippet, file_path)?;
+        let eoi = Span::new((), snippet.pos.end..snippet.pos.end);
+        let parser = object_identifier_parser();
+        let input = tokens.as_slice().map(eoi, |(token, span)| (token, span));
+        parser
+            .parse(input)
+            .into_result()
+            .map_err(|errs| map_rich_errors(source, file_path, errs))
+    })
 }
 
 pub fn parse_expression(
@@ -178,14 +195,16 @@ pub fn parse_expression(
     snippet: &SyntaxSnippet,
     file_path: &str,
 ) -> Result<Node<Expression>, AlthreadError> {
-    let tokens = lex_snippet(snippet, file_path)?;
-    let eoi = Span::new((), snippet.pos.end..snippet.pos.end);
-    let parser = expression_parser();
-    let input = tokens.as_slice().map(eoi, |(token, span)| (token, span));
-    parser
-        .parse(input)
-        .into_result()
-        .map_err(|errs| map_rich_errors(source, file_path, errs))
+    with_parser_pos_context(source, file_path, || {
+        let tokens = lex_snippet(snippet, file_path)?;
+        let eoi = Span::new((), snippet.pos.end..snippet.pos.end);
+        let parser = expression_parser();
+        let input = tokens.as_slice().map(eoi, |(token, span)| (token, span));
+        parser
+            .parse(input)
+            .into_result()
+            .map_err(|errs| map_rich_errors(source, file_path, errs))
+    })
 }
 
 pub fn parse_list_expression(
@@ -201,14 +220,17 @@ pub(crate) fn parse_ltl_expression_with_chumsky(
     snippet: &SyntaxSnippet,
     filepath: &str,
 ) -> Result<LtlExpression, AlthreadError> {
-    let tokens = lex_snippet(snippet, filepath)?;
-    let eoi = Span::new((), snippet.pos.end..snippet.pos.end);
-    let input = tokens.as_slice().map(eoi, |(token, span)| (token, span));
-    let result = ltl_expression_parser()
-        .parse(input)
-        .into_result()
-        .map_err(|errs| map_ltl_errors(source, filepath, errs));
-    result
+    with_parser_pos_context(source, filepath, || {
+        let tokens = lex_snippet(snippet, filepath)?;
+        let eoi = Span::new((), snippet.pos.end..snippet.pos.end);
+        let input = tokens.as_slice().map(eoi, |(token, span)| (token, span));
+        let result = ltl_expression_parser()
+            .parse(input)
+            .into_result()
+            .map_err(|errs| map_ltl_errors(source, filepath, errs))
+        ;
+        result
+    })
 }
 
 fn ast_parser<'tokens, 'src: 'tokens, I>(
@@ -948,11 +970,27 @@ fn literal_parser<'tokens, I>(
 where
     I: ValueInput<'tokens, Token = Token, Span = Span>,
 {
+    fn parse_int_literal(value: &str) -> i64 {
+        if let Some(hex) = value
+            .strip_prefix("0x")
+            .or_else(|| value.strip_prefix("0X"))
+        {
+            i64::from_str_radix(hex, 16).expect("valid hex int literal")
+        } else if let Some(bin) = value
+            .strip_prefix("0b")
+            .or_else(|| value.strip_prefix("0B"))
+        {
+            i64::from_str_radix(bin, 2).expect("valid binary int literal")
+        } else {
+            value.parse::<i64>().expect("valid int literal")
+        }
+    }
+
     select! {
         Token::True => Literal::Bool(true),
         Token::False => Literal::Bool(false),
         Token::Null => Literal::Null,
-        Token::IntLiteral(value) => Literal::Int(value.parse::<i64>().expect("valid int literal")),
+        Token::IntLiteral(value) => Literal::Int(parse_int_literal(&value)),
         Token::FloatLiteral(value) => Literal::Float(OrderedFloat(value.parse::<f64>().expect("valid float literal"))),
         Token::StringLiteral(value) => Literal::String(unquote_string(&value)),
     }
@@ -1929,6 +1967,34 @@ fn unquote_string(value: &str) -> String {
         .to_string()
 }
 
+fn with_parser_pos_context<T>(
+    source: &str,
+    file_path: &str,
+    f: impl FnOnce() -> Result<T, AlthreadError>,
+) -> Result<T, AlthreadError> {
+    let mut line_starts = vec![0usize];
+    for (idx, ch) in source.char_indices() {
+        if ch == '\n' {
+            line_starts.push(idx + 1);
+        }
+    }
+
+    let previous = PARSER_POS_CONTEXT.with(|ctx| {
+        ctx.replace(Some(ParserPosContext {
+            line_starts,
+            file_path: file_path.to_string(),
+        }))
+    });
+
+    let result = f();
+
+    PARSER_POS_CONTEXT.with(|ctx| {
+        let _ = ctx.replace(previous);
+    });
+
+    result
+}
+
 fn tuple_expression_node(values: Vec<Node<Expression>>, span: Span) -> Node<Expression> {
     Node {
         pos: pos_from_span_source(span),
@@ -1982,13 +2048,30 @@ fn binary_expression_node(
 }
 
 fn pos_from_span_source(span: Span) -> Pos {
-    Pos {
-        line: 0,
-        col: 0,
-        start: span.start,
-        end: span.end,
-        file_path: String::new(),
-    }
+    PARSER_POS_CONTEXT.with(|ctx| {
+        if let Some(ctx) = ctx.borrow().as_ref() {
+            let line_idx = ctx
+                .line_starts
+                .partition_point(|&line_start| line_start <= span.start)
+                .saturating_sub(1);
+            let line_start = ctx.line_starts.get(line_idx).copied().unwrap_or(0);
+            Pos {
+                line: line_idx + 1,
+                col: span.start.saturating_sub(line_start) + 1,
+                start: span.start,
+                end: span.end,
+                file_path: ctx.file_path.clone(),
+            }
+        } else {
+            Pos {
+                line: 0,
+                col: 0,
+                start: span.start,
+                end: span.end,
+                file_path: String::new(),
+            }
+        }
+    })
 }
 
 fn pos_from_span(source: &str, file_path: &str, span: Span) -> Pos {

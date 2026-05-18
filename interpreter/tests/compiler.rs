@@ -372,18 +372,25 @@ main {
     assert!(instructions.iter().any(|instruction| {
         matches!(
             &instruction.control,
+            InstructionType::MethodCall { name, .. } if name == "at"
+        )
+    }));
+
+    assert!(instructions.iter().any(|instruction| {
+        matches!(
+            &instruction.control,
             InstructionType::ExpressionAndCleanup {
                 expression: LocalExpressionNode::Binary(LocalBinaryExpressionNode {
                     left,
                     operator: BinaryOperator::Or,
                     right,
                 }),
-                unstack_len: 1,
+                unstack_len: 2,
             }
             if matches!(
                 left.as_ref(),
                 LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(LocalVarNode {
-                    index: 0,
+                    index: 1,
                 }))
             ) && matches!(
                 right.as_ref(),
@@ -395,7 +402,7 @@ main {
                 if matches!(
                     left.as_ref(),
                     LocalExpressionNode::Primary(LocalPrimaryExpressionNode::Var(LocalVarNode {
-                        index: 1,
+                        index: 0,
                     }))
                 ) && matches!(
                     right.as_ref(),
@@ -959,7 +966,7 @@ main {
                 line: 4,
                 col: 11,
                 start: 33,
-                end: 39,
+                end: 38,
                 file_path: "".to_string(),
             }),
             control: InstructionType::Expression(LocalExpressionNode::Binary(
@@ -981,7 +988,7 @@ main {
                 line: 4,
                 col: 11,
                 start: 33,
-                end: 39,
+                end: 38,
                 file_path: "".to_string(),
             }),
             control: InstructionType::JumpIf {
@@ -1016,7 +1023,7 @@ main {
                 line: 5,
                 col: 9,
                 start: 49,
-                end: 51,
+                end: 50,
                 file_path: "".to_string(),
             }),
             control: InstructionType::LocalAssignment {
@@ -1030,7 +1037,7 @@ main {
                 line: 6,
                 col: 12,
                 start: 71,
-                end: 78,
+                end: 77,
                 file_path: "".to_string(),
             }),
             control: InstructionType::Expression(LocalExpressionNode::Binary(
@@ -1052,7 +1059,7 @@ main {
                 line: 6,
                 col: 12,
                 start: 71,
-                end: 78,
+                end: 77,
                 file_path: "".to_string(),
             }),
             control: InstructionType::JumpIf {
