@@ -244,7 +244,6 @@ where
         main_block_parser(source, file_path).boxed(),
         always_block_parser(source, file_path).boxed(),
         check_block_parser(source, file_path).boxed(),
-        unsupported_block_parser(Token::Never, "never").boxed(),
         program_block_parser(source, file_path).boxed(),
         function_block_parser(source, file_path).boxed(),
     ))
@@ -431,9 +430,7 @@ fn import_path_parser<'tokens, I>(
 where
     I: ValueInput<'tokens, Token = Token, Span = Span>,
 {
-    select! {
-        Token::Ident(name) => name,
-    }
+    identifier_parser().map_with(|node, _e| node.value.value)
     .separated_by(just(Token::Slash))
     .at_least(1)
     .collect::<Vec<_>>()
@@ -936,27 +933,13 @@ where
 {
     select! {
         Token::Ident(name) => name,
+        // other keywords that can be used as identifiers
         Token::Dollar => "$".to_string(),
         Token::First => "first".to_string(),
         Token::Seq => "seq".to_string(),
+        
     }
-    .map_with(|name, e| Node {
-        pos: pos_from_span_source(e.span()),
-        value: Identifier { value: name },
-    })
-}
-
-fn member_name_parser<'tokens, I>(
-) -> impl Parser<'tokens, I, Node<Identifier>, ParserExtra<'tokens>> + Clone
-where
-    I: ValueInput<'tokens, Token = Token, Span = Span>,
-{
-    select! {
-        Token::Ident(name) => name,
-        Token::Next => "next".to_string(),
-        Token::First => "first".to_string(),
-        Token::Seq => "seq".to_string(),
-    }
+    .labelled("identifier")
     .map_with(|name, e| Node {
         pos: pos_from_span_source(e.span()),
         value: Identifier { value: name },
@@ -992,6 +975,7 @@ where
         Token::FloatLiteral(value) => Literal::Float(OrderedFloat(value.parse::<f64>().expect("valid float literal"))),
         Token::StringLiteral(value) => Literal::String(unquote_string(&value)),
     }
+    .labelled("literal")
     .map_with(|value, e| Node {
         pos: pos_from_span_source(e.span()),
         value,
@@ -1159,13 +1143,14 @@ where
                 )
                 .map(|label| CallChainSegment::Reaches { label }),
             select! { Token::IntLiteral(index) => index }
+                .labelled("int literal for tuple index")
                 .try_map(|index, span| {
                     index.parse::<usize>().map_err(|_| {
                         Rich::custom(span, format!("tuple index '{}' is too large", index))
                     })
                 })
                 .map(|index| CallChainSegment::TupleIndex { index }),
-            member_name_parser()
+                identifier_parser()
                 .then(args_tuple.clone().or_not())
                 .map(|(name, args)| match args {
                     Some(args) => CallChainSegment::Call { name, args },
@@ -1374,13 +1359,14 @@ where
                 )
                 .map(|label| CallChainSegment::Reaches { label }),
             select! { Token::IntLiteral(index) => index }
+                .labelled("int literal for tuple index")
                 .try_map(|index, span| {
                     index.parse::<usize>().map_err(|_| {
                         Rich::custom(span, format!("tuple index '{}' is too large", index))
                     })
                 })
                 .map(|index| CallChainSegment::TupleIndex { index }),
-            member_name_parser()
+            identifier_parser()
                 .then(args_tuple.clone().or_not())
                 .map(|(name, args)| match args {
                     Some(args) => CallChainSegment::Call { name, args },
@@ -1540,12 +1526,12 @@ where
             });
 
         let for_formula = just(Token::For)
-            .ignore_then(select! { Token::Ident(name) => name })
+            .ignore_then(identifier_parser())
             .then_ignore(just(Token::In))
             .then(predicate_expr.clone())
             .then(ltl_block.clone())
             .map(|((var_name, list), body)| LtlExpression::ForLoop {
-                var_name,
+                var_name: var_name.value.value,
                 list,
                 body: Box::new(body),
             });
@@ -1558,9 +1544,6 @@ where
             }),
             prefix(4, just(Token::Eventually), |_, rhs, _| {
                 LtlExpression::Eventually(Box::new(rhs))
-            }),
-            prefix(4, just(Token::Next), |_, rhs, _| {
-                LtlExpression::Next(Box::new(rhs))
             }),
             prefix(4, just(Token::Bang), |_, rhs, _| {
                 LtlExpression::Not(Box::new(rhs))
@@ -1826,7 +1809,7 @@ where
     I: ValueInput<'tokens, Token = Token, Span = Span>,
 {
     let channel_name = choice((
-        select! { Token::Ident(name) => name },
+        identifier_parser().map_with(|ident, e| ident.value.value),
         just(Token::In).to("in".to_string()),
     ));
 
@@ -1936,23 +1919,6 @@ fn apply_atomic_prefix(statement: Node<Statement>, pos: Pos) -> Node<Statement> 
             },
         }),
     }
-}
-
-fn unsupported_block_parser<'tokens, I>(
-    token: Token,
-    block_name: &'static str,
-) -> impl Parser<'tokens, I, TopLevelBlock, ParserExtra<'tokens>> + Clone
-where
-    I: ValueInput<'tokens, Token = Token, Span = Span>,
-{
-    just(token)
-        .map_with(move |_, e| e.span())
-        .try_map(move |span, _| {
-            Err(Rich::custom(
-                span,
-                format!("{block_name} blocks are not implemented yet"),
-            ))
-        })
 }
 
 fn unquote_string(value: &str) -> String {
@@ -2174,7 +2140,31 @@ fn format_pattern(pattern: &RichPattern<'_, Token>) -> String {
 
 fn format_found_token(found: Option<&Token>) -> String {
     match found {
-        Some(token) => format!("'{}'", token),
+        Some(token) => match token {
+            Token::StringLiteral(value) => format!("\"{value}\""),
+            Token::First |
+            Token::Seq |
+            Token::Await |
+            Token::Atomic |
+            Token::Receive |
+            Token::Send |
+            Token::In |
+            Token::If |
+            Token::Else |
+            Token::For |
+            Token::Always |
+            Token::Eventually |
+            Token::Until => format!("keyword '{}'", token),
+            Token::Proc |
+            Token::List |
+            Token::Tuple |
+            Token::BoolType |
+            Token::IntType |
+            Token::FloatType |
+            Token::StringType |
+            Token::VoidType => format!("datatype '{}'", token),
+            _ => format!("'{}'", token),
+        },
         None => "end of input".to_string(),
     }
 }
