@@ -1,189 +1,465 @@
-use std::fmt;
+use std::fmt::{self, Debug};
 
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
         node::{InstructionBuilder, Node},
         token::{
-            datatype::DataType, declaration_keyword::DeclarationKeyword,
-            object_identifier::ObjectIdentifier,
-        },
+            datatype::DataType, declaration_keyword::DeclarationKeyword, identifier::Identifier, null_identifier::NullIdentifier, tuple_identifier::{Lvalue, TupleIdentifier}
+        }
     },
     compiler::{CompilerState, InstructionBuilderOk, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
     vm::instruction::{Instruction, InstructionType},
 };
-
 use super::expression::Expression;
 
 #[derive(Debug, Clone)]
 pub struct Declaration {
     pub keyword: Node<DeclarationKeyword>,
-    pub identifier: Node<ObjectIdentifier>,
+    pub identifier: Lvalue,
     pub datatype: Option<Node<DataType>>,
     pub value: Option<Node<Expression>>,
 }
 
+fn compile_templateidentifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<TupleIdentifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect : bool) ->
+    AlthreadResult<InstructionBuilderOk>
+{
+
+    if !side_effect
+    {
+        let r : Option<DataType> = std::option::Option::Some(datatype.clone());
+        builder.instructions.push(Instruction {
+            control: InstructionType::Push(r.as_ref().unwrap().default()),
+            pos: Some(declaration.keyword.pos.clone()),
+        });
+    }
+    state.program_stack.push(Variable {
+    mutable: false,
+    name: "_".to_string(),
+    datatype: datatype.clone(),
+    depth: state.current_stack_depth,
+    declare_pos: Some(node.pos.clone()),
+    });
+
+    builder.debug_variables.push(crate::compiler::LocalVariableDebugInfo {
+        name: "_".to_string(),
+        datatype,
+        stack_index,
+        scope_start_ip,
+        scope_end_ip: None,
+        declare_pos: Some(node.pos.clone()),
+    });
+    
+    
+    Ok((*builder).clone())
+}
+
+fn compile_nullidentifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<NullIdentifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect : bool) ->
+    AlthreadResult<InstructionBuilderOk>
+{
+
+    if !side_effect
+    {
+        let r : Option<DataType> = std::option::Option::Some(datatype.clone());
+        builder.instructions.push(Instruction {
+            control: InstructionType::Push(r.as_ref().unwrap().default()),
+            pos: Some(declaration.keyword.pos.clone()),
+        });
+    }
+    state.program_stack.push(Variable {
+    mutable: false,
+    name: "_".to_string(),
+    datatype: datatype.clone(),
+    depth: state.current_stack_depth,
+    declare_pos: Some(node.pos.clone()),
+    });
+    builder.debug_variables.push(crate::compiler::LocalVariableDebugInfo {
+        name: "_".to_string(),
+        datatype,
+        stack_index,
+        scope_start_ip,
+        scope_end_ip: None,
+        declare_pos: Some(node.pos.clone()),
+    });
+    Ok((*builder).clone())
+}
+
+
+
+fn compile_identifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<Identifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect : bool) ->
+    AlthreadResult<InstructionBuilderOk>
+{
+    let var_name = &node.value.value;
+
+    if state.global_table().contains_key(var_name) {
+        return Err(AlthreadError::new(
+            ErrorType::VariableError,
+            Some(node.pos.clone()),
+            format!("Variable {} already declared", var_name),
+        ));
+    }
+
+    // Check if the variable starts with a capital letter (reserved for shared variables)
+    if var_name.chars().next().unwrap().is_uppercase() {
+        if !state.is_shared {
+            return Err(AlthreadError::new(
+                ErrorType::VariableError,
+                Some(node.pos.clone()),
+                format!("Variable {} starts with a capital letter, which is reserved for shared variables", var_name)
+            ));
+        }
+    } else {
+        if state.is_shared && !state.in_function {
+            return Err(AlthreadError::new(
+                ErrorType::VariableError,
+                Some(node.pos.clone()),
+                format!("Variable {} does not start with a capital letter, which is mandatory for shared variables", var_name)
+            ));
+        }
+    }
+
+    if !side_effect
+    {
+        let r : Option<DataType> = std::option::Option::Some(datatype.clone());
+        builder.instructions.push(Instruction {
+            control: InstructionType::Push(r.as_ref().unwrap().default()),
+            pos: Some(declaration.keyword.pos.clone()),
+        });
+    }
+    
+    state.program_stack.push(Variable {
+        mutable: declaration.keyword.value == DeclarationKeyword::Let,
+        name: node.value.value.clone(), // Use the simple variable name, not the full qualified name
+        datatype: datatype.clone(),
+        depth: state.current_stack_depth,  
+        declare_pos: Some(node.pos.clone()),
+    });
+    builder.debug_variables.push(crate::compiler::LocalVariableDebugInfo {
+        name: var_name.clone(),
+        datatype,
+        stack_index,
+        scope_start_ip,
+        scope_end_ip: None,
+        declare_pos: Some(node.pos.clone()),
+    });
+    Ok((*builder).clone())
+}
+
+
+
+fn compile_tupleidentifier(declaration : &Declaration , state: &mut CompilerState, node : &Node<TupleIdentifier>, builder : &mut InstructionBuilderOk, datatype : DataType ,stack_index : usize,scope_start_ip : usize,side_effect_expression : bool, position : usize,first_tuple_compile : bool) ->
+    AlthreadResult<InstructionBuilderOk>
+{ 
+    let vec_value = node.value.value.clone();
+    if vec_value.len() < 2
+    {
+        return Err(AlthreadError::new(
+            ErrorType::VariableError,
+            Some(node.pos.clone()),
+            format!("A declaration with a tuple cannot contains only one element")
+        ));
+    }
+    match datatype {
+        DataType::Tuple(tuple_datatype) => {
+            if tuple_datatype.len() != vec_value.len()
+            {
+                return Err(AlthreadError::new(
+                    ErrorType::VariableError,
+                    Some(node.pos.clone()),
+                    format!("Tuple not well defined : the number of element declared ({}) is not the same than the number of element assigned {}",tuple_datatype.len(),vec_value.len())
+                ));
+            }
+            let mut vec_value_iter = vec_value.iter().enumerate();
+
+            let mut vec_tuple_indent :Vec<(Node<TupleIdentifier>,usize,DataType)> = vec![];
+
+            while let Some((i,elt)) = vec_value_iter.next()
+            {
+                
+                let value : Lvalue = (*(*elt).clone()).into();
+                let r: Result<InstructionBuilderOk, AlthreadError>;
+                match value {
+                    Lvalue::Identifier(node) => {
+                        r = compile_identifier(&declaration, state, &node,builder,tuple_datatype[i].clone(),stack_index,scope_start_ip,side_effect_expression);
+                    },
+                    Lvalue::TupleIdentifier(node) => {
+                        let index : usize;
+                        if first_tuple_compile {
+                            index = state.program_stack.len();
+                        }
+                        else {
+                            index = state.program_stack.len()-1;
+                        }
+                        vec_tuple_indent.push((node.clone(),index,tuple_datatype[i].clone()));
+
+                        if side_effect_expression
+                        {
+                            r = compile_templateidentifier(&declaration, state, &node,builder,tuple_datatype[i].clone(),stack_index,scope_start_ip,side_effect_expression);
+                        }
+                        else {
+                            r= Ok((*builder).clone());
+                        }
+                        
+                    },
+                    Lvalue::NullIdentifier(node) =>{
+                        r = compile_nullidentifier(&declaration, state, &node,builder,tuple_datatype[i].clone(),stack_index,scope_start_ip,side_effect_expression);
+                    },
+                }
+                if r.is_err() {return r;}
+            }
+            if side_effect_expression
+            {
+                let pose = state.program_stack.len() -1 - vec_value.len() - position;
+                builder.instructions.push(
+                Instruction {
+                control: InstructionType::Destruct(pose),
+                pos: Some(node.pos.clone()),}
+                );
+                if !first_tuple_compile
+                {
+                    state.program_stack.remove(position);
+                }
+            }
+            if !vec_tuple_indent.is_empty(){
+                let vecsize = vec_tuple_indent.len()-1;
+
+                for i in 0..vec_tuple_indent.len(){
+                    let (node_iter,index_iter,dtype_iter) = vec_tuple_indent[vecsize-i].clone();
+                    let r = compile_tupleidentifier(&declaration, state, &node_iter,builder,dtype_iter,stack_index,scope_start_ip,side_effect_expression,index_iter,false);
+                    if r.is_err() {return r;} 
+                };
+            }
+        }
+        _=> {
+            return Err(AlthreadError::new(
+                ErrorType::VariableError,
+                Some(node.pos.clone()),
+                format!("Cannot have a tuple that try to divide a single element in {} ",vec_value.len()),
+            ));
+        }
+    }
+    Ok((*builder).clone())
+}
+
 impl InstructionBuilder for Declaration {
+
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         let mut builder = InstructionBuilderOk::new();
-        let mut datatype = None;
+        match &self.identifier {
+            Lvalue::Identifier(node) => {
+                let mut datatype = None;
+                let full_var_name = &node.value.value;
+                // Get the simple variable name (first and only part)
+                let var_name = &node.value.value;
 
-        let full_var_name = self
-            .identifier
-            .value
-            .parts
-            .iter()
-            .map(|p| p.value.value.as_str())
-            .collect::<Vec<_>>()
-            .join(".");
-
-        // For declarations, we should only allow simple identifiers (single part)
-        // Qualified identifiers like "fibo.N" should not be declared, only assigned to
-        if self.identifier.value.parts.len() > 1 {
-            return Err(AlthreadError::new(
-                ErrorType::VariableError,
-                Some(self.identifier.pos.clone()),
-                format!("Cannot declare qualified variable '{}'. Use simple identifiers for declarations.", full_var_name),
-            ));
-        }
-
-        // Get the simple variable name (first and only part)
-        let var_name = &self.identifier.value.parts[0].value.value;
-
-        if state.global_table().contains_key(&full_var_name) {
-            return Err(AlthreadError::new(
-                ErrorType::VariableError,
-                Some(self.identifier.pos.clone()),
-                format!("Variable {} already declared", full_var_name),
-            ));
-        }
-
-        // Check if the variable starts with a capital letter (reserved for shared variables)
-        if var_name.chars().next().unwrap().is_uppercase() {
-            if !state.is_shared {
-                return Err(AlthreadError::new(
-                    ErrorType::VariableError,
-                    Some(self.identifier.pos.clone()),
-                    format!("Variable {} starts with a capital letter, which is reserved for shared variables", var_name)
-                ));
-            }
-        } else {
-            if state.is_shared && !state.in_function {
-                return Err(AlthreadError::new(
-                    ErrorType::VariableError,
-                    Some(self.identifier.pos.clone()),
-                    format!("Variable {} does not start with a capital letter, which is mandatory for shared variables", var_name)
-                ));
-            }
-        }
-
-        if let Some(d) = &self.datatype {
-            datatype = Some(d.value.clone());
-        }
-
-        if let Some(value) = &self.value {
-            state.current_stack_depth += 1;
-            builder.extend(value.compile(state)?);
-            let computed_datatype = state
-                .program_stack
-                .last()
-                .expect("Error: Program stack is empty after compiling an expression")
-                .datatype
-                .clone();
-            let unstack_len = state.unstack_current_depth();
-
-            if let Some(declared_datatype) = datatype {
-                // Special case: allow assignment of empty list (list(void)) to typed list
-                let types_compatible =
-                    if let (DataType::List(declared_elem), DataType::List(computed_elem)) =
-                        (&declared_datatype, &computed_datatype)
-                    {
-                        // Allow list(void) to be assigned to list(T) for any T (empty list case)
-                        **computed_elem == DataType::Void || declared_elem == computed_elem
-                    } else {
-                        declared_datatype == computed_datatype
-                    };
-
-                if !types_compatible {
+                if state.global_table().contains_key(full_var_name) {
                     return Err(AlthreadError::new(
-                        ErrorType::TypeError,
-                        Some(self.datatype.as_ref().unwrap().pos.clone()),
-                        format!(
-                            "Declared type and assignment do not match (found :{} = {})",
-                            declared_datatype, computed_datatype
-                        ),
+                        ErrorType::VariableError,
+                        Some(node.pos.clone()),
+                        format!("Variable {} already declared", full_var_name),
                     ));
                 }
 
-                // For empty list assignment, add conversion instruction
-                if let (DataType::List(declared_elem), DataType::List(computed_elem)) =
-                    (&declared_datatype, &computed_datatype)
-                {
-                    if **computed_elem == DataType::Void {
-                        // Add instruction to convert empty list to declared type
-                        builder.instructions.push(Instruction {
-                            control: InstructionType::ConvertEmptyListType {
-                                to_element_type: (**declared_elem).clone(),
-                            },
-                            pos: Some(self.keyword.pos.clone()),
-                        });
-                        // Use declared type for the variable
-                        datatype = Some(declared_datatype);
+                // Check if the variable starts with a capital letter (reserved for shared variables)
+                if var_name.chars().next().unwrap().is_uppercase() {
+                    if !state.is_shared {
+                        return Err(AlthreadError::new(
+                            ErrorType::VariableError,
+                            Some(node.pos.clone()),
+                            format!("Variable {} starts with a capital letter, which is reserved for shared variables", var_name)
+                        ));
+                    }
+                } else {
+                    if state.is_shared && !state.in_function {
+                        return Err(AlthreadError::new(
+                            ErrorType::VariableError,
+                            Some(node.pos.clone()),
+                            format!("Variable {} does not start with a capital letter, which is mandatory for shared variables", var_name)
+                        ));
+                    }
+                }
+
+                if let Some(d) = &self.datatype {
+                    datatype = Some(d.value.clone());
+                }
+
+                if let Some(value) = &self.value {
+                    state.current_stack_depth += 1;
+                    builder.extend(value.compile(state)?);
+                    let computed_datatype = state
+                        .program_stack
+                        .last()
+                        .expect("Error: Program stack is empty after compiling an expression")
+                        .datatype
+                        .clone();
+                    let unstack_len = state.unstack_current_depth();
+
+                    if let Some(declared_datatype) = datatype {
+                        // Special case: allow assignment of empty list (list(void)) to typed list
+                        let types_compatible =
+                            if let (DataType::List(declared_elem), DataType::List(computed_elem)) =
+                                (&declared_datatype, &computed_datatype)
+                            {
+                                // Allow list(void) to be assigned to list(T) for any T (empty list case)
+                                **computed_elem == DataType::Void || declared_elem == computed_elem
+                            } else {
+                                declared_datatype == computed_datatype
+                            };
+                        if !types_compatible {
+                            return Err(AlthreadError::new(
+                                ErrorType::TypeError,
+                                Some(self.datatype.as_ref().unwrap().pos.clone()),
+                                format!(
+                                    "Declared type and assignment do not match (found :{} = {})",
+                                    declared_datatype, computed_datatype
+                                ),
+                            ));
+                        }
+
+                        // For empty list assignment, add conversion instruction
+                        if let (DataType::List(declared_elem), DataType::List(computed_elem)) =
+                            (&declared_datatype, &computed_datatype)
+                        {
+                            if **computed_elem == DataType::Void {
+                                // Add instruction to convert empty list to declared type
+                                builder.instructions.push(Instruction {
+                                    control: InstructionType::ConvertEmptyListType {
+                                        to_element_type: (**declared_elem).clone(),
+                                    },
+                                    pos: Some(self.keyword.pos.clone()),
+                                });
+                                // Use declared type for the variable
+                                datatype = Some(declared_datatype);
+                            } else {
+                                datatype = Some(computed_datatype);
+                            }
+                        } else {
+                            datatype = Some(computed_datatype);
+                        }
                     } else {
                         datatype = Some(computed_datatype);
                     }
-                } else {
-                    datatype = Some(computed_datatype);
-                }
-            } else {
-                datatype = Some(computed_datatype);
-            }
 
-            builder.instructions.push(Instruction {
-                control: InstructionType::Declaration { unstack_len },
-                pos: Some(self.keyword.pos.clone()),
-            });
-        } else {
-            if datatype.is_none() {
+                    builder.instructions.push(Instruction {
+                        control: InstructionType::Declaration { unstack_len },
+                        pos: Some(self.keyword.pos.clone()),
+                    });
+                } else {
+                    if datatype.is_none() {
+                        return Err(AlthreadError::new(
+                            ErrorType::TypeError,
+                            Some(node.pos.clone()),
+                            "Declaration must have a datatype or a value".to_string(),
+                        ));
+                    }
+                    builder.instructions.push(Instruction {
+                        control: InstructionType::Push(datatype.as_ref().unwrap().default()),
+                        pos: Some(self.keyword.pos.clone()),
+                    });
+                }
+
+                let datatype = datatype.unwrap();
+
+                let stack_index = state.program_stack.len();
+                // Variable becomes valid at the next instruction (after the declaration instruction)
+                let scope_start_ip = builder.instructions.len();
+                
+                state.program_stack.push(Variable {
+                    mutable: self.keyword.value == DeclarationKeyword::Let,
+                    name: var_name.clone(), // Use the simple variable name, not the full qualified name
+                    datatype: datatype.clone(),
+                    depth: state.current_stack_depth,
+                    declare_pos: Some(node.pos.clone()),
+                });
+                
+                // Add debug info to the builder (will be adjusted when builders are extended)
+                builder.debug_variables.push(crate::compiler::LocalVariableDebugInfo {
+                    name: var_name.clone(),
+                    datatype,
+                    stack_index,
+                    scope_start_ip,
+                    scope_end_ip: None,
+                    declare_pos: Some(node.pos.clone()),
+                });
+            },
+            Lvalue::TupleIdentifier(node) => {
+                let mut datatype: Option<DataType> = None;
+                let mut valeur: Option<Node<Expression>> = None;
+
+                if let Some(d) = &self.datatype {
+                    datatype = Some(d.value.clone());
+                }
+
+                if let Some(value) = &self.value {
+                    valeur = Some(value.clone());
+                    state.current_stack_depth += 1;
+                    builder.extend(value.compile(state)?);
+                    let computed_datatype = state
+                        .program_stack
+                        .last()
+                        .expect("Error: Program stack is empty after compiling an expression")
+                        .datatype
+                        .clone();
+                    let unstack_len = state.unstack_current_depth();
+                    if let Some(declared_datatype) = datatype {
+
+                        let types_compatible =
+                            if let (DataType::List(declared_elem), DataType::List(computed_elem)) =
+                                (&declared_datatype, &computed_datatype)
+                            {
+                                // Allow list(void) to be assigned to list(T) for any T (empty list case)
+                                **computed_elem == DataType::Void || declared_elem == computed_elem
+                            } else {
+                                declared_datatype == computed_datatype
+                            };
+                        
+                        if !types_compatible {
+                            return Err(AlthreadError::new(
+                                ErrorType::TypeError,
+                                Some(self.datatype.as_ref().unwrap().pos.clone()),
+                                format!(
+                                    "Declared type and assignment do not match (found :{} = {})",
+                                    declared_datatype, computed_datatype
+                                ),
+                            ));
+                        } else {
+                            datatype = Some(computed_datatype);
+                        }
+
+                    } else {
+                        datatype = Some(computed_datatype);
+                    }
+                    builder.instructions.push(Instruction {
+                        control: InstructionType::Declaration { unstack_len },
+                        pos: Some(self.keyword.pos.clone()),
+                    });
+                    
+                } else {
+                    if datatype.is_none() {
+                        return Err(AlthreadError::new(
+                            ErrorType::TypeError,
+                            Some(node.pos.clone()),
+                            "Tuple has no datatype".to_string(),
+                        ));
+                    }
+                }
+                let stack_index = state.program_stack.len();
+                let scope_start_ip = builder.instructions.len();
+                let position : usize= state.program_stack.len() - 1;
+               
+                let r = compile_tupleidentifier(&self, state, &node, &mut builder,datatype.unwrap(),stack_index,scope_start_ip,
+                valeur!=None,position,true);
+                if r.is_err() {return r;}
+            },
+            Lvalue::NullIdentifier(node) => {
                 return Err(AlthreadError::new(
                     ErrorType::TypeError,
-                    Some(self.identifier.pos.clone()),
-                    "Declaration must have a datatype or a value".to_string(),
+                    Some(node.pos.clone()),
+                    "Declaration of variable cannot be a unused value".to_string(),
                 ));
-            }
-            builder.instructions.push(Instruction {
-                control: InstructionType::Push(datatype.as_ref().unwrap().default()),
-                pos: Some(self.keyword.pos.clone()),
-            });
+            },
         }
-
-        let datatype = datatype.unwrap();
-
-        let stack_index = state.program_stack.len();
-        // Variable becomes valid at the next instruction (after the declaration instruction)
-        let scope_start_ip = builder.instructions.len();
-
-        state.program_stack.push(Variable {
-            mutable: self.keyword.value == DeclarationKeyword::Let,
-            name: var_name.clone(), // Use the simple variable name, not the full qualified name
-            datatype: datatype.clone(),
-            depth: state.current_stack_depth,
-            declare_pos: Some(self.identifier.pos.clone()),
-        });
-
-        // Add debug info to the builder (will be adjusted when builders are extended)
-        builder
-            .debug_variables
-            .push(crate::compiler::LocalVariableDebugInfo {
-                name: var_name.clone(),
-                datatype,
-                stack_index,
-                scope_start_ip,
-                scope_end_ip: None,
-                declare_pos: Some(self.identifier.pos.clone()),
-            });
-
         Ok(builder)
     }
 }
@@ -194,42 +470,88 @@ impl AstDisplay for Declaration {
 
         let prefix = &prefix.add_branch();
         writeln!(f, "{prefix}keyword: {}", self.keyword)?;
+        match &self.identifier {
+            Lvalue::Identifier(node) => {
+                // Get the display name for the identifier
+                let identifier_name = &node
+                    .value.value;
 
-        // Get the display name for the identifier
-        let identifier_name = self
-            .identifier
-            .value
-            .parts
-            .iter()
-            .map(|p| p.value.value.as_str())
-            .collect::<Vec<_>>()
-            .join(".");
-
-        match (&self.datatype, &self.value) {
-            (Some(datatype), Some(value)) => {
-                writeln!(f, "{prefix}ident: {}", identifier_name)?;
-                writeln!(f, "{prefix}datatype: {datatype}")?;
-                let prefix = prefix.switch();
-                writeln!(f, "{prefix}value")?;
-                value.ast_fmt(f, &prefix.add_leaf())?;
+                match (&self.datatype, &self.value) {
+                    (Some(datatype), Some(value)) => {
+                        writeln!(f, "{prefix}ident: {}", identifier_name)?;
+                        writeln!(f, "{prefix}datatype: {datatype}")?;
+                        let prefix = prefix.switch();
+                        writeln!(f, "{prefix}value")?;
+                        value.ast_fmt(f, &prefix.add_leaf())?;
+                    }
+                    (Some(datatype), None) => {
+                        writeln!(f, "{prefix}ident: {}", identifier_name)?;
+                        let prefix = prefix.switch();
+                        writeln!(f, "{prefix}datatype: {datatype}")?;
+                    }
+                    (None, Some(value)) => {
+                        writeln!(f, "{prefix}ident: {}", identifier_name)?;
+                        let prefix = prefix.switch();
+                        writeln!(f, "{prefix}value")?;
+                        value.ast_fmt(f, &prefix.add_leaf())?;
+                    }
+                    (None, None) => {
+                        let prefix = prefix.switch();
+                        writeln!(f, "{prefix}ident: {}", identifier_name)?;
+                    }
+                }
             }
-            (Some(datatype), None) => {
-                writeln!(f, "{prefix}ident: {}", identifier_name)?;
-                let prefix = prefix.switch();
-                writeln!(f, "{prefix}datatype: {datatype}")?;
+            Lvalue::TupleIdentifier(node) => {
+                writeln!(f, "{prefix}ident:")?;
+                node.ast_fmt(f, &prefix.add_leaf())?;
+                match (&self.datatype, &self.value) {
+                    (Some(datatype), Some(value)) => {
+                        writeln!(f, "{prefix}datatype: ")?;
+                        let p1 = &prefix.add_leaf();
+                        match &datatype.value {
+                            DataType::Tuple(v) => {
+                                writeln!(f, "{p1}tuple: ")?;
+                                let p = &p1.add_leaf();
+                                for i in 0..v.len()
+                                {
+                                   write!(f, "{p}datatype: ")?; 
+                                    v[i].fmt(f)?;
+                                    writeln!(f,"")?;
+                                } 
+                            }
+                            _ => {writeln!(f, "{prefix}datatype: {datatype}")?; }
+                        }
+                        let prefix = prefix.switch();
+                        writeln!(f, "{prefix}value")?;
+                        value.ast_fmt(f, &prefix.add_leaf())?;
+                    }
+                    (Some(datatype), None) => {
+                        writeln!(f, "{prefix}datatype: ")?;
+                        let p1 = &prefix.add_leaf();
+                        match &datatype.value {
+                            DataType::Tuple(v) => {
+                                writeln!(f, "{p1}tuple: ")?;
+                                let p = &p1.add_leaf();
+                                for i in 0..v.len()
+                                {
+                                   write!(f, "{p}datatype: ")?; 
+                                    v[i].fmt(f)?;
+                                    writeln!(f,"")?;
+                                } 
+                            }
+                            _ => {writeln!(f, "{prefix}datatype: {datatype}")?; }
+                        }
+                    }
+                    (None, Some(value)) => {
+                        let prefix = prefix.switch();
+                        writeln!(f, "{prefix}value")?;
+                        value.ast_fmt(f, &prefix.add_leaf())?;
+                    }
+                    (None, None) => {}
+                }
             }
-            (None, Some(value)) => {
-                writeln!(f, "{prefix}ident: {}", identifier_name)?;
-                let prefix = prefix.switch();
-                writeln!(f, "{prefix}value")?;
-                value.ast_fmt(f, &prefix.add_leaf())?;
-            }
-            (None, None) => {
-                let prefix = prefix.switch();
-                writeln!(f, "{prefix}ident: {}", identifier_name)?;
-            }
+            Lvalue::NullIdentifier(_node) => {},
         }
-
         Ok(())
     }
 }

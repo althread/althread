@@ -30,15 +30,6 @@ impl DataType {
             DataType::List(t) => Literal::List(t.as_ref().clone(), vec![]),
         }
     }
-    pub fn from_str(value: &str) -> Self {
-        match value {
-            "bool" => Self::Boolean,
-            "int" => Self::Integer,
-            "float" => Self::Float,
-            "string" => Self::String,
-            _ => Self::Void,
-        }
-    }
 
     /*     pub fn from_value(val: &Value) -> Self {
         match val {

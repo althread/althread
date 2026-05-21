@@ -44,7 +44,9 @@ use crate::{
             args_list::ArgsList, binary_assignment_operator::BinaryAssignmentOperator,
             binary_operator::BinaryOperator, condition_keyword::ConditionKeyword,
             datatype::DataType, declaration_keyword::DeclarationKeyword, identifier::Identifier,
-            literal::Literal, object_identifier::ObjectIdentifier, unary_operator::UnaryOperator,
+            literal::Literal, null_identifier::NullIdentifier,
+            object_identifier::ObjectIdentifier, tuple_identifier::{Lvalue, TupleIdentifier},
+            unary_operator::UnaryOperator,
         },
         Ast,
     },
@@ -705,7 +707,7 @@ where
     });
 
     keyword
-        .then(object_identifier_parser())
+        .then(lvalue_parser())
         .then(just(Token::Colon).ignore_then(datatype_parser()).or_not())
         .then(just(Token::Eq).ignore_then(expression_parser()).or_not())
         .then_ignore(just(Token::Semi))
@@ -721,6 +723,43 @@ where
                 },
             }),
         })
+}
+
+fn lvalue_parser<'tokens, I>() -> impl Parser<'tokens, I, Lvalue, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    recursive(|lvalue| {
+        let null = select! {
+            Token::Ident(name) if name == "_" => ()
+        }
+        .map_with(|_, e| {
+            Lvalue::NullIdentifier(Node {
+                pos: pos_from_span_source(e.span()),
+                value: NullIdentifier,
+            })
+        });
+
+        let ident = identifier_parser().map(Lvalue::Identifier);
+
+        let tuple = lvalue
+            .clone()
+            .separated_by(just(Token::Comma))
+            .allow_trailing()
+            .at_least(1)
+            .collect::<Vec<_>>()
+            .delimited_by(just(Token::LParen), just(Token::RParen))
+            .map_with(|values, e| {
+                Lvalue::TupleIdentifier(Node {
+                    pos: pos_from_span_source(e.span()),
+                    value: TupleIdentifier {
+                        value: values.into_iter().map(Box::new).collect(),
+                    },
+                })
+            });
+
+        choice((tuple, null, ident))
+    })
 }
 
 fn assignment_statement_parser<'tokens, I>(
@@ -1133,7 +1172,21 @@ where
                         Rich::custom(span, format!("tuple index '{}' is too large", index))
                     })
                 })
-                .map(|index| CallChainSegment::TupleIndex { index }),
+                .then(args_tuple.clone().or_not())
+                .try_map(|(index, args), span| {
+                    if let Some(args) = args {
+                        let Expression::Tuple(tuple) = &args.value else {
+                            unreachable!("argument tuples are always tuple expressions");
+                        };
+                        if !tuple.value.values.is_empty() {
+                            return Err(Rich::custom(
+                                span,
+                                "tuple access '.N()' does not accept arguments",
+                            ));
+                        }
+                    }
+                    Ok(CallChainSegment::TupleIndex { index })
+                }),
             identifier_parser()
                 .then(args_tuple.clone().or_not())
                 .map(|(name, args)| match args {
@@ -1349,7 +1402,21 @@ where
                         Rich::custom(span, format!("tuple index '{}' is too large", index))
                     })
                 })
-                .map(|index| CallChainSegment::TupleIndex { index }),
+                .then(args_tuple.clone().or_not())
+                .try_map(|(index, args), span| {
+                    if let Some(args) = args {
+                        let Expression::Tuple(tuple) = &args.value else {
+                            unreachable!("argument tuples are always tuple expressions");
+                        };
+                        if !tuple.value.values.is_empty() {
+                            return Err(Rich::custom(
+                                span,
+                                "tuple access '.N()' does not accept arguments",
+                            ));
+                        }
+                    }
+                    Ok(CallChainSegment::TupleIndex { index })
+                }),
             identifier_parser()
                 .then(args_tuple.clone().or_not())
                 .map(|(name, args)| match args {
