@@ -3,13 +3,17 @@ shared {
   const Default_tuple = (0,"zero",0.0);
   let Tuple = Default_tuple; 
   let Tuple_of_proc : tuple(proc(A),proc(A),proc(A));
-}
 
+  let P :proc(A);
+}
+  
 check {
+
   eventually (Tuple_of_proc.0().reaches(end)
     && Tuple_of_proc.1().reaches(end)
     && Tuple_of_proc.2().reaches(end)
     );
+    
   always (if 
     (Tuple_of_proc.0().reaches(end)
     || Tuple_of_proc.1().reaches(end)
@@ -20,6 +24,7 @@ check {
     }
     );
 }
+
 
 program A(id : int)
 {
