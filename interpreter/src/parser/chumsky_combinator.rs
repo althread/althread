@@ -44,7 +44,9 @@ use crate::{
             args_list::ArgsList, binary_assignment_operator::BinaryAssignmentOperator,
             binary_operator::BinaryOperator, condition_keyword::ConditionKeyword,
             datatype::DataType, declaration_keyword::DeclarationKeyword, identifier::Identifier,
-            literal::Literal, object_identifier::ObjectIdentifier, unary_operator::UnaryOperator,
+            literal::Literal, null_identifier::NullIdentifier,
+            object_identifier::ObjectIdentifier, tuple_identifier::{Lvalue, TupleIdentifier},
+            unary_operator::UnaryOperator,
         },
         Ast,
     },
@@ -73,10 +75,7 @@ enum TopLevelBlock {
     Shared(Node<Block>),
     Main(Node<Block>),
     Always(Node<ConditionBlock>),
-    Check {
-        pos: Pos,
-        body_span: Span,
-    },
+    Check(Node<CheckBlock>),
     Program {
         name: Node<Identifier>,
         args: Node<ArgsList>,
@@ -117,12 +116,8 @@ pub fn parse_program(source: &str, file_path: &str) -> Result<Ast, AlthreadError
             TopLevelBlock::Always(block) => {
                 ast.condition_blocks.insert(ConditionKeyword::Always, block);
             }
-            TopLevelBlock::Check { pos, body_span } => {
-                let formulas = parse_check_formulas(source, file_path, body_span)?;
-                ast.check_blocks.push(Node {
-                    pos,
-                    value: CheckBlock { formulas },
-                });
+            TopLevelBlock::Check(block) => {
+                ast.check_blocks.push(block);
             }
             TopLevelBlock::Program {
                 name,
@@ -212,23 +207,6 @@ pub fn parse_list_expression(
     file_path: &str,
 ) -> Result<Node<Expression>, AlthreadError> {
     parse_expression(source, snippet, file_path)
-}
-
-pub(crate) fn parse_ltl_expression_with_chumsky(
-    source: &str,
-    snippet: &SyntaxSnippet,
-    filepath: &str,
-) -> Result<LtlExpression, AlthreadError> {
-    with_parser_pos_context(filepath, || {
-        let tokens = lex_snippet(snippet, filepath)?;
-        let eoi = Span::new((), snippet.pos.end..snippet.pos.end);
-        let input = tokens.as_slice().map(eoi, |(token, span)| (token, span));
-        let result = ltl_expression_parser()
-            .parse(input)
-            .into_result()
-            .map_err(|errs| map_ltl_errors(source, filepath, errs));
-        result
-    })
 }
 
 fn ast_parser<'tokens, 'src: 'tokens, I>(
@@ -329,14 +307,17 @@ where
 {
     just(Token::Check)
         .ignore_then(
-            balanced_token_item_parser()
+            ltl_expression_parser()
+                .then_ignore(just(Token::Semi))
                 .repeated()
-                .map_with(|_, e| e.span())
+                .collect::<Vec<_>>()
                 .delimited_by(just(Token::LBrace), just(Token::RBrace)),
         )
-        .map_with(move |body_span, e| TopLevelBlock::Check {
-            pos: pos_from_span(source, file_path, e.span()),
-            body_span,
+        .map_with(move |formulas, e| {
+            TopLevelBlock::Check(Node {
+                pos: pos_from_span(source, file_path, e.span()),
+                value: CheckBlock { formulas },
+            })
         })
 }
 
@@ -650,46 +631,6 @@ where
     })
 }
 
-fn balanced_token_item_parser<'tokens, I>(
-) -> impl Parser<'tokens, I, (), ParserExtra<'tokens>> + Clone
-where
-    I: ValueInput<'tokens, Token = Token, Span = Span>,
-{
-    recursive(|item| {
-        let plain = any()
-            .filter(|tok| {
-                !matches!(
-                    tok,
-                    Token::LParen
-                        | Token::RParen
-                        | Token::LBrace
-                        | Token::RBrace
-                        | Token::LBracket
-                        | Token::RBracket
-                )
-            })
-            .ignored();
-
-        let paren = item
-            .clone()
-            .repeated()
-            .delimited_by(just(Token::LParen), just(Token::RParen))
-            .ignored();
-        let brace = item
-            .clone()
-            .repeated()
-            .delimited_by(just(Token::LBrace), just(Token::RBrace))
-            .ignored();
-        let bracket = item
-            .clone()
-            .repeated()
-            .delimited_by(just(Token::LBracket), just(Token::RBracket))
-            .ignored();
-
-        choice((plain, paren, brace, bracket))
-    })
-}
-
 fn declaration_statement_parser<'tokens, I>(
 ) -> impl Parser<'tokens, I, Node<Statement>, ParserExtra<'tokens>> + Clone
 where
@@ -705,7 +646,7 @@ where
     });
 
     keyword
-        .then(object_identifier_parser())
+        .then(lvalue_parser())
         .then(just(Token::Colon).ignore_then(datatype_parser()).or_not())
         .then(just(Token::Eq).ignore_then(expression_parser()).or_not())
         .then_ignore(just(Token::Semi))
@@ -721,6 +662,43 @@ where
                 },
             }),
         })
+}
+
+fn lvalue_parser<'tokens, I>() -> impl Parser<'tokens, I, Lvalue, ParserExtra<'tokens>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
+    recursive(|lvalue| {
+        let null = select! {
+            Token::Ident(name) if name == "_" => ()
+        }
+        .map_with(|_, e| {
+            Lvalue::NullIdentifier(Node {
+                pos: pos_from_span_source(e.span()),
+                value: NullIdentifier,
+            })
+        });
+
+        let ident = identifier_parser().map(Lvalue::Identifier);
+
+        let tuple = lvalue
+            .clone()
+            .separated_by(just(Token::Comma))
+            .allow_trailing()
+            .at_least(1)
+            .collect::<Vec<_>>()
+            .delimited_by(just(Token::LParen), just(Token::RParen))
+            .map_with(|values, e| {
+                Lvalue::TupleIdentifier(Node {
+                    pos: pos_from_span_source(e.span()),
+                    value: TupleIdentifier {
+                        value: values.into_iter().map(Box::new).collect(),
+                    },
+                })
+            });
+
+        choice((tuple, null, ident))
+    })
 }
 
 fn assignment_statement_parser<'tokens, I>(
@@ -1133,7 +1111,21 @@ where
                         Rich::custom(span, format!("tuple index '{}' is too large", index))
                     })
                 })
-                .map(|index| CallChainSegment::TupleIndex { index }),
+                .then(args_tuple.clone().or_not())
+                .try_map(|(index, args), span| {
+                    if let Some(args) = args {
+                        let Expression::Tuple(tuple) = &args.value else {
+                            unreachable!("argument tuples are always tuple expressions");
+                        };
+                        if !tuple.value.values.is_empty() {
+                            return Err(Rich::custom(
+                                span,
+                                "tuple access '.N()' does not accept arguments",
+                            ));
+                        }
+                    }
+                    Ok(CallChainSegment::TupleIndex { index })
+                }),
             identifier_parser()
                 .then(args_tuple.clone().or_not())
                 .map(|(name, args)| match args {
@@ -1349,7 +1341,21 @@ where
                         Rich::custom(span, format!("tuple index '{}' is too large", index))
                     })
                 })
-                .map(|index| CallChainSegment::TupleIndex { index }),
+                .then(args_tuple.clone().or_not())
+                .try_map(|(index, args), span| {
+                    if let Some(args) = args {
+                        let Expression::Tuple(tuple) = &args.value else {
+                            unreachable!("argument tuples are always tuple expressions");
+                        };
+                        if !tuple.value.values.is_empty() {
+                            return Err(Rich::custom(
+                                span,
+                                "tuple access '.N()' does not accept arguments",
+                            ));
+                        }
+                    }
+                    Ok(CallChainSegment::TupleIndex { index })
+                }),
             identifier_parser()
                 .then(args_tuple.clone().or_not())
                 .map(|(name, args)| match args {
@@ -2030,45 +2036,6 @@ fn map_rich_errors(
     )
 }
 
-fn map_ltl_errors(
-    source: &str,
-    file_path: &str,
-    errs: Vec<Rich<'_, Token, Span>>,
-) -> AlthreadError {
-    let err = errs.into_iter().next().expect("chumsky returned no errors");
-    let message = match err.reason() {
-        RichReason::Custom(message) => message.clone(),
-        RichReason::ExpectedFound { .. } => {
-            let expected = err
-                .expected()
-                .map(|pattern| format_pattern(pattern))
-                .collect::<Vec<_>>();
-            let found = err
-                .found()
-                .map(|token| format!("'{}'", token))
-                .unwrap_or_else(|| "end of input".to_string());
-            if expected.is_empty() {
-                format!("unexpected {found}")
-            } else if expected.len() == 1 {
-                format!("expected {}, found {found}", expected[0])
-            } else {
-                format!("expected one of {}, found {found}", expected.join(", "))
-            }
-        }
-    };
-
-    AlthreadError::new(
-        ErrorType::SyntaxError,
-        Some(Pos::from_offsets(
-            source,
-            file_path,
-            err.span().start,
-            err.span().end.max(err.span().start + 1),
-        )),
-        message,
-    )
-}
-
 fn normalize_ltl_predicate_expression(expr: Node<Expression>) -> Node<Expression> {
     match expr.value {
         Expression::Primary(primary) => match primary.value {
@@ -2179,81 +2146,4 @@ fn is_datatype_pattern(pattern: &RichPattern<'_, Token>) -> bool {
                     | Token::Tuple
             )
     )
-}
-
-fn parse_check_formulas(
-    source: &str,
-    file_path: &str,
-    body_span: Span,
-) -> Result<Vec<crate::checker::ltl::ast::LtlExpression>, AlthreadError> {
-    let body = &source[body_span.start..body_span.end];
-    let mut formulas = Vec::new();
-    let mut formula_start = 0usize;
-    let mut paren_depth = 0usize;
-    let mut brace_depth = 0usize;
-    let mut bracket_depth = 0usize;
-
-    for (idx, ch) in body.char_indices() {
-        match ch {
-            '(' => paren_depth += 1,
-            ')' => paren_depth = paren_depth.saturating_sub(1),
-            '{' => brace_depth += 1,
-            '}' => brace_depth = brace_depth.saturating_sub(1),
-            '[' => bracket_depth += 1,
-            ']' => bracket_depth = bracket_depth.saturating_sub(1),
-            ';' if paren_depth == 0 && brace_depth == 0 && bracket_depth == 0 => {
-                if let Some(snippet) =
-                    trimmed_snippet_from_offsets(source, file_path, body_span, formula_start, idx)
-                {
-                    formulas.push(parse_ltl_expression_with_chumsky(
-                        source, &snippet, file_path,
-                    )?);
-                }
-                formula_start = idx + ch.len_utf8();
-            }
-            _ => {}
-        }
-    }
-
-    if trimmed_snippet_from_offsets(source, file_path, body_span, formula_start, body.len())
-        .is_some()
-    {
-        return Err(AlthreadError::new(
-            ErrorType::SyntaxError,
-            Some(Pos::from_offsets(
-                source,
-                file_path,
-                body_span.start + formula_start,
-                body_span.end,
-            )),
-            "expected ';' after LTL formula".to_string(),
-        ));
-    }
-
-    Ok(formulas)
-}
-
-fn trimmed_snippet_from_offsets(
-    source: &str,
-    file_path: &str,
-    body_span: Span,
-    local_start: usize,
-    local_end: usize,
-) -> Option<SyntaxSnippet> {
-    let text = &source[body_span.start + local_start..body_span.start + local_end];
-    let leading_ws = text.len() - text.trim_start().len();
-    let trailing_ws = text.len() - text.trim_end().len();
-    let trimmed_start = local_start + leading_ws;
-    let trimmed_end = local_end.saturating_sub(trailing_ws);
-
-    if trimmed_start >= trimmed_end {
-        return None;
-    }
-
-    let abs_start = body_span.start + trimmed_start;
-    let abs_end = body_span.start + trimmed_end;
-    Some(SyntaxSnippet::new(
-        Pos::from_offsets(source, file_path, abs_start, abs_end),
-        source[abs_start..abs_end].to_string(),
-    ))
 }

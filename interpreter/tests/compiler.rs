@@ -238,7 +238,6 @@ fn test_shared_list_literal_initialization() {
 shared {
     let Tab = [1, 2];
 }
-
 main {
 }
     "#;
@@ -257,6 +256,29 @@ main {
             vec![Literal::Int(1), Literal::Int(2)]
         ))
     );
+}
+
+#[test]
+fn test_tuple_destructuring_emits_explicit_destructure_instruction() {
+    let input = r#"
+main {
+    let (a, b) : tuple(int, int) = (1, 2);
+}
+    "#;
+
+    let mut input_map = HashMap::new();
+    input_map.insert("".to_string(), input.to_string());
+
+    let ast = althread::parser::parse_ast(input, "").unwrap();
+    let compiled_project = ast
+        .compile(std::path::Path::new(""), StandardFileSystem, &mut input_map)
+        .unwrap();
+
+    let instructions = &compiled_project.programs_code.get("main").unwrap().instructions;
+    assert!(instructions.iter().any(|inst| matches!(
+        inst.control,
+        InstructionType::DestructureTuple { tuple_offset: 0 }
+    )));
 }
 
 #[test]

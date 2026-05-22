@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-
 use crate::{
     analysis::control_flow_graph::ControlFlowGraph,
     ast::{
+        Ast,
         block::Block,
         node::Node,
         statement::{
@@ -11,8 +11,7 @@ use crate::{
             expression::{Expression, LocalExpressionNode},
             Statement,
         },
-        token::datatype::DataType,
-        Ast,
+        token::{datatype::DataType, tuple_identifier::Lvalue},
     },
     compiler::{CompilerState, Variable},
     error::{AlthreadError, AlthreadResult, ErrorType},
@@ -314,38 +313,46 @@ impl Ast {
     ) -> AlthreadResult<()> {
         match statement {
             Statement::Declaration(var_decl) => {
-                let Some(identifier_node) = var_decl.value.identifier.value.parts.first() else {
-                    return Ok(());
-                };
-                let var_name = identifier_node.value.value.clone();
+                match &var_decl.value.identifier {
+                    Lvalue::Identifier(node) => {
+                        let var_name = node.value.value.clone();
 
-                let datatype = if let Some(explicit) = &var_decl.value.datatype {
-                    explicit.value.clone()
-                } else if let Some(value) = &var_decl.value.value {
-                    match Self::prescan_expression_datatype(&value.value, state) {
-                        Ok(datatype) => datatype,
-                        Err(message) => {
-                            log::debug!(
-                                "Skipping declaration type inference during prescan for '{}': {}",
-                                var_name,
-                                message
-                            );
+                        let datatype = if let Some(explicit) = &var_decl.value.datatype {
+                            explicit.value.clone()
+                        } else if let Some(value) = &var_decl.value.value {
+                            match Self::prescan_expression_datatype(&value.value, state) {
+                                Ok(datatype) => datatype,
+                                Err(message) => {
+                                    log::debug!(
+                                        "Skipping declaration type inference during prescan for '{}': {}",
+                                        var_name,
+                                        message
+                                    );
+                                    return Ok(());
+                                }
+                            }
+                        } else {
                             return Ok(());
-                        }
+                        };
+
+                        self.record_process_type(&var_name, &datatype, var_to_program);
+
+                        state.program_stack.push(Variable {
+                            mutable: true,
+                            name: var_name,
+                            datatype,
+                            depth: state.current_stack_depth,
+                            declare_pos: Some(var_decl.pos.clone()),
+                        });
                     }
-                } else {
-                    return Ok(());
-                };
-
-                self.record_process_type(&var_name, &datatype, var_to_program);
-
-                state.program_stack.push(Variable {
-                    mutable: true,
-                    name: var_name,
-                    datatype,
-                    depth: state.current_stack_depth,
-                    declare_pos: Some(var_decl.pos.clone()),
-                });
+                    Lvalue::TupleIdentifier(_node) => {
+                        // Tuple destructuring can introduce process-typed locals, but the
+                        // current prescan only needs direct identifiers to resolve channels.
+                    }
+                    Lvalue::NullIdentifier(_node) => {
+                        // Null identifiers only appear inside tuple destructuring.
+                    }
+                }
             }
             Statement::Assignment(assignment) => {
                 let Assignment::Binary(binary) = &assignment.value;

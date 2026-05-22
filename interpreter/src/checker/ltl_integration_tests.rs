@@ -323,6 +323,37 @@ check {
     }
 
     #[test]
+    fn test_eventually_tuple_process_conjunction_reaches_end() -> AlthreadResult<()> {
+        let source = r#"
+shared {
+    let Workers : tuple(proc(A), proc(A));
+}
+
+program A() {
+    // ends immediately
+}
+
+main {
+    let a = run A();
+    let b = run A();
+    Workers = (a, b);
+}
+
+check {
+    eventually (Workers.0().reaches(end) && Workers.1().reaches(end));
+}
+"#;
+
+        let project = compile_from_source(source);
+        let (violations, _graph) = check_program(&project, Some(1000))?;
+        assert!(
+            violations.is_empty(),
+            "Expected no LTL violation when both process references in the tuple eventually reach end"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn test_eventually_violated() -> AlthreadResult<()> {
         let source = r#"
 shared {

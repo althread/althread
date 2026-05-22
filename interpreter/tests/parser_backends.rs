@@ -77,8 +77,12 @@ shared {
     assert_eq!(shared.value.children.len(), 1);
     match &shared.value.children[0].value {
         Statement::Declaration(node) => {
-            assert_eq!(node.value.identifier.value.parts.len(), 1);
-            assert_eq!(node.value.identifier.value.parts[0].value.value, "Count");
+            match &node.value.identifier {
+                althread::ast::token::tuple_identifier::Lvalue::Identifier(identifier) => {
+                    assert_eq!(identifier.value.value, "Count");
+                }
+                other => panic!("expected simple identifier, got {other:?}"),
+            }
         }
         other => panic!("expected declaration, got {other:?}"),
     }

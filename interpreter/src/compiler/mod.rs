@@ -28,7 +28,7 @@ pub struct FunctionDefinition {
     pub is_private: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct InstructionBuilderOk {
     pub instructions: Vec<Instruction>,
 

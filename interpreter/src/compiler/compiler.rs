@@ -15,6 +15,7 @@ use crate::{
         token::{
             condition_keyword::ConditionKeyword, datatype::DataType, identifier::Identifier,
             literal::Literal,
+            tuple_identifier::Lvalue,
         },
         Ast,
     },
@@ -493,21 +494,41 @@ impl Ast {
                         let available_table = state.global_table().clone();
 
                         node.compile(&mut state)?;
+                        match &decl.value.identifier {
+                            Lvalue::Identifier(node) =>{
+                                let var_name = &node.value.value;
+                                // Use context instead of local global_table
+                                let last_program_stack = state.program_stack.last().unwrap().clone();
+                                let literal = Self::evaluate_shared_initializer(
+                                    decl.value.value.as_ref(),
+                                    &last_program_stack.datatype,
+                                    &available_table,
+                                    &available_globals,
+                                )?;
 
-                        let var_name = &decl.value.identifier.value.parts[0].value.value;
-                        // Use context instead of local global_table
-                        let last_program_stack = state.program_stack.last().unwrap().clone();
-                        let literal = Self::evaluate_shared_initializer(
-                            decl.value.value.as_ref(),
-                            &last_program_stack.datatype,
-                            &available_table,
-                            &available_globals,
-                        )?;
-
-                        state
-                            .global_table_mut()
-                            .insert(var_name.clone(), last_program_stack);
-                        state.global_memory_mut().insert(var_name.clone(), literal);
+                                state
+                                    .global_table_mut()
+                                    .insert(var_name.clone(), last_program_stack);
+                                state
+                                    .global_memory_mut()
+                                    .insert(var_name.clone(), literal);
+                            },
+                            Lvalue::TupleIdentifier(node) => 
+                            {
+                                return Err(AlthreadError::new(
+                                    ErrorType::InstructionNotAllowed,
+                                    Some(node.pos.clone()),
+                                    "The 'shared' block cannot contains declarations by a tuple destruction".to_string(),
+                                ));
+                            },
+                            Lvalue::NullIdentifier(node) => {
+                                return Err(AlthreadError::new(
+                                    ErrorType::InstructionNotAllowed,
+                                    Some(node.pos.clone()),
+                                    "The 'shared' block cannot contains a null identifier '_' destruction".to_string(),
+                                ));
+                            },
+                        }
                     }
                     _ => {
                         return Err(AlthreadError::new(
@@ -1280,7 +1301,7 @@ impl Ast {
 
         if !args.value.identifiers.is_empty() {
             process_code.instructions.push(Instruction {
-                control: InstructionType::Destruct,
+                control: InstructionType::DestructureTuple { tuple_offset: 0 },
                 pos: Some(args.pos.clone()),
             });
         }
