@@ -1301,7 +1301,7 @@ impl Ast {
 
         if !args.value.identifiers.is_empty() {
             process_code.instructions.push(Instruction {
-                control: InstructionType::Destruct(0),
+                control: InstructionType::DestructureTuple { tuple_offset: 0 },
                 pos: Some(args.pos.clone()),
             });
         }

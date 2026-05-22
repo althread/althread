@@ -136,7 +136,7 @@ impl TupleExpression {
         //             "Expected tuple of types {:?}, but found {:?}",
         //             types, top.datatype),))
         Ok(Instruction {
-            control: InstructionType::Destruct(0),
+            control: InstructionType::DestructureTuple { tuple_offset: 0 },
             pos: Some(pos),
         })
     }

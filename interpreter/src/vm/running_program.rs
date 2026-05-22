@@ -68,6 +68,37 @@ impl Hash for RunningProgramState<'_> {
 }
 
 impl<'a> RunningProgramState<'a> {
+    fn destructure_tuple_at_offset(
+        &mut self,
+        tuple_offset: usize,
+        pos: Option<Pos>,
+    ) -> AlthreadResult<()> {
+        let size = self.memory.len();
+        if tuple_offset >= size {
+            let e = AlthreadError::new(
+                ErrorType::RuntimeError,
+                pos,
+                format!(
+                    "Cannot destructure tuple at stack offset {}: stack has only {} values",
+                    tuple_offset, size
+                ),
+            );
+            return Err(self.build_error_stack(e));
+        }
+
+        let index = size - 1 - tuple_offset;
+        let tuple = self.memory.remove(index).into_tuple().map_err(|message| {
+            let e = AlthreadError::new(ErrorType::TypeError, pos.clone(), message);
+            self.build_error_stack(e)
+        })?;
+
+        for (insertion_index, value) in tuple.into_iter().enumerate() {
+            self.memory.insert(index + insertion_index, value);
+        }
+
+        Ok(())
+    }
+
     fn call_interface_method_on_literal(
         &self,
         name: &String,
@@ -722,17 +753,8 @@ impl<'a> RunningProgramState<'a> {
                     *jump
                 }
             }
-            InstructionType::Destruct(position) => {
-                let size = self.memory.len();
-                let index :usize = size -1 - *position;
-                let tuple = self.memory.remove(index).into_tuple().expect("Panic: cannot convert to tuple");
-
-                //print!("\naffichage tuple destruct {:?}\n",tuple);
-                
-                for val in tuple.into_iter() {
-                    self.memory.push(val);
-                    // self.memory.insert(index, val);
-                }
+            InstructionType::DestructureTuple { tuple_offset } => {
+                self.destructure_tuple_at_offset(*tuple_offset, cur_inst.pos.clone())?;
                 1
             }
 

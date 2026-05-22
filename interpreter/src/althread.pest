@@ -7,7 +7,7 @@ statement_prefix = { SOI ~ statement }
 expression_root = { SOI ~ expression ~ EOI }
 expression_statement_root = { SOI ~ expression_statement ~ EOI }
 expression_statement_prefix = { SOI ~ expression_statement }
-side_effect_expression_root = { SOI ~ side_effect_expression ~ EOI }
+runtime_expression_root = { SOI ~ runtime_expression ~ EOI }
 fn_call_root = { SOI ~ fn_call ~ EOI }
 run_call_root = { SOI ~ run_call ~ EOI }
 send_call_root = { SOI ~ send_call ~ EOI }
@@ -91,8 +91,8 @@ return_statement = { RETURN_KW ~ expression? ~ ";" }
 
 
 // Import block definition
-import_block = { IMPORT_KW ~ "[" ~ import_list? ~ "]" }
-import_list = { import_item ~ ("," ~ import_item)* ~ ","? }
+import_block = { IMPORT_KW ~ "{" ~ import_list? ~ "}" }
+import_list = { import_item* }
 import_item = { import_path ~ (AS_KW ~ identifier)? }
 import_path = { import_segment ~ ("/" ~ import_segment)* }
 import_segment = { domain_identifier | identifier }
@@ -126,23 +126,23 @@ pattern = { identifier | literal }
 /// - **Binary Assignments**: Assign the result of an expression to a variable (e.g., a = b + c).
 assignment = { binary_assignment }
 
-side_effect_expression    = { run_call | fn_call | expression }
+runtime_expression        = { run_call | fn_call | expression }
 
 bracket_expression = { "[" ~ (range_expression | list_literal_inner) ~ "]" }
 
 
 
-list_literal_inner = { (side_effect_expression ~ ("," ~ side_effect_expression)*)? }
+list_literal_inner = { (runtime_expression ~ ("," ~ runtime_expression)*)? }
 
 binary_assignment          = { 
     object_identifier ~ 
     binary_assignment_operator ~ 
-    side_effect_expression }
+    runtime_expression }
 binary_assignment_operator = { ASSIGN_OP | ADD_ASSIGN_OP | SUB_ASSIGN_OP | MUL_ASSIGN_OP | DIV_ASSIGN_OP | MOD_ASSIGN_OP }
 
 /// ### Declarations
 /// Declarations introduce new variables, which can be mutable (let) or immutable (const).
-declaration         = { declaration_keyword ~ ( identifier | identifier_tuple ) ~ (":" ~ datatype)? ~ ("=" ~ side_effect_expression)? }
+declaration         = { declaration_keyword ~ ( identifier | identifier_tuple ) ~ (":" ~ datatype)? ~ ("=" ~ runtime_expression)? }
 declaration_keyword = { LET_KW | CONST_KW }
 
 
