@@ -10,21 +10,21 @@
 //! 1. Negate the LTL formula (to find counter-examples)
 //! 2. Build a Büchi automaton from the negated formula
 //! 3. Explore the product automaton (program × Büchi automaton)
-//! 4. Use Nested DFS to detect accepting cycles
+//! 4. Find strongly connected components covering every acceptance set
 //! 5. An accepting cycle means the negated formula is satisfiable → original violated
 
 pub mod ltl;
+mod product;
 
 #[cfg(test)]
 mod ltl_integration_tests;
 
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    hash::Hash,
+    collections::{HashMap, VecDeque},
     rc::Rc,
 };
 
-use ltl::{automaton::BuchiAutomaton, compiled::CompiledLtlExpression, monitor::MonitoringState};
+use ltl::{automaton::BuchiAutomaton, compiled::CompiledLtlExpression};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 use crate::{
@@ -60,6 +60,9 @@ pub struct StateGraph<'a> {
     pub nodes: Vec<GraphNode>,
     pub initial_state: StateId,
     pub exhaustive: bool,
+    /// Index of the first loop edge in the returned LTL counterexample path.
+    /// Terminal executions use an explicit `_stutter_` self-loop.
+    pub violation_cycle_start: Option<usize>,
 }
 
 impl std::fmt::Display for StateLink {
@@ -107,7 +110,7 @@ impl<'a> Serialize for StateGraph<'a> {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("StateGraph", 2)?;
+        let mut state = serializer.serialize_struct("StateGraph", 3)?;
         state.serialize_field(
             "nodes",
             &self
@@ -118,6 +121,7 @@ impl<'a> Serialize for StateGraph<'a> {
                 .collect::<Vec<(&VM, &GraphNode)>>(),
         )?;
         state.serialize_field("exhaustive", &self.exhaustive)?;
+        state.serialize_field("violation_cycle_start", &self.violation_cycle_start)?;
         state.end()
     }
 }
@@ -141,6 +145,7 @@ impl<'a> StateGraph<'a> {
             nodes: vec![GraphNode::new(None, 0)],
             initial_state: 0,
             exhaustive: true,
+            violation_cycle_start: None,
         }
     }
 
@@ -176,6 +181,13 @@ fn build_state_graph<'a>(
     compiled_project: &'a CompiledProject,
     max_states: Option<usize>,
 ) -> AlthreadResult<StateGraph<'a>> {
+    if max_states == Some(0) {
+        return Err(AlthreadError::new(
+            ErrorType::RuntimeError,
+            None,
+            "The state limit must be at least 1".to_string(),
+        ));
+    }
     let mut init_vm = VM::new(compiled_project);
     init_vm.start(0);
 
@@ -188,16 +200,10 @@ fn build_state_graph<'a>(
     next_nodes.push_back(state_graph.initial_state);
 
     while let Some(current_state) = next_nodes.pop_front() {
-        if let Some(max) = max_states {
-            if state_graph.nodes.len() >= max {
-                state_graph.exhaustive = false;
-                break;
-            }
-        }
-
         let current_vm = state_graph.vm(current_state).clone();
         let current_level = state_graph.nodes[current_state].level;
         let successors = current_vm.next()?;
+        let mut fully_expanded = true;
 
         for (name, pid, instructions, actions, vm) in successors.into_iter() {
             let next_vm = Rc::new(vm);
@@ -205,6 +211,11 @@ fn build_state_graph<'a>(
             let next_state = if let Some(existing_state) = known_states.get(&next_vm) {
                 *existing_state
             } else {
+                if max_states.is_some_and(|max| state_graph.nodes.len() >= max) {
+                    state_graph.exhaustive = false;
+                    fully_expanded = false;
+                    continue;
+                }
                 let new_state =
                     state_graph.push_state(next_vm.clone(), Some(current_state), current_level + 1);
                 known_states.insert(next_vm.clone(), new_state);
@@ -222,12 +233,15 @@ fn build_state_graph<'a>(
             });
         }
 
-        state_graph.nodes[current_state].expanded = true;
+        state_graph.nodes[current_state].expanded = fully_expanded;
     }
 
     Ok(state_graph)
 }
-/// Checks a given project, returning a path from an initial state to the first state that violates an invariant. (return an empty vector if no invariant is violated)
+/// Return a nonempty counterexample when a property is violated. LTL witnesses
+/// include a closed loop, whose first edge is `graph.violation_cycle_start`.
+/// An empty path proves the properties only when `graph.exhaustive` is true;
+/// otherwise the result is inconclusive. A state limit of zero is invalid.
 pub fn check_program<'a>(
     compiled_project: &'a CompiledProject,
     max_states: Option<usize>,
@@ -421,460 +435,62 @@ pub fn reconstruct_path<'a>(
     Ok(ret_path)
 }
 
-/// Combined state for product automaton (VM state + monitor states)
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct CombinedProductState {
-    vm: StateId,
-    monitors: MonitoringState,
-}
-
-/// Checks a program with LTL formulas by exploring the reachable product automaton
-/// and then computing strongly connected components to detect accepting cycles.
-///
-/// This keeps the product exploration linear in the number of reachable states and
-/// edges, which is much more stable than relaunching an inner DFS from every
-/// accepting state when several formulas introduce additional nondeterminism.
+/// Reuse the VM graph, but check independent properties in separate products.
+/// A violation of any one property is sufficient; multiplying their automata
+/// together adds exponential work without changing the verdict.
 fn check_program_with_ltl<'a>(
     compiled_project: &'a CompiledProject,
     max_states: Option<usize>,
 ) -> AlthreadResult<(Vec<StateLink>, StateGraph<'a>)> {
-    // Step 1: Build Büchi automatons from compiled LTL formulas
-    let automatons: Vec<BuchiAutomaton> = compiled_project
-        .compiled_ltl_formulas
-        .iter()
-        .map(|formula| match formula {
-            CompiledLtlExpression::ForLoop { body, .. }
-            | CompiledLtlExpression::Exists { body, .. } => {
-                BuchiAutomaton::new(body.as_ref().clone())
-            }
-            _ => BuchiAutomaton::new(formula.clone()),
-        })
-        .collect();
+    let mut state_graph = build_state_graph(compiled_project, max_states)?;
 
-    for (i, aut) in automatons.iter().enumerate() {
-        log::debug!("Automaton #{}:", i + 1);
-        for state in &aut.states {
-            log::debug!("  State {}: accept={:?}", state.id, state.acceptance_sets);
-            log::debug!("    Formulas: {:?}", state.formulas);
-            log::debug!("    Transitions: {:?}", state.transitions);
-        }
-    }
-
-    println!("Built {} Büchi automatons", automatons.len());
-
-    // Step 2: Build the VM state graph once and reuse it for all formulas.
-    let state_graph = build_state_graph(compiled_project, max_states)?;
-    let initial_vm = state_graph.vm(state_graph.initial_state).clone();
-
-    // Step 3: Initialize monitoring state with proper quantifier handling
-    let initial_monitoring = ltl::quantifier::initialize_monitoring(
-        &compiled_project.compiled_ltl_formulas,
-        &automatons,
-        initial_vm.as_ref(),
-    )?;
-
-    let mut visited_outer: HashSet<CombinedProductState> = HashSet::new();
-
-    // Store the graph edges for path reconstruction
-    let mut product_edges: HashMap<CombinedProductState, Vec<CombinedProductState>> =
-        HashMap::new();
-
-    // Initial product state
-    let initial_product_state = CombinedProductState {
-        vm: state_graph.initial_state,
-        monitors: initial_monitoring.clone(),
-    };
-
-    let mut dfs_stack: Vec<CombinedProductState> = vec![initial_product_state.clone()];
-
-    while let Some(current_state) = dfs_stack.pop() {
-        if visited_outer.contains(&current_state) {
-            continue;
-        }
-
-        visited_outer.insert(current_state.clone());
-        let current_vm_id = current_state.vm;
-
-        let is_terminal_state =
-            state_graph.nodes[current_vm_id].expanded && state_graph.nodes[current_vm_id].successors.is_empty();
-        let is_immediate_accepting = is_terminal_state
-            && monitors_in_immediate_accepting_state(
-                &current_state.monitors,
-                &automatons,
-                &compiled_project.compiled_ltl_formulas,
-            );
-
-        if is_immediate_accepting {
-            log::debug!("DEBUG: Immediate accepting state detected (no temporal obligations)");
-            println!("LTL violation detected: accepting state with no temporal obligations");
-            let violation_path = build_violation_path(&state_graph, current_state.vm)?;
-            return Ok((violation_path, state_graph));
-        }
-
-        let current_vm = state_graph.vm(current_vm_id).clone();
-        let current_monitors = &current_state.monitors;
-        let successors = state_graph.nodes[current_vm_id].successors.clone();
-
-        if successors.is_empty() && state_graph.nodes[current_vm_id].expanded {
-            log::debug!(
-                "DEBUG: Terminal state - is_finished={}",
-                current_vm.is_finished()
-            );
-
-            let mut base_next_monitors = current_monitors.clone();
-            ltl::quantifier::update_monitors_for_new_processes(
-                &compiled_project.compiled_ltl_formulas,
-                &automatons,
-                &mut base_next_monitors,
-                current_vm.as_ref(),
-                current_vm.as_ref(),
-            )?;
-
-            let possible_next_monitoring_states =
-                base_next_monitors.get_possible_successors(current_vm.as_ref(), &automatons)?;
-
-            for next_monitors in possible_next_monitoring_states {
-                let next_product_state = CombinedProductState {
-                    vm: current_vm_id,
-                    monitors: next_monitors,
-                };
-
-                push_product_edge(
-                    &mut product_edges,
-                    current_state.clone(),
-                    next_product_state.clone(),
-                );
-
-                if !visited_outer.contains(&next_product_state) {
-                    dfs_stack.push(next_product_state);
-                }
-            }
-            continue;
-        }
-
-        if successors.is_empty() {
-            log::debug!(
-                "DEBUG: Frontier state reached before full expansion, skipping terminal-state reasoning"
-            );
-            continue;
-        }
-
-        for successor in successors.into_iter() {
-            let next_state = successor.to;
-            let next_vm = state_graph.vm(next_state).clone();
-
-            let mut base_next_monitors = current_monitors.clone();
-            ltl::quantifier::update_monitors_for_new_processes(
-                &compiled_project.compiled_ltl_formulas,
-                &automatons,
-                &mut base_next_monitors,
-                current_vm.as_ref(),
-                next_vm.as_ref(),
-            )?;
-
-            let possible_next_monitoring_states =
-                base_next_monitors.get_possible_successors(next_vm.as_ref(), &automatons)?;
-
-            for next_monitors in possible_next_monitoring_states {
-                let next_product_state = CombinedProductState {
-                    vm: next_state,
-                    monitors: next_monitors,
-                };
-
-                push_product_edge(
-                    &mut product_edges,
-                    current_state.clone(),
-                    next_product_state.clone(),
-                );
-
-                if !visited_outer.contains(&next_product_state) {
-                    dfs_stack.push(next_product_state);
-                }
-            }
-        }
-    }
-
-    if let Some(accepting_state) = find_accepting_cycle_state(
-        &visited_outer,
-        &product_edges,
-        &automatons,
-        &compiled_project.compiled_ltl_formulas,
-    ) {
-        println!("LTL violation detected: accepting cycle found");
-        let violation_path = build_violation_path(&state_graph, accepting_state.vm)?;
-        return Ok((violation_path, state_graph));
-    }
-
-    // Traditional invariant checking (separate pass for safety properties)
-    // This is done on the state graph we built
     for state_id in 0..state_graph.nodes.len() {
-        let vm = state_graph.vm(state_id).clone();
-        let check_ret = vm.check_invariants();
-        if let Err(e) = check_ret {
-            let violation_path = build_violation_path(&state_graph, state_id)?;
-            if violation_path.is_empty() {
-                // Initial state violation
-                let lines = if let Some(pos) = &e.pos {
-                    vec![pos.line()]
-                } else {
-                    vec![]
-                };
-                return Ok((
-                    vec![StateLink {
-                        to: state_id,
-                        lines,
-                        instructions: vec![],
-                        actions: vec![],
-                        pid: 0,
-                        name: "_init_".to_string(),
-                    }],
-                    state_graph,
-                ));
+        if let Err(error) = state_graph.vm(state_id).check_invariants() {
+            let mut path = build_violation_path(&state_graph, state_id);
+            if path.is_empty() {
+                path.push(StateLink {
+                    to: state_id,
+                    lines: error.pos.map(|pos| vec![pos.line()]).unwrap_or_default(),
+                    instructions: vec![],
+                    actions: vec![],
+                    pid: 0,
+                    name: "_init_".to_string(),
+                });
             }
-            return Ok((violation_path, state_graph));
+            return Ok((path, state_graph));
         }
     }
 
-    // No violations found
-    println!("LTL verification completed: no violations found");
+    for formula in &compiled_project.compiled_ltl_formulas {
+        let body = match formula {
+            CompiledLtlExpression::ForLoop { body, .. }
+            | CompiledLtlExpression::Exists { body, .. } => body.as_ref(),
+            _ => formula,
+        };
+        let automaton = BuchiAutomaton::new(body.clone());
+        if let Some((path, cycle_start)) =
+            product::check_formula(&state_graph, formula, &automaton)?
+        {
+            state_graph.violation_cycle_start = Some(cycle_start);
+            return Ok((path, state_graph));
+        }
+    }
+
     Ok((vec![], state_graph))
 }
 
-fn push_product_edge(
-    product_edges: &mut HashMap<CombinedProductState, Vec<CombinedProductState>>,
-    from: CombinedProductState,
-    to: CombinedProductState,
-) {
-    let successors = product_edges.entry(from).or_default();
-    if !successors.contains(&to) {
-        successors.push(to);
-    }
-}
-
-fn find_accepting_cycle_state(
-    reachable_states: &HashSet<CombinedProductState>,
-    product_edges: &HashMap<CombinedProductState, Vec<CombinedProductState>>,
-    automatons: &[BuchiAutomaton],
-    formulas: &[CompiledLtlExpression],
-) -> Option<CombinedProductState> {
-    let mut reverse_edges: HashMap<CombinedProductState, Vec<CombinedProductState>> =
-        HashMap::new();
-    for (from, successors) in product_edges {
-        reverse_edges.entry(from.clone()).or_default();
-        for successor in successors {
-            reverse_edges
-                .entry(successor.clone())
-                .or_default()
-                .push(from.clone());
-        }
-    }
-
-    let mut visited = HashSet::new();
-    let mut finish_order = Vec::new();
-
-    for state in reachable_states {
-        if visited.contains(state) {
-            continue;
-        }
-
-        let mut stack = vec![(state.clone(), false)];
-        while let Some((current, expanded)) = stack.pop() {
-            if expanded {
-                finish_order.push(current);
-                continue;
-            }
-
-            if !visited.insert(current.clone()) {
-                continue;
-            }
-
-            stack.push((current.clone(), true));
-            if let Some(successors) = product_edges.get(&current) {
-                for successor in successors {
-                    if !visited.contains(successor) {
-                        stack.push((successor.clone(), false));
-                    }
-                }
-            }
-        }
-    }
-
-    let mut assigned = HashSet::new();
-
-    while let Some(state) = finish_order.pop() {
-        if assigned.contains(&state) {
-            continue;
-        }
-
-        let mut component = Vec::new();
-        let mut stack = vec![state.clone()];
-        assigned.insert(state.clone());
-
-        while let Some(current) = stack.pop() {
-            component.push(current.clone());
-            if let Some(predecessors) = reverse_edges.get(&current) {
-                for predecessor in predecessors {
-                    if assigned.insert(predecessor.clone()) {
-                        stack.push(predecessor.clone());
-                    }
-                }
-            }
-        }
-
-        let is_cyclic = component.len() > 1
-            || product_edges
-                .get(&component[0])
-                .map(|successors| successors.contains(&component[0]))
-                .unwrap_or(false);
-
-        if !is_cyclic {
-            continue;
-        }
-
-        if let Some(accepting_state) = component.into_iter().find(|state| {
-            monitors_in_accepting_state(&state.monitors, automatons, formulas)
-        }) {
-            return Some(accepting_state);
-        }
-    }
-
-    None
-}
-
-fn build_violation_path<'a>(
-    state_graph: &StateGraph<'a>,
-    target: StateId,
-) -> AlthreadResult<Vec<StateLink>> {
+fn build_violation_path(state_graph: &StateGraph<'_>, target: StateId) -> Vec<StateLink> {
     let mut path = Vec::new();
-    let mut back_node = target;
-
-    while let Some(pred) = state_graph.nodes[back_node].predecessor {
-        let link = state_graph
-            .nodes
-            .get(pred)
-            .unwrap()
+    let mut current = target;
+    while let Some(predecessor) = state_graph.nodes[current].predecessor {
+        let link = state_graph.nodes[predecessor]
             .successors
             .iter()
-            .find(|x| x.to == back_node)
-            .unwrap()
-            .clone();
-        path.push(link);
-        back_node = pred;
+            .find(|link| link.to == current)
+            .expect("every discovered VM state has its predecessor edge");
+        path.push(link.clone());
+        current = predecessor;
     }
-
-    Ok(path.into_iter().rev().collect())
-}
-
-/// Check if any monitor is in an accepting state on a cycle (or terminal state).
-/// Check if any monitor is currently in an accepting state.
-/// Used by the Nested DFS algorithm to identify accepting states.
-fn monitors_in_accepting_state(
-    monitors: &MonitoringState,
-    automatons: &[BuchiAutomaton],
-    formulas: &[CompiledLtlExpression],
-) -> bool {
-    monitors
-        .monitors_per_formula
-        .iter()
-        .enumerate()
-        .any(|(formula_idx, monitors)| {
-            let automaton = &automatons[formula_idx];
-
-            // For Büchi automatons (with acceptance sets), we check if any monitor
-            // is in an accepting state. The cycle will ensure we visit it infinitely often.
-            // For degenerate automatons (without acceptance sets), all states are accepting.
-
-            match &formulas[formula_idx] {
-                CompiledLtlExpression::Exists { .. } => {
-                    // Exists: violation only if all monitors accept (or no monitor at all)
-                    if monitors.is_empty() {
-                        return true;
-                    }
-                    monitors
-                        .iter()
-                        .all(|monitor| monitor.is_accepting(automaton))
-                }
-                _ => monitors
-                    .iter()
-                    .any(|monitor| monitor.is_accepting(automaton)),
-            }
-        })
-}
-
-/// Check if any monitor is in an accepting state with no temporal obligations.
-///
-/// This is an optimization: when a Büchi state has no temporal obligations (no Next formulas),
-/// it means any infinite continuation will stay in accepting states. We can immediately
-/// report a violation without needing to find the actual cycle.
-///
-/// This provides:
-/// 1. Shorter counter-example traces (shows exactly where violation occurs)
-/// 2. Faster detection (no need to explore further)
-fn monitors_in_immediate_accepting_state(
-    monitors: &MonitoringState,
-    automatons: &[BuchiAutomaton],
-    formulas: &[CompiledLtlExpression],
-) -> bool {
-    monitors
-        .monitors_per_formula
-        .iter()
-        .enumerate()
-        .any(|(formula_idx, monitors)| {
-            let automaton = &automatons[formula_idx];
-
-            match &formulas[formula_idx] {
-                CompiledLtlExpression::Exists { .. } => {
-                    if monitors.is_empty() {
-                        return true;
-                    }
-                    monitors.iter().all(|monitor| {
-                        monitor.is_accepting(automaton)
-                            && state_has_only_propositional_formulas(
-                                automaton,
-                                monitor.current_state_id,
-                            )
-                    })
-                }
-                _ => monitors.iter().any(|monitor| {
-                    monitor.is_accepting(automaton)
-                        && state_has_only_propositional_formulas(
-                            automaton,
-                            monitor.current_state_id,
-                        )
-                }),
-            }
-        })
-}
-
-/// Check if a Büchi state has only propositional formulas
-/// (no temporal obligations like Next, Until, Eventually, Always).
-///
-/// When a state has no temporal obligations, any infinite suffix from this state
-/// will remain in accepting states, so we can detect violations immediately.
-fn state_has_only_propositional_formulas(automaton: &BuchiAutomaton, state_id: usize) -> bool {
-    if let Some(state) = automaton.states.get(state_id) {
-        state.formulas.iter().all(|f| is_propositional(f))
-    } else {
-        false
-    }
-}
-
-/// Check if an LTL expression is purely propositional (no temporal operators).
-fn is_propositional(expr: &CompiledLtlExpression) -> bool {
-    match expr {
-        CompiledLtlExpression::Boolean(_) => true,
-        CompiledLtlExpression::Predicate { .. } => true,
-        CompiledLtlExpression::Not(inner) => is_propositional(inner),
-        CompiledLtlExpression::And(a, b)
-        | CompiledLtlExpression::Or(a, b)
-        | CompiledLtlExpression::Implies(a, b) => is_propositional(a) && is_propositional(b),
-        // Temporal operators
-        CompiledLtlExpression::Next(_)
-        | CompiledLtlExpression::Eventually(_)
-        | CompiledLtlExpression::Always(_)
-        | CompiledLtlExpression::Until(_, _)
-        | CompiledLtlExpression::Release(_, _) => false,
-        // Quantifiers contain temporal formulas
-        CompiledLtlExpression::ForLoop { .. } | CompiledLtlExpression::Exists { .. } => false,
-    }
+    path.reverse();
+    path
 }

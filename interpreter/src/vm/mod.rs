@@ -696,6 +696,13 @@ impl<'a> Hash for VM<'a> {
         }
         waiting.hash(state);
         self.running_programs.hash(state);
+        self.executable_programs.hash(state);
+        self.next_program_id.hash(state);
+        // The dependency sets are checked by equality. Hashing their sorted
+        // process IDs avoids relying on HashMap iteration order.
+        let mut waiting_ids: Vec<_> = self.waiting_programs.keys().collect();
+        waiting_ids.sort_unstable();
+        waiting_ids.hash(state);
     }
 
     fn hash_slice<H: Hasher>(data: &[Self], state: &mut H)
@@ -725,7 +732,11 @@ impl std::cmp::PartialEq for VM<'_> {
         if self.channels.get_waiting_send() != other.channels.get_waiting_send() {
             return false;
         }
-        self.running_programs == other.running_programs && self.programs_code == other.programs_code
+        self.running_programs == other.running_programs
+            && self.programs_code == other.programs_code
+            && self.executable_programs == other.executable_programs
+            && self.waiting_programs == other.waiting_programs
+            && self.next_program_id == other.next_program_id
     }
 }
 

@@ -28,6 +28,25 @@ struct StackFrame<'a> {
     pos: Option<Pos>,               // the position in the source code where this frame was created
 }
 
+impl PartialEq for StackFrame<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.return_ip == other.return_ip
+            && self.caller_fp == other.caller_fp
+            && std::ptr::eq(self.caller_code, other.caller_code)
+            && self.expected_return_type == other.expected_return_type
+    }
+}
+
+impl Hash for StackFrame<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.return_ip.hash(state);
+        self.caller_fp.hash(state);
+        self.caller_code.as_ptr().hash(state);
+        self.caller_code.len().hash(state);
+        self.expected_return_type.hash(state);
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct RunningProgramState<'a> {
     pub name: String,
@@ -54,8 +73,11 @@ impl PartialEq for RunningProgramState<'_> {
             && self.memory == other.memory
             && self.name == other.name
             && self.instruction_pointer == other.instruction_pointer
+            // Code is immutable and shared by all states of a compiled project.
+            && std::ptr::eq(self.current_code, other.current_code)
             && self.frame_pointer == other.frame_pointer
-            && self.call_stack.len() == other.call_stack.len()
+            && self.call_stack == other.call_stack
+            && self.clock == other.clock
     }
 }
 
@@ -63,7 +85,13 @@ impl Hash for RunningProgramState<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.id.hash(state);
         self.memory.hash(state);
+        self.name.hash(state);
         self.instruction_pointer.hash(state);
+        self.current_code.as_ptr().hash(state);
+        self.current_code.len().hash(state);
+        self.frame_pointer.hash(state);
+        self.call_stack.hash(state);
+        self.clock.hash(state);
     }
 }
 

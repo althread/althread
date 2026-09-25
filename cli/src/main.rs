@@ -201,7 +201,10 @@ pub fn check_command(cli_args: &CheckCommand) {
         println!("✓ No invariant violated");
     } else {
         println!("✗ Invariant violated");
-        for link in checked.0.iter() {
+        for (index, link) in checked.0.iter().enumerate() {
+            if checked.1.violation_cycle_start == Some(index) {
+                println!("-- start of repeating counterexample cycle --");
+            }
             println!(
                 "{}",
                 format!("-- {}#{} --", link.name, link.pid).style(if link.pid == 0 {

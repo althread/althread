@@ -555,6 +555,7 @@ pub fn check(
         path: path_nodes,
         nodes: graph_nodes,
         exhaustive: state_graph.exhaustive,
+        violation_cycle_start: state_graph.violation_cycle_start,
     };
 
     Ok(to_js(&result))

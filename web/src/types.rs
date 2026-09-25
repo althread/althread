@@ -208,6 +208,8 @@ pub struct CheckResult {
     pub path: Vec<GraphNode>,
     pub nodes: Vec<GraphNode>,
     pub exhaustive: bool,
+    /// First transition in the repeating part of an LTL counterexample.
+    pub violation_cycle_start: Option<usize>,
 }
 
 /// Result from an interactive step execution

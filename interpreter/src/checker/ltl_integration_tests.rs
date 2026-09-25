@@ -89,12 +89,10 @@ check {
         println!("Number of violations: {}", violations.len());
         println!("Number of states: {}", graph.nodes.len());
 
-        // This test is expected to find a violation (deadlock preventing termination)
-        // If it doesn't, there may be a bug in the checker
-        // For now, we document the current behavior
-        if violations.is_empty() {
-            println!("WARNING: No violation detected for deadlock case - possible bug in checker");
-        }
+        assert!(
+            !violations.is_empty(),
+            "Deadlock must violate eventual termination"
+        );
 
         Ok(())
     }
@@ -382,10 +380,7 @@ check {
         println!("Violations: {}", violations.len());
         println!("States: {}", graph.nodes.len());
 
-        // This should detect a violation (Done never becomes true)
-        if violations.is_empty() {
-            println!("WARNING: No violation detected - possible bug");
-        }
+        assert!(!violations.is_empty(), "Done remains false forever");
 
         Ok(())
     }
