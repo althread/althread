@@ -10,6 +10,8 @@
 		"install-deps": "cargo install wasm-pack",
 		"generate-examples": "node app/scripts/generate-examples.js",
 		"clean": "rm -rf dist",
+		"check:lsp": "tsc --project tsconfig.lsp.json",
+		"test:lsp": "node --experimental-transform-types --test tests/lsp.test.mjs",
 		"check": "biome check",
 		"check:fix": "biome check --write"
 	},

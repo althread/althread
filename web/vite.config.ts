@@ -13,6 +13,9 @@ export default defineConfig({
 			"@examples": "/app/examples",
 		},
 	},
+	worker: {
+		format: "es",
+	},
 	build: {
 		target: "esnext",
 	},

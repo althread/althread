@@ -255,7 +255,6 @@ const Tutorial: Component = () => {
 					const readOnlyEditor = createEditor({
 						defaultValue: code,
 						onValueChange: undefined,
-						compile: () => Promise.resolve(),
 						filePath: "example.alt",
 						theme: theme(),
 					});
@@ -294,17 +293,12 @@ const Tutorial: Component = () => {
 		});
 	});
 
-	const compileFromEditor = async (currentEditorCode: string) => {
-		const virtualFS = getTutorialVirtualFS(currentEditorCode);
-		return await workerClient.compile(currentEditorCode, "main.alt", virtualFS);
-	};
-
 	const editorInstance = createEditor({
 		defaultValue: code(),
 		onValueChange: (newCode) => {
 			setCode(newCode);
 		},
-		compile: compileFromEditor,
+		getWorkspace: () => getTutorialVirtualFS(code()),
 		theme: theme(),
 	});
 

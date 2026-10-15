@@ -189,32 +189,26 @@ export default function App() {
 
 	// Initialize editor (no default file content)
 	const editor = createEditor({
-		compile: async (source: string) => {
-			const activeFile = editorManager.activeFile();
-			if (!activeFile) return null;
-			const filePath =
-				getPathFromId(mockFileSystem(), activeFile.id) || activeFile.name;
-			const virtualFS = buildVirtualFileSystem(mockFileSystem());
-			return await workerClient.compile(source, filePath, virtualFS);
+		getWorkspace: () => buildVirtualFileSystem(mockFileSystem()),
+		onWorkspaceChange: (files) => {
+			for (const [path, content] of Object.entries(files)) saveFileContent(path, content);
+		},
+		onNavigate: (path, position) => {
+			if (!findFileByPath(mockFileSystem(), path)) return;
+			editorManager.handleFileSelect(path, mockFileSystem());
+			const view = editor.safeEditorView();
+			if (!view) return;
+			const line = view.state.doc.line(Math.min(position.line + 1, view.state.doc.lines));
+			const anchor = Math.min(line.from + position.character, line.to);
+			view.dispatch({ selection: { anchor }, scrollIntoView: true });
+			view.focus();
 		},
 		defaultValue: "// Welcome to Althread\n",
 		filePath: "untitled.alt",
 		theme: theme(),
 		onValueChange: (value) => {
-			// Save current file content when editor changes
-			// Use a delayed check since editorManager might not be initialized yet
-			setTimeout(() => {
-				if (
-					editorManager &&
-					editorManager.activeFile &&
-					editorManager.activeFile()
-				) {
-					const filePath =
-						getPathFromId(mockFileSystem(), editorManager.activeFile()!.id) ||
-						editorManager.activeFile()!.name;
-					saveFileContent(filePath, value);
-				}
-			}, 0);
+			const active = editorManager.activeFile();
+			if (active) saveFileContent(getPathFromId(mockFileSystem(), active.id) || active.name, value);
 		},
 	});
 
@@ -574,6 +568,7 @@ export default function App() {
 
 				// Update the editor content
 				const editorView = editor.editorView();
+				if (!editorView) return;
 				const transaction = editorView.state.update({
 					changes: {
 						from: 0,

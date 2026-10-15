@@ -22,19 +22,11 @@ import { python } from "@codemirror/lang-python";
 import { rust } from "@codemirror/lang-rust";
 import {
 	bracketMatching,
-	defaultHighlightStyle,
 	foldGutter,
 	foldKeymap,
-	HighlightStyle,
 	indentOnInput,
-	syntaxHighlighting,
 } from "@codemirror/language";
-import {
-	type Diagnostic,
-	linter,
-	lintGutter,
-	lintKeymap,
-} from "@codemirror/lint";
+import { lintGutter, lintKeymap } from "@codemirror/lint";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import {
 	Compartment,
@@ -58,17 +50,17 @@ import {
 	rectangularSelection,
 	WidgetType,
 } from "@codemirror/view";
-import { Tag, tags as t, tags } from "@lezer/highlight";
 import { createCodeMirror } from "solid-codemirror";
-import { createSignal, onMount } from "solid-js";
+import { createEffect } from "solid-js";
 import {
 	type CodeEditorTheme,
 	createCustomSyntaxHighlighting,
 } from "./custom-style";
 import editor_lang from "./editor-lang";
+import type { LanguageOptions } from "../../lsp/extension";
 
 // Language detection based on file extension
-const getLanguageExtension = (filePath: string): Extension => {
+const getLanguageExtension = (filePath: string, options: LanguageOptions): Extension => {
 	const extension = filePath.split(".").pop()?.toLowerCase();
 
 	switch (extension) {
@@ -99,7 +91,7 @@ const getLanguageExtension = (filePath: string): Extension => {
 		case "hpp":
 			return cpp();
 		case "alt":
-			return editor_lang(); // Your custom language
+			return editor_lang(options);
 		default:
 			return javascript(); // Default to JavaScript for unknown files
 	}
@@ -219,6 +211,15 @@ const createEditorTheme = (theme: CodeEditorTheme) => {
 				color: isDark ? "#abb2bf" : "#2f3441",
 				backgroundColor: isDark ? "#1e1e1e" : "#f7f1e7",
 			},
+			".cm-tooltip": {
+				backgroundColor: isDark ? "#252526" : "#fffaf2",
+				color: isDark ? "#ddd" : "#2f3441",
+				border: `1px solid ${isDark ? "#555" : "#c6bda9"}`,
+			},
+			".cm-tooltip-autocomplete ul li[aria-selected]": {
+				backgroundColor: isDark ? "#094771" : "#d9e8f5",
+				color: isDark ? "#fff" : "#16324c",
+			},
 			".cm-content": {
 				caretColor: isDark ? "#528bff" : "#0f6bbd",
 			},
@@ -307,21 +308,30 @@ const createEditorTheme = (theme: CodeEditorTheme) => {
 };
 
 const createEditor = ({
-	compile,
 	defaultValue,
 	onValueChange,
 	filePath = "main.alt",
 	theme = "dark",
+	getWorkspace,
+	onNavigate,
+	onWorkspaceChange,
 }: {
-	compile: (code: string) => Promise<any>;
 	defaultValue: string | undefined;
 	onValueChange: undefined | ((value: string) => void);
 	filePath?: string;
 	theme?: CodeEditorTheme;
+	getWorkspace?: LanguageOptions["getWorkspace"];
+	onNavigate?: LanguageOptions["onNavigate"];
+	onWorkspaceChange?: LanguageOptions["onWorkspaceChange"];
 }) => {
+	let currentContent = defaultValue ?? "";
+	let requestedReadOnly = false;
 	const editor = createCodeMirror({
 		value: defaultValue,
-		onValueChange: onValueChange,
+		onValueChange: (value) => {
+			currentContent = value;
+			onValueChange?.(value);
+		},
 	});
 
 	// Store current filename for language detection
@@ -329,74 +339,21 @@ const createEditor = ({
 
 	// Create compartments for dynamic extensions
 	const languageCompartment = new Compartment();
-	const linterCompartment = new Compartment();
 	const readOnlyCompartment = new Compartment();
 	const themeCompartment = new Compartment();
 	const syntaxCompartment = new Compartment();
 
-	// Create linter only for .alt files, but always include lintGutter for consistent spacing
-	const createLinterExtension = (filePath: string): Extension => {
-		if (filePath.endsWith(".alt")) {
-			const regexpLinter = linter(async (view) => {
-				console.log("linting .alt file");
-				const diagnostics: Diagnostic[] = [];
-
-				const code = view.state.doc.toString();
-
-				try {
-					await compile(code);
-				} catch (e: any) {
-					console.log("Lint error:", e);
-
-					// Check if error has position information
-					if (
-						e.pos &&
-						typeof e.pos.start === "number" &&
-						typeof e.pos.end === "number"
-					) {
-						diagnostics.push({
-							from: e.pos.start,
-							to: e.pos.end,
-							severity: "error",
-							message: e.message || "Compilation error",
-						});
-					} else {
-						// If no position info, highlight the entire document or first line
-						const docLength = view.state.doc.length;
-						if (docLength > 0) {
-							const firstLineEnd = view.state.doc.line(1).to;
-							diagnostics.push({
-								from: 0,
-								to: Math.min(firstLineEnd, docLength),
-								severity: "error",
-								message: e.message || "Compilation error",
-							});
-						}
-					}
-				}
-				return diagnostics;
-			});
-			return [regexpLinter, lintGutter()];
-		}
-		// For non-.alt files, still include lintGutter for consistent spacing, but no actual linter
-		return [lintGutter()];
-	};
-
-	// Function to update language and linter
+	const languageOptions = (path: string): LanguageOptions => ({
+		filePath: path, getWorkspace, onNavigate, onWorkspaceChange,
+	});
 	const updateLanguage = (newFileName: string) => {
-		console.log(`Switching to language for: ${newFileName}`);
 		currentFileName = newFileName;
-
-		// Update language extension
-		const newLanguageExtension = getLanguageExtension(newFileName);
-		editor.editorView().dispatch({
-			effects: languageCompartment.reconfigure(newLanguageExtension),
-		});
-
-		// Update linter extension (only for .alt files, but always include gutter)
-		const newLinterExtension = createLinterExtension(newFileName);
-		editor.editorView().dispatch({
-			effects: linterCompartment.reconfigure(newLinterExtension),
+		const view = editor.editorView();
+		if (!view || !languageCompartment.get(view.state)) return;
+		view.dispatch({
+			effects: languageCompartment.reconfigure(
+				getLanguageExtension(newFileName, languageOptions(newFileName)),
+			),
 		});
 	};
 
@@ -424,9 +381,9 @@ const createEditor = ({
 
 	// Add compartments for dynamic extensions
 	editor.createExtension(
-		languageCompartment.of(getLanguageExtension(filePath)),
+		languageCompartment.of(getLanguageExtension(filePath, languageOptions(filePath))),
 	);
-	editor.createExtension(linterCompartment.of(createLinterExtension(filePath)));
+	editor.createExtension(lintGutter());
 	editor.createExtension(readOnlyCompartment.of([]));
 	editor.createExtension(highlightField);
 
@@ -444,6 +401,7 @@ const createEditor = ({
 
 	// Safe content update function
 	const safeUpdateContent = (content: string) => {
+		currentContent = content;
 		const view = safeEditorView();
 		if (view) {
 			try {
@@ -466,6 +424,7 @@ const createEditor = ({
 
 	// Function to toggle read-only mode
 	const setReadOnly = (isReadOnly: boolean) => {
+		requestedReadOnly = isReadOnly;
 		const view = safeEditorView();
 		if (view) {
 			try {
@@ -481,6 +440,16 @@ const createEditor = ({
 		}
 		return false;
 	};
+
+	// A file can be selected before Solid mounts the editor. Apply the latest
+	// requested buffer, URI and access mode as soon as its view is available.
+	createEffect(() => {
+		const view = editor.editorView();
+		if (!view) return;
+		safeUpdateContent(currentContent);
+		updateLanguage(currentFileName);
+		setReadOnly(requestedReadOnly);
+	});
 
 	// Function to highlight specific lines
 	const highlightLines = (

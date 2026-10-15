@@ -1,12 +1,13 @@
 // Lezer parser compiled with pnpm run prepare
 
-import { completeFromList } from "@codemirror/autocomplete";
 import {
 	foldInside,
 	foldNodeProp,
 	indentNodeProp,
 	LRLanguage,
 } from "@codemirror/language";
+
+import { languageExtensions, type LanguageOptions } from "../../lsp/extension";
 
 import { althreadHighlight } from "../../../lezer/highlight.js";
 import { parser } from "../../../lezer/parser.js";
@@ -31,19 +32,12 @@ export const exampleLanguage = LRLanguage.define({
 	},
 });
 
-export const exampleCompletion = exampleLanguage.data.of({
-	autocomplete: completeFromList([
-		{ label: "defun", type: "keyword" },
-		{ label: "defvar", type: "keyword" },
-		{ label: "let", type: "keyword" },
-		{ label: "cons", type: "function" },
-		{ label: "car", type: "function" },
-		{ label: "cdr", type: "function" },
-	]),
-});
-
 import { LanguageSupport } from "@codemirror/language";
 
-export default function () {
-	return new LanguageSupport(exampleLanguage, [exampleCompletion]);
+export default function (options: LanguageOptions) {
+	const service = languageExtensions(options);
+	return new LanguageSupport(exampleLanguage, [
+		service.extension,
+		exampleLanguage.data.of({ autocomplete: service.completion }),
+	]);
 }

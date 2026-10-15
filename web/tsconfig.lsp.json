@@ -1,0 +1,8 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"types": [],
+		"skipLibCheck": true
+	},
+	"include": ["app/lsp/**/*.ts", "app/workers/language-server.worker.ts"]
+}

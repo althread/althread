@@ -37,12 +37,7 @@ export const createEditorManager = (editor: any) => {
 					editor.setReadOnly(isInDeps);
 				}
 
-				// Then update language (after content is loaded)
-				setTimeout(() => {
-					if (editor && editor.updateLanguage) {
-						editor.updateLanguage(file.name);
-					}
-				}, 10);
+				editor.updateLanguage?.(path);
 			}
 		}
 	};
@@ -67,12 +62,7 @@ export const createEditorManager = (editor: any) => {
 				editor.setReadOnly(isInDeps);
 			}
 
-			// Then update language (after content is loaded)
-			setTimeout(() => {
-				if (editor && editor.updateLanguage) {
-					editor.updateLanguage(file.name);
-				}
-			}, 10);
+			editor.updateLanguage?.(filePath);
 		}
 	};
 
@@ -97,12 +87,8 @@ export const createEditorManager = (editor: any) => {
 				const content = loadFileContent(newFilePath);
 				editor.safeUpdateContent(content);
 
-				// Update language
-				setTimeout(() => {
-					if (editor && editor.updateLanguage) {
-						editor.updateLanguage(newActiveFile.name);
-					}
-				}, 10);
+				editor.updateLanguage?.(newFilePath);
+				editor.setReadOnly?.(newFilePath === "deps" || newFilePath.startsWith("deps/"));
 			}
 		}
 	};

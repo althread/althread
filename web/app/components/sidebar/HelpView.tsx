@@ -20,6 +20,16 @@ export default function HelpView(props: HelpViewProps) {
 			<div class="help-view-content">
 				<Show when={!showExamples()}>
 					<div class="help-links">
+						<div class="help-link">
+							<div>
+								<div class="help-link-title">Intelligent Althread editor</div>
+								<div class="help-link-desc">
+									Ctrl+Space: completion · F12 or Ctrl/Cmd+click: definition ·
+									Shift+F12: references · F2: rename.
+									Hover a symbol for its type; function signatures appear while typing arguments.
+								</div>
+							</div>
+						</div>
 						<button class="help-link" onClick={() => setShowExamples(true)}>
 							<i class="codicon codicon-file-code"></i>
 							<div>

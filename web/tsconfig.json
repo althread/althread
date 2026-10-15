@@ -9,6 +9,7 @@
 		"resolveJsonModule": true,
 		"esModuleInterop": true,
 		"noEmit": true,
+		"allowImportingTsExtensions": true,
 		"noUnusedLocals": true,
 		"noUnusedParameters": true,
 		"noImplicitReturns": true,

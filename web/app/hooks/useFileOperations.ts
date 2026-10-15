@@ -77,12 +77,8 @@ export const createFileOperationsHandlers = (
 		if (editor && editor.safeUpdateContent) {
 			editor.safeUpdateContent(fileContent);
 
-			// Then update language
-			setTimeout(() => {
-				if (editor && editor.updateLanguage) {
-					editor.updateLanguage(name);
-				}
-			}, 10);
+			editor.updateLanguage?.(fullPath);
+			editor.setReadOnly?.(fullPath.startsWith("deps/"));
 		}
 	};
 
@@ -218,6 +214,11 @@ export const createFileOperationsHandlers = (
 		if (activeFileId) {
 			const newActiveFile = findEntryById(newFileSystem, activeFileId);
 			setActiveFile(newActiveFile);
+			if (newActiveFile) {
+				const activePath = getPathFromId(newFileSystem, newActiveFile.id) || newActiveFile.name;
+				editor.updateLanguage?.(activePath);
+				editor.setReadOnly?.(activePath.startsWith("deps/"));
+			}
 		}
 	};
 
@@ -315,6 +316,11 @@ export const createFileOperationsHandlers = (
 		if (activeFileId) {
 			const newActiveFile = findEntryById(newFileSystem, activeFileId);
 			setActiveFile(newActiveFile);
+			if (newActiveFile) {
+				const activePath = getPathFromId(newFileSystem, newActiveFile.id) || newActiveFile.name;
+				editor.updateLanguage?.(activePath);
+				editor.setReadOnly?.(activePath.startsWith("deps/"));
+			}
 		}
 	};
 
@@ -375,12 +381,8 @@ export const createFileOperationsHandlers = (
 				const content = loadFileContent(newFilePath);
 				editor.safeUpdateContent(content);
 
-				// Update language
-				setTimeout(() => {
-					if (editor && editor.updateLanguage) {
-						editor.updateLanguage(newActiveFile.name);
-					}
-				}, 10);
+				editor.updateLanguage?.(newFilePath);
+				editor.setReadOnly?.(newFilePath.startsWith("deps/"));
 			}
 		}
 
@@ -516,16 +518,17 @@ export const createFileOperationsHandlers = (
 					const content = loadFileContent(newFilePath);
 					editor.safeUpdateContent(content);
 
-					// Update language
-					setTimeout(() => {
-						if (editor && editor.updateLanguage) {
-							editor.updateLanguage(newActiveFile.name);
-						}
-					}, 10);
+					editor.updateLanguage?.(newFilePath);
+					editor.setReadOnly?.(newFilePath.startsWith("deps/"));
 				}
 			} else {
 				const newActiveFile = findEntryById(newFileSystem, activeFileId);
 				setActiveFile(newActiveFile);
+				if (newActiveFile) {
+					const activePath = getPathFromId(newFileSystem, newActiveFile.id) || newActiveFile.name;
+					editor.updateLanguage?.(activePath);
+					editor.setReadOnly?.(activePath.startsWith("deps/"));
+				}
 			}
 		}
 	};
