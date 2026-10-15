@@ -1,5 +1,6 @@
 # Stage 1: Build
-FROM rust:1.82-slim-bookworm AS builder
+# Follow stable Rust, as in CI; dependencies require Rust 2024 support.
+FROM rust:1-slim-bookworm AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
@@ -10,7 +11,7 @@ WORKDIR /usr/src/althread
 COPY . .
 
 # Build the project
-RUN cargo build --release -p althread-cli
+RUN cargo build --locked --release -p althread-cli
 
 # Stage 2: Runtime
 FROM debian:bookworm-slim
