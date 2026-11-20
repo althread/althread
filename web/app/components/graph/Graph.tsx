@@ -1,5 +1,5 @@
 import { useGraphMaximizeHotkeys } from "@hooks/useGraphMaximizeHotkeys";
-import { createEffect, createSignal, onCleanup } from "solid-js";
+import { createEffect, createSignal, on, onCleanup, untrack } from "solid-js";
 import vis from "vis-network/dist/vis-network.esm";
 import { exportStatesToCSV } from "./exportToCSV";
 import GraphToolbar from "./GraphToolbar";
@@ -10,21 +10,24 @@ import {
 	formatState,
 	setupNodeClickZoom,
 } from "./visHelpers";
+import { MAX_VISIBLE_GRAPH_NODES } from "@utils/graphBuilders";
 import { themes } from "./visOptions";
 
 interface GraphProps {
 	nodes: any[];
 	edges: any[];
 	vm_states?: any[];
-	setLoadingAction: (action: string | null) => void;
+	setLoadingAction?: (action: string | null) => void;
 	theme?: "light" | "dark";
 	onEdgeClick?: (edgeId: string, edgeData: any) => void;
 	onNodeSelect?: (node: any | null) => void;
 	tooLargeStatusMessage?: string;
+	/** Node to select (and focus) in the graph, e.g. the current step of a trace. */
+	selectedNode?: number | string | null;
 	ref?: (instance: { selectNode: (nodeId: string | number) => void }) => void;
 }
 
-export const MAX_VISIBLE_GRAPH_NODES = 200;
+export { MAX_VISIBLE_GRAPH_NODES };
 
 export default (props: GraphProps) => {
 	let container: HTMLDivElement | undefined;
@@ -66,7 +69,7 @@ export default (props: GraphProps) => {
 			if (props.onNodeSelect) {
 				props.onNodeSelect(null);
 			}
-			props.setLoadingAction(null);
+			props.setLoadingAction?.(null);
 			return;
 		}
 
@@ -166,16 +169,25 @@ export default (props: GraphProps) => {
 			}
 		});
 
+		const applyInitialSelection = () => {
+			const selected = untrack(() => props.selectedNode);
+			if (network && selected !== null && selected !== undefined) {
+				network.selectNodes([selected]);
+			}
+		};
+
 		if (isLargeGraph) {
 			if (network) {
 				network.fit({ animation: false });
 			}
-			props.setLoadingAction(null);
+			applyInitialSelection();
+			props.setLoadingAction?.(null);
 		} else {
 			network.once("stabilized", () => {
 				if (network) {
 					network.fit();
-					props.setLoadingAction(null);
+					applyInitialSelection();
+					props.setLoadingAction?.(null);
 				}
 			});
 		}
@@ -187,6 +199,18 @@ export default (props: GraphProps) => {
 			}
 		});
 	});
+
+	createEffect(
+		on(
+			() => props.selectedNode,
+			(selected) => {
+				if (!network || selected === null || selected === undefined) return;
+				network.selectNodes([selected]);
+				network.focus(selected, { animation: true, scale: 1.2 });
+			},
+			{ defer: true },
+		),
+	);
 
 	useGraphMaximizeHotkeys(setMaximized);
 

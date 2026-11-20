@@ -1,50 +1,35 @@
 // @refresh granular
 
 import { Logo } from "@assets/images/Logo";
-import createEditor from "@components/editor/Editor";
-import type { FileSystemEntry } from "@components/fileexplorer/FileExplorer";
-import { renderMessageFlowGraph } from "@components/graph/CommGraph";
-import Graph, { MAX_VISIBLE_GRAPH_NODES } from "@components/graph/Graph";
-import Resizable from "@corvu/resizable";
-import type { JSX } from "solid-js";
-import {
-	createEffect,
-	createSignal,
-	Match,
-	onMount,
-	onCleanup,
-	Show,
-	Switch,
-} from "solid-js";
-import init, {
-	execute_interactive_step,
-	get_next_interactive_states,
-	initialize,
-	start_interactive_session,
-} from "../pkg/althread_web";
-import "@components/fileexplorer/FileExplorer.css";
 import {
 	DeleteConfirmationDialog,
 	MoveConfirmationDialog,
 } from "@components/dialogs/ConfirmationDialogs";
 import { LoadExampleDialog } from "@components/dialogs/LoadExampleDialog";
+import createEditor from "@components/editor/Editor";
 import { EmptyEditor } from "@components/editor/EmptyEditor";
-import ErrorDisplay from "@components/error/ErrorDisplay";
+import type { FileSystemEntry } from "@components/fileexplorer/FileExplorer";
 import FileTabs from "@components/fileexplorer/FileTabs";
-import VMStateInspector from "@components/graph/VMStateInspector";
-import InteractivePanel from "@components/interactive/InteractivePanel";
+import ResultsPanel from "@components/results/ResultsPanel";
 import Sidebar, { type SidebarView } from "@components/sidebar/Sidebar";
+import Resizable from "@corvu/resizable";
 import { createEditorManager } from "@hooks/useEditorManager";
+import {
+	createExecutionController,
+	type ExecutionAction,
+	type ExecutionContext,
+} from "@hooks/useExecution";
 import { createFileOperationsHandlers } from "@hooks/useFileOperations";
-import { formatAlthreadError } from "@utils/error";
 import {
 	buildVirtualFileSystem,
 	findFileByPath,
-	getFileContentFromVirtualFS,
 	getPathFromId,
-} from "@utils/fileSystemUtils"; // Add buildVirtualFileSystem here
-import { buildGraphFromNodes } from "@utils/graphBuilders";
-// Import our new modules
+} from "@utils/fileSystemUtils";
+import { isMac, modKey } from "@utils/platform";
+import {
+	clearSharedEditorFileFromUrl,
+	loadSharedEditorFileFromUrl,
+} from "@utils/share";
 import {
 	type EditorTheme,
 	loadEditorTheme,
@@ -54,53 +39,66 @@ import {
 	saveFileContent,
 	saveFileSystem,
 } from "@utils/storage";
+import type { JSX } from "solid-js";
 import {
-	clearSharedEditorFileFromUrl,
-	loadSharedEditorFileFromUrl,
-} from "@utils/share";
-import { workerClient } from "@utils/workerClient";
-import type {
-	CheckResult,
-	GraphNode,
-	RunResult,
-	VMStateSelection,
-} from "./types/vm-state";
+	createEffect,
+	createSignal,
+	on,
+	onCleanup,
+	onMount,
+	Show,
+} from "solid-js";
+import "@components/fileexplorer/FileExplorer.css";
+import init, { initialize } from "../pkg/althread_web";
 import "./theme-overrides.css";
 
 init().then(() => {
-	console.log("loaded");
-	initialize(); // Initialize the panic hook
+	initialize(); // Install the panic hook
 });
 
-const animationTimeOut = 100; //ms
-const DEFAULT_WEB_CHECK_MAX_STATES = 10_000;
-const WEB_RUN_MAX_STEPS = 1_000;
+/** Returns `name.ext`, or `name-2.ext`, `name-3.ext`… if the name is already taken at the root. */
+const uniqueFileName = (fileSystem: FileSystemEntry[], fileName: string) => {
+	if (!findFileByPath(fileSystem, fileName)) return fileName;
+	const dot = fileName.lastIndexOf(".");
+	const base = dot > 0 ? fileName.slice(0, dot) : fileName;
+	const ext = dot > 0 ? fileName.slice(dot) : "";
+	let i = 2;
+	while (findFileByPath(fileSystem, `${base}-${i}${ext}`)) i++;
+	return `${base}-${i}${ext}`;
+};
 
-const createUniqueSharedFileName = (
+/** Does `destPath` (a directory path, "" for the root) already contain an entry named `name`? */
+const directoryContains = (
 	fileSystem: FileSystemEntry[],
-	fileName: string,
-): string => {
-	const extensionIndex = fileName.lastIndexOf(".");
-	const baseName =
-		extensionIndex >= 0 ? fileName.slice(0, extensionIndex) : fileName;
-	const extension = extensionIndex >= 0 ? fileName.slice(extensionIndex) : "";
-	let candidate = `${baseName}-${Date.now()}${extension}`;
-
-	while (findFileByPath(fileSystem, candidate)) {
-		candidate = `${baseName}-${Date.now()}-${Math.floor(Math.random() * 1000)}${extension}`;
+	destPath: string,
+	name: string,
+) => {
+	let level: FileSystemEntry[] | undefined = fileSystem;
+	for (const part of destPath.split("/").filter(Boolean)) {
+		level = level?.find(
+			(e) => e.name === part && e.type === "directory",
+		)?.children;
+		if (!level) return false;
 	}
+	return level.some((entry) => entry.name === name);
+};
 
-	return candidate;
+interface FileDialogState {
+	isOpen: boolean;
+	content: string;
+	fileName: string;
+}
+const CLOSED_FILE_DIALOG: FileDialogState = {
+	isOpen: false,
+	content: "",
+	fileName: "",
 };
 
 export default function App() {
-	// Load file system from localStorage
 	const sharedEditorFile = loadSharedEditorFileFromUrl();
-	const storedFileSystem = loadFileSystem();
-	const initialFileSystem = storedFileSystem;
 
 	const [mockFileSystem, setMockFileSystem] =
-		createSignal<FileSystemEntry[]>(initialFileSystem);
+		createSignal<FileSystemEntry[]>(loadFileSystem());
 	const [selectedFiles, setSelectedFiles] = createSignal<string[]>([]);
 	const [creationError, setCreationError] = createSignal<string | null>(null);
 	const [didAutoOpenDefault, setDidAutoOpenDefault] = createSignal(
@@ -114,91 +112,76 @@ export default function App() {
 		parentPath: string;
 	} | null>(null);
 
-	// Sidebar view state
+	// ---- Sidebar ---------------------------------------------------------------
+
 	const [sidebarView, setSidebarView] = createSignal<SidebarView>("help");
 	const [sidebarCollapsed, setSidebarCollapsed] = createSignal(false);
 
-	// Ref to corvu resizable collapse/expand functions — set by MainLayoutWrapper
+	// corvu resizable size accessors — set by the Resizable `as` wrapper below
 	let getResizableSizes: (() => number[]) | null = null;
 	let setResizableSizes: ((sizes: number[]) => void) | null = null;
 	const [sidebarPrevSize, setSidebarPrevSize] = createSignal(0.2);
+	/** Width of the icon strip shown when the sidebar is collapsed (see `.sidebar-collapsed`). */
+	const COLLAPSED_STRIP_WIDTH = 48;
 
 	const toggleSidebarCollapse = () => {
 		const next = !sidebarCollapsed();
+		const setSizes = setResizableSizes;
+		const rightPanelEl = document.querySelector<HTMLElement>(".right-panel");
+		const containerEl = document.getElementById("content");
 
-		// Capture to locally scoped consts to satisfy TS non-null checks without !
-		const getSizesFn = getResizableSizes;
-		const setSizesFn = setResizableSizes;
+		if (getResizableSizes && setSizes && rightPanelEl && containerEl) {
+			const containerW = containerEl.getBoundingClientRect().width;
+			const rightW = rightPanelEl.getBoundingClientRect().width;
 
-		if (getSizesFn && setSizesFn) {
-			const rightPanelEl = document.querySelector(
-				".right-panel",
-			) as HTMLElement;
-			const containerEl = document.getElementById("content") as HTMLElement;
-
-			if (rightPanelEl && containerEl) {
-				const containerW = containerEl.getBoundingClientRect().width;
-				const rightW = rightPanelEl.getBoundingClientRect().width;
-
-				// Provide exact pixel math. The layout has 0px handles now.
-				// However, the container's physical width changes by exactly 48px
-				// because of the `.sidebar-collapsed` class adding `margin-left: 48px`.
-				if (next) {
-					// Collapsing: container will shrink by 48px
-					const targetContainerW = containerW - 48;
-
-					// Save the sidebar's current pixel width so we can restore it exactly
-					const currentSidebarW =
-						(
-							document.querySelector(
-								"#content > [data-corvu-resizable-panel]:first-child",
-							) as HTMLElement
-						)?.getBoundingClientRect()?.width || containerW * 0.2;
-					setSidebarPrevSize(currentSidebarW);
-
-					// Right panel should maintain its exact current pixel width
-					const newRightPercent = rightW / targetContainerW;
-
-					setSizesFn([0, 1 - newRightPercent, newRightPercent]);
-				} else {
-					// Expanding: container will grow by 48px
-					const targetContainerW = containerW + 48;
-
-					// Restore sidebar to its exact previous pixel width
-					const restoreSidebarW = sidebarPrevSize();
-					const newLeftPercent = restoreSidebarW / targetContainerW;
-
-					// Right panel should maintain its exact current pixel width
-					const newRightPercent = rightW / targetContainerW;
-
-					setSizesFn([
-						newLeftPercent,
-						1 - newLeftPercent - newRightPercent,
-						newRightPercent,
-					]);
-				}
+			// Keep the right panel at its current pixel width while the container
+			// grows/shrinks by the width of the collapsed icon strip.
+			if (next) {
+				const targetW = containerW - COLLAPSED_STRIP_WIDTH;
+				const sidebarW =
+					document
+						.querySelector<HTMLElement>(
+							"#content > [data-corvu-resizable-panel]:first-child",
+						)
+						?.getBoundingClientRect().width || containerW * 0.2;
+				setSidebarPrevSize(sidebarW);
+				const right = rightW / targetW;
+				setSizes([0, 1 - right, right]);
+			} else {
+				const targetW = containerW + COLLAPSED_STRIP_WIDTH;
+				const left = sidebarPrevSize() / targetW;
+				const right = rightW / targetW;
+				setSizes([left, 1 - left - right, right]);
 			}
 		}
 
 		setSidebarCollapsed(next);
 	};
 
-	const toggleTheme = () => {
-		setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+	const showSidebarView = (view: SidebarView) => {
+		if (sidebarCollapsed()) toggleSidebarCollapse();
+		setSidebarView(view);
 	};
 
-	// Initialize editor (no default file content)
+	// ---- Editor ------------------------------------------------------------------
+
+	const pathOf = (entry: FileSystemEntry) =>
+		getPathFromId(mockFileSystem(), entry.id) || entry.name;
+
 	const editor = createEditor({
 		getWorkspace: () => buildVirtualFileSystem(mockFileSystem()),
 		onWorkspaceChange: (files) => {
-			for (const [path, content] of Object.entries(files)) saveFileContent(path, content);
+			for (const [path, content] of Object.entries(files))
+				saveFileContent(path, content);
 		},
 		onNavigate: (path, position) => {
 			if (!findFileByPath(mockFileSystem(), path)) return;
 			editorManager.handleFileSelect(path, mockFileSystem());
 			const view = editor.safeEditorView();
 			if (!view) return;
-			const line = view.state.doc.line(Math.min(position.line + 1, view.state.doc.lines));
+			const line = view.state.doc.line(
+				Math.min(position.line + 1, view.state.doc.lines),
+			);
 			const anchor = Math.min(line.from + position.character, line.to);
 			view.dispatch({ selection: { anchor }, scrollIntoView: true });
 			view.focus();
@@ -208,14 +191,12 @@ export default function App() {
 		theme: theme(),
 		onValueChange: (value) => {
 			const active = editorManager.activeFile();
-			if (active) saveFileContent(getPathFromId(mockFileSystem(), active.id) || active.name, value);
+			if (active) saveFileContent(pathOf(active), value);
 		},
 	});
 
-	// Initialize editor manager
 	const editorManager = createEditorManager(editor);
 
-	// Initialize file operations handlers
 	const fileOperations = createFileOperationsHandlers(
 		mockFileSystem,
 		setMockFileSystem,
@@ -230,11 +211,107 @@ export default function App() {
 		loadFileContent,
 	);
 
-	onMount(() => {
-		if (!sharedEditorFile) {
+	const openNewFile = (fileName: string, content: string) => {
+		editorManager.createNewFileWithContent(
+			uniqueFileName(mockFileSystem(), fileName),
+			content,
+			fileOperations,
+			mockFileSystem,
+		);
+	};
+
+	const isAltFile = () =>
+		editorManager.activeFile()?.name.endsWith(".alt") ?? false;
+
+	// ---- Execution -------------------------------------------------------------
+
+	const executionContext = (): ExecutionContext | null => {
+		const active = editorManager.activeFile();
+		const view = editor.safeEditorView();
+		if (!active || !isAltFile() || !view) return null;
+		const fs = mockFileSystem();
+		return {
+			source: view.state.doc.toString(),
+			filePath: getPathFromId(fs, active.id, "") || active.name,
+			virtualFS: buildVirtualFileSystem(fs),
+		};
+	};
+
+	const exec = createExecutionController({
+		getContext: executionContext,
+		theme,
+	});
+
+	/** Lines temporarily highlighted while hovering an interactive choice. */
+	const [previewLines, setPreviewLines] = createSignal<number[] | null>(null);
+
+	// Highlight in the editor the lines of the selected state (or hovered choice).
+	createEffect(() => {
+		const preview = previewLines();
+		if (preview && preview.length > 0) {
+			editor.highlightLines?.(preview);
 			return;
 		}
 
+		const selection = exec.selectedVM();
+		const specs = (selection?.vm?.locals ?? [])
+			.map((p: any) => ({ line: p.line, label: `${p.name}#${p.pid}` }))
+			.filter((s: any) => typeof s.line === "number" && s.line > 0);
+		if (specs.length > 0) {
+			editor.highlightLines?.(specs);
+			return;
+		}
+		if (selection?.stepIndex !== undefined) {
+			const lines = exec.stepLines()[selection.stepIndex];
+			if (lines?.length) {
+				editor.highlightLines?.(lines);
+				return;
+			}
+		}
+		editor.clearHighlights?.();
+	});
+
+	// Results describe the file they were computed for: drop them when switching files.
+	createEffect(
+		on(
+			() => editorManager.activeFile()?.id,
+			() => {
+				setPreviewLines(null);
+				if (exec.mode() === "interactive") exec.stopInteractive();
+			},
+			{ defer: true },
+		),
+	);
+
+	const canExecute = () => !!editorManager.activeFile() && isAltFile();
+
+	const actionTitle = (label: string, shortcut?: string) => {
+		if (!editorManager.activeFile()) return `${label} — open a file first`;
+		if (!isAltFile()) return `${label} — only .alt files can be executed`;
+		return shortcut ? `${label} (${shortcut})` : label;
+	};
+
+	const runShortcut = `${modKey}+Enter`;
+	const checkShortcut = `${modKey}+Shift+Enter`;
+
+	// Global shortcuts. Capture phase so that they win over the editor keymap.
+	onMount(() => {
+		const handler = (e: KeyboardEvent) => {
+			const mod = isMac ? e.metaKey : e.ctrlKey;
+			if (!mod || e.key !== "Enter" || e.altKey) return;
+			e.preventDefault();
+			e.stopPropagation();
+			if (e.shiftKey) exec.check();
+			else exec.run();
+		};
+		window.addEventListener("keydown", handler, true);
+		onCleanup(() => window.removeEventListener("keydown", handler, true));
+	});
+
+	// ---- Startup -----------------------------------------------------------------
+
+	onMount(() => {
+		if (!sharedEditorFile) return;
 		clearSharedEditorFileFromUrl();
 
 		const existingFile = findFileByPath(
@@ -249,1632 +326,386 @@ export default function App() {
 			});
 			return;
 		}
-
-		editorManager.createNewFileWithContent(
-			sharedEditorFile.fileName,
-			sharedEditorFile.content,
-			fileOperations,
-			mockFileSystem,
-		);
+		openNewFile(sharedEditorFile.fileName, sharedEditorFile.content);
 	});
 
-	// Auto-open main.alt by default (once), so the editor isn't empty on load.
+	// Auto-open main.alt (or the only root file) once, so the editor isn't empty on load.
 	createEffect(() => {
 		if (didAutoOpenDefault()) return;
-		if (editorManager.activeFile()) {
-			setDidAutoOpenDefault(true);
-			return;
-		}
+		setDidAutoOpenDefault(true);
+		if (editorManager.activeFile()) return;
 
 		const fs = mockFileSystem();
 		const main = findFileByPath(fs, "main.alt");
-
-		if (main && main.type === "file") {
+		if (main?.type === "file") {
 			editorManager.handleFileSelect("main.alt", fs);
-			setDidAutoOpenDefault(true);
-			return;
+		} else if (fs.length === 1 && fs[0].type === "file") {
+			editorManager.handleFileSelect(
+				getPathFromId(fs, fs[0].id) || fs[0].name,
+				fs,
+			);
 		}
-
-		// Fallback: if there's exactly one file in root, open it.
-		const singleRootFile =
-			fs.length === 1 && fs[0].type === "file" ? fs[0] : null;
-		if (singleRootFile) {
-			const filePath =
-				getPathFromId(fs, singleRootFile.id) || singleRootFile.name;
-			editorManager.handleFileSelect(filePath, fs);
-		}
-		setDidAutoOpenDefault(true);
 	});
 
-	// Conflict checking functions for file operations
-	const checkNameConflict = (destPath: string, movingName: string): boolean => {
-		if (destPath === "") {
-			// Moving to root
-			return mockFileSystem().some((entry) => entry.name === movingName);
-		}
+	createEffect(() => saveFileSystem(mockFileSystem()));
 
-		// Find the destination directory
-		const findDirectory = (
-			files: FileSystemEntry[],
-			targetPath: string,
-		): FileSystemEntry | null => {
-			const parts = targetPath.split("/").filter((part) => part !== "");
-			let currentLevel = files;
+	createEffect(() => {
+		const currentTheme = theme();
+		document.documentElement.dataset.theme = currentTheme;
+		document.body.dataset.theme = currentTheme;
+		editor.updateTheme?.(currentTheme);
+	});
 
-			for (const part of parts) {
-				const dir = currentLevel.find(
-					(e) => e.name === part && e.type === "directory",
-				);
-				if (!dir || !dir.children) return null;
-				currentLevel = dir.children;
-			}
+	// Reload active file content after the sidebar layout changes to preserve editor content
+	createEffect(
+		on(sidebarCollapsed, () => {
+			setTimeout(() => {
+				const activeFile = editorManager.activeFile();
+				const view = editor.safeEditorView();
+				if (!activeFile || !view) return;
+				const content = loadFileContent(pathOf(activeFile));
+				view.dispatch({
+					changes: { from: 0, to: view.state.doc.length, insert: content },
+				});
+			}, 50);
+		}),
+	);
 
-			// Return a synthetic entry representing the directory
-			return {
-				id: "temp",
-				name: "",
-				type: "directory",
-				children: currentLevel,
-			};
-		};
+	// ---- Dialogs -----------------------------------------------------------------
 
-		const destDir = findDirectory(mockFileSystem(), destPath);
-		return (
-			destDir?.children?.some((entry) => entry.name === movingName) || false
-		);
-	};
-
-	// Confirmation dialog state for file conflicts
 	const [moveConfirmation, setMoveConfirmation] = createSignal<{
 		isOpen: boolean;
 		sourcePaths: string[];
 		destPath: string;
 		conflictingName: string;
-	}>({
-		isOpen: false,
-		sourcePaths: [],
-		destPath: "",
-		conflictingName: "",
-	});
+	}>({ isOpen: false, sourcePaths: [], destPath: "", conflictingName: "" });
+	const closeMoveDialog = () =>
+		setMoveConfirmation({
+			isOpen: false,
+			sourcePaths: [],
+			destPath: "",
+			conflictingName: "",
+		});
 
-	// Delete confirmation dialog state
 	const [deleteConfirmation, setDeleteConfirmation] = createSignal<{
 		isOpen: boolean;
 		paths: string[];
-	}>({
-		isOpen: false,
-		paths: [],
-	});
+	}>({ isOpen: false, paths: [] });
 
-	// Load example dialog state
-	const [loadExampleDialog, setLoadExampleDialog] = createSignal<{
-		isOpen: boolean;
-		content: string;
-		fileName: string;
-	}>({
-		isOpen: false,
-		content: "",
-		fileName: "",
-	});
-	const [sharedImportDialog, setSharedImportDialog] = createSignal<{
-		isOpen: boolean;
-		content: string;
-		fileName: string;
-	}>({
-		isOpen: false,
-		content: "",
-		fileName: "",
-	});
-
-	const showMoveConfirmDialog = (
-		sourcePaths: string[],
-		destPath: string,
-		conflictingName: string,
-	) => {
-		setMoveConfirmation({
-			isOpen: true,
-			sourcePaths,
-			destPath,
-			conflictingName,
-		});
-	};
+	const [loadExampleDialog, setLoadExampleDialog] =
+		createSignal<FileDialogState>(CLOSED_FILE_DIALOG);
+	const [sharedImportDialog, setSharedImportDialog] =
+		createSignal<FileDialogState>(CLOSED_FILE_DIALOG);
 
 	const handleConfirmedMove = () => {
-		const confirmation = moveConfirmation();
-
-		// Execute the move with replacement for each source path
-		confirmation.sourcePaths.forEach((sourcePath) => {
+		const { sourcePaths, destPath, conflictingName } = moveConfirmation();
+		for (const sourcePath of sourcePaths) {
 			fileOperations.handleMoveWithReplacement(
 				sourcePath,
-				confirmation.destPath,
-				confirmation.conflictingName,
+				destPath,
+				conflictingName,
 			);
-		});
-
-		setMoveConfirmation({
-			isOpen: false,
-			sourcePaths: [],
-			destPath: "",
-			conflictingName: "",
-		});
-	};
-
-	const handleCanceledMove = () => {
-		setMoveConfirmation({
-			isOpen: false,
-			sourcePaths: [],
-			destPath: "",
-			conflictingName: "",
-		});
-	};
-
-	const showDeleteConfirmDialog = (paths: string[]) => {
-		setDeleteConfirmation({
-			isOpen: true,
-			paths,
-		});
+		}
+		closeMoveDialog();
 	};
 
 	const handleConfirmedDelete = () => {
-		const confirmation = deleteConfirmation();
-		confirmation.paths.forEach((path) => {
+		for (const path of deleteConfirmation().paths) {
 			fileOperations.handleDeleteEntry(path);
-		});
+		}
 		setDeleteConfirmation({ isOpen: false, paths: [] });
-	};
-
-	const handleCanceledDelete = () => {
-		setDeleteConfirmation({ isOpen: false, paths: [] });
-	};
-
-	// Load example handlers
-	const handleLoadExample = (content: string, fileName: string) => {
-		// Show the dialog with the loaded content
-		setLoadExampleDialog({
-			isOpen: true,
-			content,
-			fileName,
-		});
 	};
 
 	const handleLoadInCurrentFile = () => {
 		const dialog = loadExampleDialog();
-		setLoadExampleDialog({ isOpen: false, content: "", fileName: "" });
+		setLoadExampleDialog(CLOSED_FILE_DIALOG);
 
-		// If no file is active, create a new one
-		if (!editorManager.activeFile()) {
-			const fileName = `${dialog.fileName.replace(".alt", "")}-${Date.now()}.alt`;
-			editorManager.createNewFileWithContent(
-				fileName,
-				dialog.content,
-				fileOperations,
-				mockFileSystem,
-			);
+		const activeFile = editorManager.activeFile();
+		if (!activeFile) {
+			openNewFile(dialog.fileName, dialog.content);
 			return;
 		}
-
-		// Load into current file - update both editor and saved content
-		if (editor && editor.safeUpdateContent) {
-			editor.safeUpdateContent(dialog.content);
-		} else {
-			// Fallback for older editor instances
-			const up = editor.editorView().state.update({
-				changes: {
-					from: 0,
-					to: editor.editorView().state.doc.length,
-					insert: dialog.content,
-				},
-			});
-			editor.editorView().update([up]);
-		}
-
-		// Also update the saved content in localStorage
-		const activeFile = editorManager.activeFile();
-		if (activeFile) {
-			const filePath =
-				getPathFromId(mockFileSystem(), activeFile.id) || activeFile.name;
-			saveFileContent(filePath, dialog.content);
-		}
+		editor.safeUpdateContent(dialog.content);
+		saveFileContent(pathOf(activeFile), dialog.content);
 	};
 
 	const handleLoadInNewFile = () => {
 		const dialog = loadExampleDialog();
-		setLoadExampleDialog({ isOpen: false, content: "", fileName: "" });
-		const fileName = `${dialog.fileName.replace(".alt", "")}-${Date.now()}.alt`;
-		editorManager.createNewFileWithContent(
-			fileName,
-			dialog.content,
-			fileOperations,
-			mockFileSystem,
-		);
-	};
-
-	const handleCancelLoadExample = () => {
-		setLoadExampleDialog({ isOpen: false, content: "", fileName: "" });
+		setLoadExampleDialog(CLOSED_FILE_DIALOG);
+		openNewFile(dialog.fileName, dialog.content);
 	};
 
 	const handleReplaceSharedImport = () => {
 		const dialog = sharedImportDialog();
-		setSharedImportDialog({ isOpen: false, content: "", fileName: "" });
+		setSharedImportDialog(CLOSED_FILE_DIALOG);
 		saveFileContent(dialog.fileName, dialog.content);
 		editorManager.handleFileSelect(dialog.fileName, mockFileSystem());
 	};
 
 	const handleSharedImportInNewFile = () => {
 		const dialog = sharedImportDialog();
-		setSharedImportDialog({ isOpen: false, content: "", fileName: "" });
-		const fileName = createUniqueSharedFileName(
-			mockFileSystem(),
-			dialog.fileName,
-		);
-		editorManager.createNewFileWithContent(
-			fileName,
-			dialog.content,
-			fileOperations,
-			mockFileSystem,
-		);
+		setSharedImportDialog(CLOSED_FILE_DIALOG);
+		openNewFile(dialog.fileName, dialog.content);
 	};
 
 	const handleCancelSharedImport = () => {
-		setSharedImportDialog({ isOpen: false, content: "", fileName: "" });
-		if (!editorManager.activeFile()) {
-			setDidAutoOpenDefault(false);
-		}
+		setSharedImportDialog(CLOSED_FILE_DIALOG);
+		if (!editorManager.activeFile()) setDidAutoOpenDefault(false);
 	};
 
-	// New file prompt handlers
 	const handleNewFileClick = () => {
-		// If sidebar is collapsed, expand it first
-		if (sidebarCollapsed()) {
-			setSidebarCollapsed(false);
-		}
-		// Switch to explorer view and trigger global file creation state
-		setSidebarView("explorer");
+		showSidebarView("explorer");
 		setGlobalFileCreation({ type: "file", parentPath: "" });
 	};
 
-	// Helper function to check if active file has .alt extension
-	const isAltFile = () => {
-		const activeFile = editorManager.activeFile();
-		if (!activeFile) return false;
-		return activeFile.name.endsWith(".alt");
-	};
-
-	// Save file system whenever it changes
-	createEffect(() => {
-		saveFileSystem(mockFileSystem());
-	});
-
-	createEffect(() => {
-		const currentTheme = theme();
-		saveEditorTheme(currentTheme);
-		document.documentElement.dataset.theme = currentTheme;
-		document.body.dataset.theme = currentTheme;
-		editor.updateTheme?.(currentTheme);
-	});
-
-	// Reload active file content when sidebar state changes to preserve editor content
-	createEffect(() => {
-		// This effect runs whenever sidebarCollapsed changes
-		sidebarCollapsed(); // Read the signal to create dependency
-
-		// Reload the active file content after the layout change
-		setTimeout(() => {
-			const activeFile = editorManager.activeFile();
-			if (activeFile && editor && editor.editorView) {
-				const filePath =
-					getPathFromId(mockFileSystem(), activeFile.id) || activeFile.name;
-				const content = loadFileContent(filePath);
-
-				// Update the editor content
-				const editorView = editor.editorView();
-				if (!editorView) return;
-				const transaction = editorView.state.update({
-					changes: {
-						from: 0,
-						to: editorView.state.doc.length,
-						insert: content,
-					},
-				});
-				editorView.update([transaction]);
-			}
-		}, 50); // Small delay to ensure DOM is updated
-	});
-
-	const [activeTab, setActiveTab] = createSignal("console");
-	const handleExecutionTabClick = (tab: string) => {
-		setActiveTab(tab);
-	};
-
-	const [nodes, setNodes] = createSignal<any[]>([]);
-	const [edges, setEdges] = createSignal<any[]>([]);
-	const [isRun, setIsRun] = createSignal(true);
-
-	const [stdout, setStdout] = createSignal(
-		"The console output will appear here.",
-	);
-	const [stdoutWarning, setStdoutWarning] = createSignal<string | null>(null);
-	const [out, setOut] = createSignal("The execution output will appear here.");
-	const [commgraphout, setCommGraphOut] = createSignal<any[]>([]); //messageflow graph
-	const [runGraphNodes, setRunGraphNodes] = createSignal<GraphNode[]>([]); // For run mode - stores graph nodes
-	const [runBuiltGraph, setRunBuiltGraph] = createSignal<{
-		nodes: any[];
-		edges: any[];
-	}>({ nodes: [], edges: [] }); // Built graph for vis.js
-	const [counterexampleReplayNodes, setCounterexampleReplayNodes] =
-		createSignal<GraphNode[]>([]); // Replayable counter-example path
-	const [counterexampleReplayStepLines, setCounterexampleReplayStepLines] =
-		createSignal<number[][]>([]); // Step lines for counter-example replay
-	const [checkTooLargeStatus, setCheckTooLargeStatus] = createSignal<
-		string | null
-	>(null);
-	const [stepLines, setStepLines] = createSignal<number[][]>([]); //to store lines for each step
-	const [activeAction, setActiveAction] = createSignal<string | null>(null);
-	const [loadingAction, setLoadingAction] = createSignal<string | null>(null);
-	const [executionError, setExecutionError] = createSignal(false);
-	const [structuredError, setStructuredError] = createSignal<any>(null);
-	const [selectedVM, setSelectedVM] = createSignal<VMStateSelection | null>(
-		null,
-	);
-
-	// Graph ref for programmatic control
-	let graphRef: { selectNode: (nodeId: string | number) => void } | null = null;
-
-	const selectRunVmByIndex = (index: number) => {
-		const nodes = runGraphNodes();
-		if (!nodes || nodes.length === 0) return;
-		const clamped = Math.max(0, Math.min(index, nodes.length - 1));
-		setSelectedVM({ vm: nodes[clamped].vm, stepIndex: clamped });
-
-		// Select the corresponding node in the graph
-		if (graphRef) {
-			graphRef.selectNode(clamped);
-		}
-	};
-
-	// Highlight lines in editor when a VM state is selected
-	createEffect(() => {
-		const selection = selectedVM();
-		if (!selection || !editor || !editor.highlightLines) {
-			if (editor) editor.clearHighlights?.();
+	const handleErrorFileClick = (filePath: string) => {
+		if (!findFileByPath(mockFileSystem(), filePath)) {
+			console.warn(`File not found: ${filePath}`);
 			return;
 		}
-
-		const vmState = selection.vm;
-
-		if (vmState && vmState.locals && vmState.locals.length > 0) {
-			// Collect lines/labels from all programs in the current VM state
-			const specs = vmState.locals
-				.map((p: any) => ({ line: p.line, label: `${p.name}#${p.pid}` }))
-				.filter((s: any) => typeof s.line === "number" && s.line > 0);
-
-			if (specs.length > 0) {
-				editor.highlightLines(specs);
-				return;
-			}
-		}
-
-		// If we have stepIndex (from Run mode), use stepLines as fallback
-		if (selection.stepIndex !== undefined) {
-			const lines = stepLines()[selection.stepIndex];
-			if (lines && lines.length > 0) {
-				editor.highlightLines(lines);
-				return;
-			}
-		}
-
-		editor.clearHighlights?.();
-	});
-
-	createEffect(() => {
-		if (!isRun() || activeTab() !== "vm_states") return;
-
-		const handler = (event: KeyboardEvent) => {
-			if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-
-			const nodes = runGraphNodes();
-			if (!nodes || nodes.length === 0) return;
-
-			const vm = selectedVM();
-			let currentIndex = vm?.stepIndex ?? 0;
-			if (currentIndex < 0) currentIndex = 0;
-
-			const nextIndex =
-				event.key === "ArrowRight" ? currentIndex + 1 : currentIndex - 1;
-			selectRunVmByIndex(nextIndex);
-			event.preventDefault();
-		};
-
-		window.addEventListener("keydown", handler);
-		onCleanup(() => window.removeEventListener("keydown", handler));
-	});
-
-	// Interactive mode state
-	const [isInteractiveMode, setIsInteractiveMode] = createSignal(false);
-	const [interactiveStates, setInteractiveStates] = createSignal<any[]>([]);
-	const [executionHistory, setExecutionHistory] = createSignal<number[]>([]);
-	const [currentVMState, setCurrentVMState] = createSignal<any>(null);
-	const [interactiveFinished, setInteractiveFinished] = createSignal(false);
-	const [interactiveDeadlock, setInteractiveDeadlock] = createSignal(false);
-	const [interactiveStepLines, setInteractiveStepLines] = createSignal<
-		number[][]
-	>([]);
-	const [accumulatedOutput, setAccumulatedOutput] = createSignal<string>("");
-	const [accumulatedExecutionOutput, setAccumulatedExecutionOutput] =
-		createSignal<string>("");
-	const [interactiveMessageFlow, setInteractiveMessageFlow] = createSignal<
-		any[]
-	>([]);
-	const [interactiveVmStates, setInteractiveVmStates] = createSignal<any[]>([]);
-
-	const resetSetOut = () => {
-		setOut("The execution output will appear here.");
+		editorManager.handleFileSelect(filePath, mockFileSystem());
+		showSidebarView("explorer");
 	};
 
-	const resetStdoutWarning = () => {
-		setStdoutWarning(null);
-	};
+	// ---- Rendering ---------------------------------------------------------------
 
-	const isDeadlockError = (error: any) =>
-		typeof error?.message === "string" &&
-		error.message.toLowerCase().includes("deadlock");
-
-	const appendStatusNotice = (text: string, notice: string) => {
-		const trimmed = text.trimEnd();
-		return trimmed.length > 0 ? `${trimmed}\n\n${notice}` : notice;
-	};
-
-	const getCheckTooLargeStatus = (result: CheckResult) => {
-		if (result.verdict === "violated") {
-			if (result.exhaustive) {
-				return "Verification result: a violation was found.";
+	const AppSidebar = () => (
+		<Sidebar
+			files={mockFileSystem()}
+			onFileSelect={(path) =>
+				editorManager.handleFileSelect(path, mockFileSystem())
 			}
-			return "Verification result: a violation was found before exploration completed. The counterexample is valid, but the explored graph is partial.";
-		}
-		if (result.verdict === "verified") {
-			return "Verification result: the check succeeded with no violation.";
-		}
-		return "Verification result: exploration stopped before the check could complete.";
-	};
-
-	const buildHiddenGraphPlaceholders = (count: number) =>
-		Array.from({ length: count }, (_, id) => ({ id }));
-
-	const getDeadlockExecutionOutput = (error: any, fallbackOutput = "") => {
-		const errorInfo = formatAlthreadError(
-			error,
-			getFileContentFromVirtualFS(
-				buildVirtualFileSystem(mockFileSystem()),
-				error?.pos?.file_path || "",
-			),
-		);
-		return appendStatusNotice(fallbackOutput, errorInfo.message);
-	};
-
-	const executeInteractiveStep = async (selectedIndex: number) => {
-		try {
-			if (!editorManager.activeFile()) return;
-			setInteractiveDeadlock(false);
-
-			const virtualFS = buildVirtualFileSystem(mockFileSystem());
-			let filePath = getPathFromId(
-				mockFileSystem(),
-				editorManager.activeFile()!.id,
-				"",
-			);
-			if (!filePath) {
-				filePath = editorManager.activeFile()!.name;
+			onNewFile={fileOperations.handleNewFile}
+			onNewFolder={fileOperations.handleNewFolder}
+			onMoveEntry={fileOperations.handleMoveEntry}
+			onRenameEntry={fileOperations.handleRenameEntry}
+			onDeleteEntry={fileOperations.handleDeleteEntry}
+			onCopyEntry={fileOperations.handleCopyEntry}
+			onFileUpload={fileOperations.handleFileUpload}
+			activeFile={editorManager.activeFile()}
+			getFilePath={pathOf}
+			selectedFiles={selectedFiles()}
+			onSelectionChange={setSelectedFiles}
+			creationError={creationError()}
+			setCreationError={setCreationError}
+			checkNameConflict={(destPath, name) =>
+				directoryContains(mockFileSystem(), destPath, name)
 			}
-			let stepResult;
-			try {
-				// Execute the step and get the output
-				stepResult = execute_interactive_step(
-					editor.editorView().state.doc.toString(),
-					filePath,
-					virtualFS,
-					executionHistory(),
-					selectedIndex,
-				);
-			} catch (e: any) {
-				console.error("Error executing interactive step:", e);
+			showConfirmDialog={(sourcePaths, destPath, conflictingName) =>
+				setMoveConfirmation({
+					isOpen: true,
+					sourcePaths,
+					destPath,
+					conflictingName,
+				})
 			}
-
-			// Add the selected step to history
-			const newHistory = [...executionHistory(), selectedIndex];
-			setExecutionHistory(newHistory);
-
-			// Update the accumulated console output (print statements)
-			const currentConsoleOutput = accumulatedOutput();
-			const newStepOutput = stepResult.output || [];
-
-			let updatedConsoleOutput = currentConsoleOutput;
-			if (newStepOutput.length > 0) {
-				updatedConsoleOutput += newStepOutput.join("\n") + "\n";
+			showDeleteConfirmDialog={(paths) =>
+				setDeleteConfirmation({ isOpen: true, paths })
 			}
-			setAccumulatedOutput(updatedConsoleOutput);
-
-			// Update accumulated message flow events
-			const currentMessageFlow = interactiveMessageFlow();
-			const newMessageFlowEvents = stepResult.message_flow_events || [];
-			setInteractiveMessageFlow([
-				...currentMessageFlow,
-				...newMessageFlowEvents,
-			]);
-
-			// Update accumulated VM states
-			const currentVmStates = interactiveVmStates();
-			const newVmState = stepResult.current_state;
-			if (newVmState) {
-				setInteractiveVmStates([...currentVmStates, newVmState]);
+			globalFileCreation={globalFileCreation()}
+			setGlobalFileCreation={setGlobalFileCreation}
+			setFileSystem={setMockFileSystem}
+			onLoadExample={(content, fileName) =>
+				setLoadExampleDialog({ isOpen: true, content, fileName })
 			}
+			activeView={sidebarView()}
+			onViewChange={setSidebarView}
+			isCollapsed={sidebarCollapsed()}
+			onToggleCollapse={toggleSidebarCollapse}
+		/>
+	);
 
-			// Update interactive step lines
-			const currentInteractiveStepLines = interactiveStepLines();
-			const newStepLines = stepResult.lines || [];
-			setInteractiveStepLines([...currentInteractiveStepLines, newStepLines]);
-
-			// Update execution output to show step details (debug info) - accumulate all steps
-			const executedStep = stepResult.executed_step;
-			const debugOutput = stepResult.debug || "";
-
-			if (executedStep) {
-				const stepInfo = `Executed: ${executedStep.prog_name}#${executedStep.prog_id}\n${debugOutput}`;
-				const currentExecutionOutput = accumulatedExecutionOutput();
-				const updatedExecutionOutput =
-					currentExecutionOutput +
-					(currentExecutionOutput ? "\n\n" : "") +
-					stepInfo;
-				setAccumulatedExecutionOutput(updatedExecutionOutput);
-				setOut(updatedExecutionOutput);
-			} else {
-				const currentExecutionOutput = accumulatedExecutionOutput();
-				const updatedExecutionOutput =
-					currentExecutionOutput +
-					(currentExecutionOutput ? "\n\n" : "") +
-					debugOutput;
-				setAccumulatedExecutionOutput(updatedExecutionOutput);
-				setOut(updatedExecutionOutput);
-			}
-
-			let res;
-			try {
-				// Get next states with updated history
-				res = get_next_interactive_states(
-					editor.editorView().state.doc.toString(),
-					filePath,
-					virtualFS,
-					newHistory,
-				);
-			} catch (e: any) {
-				if (!isDeadlockError(e)) {
-					throw e;
+	const ActionButton = (props: {
+		action: ExecutionAction;
+		label: string;
+		icon: string;
+		shortcut?: string;
+		primary?: boolean;
+		onClick: () => void;
+	}) => (
+		<button
+			type="button"
+			class="vscode-button"
+			classList={{
+				primary: props.primary,
+				active:
+					props.action === "interactive" && exec.mode() === "interactive",
+			}}
+			disabled={!canExecute() || exec.busy() !== null}
+			title={actionTitle(props.label, props.shortcut)}
+			onClick={() => props.onClick()}
+		>
+			<i
+				class={
+					exec.busy() === props.action
+						? "codicon codicon-loading codicon-modifier-spin"
+						: `codicon codicon-${props.icon}`
 				}
-
-				const deadlockConsoleOutput = appendStatusNotice(
-					updatedConsoleOutput,
-					"Deadlock detected.",
-				);
-				const deadlockExecutionOutput = getDeadlockExecutionOutput(
-					e,
-					accumulatedExecutionOutput(),
-				);
-
-				setAccumulatedOutput(deadlockConsoleOutput);
-				setAccumulatedExecutionOutput(deadlockExecutionOutput);
-				setOut(deadlockExecutionOutput);
-				setInteractiveStates([]);
-				setInteractiveFinished(true);
-				setInteractiveDeadlock(true);
-				setExecutionError(false);
-				return;
-			}
-
-			setInteractiveStates(res.next_states || []);
-			setCurrentVMState(stepResult.new_state || res.current_state);
-			setInteractiveFinished(!res.next_states || res.next_states.length === 0);
-			setInteractiveDeadlock(false);
-
-			if (!res.next_states || res.next_states.length === 0) {
-				const currentExecutionOutput = accumulatedExecutionOutput();
-				const finalOutput =
-					currentExecutionOutput +
-					(currentExecutionOutput ? "\n\n" : "") +
-					"Program execution completed.";
-				setAccumulatedExecutionOutput(finalOutput);
-				setOut(finalOutput);
-			} else if (res.next_states.length === 0) {
-				const currentExecutionOutput = accumulatedExecutionOutput();
-				const finalOutput =
-					currentExecutionOutput +
-					(currentExecutionOutput ? "\n\n" : "") +
-					"No more states available.";
-				setAccumulatedExecutionOutput(finalOutput);
-				setOut(finalOutput);
-				setInteractiveFinished(true);
-			}
-		} catch (e: any) {
-			console.error("Interactive step error:", e);
-			if (isDeadlockError(e)) {
-				const deadlockConsoleOutput = appendStatusNotice(
-					accumulatedOutput(),
-					"Deadlock detected.",
-				);
-				const deadlockExecutionOutput = getDeadlockExecutionOutput(
-					e,
-					accumulatedExecutionOutput(),
-				);
-
-				setAccumulatedOutput(deadlockConsoleOutput);
-				setAccumulatedExecutionOutput(deadlockExecutionOutput);
-				setOut(deadlockExecutionOutput);
-				setInteractiveStates([]);
-				setInteractiveFinished(true);
-				setInteractiveDeadlock(true);
-				setExecutionError(false);
-				return;
-			}
-
-			const errorInfo = formatAlthreadError(
-				e,
-				getFileContentFromVirtualFS(
-					buildVirtualFileSystem(mockFileSystem()),
-					e.pos?.file_path || "",
-				),
-			);
-			setStructuredError(errorInfo);
-			setOut(errorInfo.message);
-			setExecutionError(true);
-			// Switch to execution tab to show the error
-			setActiveTab("execution");
-		}
-	};
-
-	// Function to handle file opening from error display
-	const handleErrorFileClick = (filePath: string) => {
-		// Find the file in the file system and open it
-		const file = findFileByPath(mockFileSystem(), filePath);
-		if (file) {
-			editorManager.handleFileSelect(filePath, mockFileSystem());
-
-			// If sidebar is collapsed, expand it to show the file
-			if (sidebarCollapsed()) {
-				setSidebarCollapsed(false);
-			}
-			setSidebarView("explorer");
-		} else {
-			console.warn(`File not found: ${filePath}`);
-		}
-	};
-
-	const closeInteractiveMode = () => {
-		setIsInteractiveMode(false);
-		setInteractiveStates([]);
-		setExecutionHistory([]);
-		setCurrentVMState(null);
-		setInteractiveFinished(false);
-		setInteractiveDeadlock(false);
-		setAccumulatedOutput("");
-		setAccumulatedExecutionOutput("");
-		setInteractiveMessageFlow([]);
-		setInteractiveVmStates([]);
-		setActiveAction(null);
-	};
-
-	const resetInteractiveMode = async () => {
-		if (!editorManager.activeFile()) return;
-
-		try {
-			setExecutionError(false);
-			resetSetOut();
-			setAccumulatedOutput("");
-			setAccumulatedExecutionOutput("");
-			setInteractiveMessageFlow([]);
-			setInteractiveVmStates([]);
-			setInteractiveStepLines([]);
-			setInteractiveDeadlock(false);
-
-			const virtualFS = buildVirtualFileSystem(mockFileSystem());
-			let filePath = getPathFromId(
-				mockFileSystem(),
-				editorManager.activeFile()!.id,
-				"",
-			);
-			if (!filePath) {
-				filePath = editorManager.activeFile()!.name;
-			}
-
-			const res = start_interactive_session(
-				editor.editorView().state.doc.toString(),
-				filePath,
-				virtualFS,
-			);
-
-			setInteractiveStates(res.next_states || []);
-			setCurrentVMState(res.current_state);
-			setInteractiveFinished(!res.next_states || res.next_states.length === 0);
-			setExecutionHistory([]);
-
-			if (!res.next_states || res.next_states.length === 0) {
-				setOut("Program execution completed immediately.");
-			} else if (res.next_states.length === 0) {
-				setOut("No more states available.");
-				setInteractiveFinished(true);
-			} else {
-				setOut(
-					"Interactive session restarted. Choose the next instruction to execute.",
-				);
-			}
-		} catch (e: any) {
-			console.error("Interactive reset error:", e);
-			if (isDeadlockError(e)) {
-				setInteractiveStates([]);
-				setCurrentVMState(null);
-				setInteractiveFinished(true);
-				setInteractiveDeadlock(true);
-				setAccumulatedOutput("Deadlock detected.");
-				setAccumulatedExecutionOutput(getDeadlockExecutionOutput(e));
-				setOut(getDeadlockExecutionOutput(e));
-				setExecutionError(false);
-				return;
-			}
-
-			const errorInfo = formatAlthreadError(
-				e,
-				getFileContentFromVirtualFS(
-					buildVirtualFileSystem(mockFileSystem()),
-					e.pos?.file_path || "",
-				),
-			);
-			setStructuredError(errorInfo);
-			setOut(errorInfo.message);
-			setExecutionError(true);
-		}
-	};
-
-	const resetAllState = async () => {
-		setExecutionError(false);
-		setStructuredError(null);
-		setIsRun(true);
-		setIsInteractiveMode(false);
-		resetSetOut();
-		setStdout("The console output will appear here.");
-		resetStdoutWarning();
-		setCommGraphOut([]);
-		setNodes([]);
-		setEdges([]);
-		setRunGraphNodes([]);
-		setRunBuiltGraph({ nodes: [], edges: [] });
-		setCounterexampleReplayNodes([]);
-		setCounterexampleReplayStepLines([]);
-		setActiveAction(null);
-		setSelectedVM(null);
-		// Reset interactive mode state
-		setInteractiveStates([]);
-		setExecutionHistory([]);
-		setCurrentVMState(null);
-		setInteractiveFinished(false);
-		setInteractiveDeadlock(false);
-		setAccumulatedOutput("");
-		setAccumulatedExecutionOutput("");
-		setInteractiveMessageFlow([]);
-		setInteractiveVmStates([]);
-	};
-
-	const renderExecContent = () => (
-		<Switch>
-			<Match when={activeTab() === "execution"}>
-				<div class="console">
-					{executionError() && structuredError() ? (
-						<div class="execution-error-box">
-							<ErrorDisplay
-								error={structuredError()}
-								onFileClick={handleErrorFileClick}
-							/>
-						</div>
-					) : executionError() ? (
-						<div class="execution-error-box">
-							<pre>{out()}</pre>
-						</div>
-					) : (
-						<pre>{out()}</pre>
-					)}
-				</div>
-			</Match>
-
-			<Match when={isRun() && activeTab() === "console"}>
-				<div class="console">
-					<pre>{stdout()}</pre>
-					<Show when={stdoutWarning()}>
-						{(warning) => (
-							<pre style="color: #f14c4c; margin-top: 12px;">{warning()}</pre>
-						)}
-					</Show>
-				</div>
-			</Match>
-
-			<Match when={isRun() && activeTab() === "msg_flow"}>
-				<div class="console">
-					{renderMessageFlowGraph(commgraphout(), [], editor)}
-				</div>
-			</Match>
-
-			<Match when={isRun() && activeTab() === "vm_states"}>
-				<div class="console">
-					<Resizable
-						id="vm-states-layout"
-						orientation="vertical"
-						style={{
-							height: "100%",
-							width: "100%",
-							display: "flex",
-							"flex-direction": "column",
-						}}
-					>
-						<Resizable.Panel
-							initialSize={0.4}
-							minSize={0.2}
-							style={{
-								display: "flex",
-								"flex-direction": "column",
-								overflow: "hidden",
-							}}
-						>
-							<VMStateInspector
-								node={selectedVM()}
-								onClose={() => setSelectedVM(null)}
-							/>
-						</Resizable.Panel>
-						<Resizable.Handle class="Resizable-handle" />
-						<Resizable.Panel
-							initialSize={0.6}
-							minSize={0.2}
-							style={{
-								display: "flex",
-								"flex-direction": "column",
-								overflow: "hidden",
-							}}
-						>
-							<Graph
-								nodes={runBuiltGraph().nodes}
-								edges={runBuiltGraph().edges}
-								setLoadingAction={setLoadingAction}
-								theme={theme()}
-								onEdgeClick={(_edgeId: string, edgeData: any) => {
-									if (edgeData && edgeData.lines && editor.highlightLines) {
-										editor.highlightLines(edgeData.lines);
-									}
-								}}
-								onNodeSelect={setSelectedVM}
-								ref={(instance) => (graphRef = instance)}
-							/>
-						</Resizable.Panel>
-					</Resizable>
-				</div>
-			</Match>
-
-			<Match when={!isRun()}>
-				<div class="console">
-					<Resizable
-						id="checker-states-layout"
-						orientation="vertical"
-						style={{
-							height: "100%",
-							width: "100%",
-							display: "flex",
-							"flex-direction": "column",
-						}}
-					>
-						<Resizable.Panel
-							initialSize={0.4}
-							minSize={0.2}
-							style={{
-								display: "flex",
-								"flex-direction": "column",
-								overflow: "hidden",
-							}}
-						>
-							<VMStateInspector
-								node={selectedVM()}
-								onClose={() => setSelectedVM(null)}
-							/>
-						</Resizable.Panel>
-						<Resizable.Handle class="Resizable-handle" />
-						<Resizable.Panel
-							initialSize={0.6}
-							minSize={0.2}
-							style={{
-								display: "flex",
-								"flex-direction": "column",
-								overflow: "hidden",
-							}}
-						>
-							<Graph
-								nodes={nodes()}
-								edges={edges()}
-								setLoadingAction={setLoadingAction}
-								theme={theme()}
-								tooLargeStatusMessage={checkTooLargeStatus() ?? undefined}
-								onEdgeClick={(_edgeId: string, edgeData: any) => {
-									if (edgeData && edgeData.lines && editor.highlightLines) {
-										editor.highlightLines(edgeData.lines);
-									}
-								}}
-								onNodeSelect={setSelectedVM}
-								ref={(instance) => (graphRef = instance)}
-							/>
-						</Resizable.Panel>
-					</Resizable>
-				</div>
-			</Match>
-		</Switch>
+			/>
+			<span>{props.label}</span>
+		</button>
 	);
 
 	return (
-		<>
-			<div class="app-shell" data-theme={theme()}>
-				<div id="header">
-					<div class="brand">
-						<Logo />
-						<h3>Althread</h3>
-					</div>
-					<div class="actions">
-						<button
-							class="vscode-button theme-toggle-button"
-							title={`Switch to ${theme() === "dark" ? "light" : "dark"} theme`}
-							onClick={toggleTheme}
-						>
-							Theme: {theme() === "dark" ? "Dark" : "Light"}
-						</button>
-						<button
-							class={`vscode-button${activeAction() === "interactive" ? " active" : ""}`}
-							disabled={
-								loadingAction() === "interactive" ||
-								!editorManager.activeFile() ||
-								!isAltFile()
-							}
-							onClick={async () => {
-								if (!editorManager.activeFile()) return;
-								if (activeAction() !== "interactive")
-									setActiveAction("interactive");
-								if (loadingAction() !== "interactive")
-									setLoadingAction("interactive");
-
-								try {
-									setIsInteractiveMode(true);
-									setExecutionError(false);
-									resetSetOut();
-									setInteractiveDeadlock(false);
-									// Reset accumulated output for new session
-									setAccumulatedOutput("");
-									// Go to console by default, execution only if there are errors
-									setActiveTab("console");
-
-									const virtualFS = buildVirtualFileSystem(mockFileSystem());
-									let filePath = getPathFromId(
-										mockFileSystem(),
-										editorManager.activeFile()!.id,
-										"",
-									);
-									if (!filePath) {
-										filePath = editorManager.activeFile()!.name;
-									}
-
-									const res = start_interactive_session(
-										editor.editorView().state.doc.toString(),
-										filePath,
-										virtualFS,
-									);
-									setInteractiveStates(res.next_states || []);
-									setCurrentVMState(res.current_state);
-									setInteractiveFinished(
-										!res.next_states || res.next_states.length === 0,
-									);
-									setExecutionHistory([]);
-
-									if (!res.next_states || res.next_states.length === 0) {
-										setOut("Program execution completed.");
-									} else if (res.next_states.length === 0) {
-										setOut("No interactive choices available.");
-									} else {
-										setOut(
-											"Interactive mode started. Select the next instruction to execute.",
-										);
-									}
-								} catch (e: any) {
-									console.error("Interactive mode error:", e);
-									if (isDeadlockError(e)) {
-										setInteractiveStates([]);
-										setCurrentVMState(null);
-										setInteractiveFinished(true);
-										setInteractiveDeadlock(true);
-										setAccumulatedOutput("Deadlock detected.");
-										setAccumulatedExecutionOutput(
-											getDeadlockExecutionOutput(e),
-										);
-										setOut(getDeadlockExecutionOutput(e));
-										setExecutionError(false);
-										return;
-									}
-
-									const errorInfo = formatAlthreadError(
-										e,
-										getFileContentFromVirtualFS(
-											buildVirtualFileSystem(mockFileSystem()),
-											e.pos?.file_path || "",
-										),
-									);
-									setStructuredError(errorInfo);
-									setOut(errorInfo.message);
-									setExecutionError(true);
-									setIsInteractiveMode(false);
-									// Switch to execution tab to show the error
-									setActiveTab("execution");
-								} finally {
-									setTimeout(() => {
-										setLoadingAction(null);
-									}, animationTimeOut);
-								}
-							}}
-						>
-							<i
-								class={
-									loadingAction() === "interactive"
-										? "codicon codicon-loading codicon-modifier-spin"
-										: "codicon codicon-debug-step-over"
-								}
-							></i>
-							Interactive
-						</button>
-
-						<button
-							class={`vscode-button${activeAction() === "run" ? " active" : ""}`}
-							disabled={
-								loadingAction() === "run" ||
-								!editorManager.activeFile() ||
-								!isAltFile()
-							}
-							onClick={async () => {
-								if (!editorManager.activeFile()) return;
-								if (!isRun()) setIsRun(true);
-								setExecutionError(false);
-								resetSetOut();
-								resetStdoutWarning();
-								if (activeAction() !== "run") setActiveAction("run");
-								if (loadingAction() !== "run") setLoadingAction("run");
-								setSelectedVM(null);
-								try {
-									const virtualFS = buildVirtualFileSystem(mockFileSystem());
-									let filePath = getPathFromId(
-										mockFileSystem(),
-										editorManager.activeFile()!.id,
-										"",
-									);
-									if (!filePath) {
-										filePath = editorManager.activeFile()!.name; // Fallback to name if ID not found
-									}
-									const res: RunResult = await workerClient.run(
-										editor.editorView().state.doc.toString(),
-										filePath,
-										virtualFS,
-									);
-									const runtimeError = (res as any).runtime_error;
-
-									if (res.debug.length === 0) {
-										resetSetOut();
-									} else {
-										setOut(res.debug);
-									}
-									setCommGraphOut(res.message_flow_events);
-									setRunGraphNodes(res.nodes);
-									setStepLines(res.step_lines || []);
-
-									// Build the graph for visualization
-									const builtGraph = buildGraphFromNodes(res.nodes, {
-										mode: "run",
-										stepLines: res.step_lines || [],
-										theme: theme(),
-									});
-									setRunBuiltGraph(builtGraph);
-
-									const plainStdout = res.stdout.join("\n");
-									setStdout(plainStdout);
-									setStdoutWarning(
-										(res as any).max_steps_reached
-											? `Maximum number of steps reached (${WEB_RUN_MAX_STEPS}). Execution was stopped.`
-											: null,
-									);
-
-									if (runtimeError) {
-										const runtimeInfo = formatAlthreadError(
-											runtimeError,
-											getFileContentFromVirtualFS(
-												virtualFS,
-												runtimeError.pos?.file_path || filePath,
-											),
-										);
-										const executionOutput =
-											res.debug.length > 0
-												? `${res.debug}\n${runtimeInfo.message}`
-												: runtimeInfo.message;
-
-										setStructuredError(null);
-										setOut(executionOutput);
-										if (isDeadlockError(runtimeError)) {
-											setStdout(
-												appendStatusNotice(plainStdout, "Deadlock detected."),
-											);
-											setExecutionError(false);
-											setActiveTab("console");
-										} else {
-											setExecutionError(true);
-											setActiveTab("execution");
-										}
-									} else {
-										setStructuredError(null);
-										setExecutionError(false);
-										setActiveTab("console");
-									}
-								} catch (e: any) {
-									console.error("Execution error:", e);
-									// show error in execution tab
-									const errorInfo = formatAlthreadError(
-										e,
-										getFileContentFromVirtualFS(
-											buildVirtualFileSystem(mockFileSystem()),
-											e.pos?.file_path || "",
-										),
-									);
-									setStructuredError(errorInfo);
-									setOut(errorInfo.message);
-									setActiveTab("execution");
-									// reset other tabs to initial state
-									setStdout("The console output will appear here.");
-									resetStdoutWarning();
-									setCommGraphOut([]);
-									setRunGraphNodes([]);
-									setRunBuiltGraph({ nodes: [], edges: [] });
-									setExecutionError(true);
-								} finally {
-									setTimeout(() => {
-										setLoadingAction(null);
-									}, animationTimeOut);
-								}
-							}}
-						>
-							<i
-								class={
-									loadingAction() === "run"
-										? "codicon codicon-loading codicon-modifier-spin"
-										: "codicon codicon-play"
-								}
-							></i>
-							Run
-						</button>
-
-						<button
-							class={`vscode-button${activeAction() === "check" ? " active" : ""}`}
-							disabled={!editorManager.activeFile() || !isAltFile()}
-							onClick={async () => {
-								if (loadingAction() !== "check") setLoadingAction("check");
-								if (activeAction() !== "check") setActiveAction("check");
-								setSelectedVM(null);
-								setActiveTab("vm_states");
-								if (executionError()) setExecutionError(false);
-								setCheckTooLargeStatus(null);
-								if (!editorManager.activeFile()) return;
-
-								try {
-									const virtualFS = buildVirtualFileSystem(mockFileSystem());
-
-									let filePath = getPathFromId(
-										mockFileSystem(),
-										editorManager.activeFile()!.id,
-										"",
-									);
-									if (!filePath) {
-										filePath = editorManager.activeFile()!.name; // Fallback to name if ID not found
-									}
-
-									const res: CheckResult = await workerClient.check(
-										editor.editorView().state.doc.toString(),
-										filePath,
-										virtualFS,
-										DEFAULT_WEB_CHECK_MAX_STATES,
-									);
-
-									if (res.verdict === "violated") {
-										if (res.exhaustive) {
-											setOut(
-												"Violation found! See the highlighted path in the VM states graph.",
-											);
-										} else {
-											setOut(
-												"Violation found before exploration completed. The counterexample is valid, but the explored graph is partial. See the highlighted path in the VM states graph.",
-											);
-										}
-									} else if (res.verdict === "verified") {
-										setOut(
-											"Verification complete: No property violations found.",
-										);
-									} else {
-										setOut(
-											"Verification inconclusive: The state limit was reached.",
-										);
-									}
-									setCheckTooLargeStatus(getCheckTooLargeStatus(res));
-
-									setCounterexampleReplayNodes(res.path);
-									setCounterexampleReplayStepLines(
-										res.path.slice(1).map((node) => node.metadata.lines ?? []),
-									);
-
-									if (res.nodes.length > MAX_VISIBLE_GRAPH_NODES) {
-										setNodes(buildHiddenGraphPlaceholders(res.nodes.length));
-										setEdges([]);
-									} else {
-										const builtGraph = buildGraphFromNodes(res.nodes, {
-											mode: "check",
-											violationPath: res.violation_path,
-											theme: theme(),
-										});
-
-										setNodes(builtGraph.nodes);
-										setEdges(builtGraph.edges);
-									}
-									setIsRun(false);
-								} catch (e: any) {
-									// show error in execution tab
-									const errorInfo = formatAlthreadError(
-										e,
-										getFileContentFromVirtualFS(
-											buildVirtualFileSystem(mockFileSystem()),
-											e.pos?.file_path || "",
-										),
-									);
-									setStructuredError(errorInfo);
-									setOut(errorInfo.message);
-									setActiveTab("execution");
-									setLoadingAction(null);
-									setCheckTooLargeStatus(null);
-									setCounterexampleReplayNodes([]);
-									setCounterexampleReplayStepLines([]);
-									// reset other tabs to initial state
-									setStdout("The console output will appear here.");
-									resetStdoutWarning();
-									setCommGraphOut([]);
-									setRunGraphNodes([]);
-									setRunBuiltGraph({ nodes: [], edges: [] });
-									setExecutionError(true);
-								}
-							}}
-						>
-							<i
-								class={
-									loadingAction() === "check"
-										? "codicon codicon-loading codicon-modifier-spin"
-										: "codicon codicon-check"
-								}
-							></i>
-							Check
-						</button>
-
-						<button
-							class={`vscode-button${activeAction() === "run-counterexample" ? " active" : ""}`}
-							disabled={
-								loadingAction() === "run-counterexample" ||
-								counterexampleReplayNodes().length === 0
-							}
-							onClick={async () => {
-								const replayNodes = counterexampleReplayNodes();
-								if (replayNodes.length === 0) return;
-
-								if (!isRun()) setIsRun(true);
-								setExecutionError(false);
-								setStructuredError(null);
-								if (activeAction() !== "run-counterexample")
-									setActiveAction("run-counterexample");
-								if (loadingAction() !== "run-counterexample")
-									setLoadingAction("run-counterexample");
-								setSelectedVM(null);
-
-								try {
-									const replayStepLines = counterexampleReplayStepLines();
-									setRunGraphNodes(replayNodes);
-									setStepLines(replayStepLines);
-
-									const builtGraph = buildGraphFromNodes(replayNodes, {
-										mode: "run",
-										stepLines: replayStepLines,
-										theme: theme(),
-									});
-
-									setRunBuiltGraph(builtGraph);
-									setCommGraphOut([]);
-									setStdout("Counter-example replay loaded from checker path.");
-									setOut(
-										"Counter-example replay loaded. Open VM states to walk through the violating trace.",
-									);
-									setActiveTab("vm_states");
-								} finally {
-									setTimeout(() => {
-										setLoadingAction(null);
-									}, animationTimeOut);
-								}
-							}}
-						>
-							<i
-								class={
-									loadingAction() === "run-counterexample"
-										? "codicon codicon-loading codicon-modifier-spin"
-										: "codicon codicon-debug-start"
-								}
-							></i>
-							Run CE
-						</button>
-
-						<button
-							class={`vscode-button${loadingAction() === "reset" ? " active" : ""}`}
-							onClick={async () => {
-								setLoadingAction("reset");
-								try {
-									await resetAllState();
-								} finally {
-									setTimeout(() => {
-										setLoadingAction(null);
-									}, 100);
-								}
-							}}
-						>
-							<i
-								class={
-									loadingAction() === "reset"
-										? "codicon codicon-loading codicon-modifier-spin"
-										: "codicon codicon-clear-all"
-								}
-							></i>
-							Reset
-						</button>
-					</div>
+		<div class="app-shell" data-theme={theme()}>
+			<header id="header">
+				<div class="brand">
+					<Logo />
+					<h3>Althread</h3>
 				</div>
-
-				{/* Collapsed sidebar icon strip — absolutely positioned so it overlays when sidebar panel is at 0 */}
-				<Show when={sidebarCollapsed()}>
-					<div class="collapsed-sidebar-container">
-						<Sidebar
-							files={mockFileSystem()}
-							onFileSelect={(path) =>
-								editorManager.handleFileSelect(path, mockFileSystem())
-							}
-							onNewFile={fileOperations.handleNewFile}
-							onNewFolder={fileOperations.handleNewFolder}
-							onMoveEntry={fileOperations.handleMoveEntry}
-							onRenameEntry={fileOperations.handleRenameEntry}
-							onDeleteEntry={fileOperations.handleDeleteEntry}
-							onCopyEntry={fileOperations.handleCopyEntry}
-							onFileUpload={fileOperations.handleFileUpload}
-							activeFile={editorManager.activeFile()}
-							getFilePath={(entry) =>
-								getPathFromId(mockFileSystem(), entry.id) || entry.name
-							}
-							selectedFiles={selectedFiles()}
-							onSelectionChange={setSelectedFiles}
-							creationError={creationError()}
-							setCreationError={setCreationError}
-							checkNameConflict={checkNameConflict}
-							showConfirmDialog={showMoveConfirmDialog}
-							showDeleteConfirmDialog={showDeleteConfirmDialog}
-							globalFileCreation={globalFileCreation()}
-							setGlobalFileCreation={setGlobalFileCreation}
-							setFileSystem={setMockFileSystem}
-							onLoadExample={handleLoadExample}
-							activeView={sidebarView()}
-							onViewChange={setSidebarView}
-							isCollapsed={sidebarCollapsed()}
-							onToggleCollapse={toggleSidebarCollapse}
+				<div class="actions">
+					<div class="action-group" role="group" aria-label="Execution">
+						<ActionButton
+							action="run"
+							label="Run"
+							icon="play"
+							shortcut={runShortcut}
+							primary
+							onClick={exec.run}
+						/>
+						<ActionButton
+							action="check"
+							label="Check"
+							icon="workspace-trusted"
+							shortcut={checkShortcut}
+							onClick={exec.check}
+						/>
+						<ActionButton
+							action="interactive"
+							label="Step"
+							icon="debug-step-over"
+							onClick={exec.startInteractive}
 						/>
 					</div>
-				</Show>
-
-				<div
-					class={`content-wrapper ${sidebarCollapsed() ? "sidebar-collapsed" : ""}`}
-				>
-					<Resizable
-						id="content"
-						as={(props: JSX.HTMLAttributes<HTMLDivElement>) => {
-							// Access corvu context here so we can wire exact size logic
-							const ctx = Resizable.useContext();
-							getResizableSizes = ctx.sizes;
-							setResizableSizes = ctx.setSizes;
-							return <div {...props} />;
+					<span class="actions-separator" />
+					<button
+						type="button"
+						class="vscode-button icon-only theme-toggle-button"
+						title={`Switch to ${theme() === "dark" ? "light" : "dark"} theme`}
+						aria-label="Toggle theme"
+						onClick={() => {
+							const next = theme() === "dark" ? "light" : "dark";
+							saveEditorTheme(next);
+							setTheme(next);
 						}}
 					>
-						{/* Sidebar panel — collapsible, hidden when sidebarCollapsed */}
-						<Resizable.Panel
-							initialSize={0.2}
-							minSize={0.15}
-							collapsible
-							collapsedSize={0}
-							onCollapse={() => {
-								if (!sidebarCollapsed()) setSidebarCollapsed(true);
-							}}
-							onExpand={() => {
-								if (sidebarCollapsed()) setSidebarCollapsed(false);
-							}}
-							style={{ overflow: "hidden" }}
-						>
-							<Sidebar
-								files={mockFileSystem()}
-								onFileSelect={(path) =>
-									editorManager.handleFileSelect(path, mockFileSystem())
-								}
-								onNewFile={fileOperations.handleNewFile}
-								onNewFolder={fileOperations.handleNewFolder}
-								onMoveEntry={fileOperations.handleMoveEntry}
-								onRenameEntry={fileOperations.handleRenameEntry}
-								onDeleteEntry={fileOperations.handleDeleteEntry}
-								onCopyEntry={fileOperations.handleCopyEntry}
-								onFileUpload={fileOperations.handleFileUpload}
-								activeFile={editorManager.activeFile()}
-								getFilePath={(entry) =>
-									getPathFromId(mockFileSystem(), entry.id) || entry.name
-								}
-								selectedFiles={selectedFiles()}
-								onSelectionChange={setSelectedFiles}
-								creationError={creationError()}
-								setCreationError={setCreationError}
-								checkNameConflict={checkNameConflict}
-								showConfirmDialog={showMoveConfirmDialog}
-								showDeleteConfirmDialog={showDeleteConfirmDialog}
-								globalFileCreation={globalFileCreation()}
-								setGlobalFileCreation={setGlobalFileCreation}
-								setFileSystem={setMockFileSystem}
-								onLoadExample={handleLoadExample}
-								activeView={sidebarView()}
-								onViewChange={setSidebarView}
-								isCollapsed={sidebarCollapsed()}
-								onToggleCollapse={toggleSidebarCollapse}
-							/>
-						</Resizable.Panel>
-
-						<Resizable.Handle class="Resizable-handle" />
-
-						<Resizable.Panel
-							class="editor-panel"
-							initialSize={0.5}
-							minSize={0.2}
-						>
-							<FileTabs
-								openFiles={editorManager.openFiles()}
-								activeFile={editorManager.activeFile()}
-								getFilePath={(entry) =>
-									getPathFromId(mockFileSystem(), entry.id) || entry.name
-								}
-								onTabClick={(file) =>
-									editorManager.handleFileTabClick(file, mockFileSystem())
-								}
-								onTabClose={(file) =>
-									editorManager.handleTabClose(file, mockFileSystem())
-								}
-							/>
-							{editorManager.activeFile() ? (
-								<div class="editor-instance-wrapper" ref={editor.ref} />
-							) : (
-								<EmptyEditor onNewFile={handleNewFileClick} />
-							)}
-						</Resizable.Panel>
-
-						<Resizable.Handle class="Resizable-handle" />
-
-						<Resizable.Panel
-							class="right-panel"
-							initialSize={0.3}
-							minSize={0.1}
-						>
-							<div class="execution-content">
-								<div class="tab">
-									<button
-										class={`tab_button ${activeTab() === "console" ? "active" : ""}`}
-										onclick={() => handleExecutionTabClick("console")}
-										disabled={!isRun()}
-										title="Console"
-									>
-										<i class="codicon codicon-terminal"></i>{" "}
-										<span>Console</span>
-									</button>
-									<button
-										class={`tab_button 
-                           ${activeTab() === "execution" ? "active" : ""} 
-                           ${executionError() ? "execution-error" : ""}`}
-										onclick={() => handleExecutionTabClick("execution")}
-										title="Execution"
-									>
-										<i class="codicon codicon-play"></i> <span>Execution</span>
-									</button>
-									<button
-										class={`tab_button ${activeTab() === "msg_flow" ? "active" : ""}`}
-										onclick={() => handleExecutionTabClick("msg_flow")}
-										disabled={!isRun()}
-										title="Message flow"
-									>
-										<i class="codicon codicon-send"></i>{" "}
-										<span>Message flow</span>
-									</button>
-									<button
-										class={`tab_button ${activeTab() === "vm_states" ? "active" : ""}`}
-										onclick={() => handleExecutionTabClick("vm_states")}
-										title="VM states"
-									>
-										<i class="codicon codicon-type-hierarchy-sub"></i>{" "}
-										<span>VM states</span>
-									</button>
-								</div>
-								<div class="tab-content">{renderExecContent()}</div>
-							</div>
-						</Resizable.Panel>
-					</Resizable>
+						<i class="codicon codicon-color-mode" />
+					</button>
 				</div>
+			</header>
 
-				{/* Move Confirmation Dialog */}
-				<MoveConfirmationDialog
-					isOpen={moveConfirmation().isOpen}
-					title="Replace Existing Item"
-					message="An item with this name already exists in the destination folder. Do you want to replace it?"
-					fileName={moveConfirmation().conflictingName}
-					onConfirm={handleConfirmedMove}
-					onCancel={handleCanceledMove}
-				/>
+			{/* Collapsed sidebar icon strip — overlays the layout while the sidebar panel is at 0 */}
+			<Show when={sidebarCollapsed()}>
+				<div class="collapsed-sidebar-container">
+					<AppSidebar />
+				</div>
+			</Show>
 
-				{/* Delete Confirmation Dialog */}
-				<DeleteConfirmationDialog
-					isOpen={deleteConfirmation().isOpen}
-					paths={deleteConfirmation().paths}
-					onConfirm={handleConfirmedDelete}
-					onCancel={handleCanceledDelete}
-				/>
+			<div
+				class="content-wrapper"
+				classList={{ "sidebar-collapsed": sidebarCollapsed() }}
+			>
+				<Resizable
+					id="content"
+					as={(props: JSX.HTMLAttributes<HTMLDivElement>) => {
+						const ctx = Resizable.useContext();
+						getResizableSizes = ctx.sizes;
+						setResizableSizes = ctx.setSizes;
+						return <div {...props} />;
+					}}
+				>
+					<Resizable.Panel
+						initialSize={0.2}
+						minSize={0.15}
+						collapsible
+						collapsedSize={0}
+						onCollapse={() => setSidebarCollapsed(true)}
+						onExpand={() => setSidebarCollapsed(false)}
+						style={{ overflow: "hidden" }}
+					>
+						<AppSidebar />
+					</Resizable.Panel>
 
-				{/* Load Example Dialog */}
-				<LoadExampleDialog
-					isOpen={loadExampleDialog().isOpen}
-					onLoadInCurrent={handleLoadInCurrentFile}
-					onLoadInNew={handleLoadInNewFile}
-					onCancel={handleCancelLoadExample}
-				/>
+					<Resizable.Handle class="Resizable-handle" />
 
-				<LoadExampleDialog
-					isOpen={sharedImportDialog().isOpen}
-					onLoadInCurrent={handleReplaceSharedImport}
-					onLoadInNew={handleSharedImportInNewFile}
-					onCancel={handleCancelSharedImport}
-					title="Shared Link Import"
-					message="A file with the same name already exists. What should the editor do with the shared content?"
-					detail={`Replace ${sharedImportDialog().fileName} or create a new file with a unique name.`}
-					currentLabel="Replace File"
-					newLabel="Create Copy"
-				/>
+					<Resizable.Panel
+						class="editor-panel"
+						initialSize={0.5}
+						minSize={0.2}
+					>
+						<FileTabs
+							openFiles={editorManager.openFiles()}
+							activeFile={editorManager.activeFile()}
+							getFilePath={pathOf}
+							onTabClick={(file) =>
+								editorManager.handleFileTabClick(file, mockFileSystem())
+							}
+							onTabClose={(file) =>
+								editorManager.handleTabClose(file, mockFileSystem())
+							}
+						/>
+						<Show
+							when={editorManager.activeFile()}
+							fallback={<EmptyEditor onNewFile={handleNewFileClick} />}
+						>
+							<div class="editor-instance-wrapper" ref={editor.ref} />
+						</Show>
+					</Resizable.Panel>
 
-				{/* Interactive Panel */}
-				<InteractivePanel
-					isVisible={isInteractiveMode()}
-					interactiveStates={interactiveStates()}
-					currentVMState={currentVMState()}
-					isFinished={interactiveFinished()}
-					deadlockDetected={interactiveDeadlock()}
-					executionOutput={out()}
-					executionError={executionError()}
-					onExecuteStep={executeInteractiveStep}
-					onClose={closeInteractiveMode}
-					onReset={resetInteractiveMode}
-					stdout={accumulatedOutput()}
-					commGraphOut={commgraphout()}
-					vmStates={[]}
-					isRun={isRun()}
-					interactiveMessageFlow={interactiveMessageFlow()}
-					interactiveVmStates={interactiveVmStates()}
-					interactiveStepLines={interactiveStepLines()}
-					editor={editor}
-					theme={theme()}
-				/>
+					<Resizable.Handle class="Resizable-handle" />
+
+					<Resizable.Panel
+						class="right-panel"
+						initialSize={0.3}
+						minSize={0.15}
+					>
+						<ResultsPanel
+							exec={exec}
+							editor={editor}
+							theme={theme()}
+							runShortcut={runShortcut}
+							onErrorFileClick={handleErrorFileClick}
+							onPreviewLines={setPreviewLines}
+						/>
+					</Resizable.Panel>
+				</Resizable>
 			</div>
-		</>
+
+			<MoveConfirmationDialog
+				isOpen={moveConfirmation().isOpen}
+				title="Replace Existing Item"
+				message="An item with this name already exists in the destination folder. Do you want to replace it?"
+				fileName={moveConfirmation().conflictingName}
+				onConfirm={handleConfirmedMove}
+				onCancel={closeMoveDialog}
+			/>
+
+			<DeleteConfirmationDialog
+				isOpen={deleteConfirmation().isOpen}
+				paths={deleteConfirmation().paths}
+				onConfirm={handleConfirmedDelete}
+				onCancel={() => setDeleteConfirmation({ isOpen: false, paths: [] })}
+			/>
+
+			<LoadExampleDialog
+				isOpen={loadExampleDialog().isOpen}
+				detail={`Replace the content of the current file, or open “${loadExampleDialog().fileName}” in a new file.`}
+				onLoadInCurrent={handleLoadInCurrentFile}
+				onLoadInNew={handleLoadInNewFile}
+				onCancel={() => setLoadExampleDialog(CLOSED_FILE_DIALOG)}
+			/>
+
+			<LoadExampleDialog
+				isOpen={sharedImportDialog().isOpen}
+				onLoadInCurrent={handleReplaceSharedImport}
+				onLoadInNew={handleSharedImportInNewFile}
+				onCancel={handleCancelSharedImport}
+				title="Shared Link Import"
+				message="A file with the same name already exists. What should the editor do with the shared content?"
+				detail={`Replace ${sharedImportDialog().fileName} or create a new file with a unique name.`}
+				currentLabel="Replace File"
+				newLabel="Create Copy"
+			/>
+		</div>
 	);
 }

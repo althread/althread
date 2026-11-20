@@ -77,6 +77,8 @@
 	--app-icon-color: #c5c5c5;
 	--app-icon-muted: #858585;
 	--app-focus-border: rgba(14, 99, 156, 0.3);
+	--header-height: 52px;
+	--app-on-primary: #1a1206;
 	background-color: var(--background-graphics);
 	color: var(--app-text);
 	font-family:
@@ -186,20 +188,19 @@ body {
 
 #header {
 	margin: 0;
-	/* Includes vertical padding below (box-sizing keeps total height consistent). */
-	height: 62px;
+	height: var(--header-height);
 	box-sizing: border-box;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 2rem;
-	padding: 1rem 1rem 1rem 0.5rem;
+	gap: 1rem;
+	padding: 0 12px 0 4px;
 	background-color: var(--app-surface);
 	border-bottom: 1px solid var(--app-border);
 }
 
 .content-wrapper {
-	height: calc(100vh - 62px);
+	height: calc(100vh - var(--header-height));
 	overflow: hidden;
 	/* Prevent page-level scrolling */
 }
@@ -216,8 +217,7 @@ body {
 /* Collapsed sidebar container styles */
 .collapsed-sidebar-container {
 	position: absolute;
-	top: 62px;
-	/* Height of header */
+	top: var(--header-height);
 	left: 0;
 	bottom: 0;
 	z-index: 1000;
@@ -395,12 +395,15 @@ body {
 	display: flex;
 	align-items: center;
 	gap: 6px;
+	height: 30px;
+	box-sizing: border-box;
 	background-color: var(--app-surface-hover);
 	color: var(--app-text-muted);
 	border: 1px solid var(--app-border-strong);
-	padding: 4px 12px;
-	border-radius: 2px;
+	padding: 0 12px;
+	border-radius: 4px;
 	cursor: pointer;
+	font-family: inherit;
 	font-size: 13px;
 	transition:
 		background-color 0.2s,
@@ -411,16 +414,16 @@ body {
 .vscode-button:hover {
 	background-color: var(--app-surface-elevated);
 	border-color: var(--app-border-strong);
+	color: var(--app-text);
 }
 
 .vscode-button:disabled {
-	opacity: 0.8;
+	opacity: 0.6;
 	cursor: not-allowed;
 	background-color: var(--app-surface);
 	border-color: var(--app-border);
 	color: var(--app-text-soft);
-	pointer-events: none;
-	/* Prevent any interaction */
+	cursor: not-allowed;
 }
 
 .vscode-button .codicon {
@@ -441,23 +444,81 @@ body {
 
 .vscode-button.active {
 	background-color: var(--app-surface-muted);
-	border: 1px solid var(--app-text);
+	border-color: var(--ifm-color-primary);
 	color: var(--app-text);
+}
+
+.vscode-button.primary {
+	background-color: var(--ifm-color-primary);
+	border-color: var(--ifm-color-primary);
+	color: var(--app-on-primary);
+	font-weight: 600;
+}
+
+.vscode-button.primary:hover {
+	background-color: var(--ifm-color-primary-light);
+	border-color: var(--ifm-color-primary-light);
+	color: var(--app-on-primary);
+}
+
+.vscode-button.primary:disabled {
+	background-color: color-mix(in srgb, var(--ifm-color-primary) 35%, var(--app-surface));
+	border-color: transparent;
+	color: var(--app-text-soft);
+}
+
+.vscode-button.icon-only {
+	width: 30px;
+	padding: 0;
+	justify-content: center;
 }
 
 .actions {
 	display: flex;
 	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+.action-group {
+	display: flex;
+	align-items: center;
 	gap: 6px;
+}
+
+.actions-separator {
+	width: 1px;
+	height: 20px;
+	background: var(--app-border-strong);
 }
 
 .brand {
 	display: flex;
 	height: 100%;
 	align-items: center;
-	gap: 12px;
-	padding: 0.5rem;
+	gap: 8px;
+	padding: 0 0.5rem;
 	color: var(--app-text-muted);
+}
+
+.brand img {
+	height: 32px !important;
+}
+
+.brand h3 {
+	margin: 0;
+	font-size: 17px;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+}
+
+@media (max-width: 720px) {
+	.action-group .vscode-button span {
+		display: none;
+	}
+	.brand h3 {
+		display: none;
+	}
 }
 
 .Resizable-handle {
@@ -850,8 +911,4 @@ body {
 	min-height: 0;
 }
 
-@container right-panel (max-width: 450px) {
-	.tab_button span {
-		display: none;
-	}
-}
+

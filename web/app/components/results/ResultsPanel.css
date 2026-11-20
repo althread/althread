@@ -1,0 +1,241 @@
+/* ---- Tabs ---------------------------------------------------------------- */
+
+.execution-content .tab {
+	align-items: stretch;
+	border-bottom: 1px solid var(--app-border);
+	padding: 0 4px 0 8px;
+}
+
+.execution-content .tab_button {
+	flex: 0 0 auto;
+	padding: 10px 12px;
+	margin-bottom: -1px;
+}
+
+.execution-content .tab_button span {
+	overflow: visible;
+}
+
+.execution-content .tab_button.highlighted {
+	color: var(--ifm-color-primary);
+}
+
+.tab-clear-button {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0 10px;
+	background: none;
+	border: none;
+	color: var(--app-text-soft);
+	cursor: pointer;
+	border-radius: 4px;
+}
+
+.tab-clear-button:hover:not(:disabled) {
+	color: var(--app-text);
+	background: var(--app-surface-hover);
+}
+
+.tab-clear-button:disabled {
+	opacity: 0.35;
+	cursor: default;
+}
+
+/* ---- Status banner -------------------------------------------------------- */
+
+.status-banner {
+	--tone: var(--app-text-soft);
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 14px;
+	border-bottom: 1px solid var(--app-border);
+	border-left: 3px solid var(--tone);
+	background: color-mix(in srgb, var(--tone) 10%, var(--app-surface));
+	font-size: 13px;
+	flex-shrink: 0;
+}
+
+.status-banner > .codicon {
+	color: var(--tone);
+	font-size: 18px;
+	flex-shrink: 0;
+}
+
+.status-banner.tone-busy {
+	--tone: var(--ifm-color-primary);
+}
+
+.status-banner.tone-success {
+	--tone: var(--app-success-text);
+}
+
+.status-banner.tone-warning {
+	--tone: var(--app-accent-orange);
+}
+
+.status-banner.tone-error {
+	--tone: var(--app-accent-red);
+}
+
+.status-banner.tone-neutral {
+	--tone: var(--app-accent-blue);
+}
+
+.status-text {
+	flex: 1;
+	min-width: 0;
+}
+
+.status-title {
+	color: var(--app-text);
+	font-weight: 600;
+}
+
+.status-detail {
+	margin-top: 2px;
+	color: var(--app-text-muted);
+	font-size: 12px;
+	line-height: 1.4;
+	overflow-wrap: anywhere;
+}
+
+.status-action {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 5px 10px;
+	border-radius: 4px;
+	border: 1px solid var(--tone);
+	background: transparent;
+	color: var(--app-text);
+	font: inherit;
+	font-size: 12px;
+	white-space: nowrap;
+	cursor: pointer;
+	flex-shrink: 0;
+}
+
+.status-action:hover {
+	background: color-mix(in srgb, var(--tone) 20%, transparent);
+}
+
+/* ---- Content -------------------------------------------------------------- */
+
+.execution-content .console {
+	padding: 0;
+}
+
+.execution-content .console > pre {
+	padding: 14px 16px;
+}
+
+.execution-content .console > pre.console-warning {
+	flex: 0 0 auto;
+	color: var(--app-accent-red);
+	border-top: 1px solid var(--app-border);
+}
+
+.states-layout {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	width: 100%;
+}
+
+.states-pane {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.execution-content .state-graph {
+	border: none;
+	border-top: 1px solid var(--app-border);
+	box-shadow: none;
+}
+
+/* ---- Shared empty state ---------------------------------------------------- */
+
+.results-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	gap: 8px;
+	padding: 48px 24px;
+	color: var(--app-text-soft);
+	margin: auto 0;
+}
+
+.results-empty > .codicon {
+	font-size: 32px;
+	opacity: 0.6;
+}
+
+.results-empty h4 {
+	margin: 4px 0 0;
+	color: var(--app-text-muted);
+	font-size: 14px;
+	font-weight: 600;
+}
+
+.results-empty p {
+	margin: 0;
+	max-width: 340px;
+	font-size: 12.5px;
+	line-height: 1.55;
+}
+
+.results-empty code {
+	font-family: "Menlo", "Monaco", "Courier New", monospace;
+	font-size: 11.5px;
+	color: var(--app-syntax-keyword);
+}
+
+/* ---- Small icon buttons ---------------------------------------------------- */
+
+.icon-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 4px 8px;
+	border-radius: 4px;
+	border: 1px solid var(--app-border);
+	background: var(--app-surface-muted);
+	color: var(--app-text-muted);
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.icon-button:hover:not(:disabled) {
+	background: var(--app-surface-hover);
+	color: var(--app-text);
+	border-color: var(--app-border-strong);
+}
+
+.icon-button:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+/* Narrow panel: only the active tab keeps its label. */
+@container right-panel (max-width: 560px) {
+	.execution-content .tab_button:not(.active) span {
+		display: none;
+	}
+	.execution-content .tab_button {
+		padding: 10px;
+	}
+}
+
+@container right-panel (max-width: 340px) {
+	.execution-content .tab_button span,
+	.icon-button span {
+		display: none;
+	}
+}

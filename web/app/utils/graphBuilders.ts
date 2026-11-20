@@ -11,6 +11,9 @@ import type {
 	VisGraphNode,
 } from "../types/vm-state";
 
+/** Above this number of nodes the state graph is not rendered. */
+export const MAX_VISIBLE_GRAPH_NODES = 200;
+
 interface GraphBuildOptions {
 	mode?: "run" | "check";
 	stepLines?: number[][];

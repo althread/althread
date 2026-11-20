@@ -1,5 +1,17 @@
 # Online editor
 
+## Running programs
+
+| Action | Shortcut | What it does |
+| --- | --- | --- |
+| **Run** | `Ctrl/Cmd+Enter` | Executes one random interleaving of the active `.alt` file. |
+| **Check** | `Ctrl/Cmd+Shift+Enter` | Explores every reachable state and verifies the `check` properties. A violation can be replayed step by step from the result banner. |
+| **Step** | | Step-by-step execution: pick which process runs next (`1`–`9`), undo with `Backspace`. |
+
+The results panel shows a status banner for the last action (verdict, deadlock,
+errors) and the Console, Execution, Messages and States tabs. In the States tab,
+`←` / `→` walk through the current trace (ignored while typing in the editor).
+
 ## Althread language server
 
 `.alt` buffers use an LSP 3.17 client over JSON-RPC messages to a dedicated

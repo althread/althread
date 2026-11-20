@@ -42,67 +42,48 @@ export default function SearchView(props: SearchViewProps) {
 			"path",
 		];
 
-	// Helper function to create VS Code-style content preview
+	/** Description, plus the first content line matching the query (VS Code style). */
 	const createContentPreview = (
 		item: SearchResult,
 		searchQuery: string,
 	): string => {
-		const content = item.content || "";
 		const description = item.description || "";
+		const content = item.content || "";
+		const queryLower = searchQuery.trim().toLowerCase();
+		if (!queryLower || !content) return description;
 
-		if (!searchQuery || !content) {
-			// No search query or content, show description with first line or first 100 chars
-			const firstLine = content.split("\n")[0] || "";
-			const preview =
-				firstLine.length > 100
-					? `${firstLine.substring(0, 100)}...`
-					: firstLine;
-			return preview ? `${description} | Content: ${preview}` : description;
+		const line = content
+			.split("\n")
+			.find((l) => l.toLowerCase().includes(queryLower));
+		if (!line) return description;
+
+		let snippet = line.trim();
+		if (snippet.length > 100) {
+			const matchIndex = snippet.toLowerCase().indexOf(queryLower);
+			const start = Math.max(0, matchIndex - 30);
+			const end = Math.min(snippet.length, start + 100);
+			snippet = `${start > 0 ? "…" : ""}${snippet.substring(start, end)}${end < snippet.length ? "…" : ""}`;
 		}
-
-		const queryLower = searchQuery.toLowerCase();
-		const lines = content.split("\n");
-
-		// Find the first line that contains the search query
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-			if (line.toLowerCase().includes(queryLower)) {
-				// Found a matching line, show it with context
-				const trimmedLine = line.trim();
-				if (trimmedLine.length > 100) {
-					// If the line is too long, try to center the match
-					const matchIndex = line.toLowerCase().indexOf(queryLower);
-					const start = Math.max(0, matchIndex - 30);
-					const end = Math.min(line.length, start + 100);
-					const snippet = line.substring(start, end);
-					return `${description}\n${start > 0 ? "..." : ""}${snippet}${end < line.length ? "..." : ""}`;
-				}
-				return `${description}\n${trimmedLine}`;
-			}
-		}
-
-		// No match found in content, show description with first line
-		const firstLine = lines[0] || "";
-		const preview =
-			firstLine.length > 100 ? `${firstLine.substring(0, 100)}...` : firstLine;
-		return preview ? `${description} | Content: ${preview}` : description;
+		return description ? `${description}\n${snippet}` : snippet;
 	};
 
-	// Helper function to highlight search matches
+	const escapeHtml = (text: string) =>
+		text
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;")
+			.replace(/"/g, "&quot;");
+
+	/** Escapes the text (it can come from user files) and wraps the first match in a highlight span. */
 	const highlightMatch = (text: string, searchQuery: string): string => {
-		if (!searchQuery) return text;
-
-		const queryLower = searchQuery.toLowerCase();
-		const textLower = text.toLowerCase();
-		const index = textLower.indexOf(queryLower);
-
-		if (index === -1) return text;
+		const query = searchQuery.trim();
+		const index = query ? text.toLowerCase().indexOf(query.toLowerCase()) : -1;
+		if (index === -1) return escapeHtml(text);
 
 		const before = text.substring(0, index);
-		const match = text.substring(index, index + searchQuery.length);
-		const after = text.substring(index + searchQuery.length);
-
-		return `${before}<span class="search-highlight">${match}</span>${after}`;
+		const match = text.substring(index, index + query.length);
+		const after = text.substring(index + query.length);
+		return `${escapeHtml(before)}<span class="search-highlight">${escapeHtml(match)}</span>${escapeHtml(after)}`;
 	};
 
 	const filteredItems = createMemo(() => {
@@ -156,7 +137,7 @@ export default function SearchView(props: SearchViewProps) {
 							}}
 						/>
 						<Show when={query()}>
-							<button class="search-clear" onClick={clearSearch}>
+							<button type="button" class="search-clear" onClick={clearSearch}>
 								<i class="codicon codicon-close"></i>
 							</button>
 						</Show>
@@ -192,7 +173,7 @@ export default function SearchView(props: SearchViewProps) {
 						<div class="search-no-results">
 							<i class="codicon codicon-search-stop"></i>
 							<p>{props.noResultsMessage || "No results found"}</p>
-							<button class="search-clear-btn" onClick={clearSearch}>
+							<button type="button" class="search-clear-btn" onClick={clearSearch}>
 								Clear search
 							</button>
 						</div>
@@ -201,7 +182,7 @@ export default function SearchView(props: SearchViewProps) {
 					<Show when={filteredItems().length > 0}>
 						<For each={filteredItems()}>
 							{(item) => (
-								<button class="search-result-item" onClick={item.onClick}>
+								<button type="button" class="search-result-item" onClick={item.onClick}>
 									<Show when={item.icon}>
 										<i
 											class={`codicon codicon-${item.icon} search-result-icon`}
@@ -214,7 +195,7 @@ export default function SearchView(props: SearchViewProps) {
 												{item.subtitle === "Root" ? "root" : item.subtitle}
 											</div>
 										</Show>
-										<Show when={item.description || item.content}>
+										<Show when={createContentPreview(item, query())}>
 											<div
 												class="search-result-description"
 												innerHTML={highlightMatch(
