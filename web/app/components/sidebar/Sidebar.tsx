@@ -143,11 +143,11 @@ export default function Sidebar(props: SidebarProps) {
 			}
 
 			if (entry.children) {
-				entry.children.forEach((child) => addFileToResults(child, fullPath));
+				for (const child of entry.children) addFileToResults(child, fullPath);
 			}
 		};
 
-		props.files.forEach((entry) => addFileToResults(entry));
+		for (const entry of props.files) addFileToResults(entry);
 		return results;
 	};
 
@@ -155,6 +155,7 @@ export default function Sidebar(props: SidebarProps) {
 		<div class={`sidebar ${props.isCollapsed ? "collapsed" : ""}`}>
 			<div class="sidebar-tabs">
 				<button
+					type="button"
 					class={`sidebar-tab ${activeView() === "explorer" ? "active" : ""}`}
 					onClick={() => handleTabClick("explorer")}
 					title={`File Explorer (${modKey}+Shift+E)`}
@@ -162,6 +163,7 @@ export default function Sidebar(props: SidebarProps) {
 					<i class="codicon codicon-files"></i>
 				</button>
 				<button
+					type="button"
 					class={`sidebar-tab ${activeView() === "search" ? "active" : ""}`}
 					onClick={() => handleTabClick("search")}
 					title={`Search (${modKey}+Shift+F)`}
@@ -169,6 +171,7 @@ export default function Sidebar(props: SidebarProps) {
 					<i class="codicon codicon-search"></i>
 				</button>
 				<button
+					type="button"
 					class={`sidebar-tab ${activeView() === "packages" ? "active" : ""}`}
 					onClick={() => handleTabClick("packages")}
 					title={`Package Manager (${modKey}+Shift+P)`}
@@ -176,6 +179,7 @@ export default function Sidebar(props: SidebarProps) {
 					<i class="codicon codicon-package"></i>
 				</button>
 				<button
+					type="button"
 					class={`sidebar-tab ${activeView() === "help" ? "active" : ""}`}
 					onClick={() => handleTabClick("help")}
 					title={`Help & Resources (${modKey}+Shift+I)`}

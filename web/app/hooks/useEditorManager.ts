@@ -88,7 +88,9 @@ export const createEditorManager = (editor: any) => {
 				editor.safeUpdateContent(content);
 
 				editor.updateLanguage?.(newFilePath);
-				editor.setReadOnly?.(newFilePath === "deps" || newFilePath.startsWith("deps/"));
+				editor.setReadOnly?.(
+					newFilePath === "deps" || newFilePath.startsWith("deps/"),
+				);
 			}
 		}
 	};

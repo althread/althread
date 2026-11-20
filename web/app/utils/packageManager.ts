@@ -1,6 +1,13 @@
 import type { FileSystemEntry } from "@components/fileexplorer/FileExplorer";
+import * as althreadWasm from "../../pkg/althread_web";
 import { findFileByPath } from "./fileSystemUtils";
 import { loadFileContent, saveFileContent } from "./storage";
+
+/** The WASM module, initialized (initialization is idempotent). */
+const loadWasm = async () => {
+	await althreadWasm.default();
+	return althreadWasm;
+};
 
 // Package management for web editor
 export interface PackageInfo {
@@ -68,8 +75,7 @@ export class WebPackageManager {
 		version: string = "0.1.0",
 	): Promise<void> {
 		// Import and initialize the WASM module
-		const wasmModule = await import("../../pkg/althread_web");
-		await wasmModule.default(); // Initialize the WASM module
+		const wasmModule = await loadWasm();
 
 		const tomlContent = wasmModule.create_alt_toml(packageName, version);
 
@@ -129,8 +135,7 @@ export class WebPackageManager {
 
 		try {
 			// Import and initialize the WASM module
-			const wasmModule = await import("../../pkg/althread_web");
-			await wasmModule.default(); // Initialize the WASM module
+			const wasmModule = await loadWasm();
 
 			const dependenciesResult =
 				wasmModule.parse_dependencies_from_toml(content);
@@ -189,8 +194,7 @@ export class WebPackageManager {
 			console.log("📄 Current alt.toml content:", content);
 
 			// Import and initialize the WASM module
-			const wasmModule = await import("../../pkg/althread_web");
-			await wasmModule.default(); // Initialize the WASM module
+			const wasmModule = await loadWasm();
 
 			// The WASM function returns a Result<String, JsValue>, so we need to handle potential errors
 			let updatedContent: string;
@@ -545,7 +549,7 @@ version = "${version}"
 		const keysToRemove = Array.from(this.packageCache.keys()).filter((key) =>
 			key.startsWith(packageName),
 		);
-		keysToRemove.forEach((key) => this.packageCache.delete(key));
+		for (const key of keysToRemove) this.packageCache.delete(key);
 		this.savePackageCache();
 
 		// Remove from file system
@@ -596,8 +600,7 @@ version = "${version}"
 	// Validate package name using WASM
 	public async validatePackageName(packageName: string): Promise<boolean> {
 		try {
-			const wasmModule = await import("../../pkg/althread_web");
-			await wasmModule.default(); // Initialize the WASM module
+			const wasmModule = await loadWasm();
 			return wasmModule.validate_package_name(packageName);
 		} catch (error) {
 			console.error("Failed to validate package name:", error);

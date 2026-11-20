@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { LanguageWorkspace } from "../app/lsp/analysis.ts";
-import { LanguageServer, byteOffsetToUtf16 } from "../app/lsp/server.ts";
 import {
-	pathToUri,
-	uriToPath,
-	positionAt,
 	offsetAt,
+	pathToUri,
+	positionAt,
+	uriToPath,
 } from "../app/lsp/protocol.ts";
+import { byteOffsetToUtf16, LanguageServer } from "../app/lsp/server.ts";
+
 const uri = pathToUri("main.alt");
 const position = (source, needle, delta = needle.length) =>
 	positionAt(source, source.indexOf(needle) + delta);

@@ -47,7 +47,10 @@ export default function InteractiveChoices(props: InteractiveChoicesProps) {
 		if (n >= 1 && n <= 9 && n <= props.choices.length) {
 			e.preventDefault();
 			props.onExecute(n - 1);
-		} else if ((e.key === "Backspace" || e.key === "u") && props.stepCount > 0) {
+		} else if (
+			(e.key === "Backspace" || e.key === "u") &&
+			props.stepCount > 0
+		) {
 			e.preventDefault();
 			props.onUndo();
 		}
@@ -139,7 +142,9 @@ export default function InteractiveChoices(props: InteractiveChoicesProps) {
 											: "Execute this instruction"
 									}
 								>
-									<span class="choice-key">{index() < 9 ? index() + 1 : ""}</span>
+									<span class="choice-key">
+										{index() < 9 ? index() + 1 : ""}
+									</span>
 									<span class="choice-process">
 										{choice.prog_name}
 										<span class="choice-pid">#{choice.prog_id}</span>

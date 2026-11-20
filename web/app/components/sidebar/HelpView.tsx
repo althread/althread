@@ -25,12 +25,16 @@ export default function HelpView(props: HelpViewProps) {
 								<div class="help-link-title">Intelligent Althread editor</div>
 								<div class="help-link-desc">
 									Ctrl+Space: completion · F12 or Ctrl/Cmd+click: definition ·
-									Shift+F12: references · F2: rename.
-									Hover a symbol for its type; function signatures appear while typing arguments.
+									Shift+F12: references · F2: rename. Hover a symbol for its
+									type; function signatures appear while typing arguments.
 								</div>
 							</div>
 						</div>
-						<button class="help-link" onClick={() => setShowExamples(true)}>
+						<button
+							type="button"
+							class="help-link"
+							onClick={() => setShowExamples(true)}
+						>
 							<i class="codicon codicon-file-code"></i>
 							<div>
 								<div class="help-link-title">Browse Examples</div>
@@ -39,7 +43,11 @@ export default function HelpView(props: HelpViewProps) {
 								</div>
 							</div>
 						</button>
-						<button class="help-link" onClick={() => navigate("/tutorials")}>
+						<button
+							type="button"
+							class="help-link"
+							onClick={() => navigate("/tutorials")}
+						>
 							<i class="codicon codicon-book"></i>
 							<div>
 								<div class="help-link-title">Tutorials</div>
@@ -47,6 +55,7 @@ export default function HelpView(props: HelpViewProps) {
 							</div>
 						</button>
 						<button
+							type="button"
 							class="help-link"
 							onClick={() =>
 								window.open(
@@ -62,6 +71,7 @@ export default function HelpView(props: HelpViewProps) {
 							</div>
 						</button>
 						<button
+							type="button"
 							class="help-link"
 							onClick={() =>
 								window.open(
@@ -83,6 +93,7 @@ export default function HelpView(props: HelpViewProps) {
 					<div class="example-search-container">
 						<div class="example-search-header">
 							<button
+								type="button"
 								class="back-button"
 								onClick={() => setShowExamples(false)}
 							>

@@ -80,7 +80,9 @@ export function buildGraphFromNodes(
 		// Determine node color based on mode and violation path
 		const isViolationNode = mode === "check" && violationNodeSet.has(i);
 
-		let backgroundColor, borderColor, fontColor;
+		let backgroundColor: string;
+		let borderColor: string;
+		let fontColor: string;
 		if (mode === "run") {
 			backgroundColor = "#314d31";
 			borderColor = "#a6dfa6";

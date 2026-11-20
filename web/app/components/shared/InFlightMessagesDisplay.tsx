@@ -27,16 +27,10 @@ export default function InFlightMessagesDisplay(
 
 	return (
 		<div class={`section${props.collapsed ? " section-collapsed" : ""}`}>
-			<div
+			<button
+				type="button"
 				class={`collapsible-header${isLocked() ? " header-locked" : ""}`}
 				onClick={props.onToggle}
-				onKeyDown={(e) => {
-					if (e.key === "Enter" || e.key === " ") {
-						e.preventDefault();
-						props.onToggle();
-					}
-				}}
-				role="button"
 				tabIndex={isLocked() ? -1 : 0}
 				aria-expanded={!props.collapsed}
 				aria-controls={bodyId}
@@ -53,13 +47,13 @@ export default function InFlightMessagesDisplay(
 				></i>
 				<i class="codicon codicon-mail header-section-icon"></i>
 				<span class="section-label">In-flight messages</span>
-				<div class={`header-count${props.hasChanged ? " changed" : ""}`}>
+				<span class={`header-count${props.hasChanged ? " changed" : ""}`}>
 					<Show when={props.hasChanged}>
 						<span class="change-indicator">!</span>
 					</Show>
 					{totalCount()}
-				</div>
-			</div>
+				</span>
+			</button>
 			<div
 				id={bodyId}
 				class={`section-body${props.collapsed ? " section-body-hidden" : ""}`}

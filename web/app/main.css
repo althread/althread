@@ -423,7 +423,6 @@ body {
 	background-color: var(--app-surface);
 	border-color: var(--app-border);
 	color: var(--app-text-soft);
-	cursor: not-allowed;
 }
 
 .vscode-button .codicon {
@@ -462,7 +461,11 @@ body {
 }
 
 .vscode-button.primary:disabled {
-	background-color: color-mix(in srgb, var(--ifm-color-primary) 35%, var(--app-surface));
+	background-color: color-mix(
+		in srgb,
+		var(--ifm-color-primary) 35%,
+		var(--app-surface)
+	);
 	border-color: transparent;
 	color: var(--app-text-soft);
 }
@@ -910,5 +913,3 @@ body {
 	flex: 1 1 0%;
 	min-height: 0;
 }
-
-

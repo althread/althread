@@ -173,7 +173,11 @@ export default function SearchView(props: SearchViewProps) {
 						<div class="search-no-results">
 							<i class="codicon codicon-search-stop"></i>
 							<p>{props.noResultsMessage || "No results found"}</p>
-							<button type="button" class="search-clear-btn" onClick={clearSearch}>
+							<button
+								type="button"
+								class="search-clear-btn"
+								onClick={clearSearch}
+							>
 								Clear search
 							</button>
 						</div>
@@ -182,7 +186,11 @@ export default function SearchView(props: SearchViewProps) {
 					<Show when={filteredItems().length > 0}>
 						<For each={filteredItems()}>
 							{(item) => (
-								<button type="button" class="search-result-item" onClick={item.onClick}>
+								<button
+									type="button"
+									class="search-result-item"
+									onClick={item.onClick}
+								>
 									<Show when={item.icon}>
 										<i
 											class={`codicon codicon-${item.icon} search-result-icon`}

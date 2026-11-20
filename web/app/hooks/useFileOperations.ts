@@ -215,7 +215,8 @@ export const createFileOperationsHandlers = (
 			const newActiveFile = findEntryById(newFileSystem, activeFileId);
 			setActiveFile(newActiveFile);
 			if (newActiveFile) {
-				const activePath = getPathFromId(newFileSystem, newActiveFile.id) || newActiveFile.name;
+				const activePath =
+					getPathFromId(newFileSystem, newActiveFile.id) || newActiveFile.name;
 				editor.updateLanguage?.(activePath);
 				editor.setReadOnly?.(activePath.startsWith("deps/"));
 			}
@@ -317,7 +318,8 @@ export const createFileOperationsHandlers = (
 			const newActiveFile = findEntryById(newFileSystem, activeFileId);
 			setActiveFile(newActiveFile);
 			if (newActiveFile) {
-				const activePath = getPathFromId(newFileSystem, newActiveFile.id) || newActiveFile.name;
+				const activePath =
+					getPathFromId(newFileSystem, newActiveFile.id) || newActiveFile.name;
 				editor.updateLanguage?.(activePath);
 				editor.setReadOnly?.(activePath.startsWith("deps/"));
 			}
@@ -525,7 +527,9 @@ export const createFileOperationsHandlers = (
 				const newActiveFile = findEntryById(newFileSystem, activeFileId);
 				setActiveFile(newActiveFile);
 				if (newActiveFile) {
-					const activePath = getPathFromId(newFileSystem, newActiveFile.id) || newActiveFile.name;
+					const activePath =
+						getPathFromId(newFileSystem, newActiveFile.id) ||
+						newActiveFile.name;
 					editor.updateLanguage?.(activePath);
 					editor.setReadOnly?.(activePath.startsWith("deps/"));
 				}

@@ -1,9 +1,10 @@
 import { render } from "solid-js/web";
 import "./main.css";
 import { HashRouter, Route, useNavigate } from "@solidjs/router";
-import { onMount } from "solid-js";
+import { lazy, onMount } from "solid-js";
 import App from "./App";
-import Tutorial from "./components/tutorial/Tutorial";
+
+const Tutorial = lazy(() => import("./components/tutorial/Tutorial"));
 
 // This component will handle the redirection for any unmatched route.
 const NotFound = () => {

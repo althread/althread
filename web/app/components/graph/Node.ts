@@ -1,12 +1,10 @@
 import type { Color } from "vis-network";
-import type { ProgramStateJS } from "./State";
-
-export type Node = {
-	// This represents the VM state in JS
-	channels: any[]; // Array of ChannelState
-	globals: Record<string, any>; // Record of globals
-	locals: ProgramStateJS[]; // Array of program states
-};
+import type {
+	ChannelState,
+	Literal,
+	ProgramState,
+	VMState,
+} from "../../types/vm-state";
 
 export type VisNode = {
 	id: number;
@@ -23,44 +21,45 @@ export const node_entirely = (n: any) => {
 };
 //////////////////////////////////////
 
-export const literal = (value: any): string => {
+export const literal = (value: Literal | unknown): string => {
 	if (!value || typeof value !== "object") {
 		return String(value);
 	}
+	const lit = value as Literal;
 
-	if (value.type === "Null") return "null";
-	if (value.type === "Int" || value.type === "Float" || value.type === "Bool") {
-		return String(value.value);
+	if (lit.type === "Null") return "null";
+	if (lit.type === "Int" || lit.type === "Float" || lit.type === "Bool") {
+		return String(lit.value);
 	}
-	if (value.type === "String") {
-		return `"${value.value}"`;
+	if (lit.type === "String") {
+		return `"${lit.value}"`;
 	}
 
-	if (value.type === "Tuple") {
-		const tupleValues = value.value;
+	if (lit.type === "Tuple") {
+		const tupleValues = lit.value;
 		if (Array.isArray(tupleValues)) {
 			return "(" + tupleValues.map(literal).join(",") + ")";
 		}
 		return "()";
 	}
 
-	if (value.type === "List") {
-		const listValues = value.value;
+	if (lit.type === "List") {
+		const listValues = lit.value;
 		if (Array.isArray(listValues)) {
 			return "[" + listValues.map(literal).join(",") + "]";
 		}
 		return "[]";
 	}
 
-	if (value.type === "Process") {
-		return `Proc(${value.value[0]}#${value.value[1]})`;
+	if (lit.type === "Process") {
+		return `Proc(${lit.value[0]}#${lit.value[1]})`;
 	}
 
 	// Fallback for more complex objects on stack, or adjust as needed
 	return JSON.stringify(value);
 };
 
-export const nodeToString = (n: any): string => {
+export const nodeToString = (n: VMState | null | undefined): string => {
 	if (!n) {
 		return "VM state is not available.";
 	}
@@ -77,22 +76,22 @@ export const nodeToString = (n: any): string => {
 		"\n\n*Program States & Channels:*\n" +
 		(n.locals && n.locals.length > 0
 			? n.locals
-					.map((prog_state: ProgramStateJS) => {
+					.map((prog_state: ProgramState) => {
 						const program_details =
 							`  *Program ${prog_state.name}* (pid ${prog_state.pid}, clock ${prog_state.clock}):\n` +
 							`    pc: ${prog_state.instruction_pointer}\n` +
-							`    stack: [${(prog_state.memory || []).map((v) => literal(v)).join(", ")}]`;
+							`    stack: [${(prog_state.memory || []).map(literal).join(", ")}]`;
 
 						const progChannels = (n.channels || []).filter(
-							(c: any) => c.pid === prog_state.pid,
+							(c: ChannelState) => c.pid === prog_state.pid,
 						);
 						let program_channels_output = "";
 						if (progChannels.length > 0) {
 							program_channels_output += "\n    *Channels:*\n";
 							program_channels_output += progChannels
 								.map(
-									(c: any) =>
-										`      ${c.name} <- [${(c.values || []).map((v) => literal(v)).join(", ")}]`,
+									(c: ChannelState) =>
+										`      ${c.name} <- [${(c.values || []).map(literal).join(", ")}]`,
 								)
 								.join("\n");
 						} else {

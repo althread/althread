@@ -11,15 +11,6 @@ import {
 	indentWithTab,
 	toggleComment,
 } from "@codemirror/commands";
-import { cpp } from "@codemirror/lang-cpp";
-import { css } from "@codemirror/lang-css";
-import { html } from "@codemirror/lang-html";
-// Import additional language supports
-import { javascript } from "@codemirror/lang-javascript";
-import { json } from "@codemirror/lang-json";
-import { markdown } from "@codemirror/lang-markdown";
-import { python } from "@codemirror/lang-python";
-import { rust } from "@codemirror/lang-rust";
 import {
 	bracketMatching,
 	foldGutter,
@@ -52,48 +43,56 @@ import {
 } from "@codemirror/view";
 import { createCodeMirror } from "solid-codemirror";
 import { createEffect } from "solid-js";
+import type { LanguageOptions } from "../../lsp/extension";
 import {
 	type CodeEditorTheme,
 	createCustomSyntaxHighlighting,
 } from "./custom-style";
 import editor_lang from "./editor-lang";
-import type { LanguageOptions } from "../../lsp/extension";
 
-// Language detection based on file extension
-const getLanguageExtension = (filePath: string, options: LanguageOptions): Extension => {
-	const extension = filePath.split(".").pop()?.toLowerCase();
+const fileExtension = (filePath: string) =>
+	filePath.split(".").pop()?.toLowerCase() ?? "";
 
+const isAlthreadFile = (filePath: string) => fileExtension(filePath) === "alt";
+
+/**
+ * Highlighting for non-Althread files. The language packages are loaded on
+ * demand so that they are not part of the main bundle.
+ */
+const loadOtherLanguage = async (filePath: string): Promise<Extension> => {
+	const extension = fileExtension(filePath);
 	switch (extension) {
 		case "js":
 		case "jsx":
 		case "ts":
 		case "tsx":
-			return javascript({ jsx: true, typescript: extension.includes("ts") });
+			return (await import("@codemirror/lang-javascript")).javascript({
+				jsx: extension.endsWith("x"),
+				typescript: extension.startsWith("ts"),
+			});
 		case "css":
-			return css();
+			return (await import("@codemirror/lang-css")).css();
 		case "html":
 		case "htm":
-			return html();
+			return (await import("@codemirror/lang-html")).html();
 		case "json":
-			return json();
+			return (await import("@codemirror/lang-json")).json();
 		case "md":
 		case "markdown":
-			return markdown();
+			return (await import("@codemirror/lang-markdown")).markdown();
 		case "py":
-			return python();
+			return (await import("@codemirror/lang-python")).python();
 		case "rs":
-			return rust();
+			return (await import("@codemirror/lang-rust")).rust();
 		case "cpp":
 		case "cc":
 		case "cxx":
 		case "c":
 		case "h":
 		case "hpp":
-			return cpp();
-		case "alt":
-			return editor_lang(options);
+			return (await import("@codemirror/lang-cpp")).cpp();
 		default:
-			return javascript(); // Default to JavaScript for unknown files
+			return []; // plain text
 	}
 };
 
@@ -344,17 +343,37 @@ const createEditor = ({
 	const syntaxCompartment = new Compartment();
 
 	const languageOptions = (path: string): LanguageOptions => ({
-		filePath: path, getWorkspace, onNavigate, onWorkspaceChange,
+		filePath: path,
+		getWorkspace,
+		onNavigate,
+		onWorkspaceChange,
 	});
 	const updateLanguage = (newFileName: string) => {
 		currentFileName = newFileName;
 		const view = editor.editorView();
 		if (!view || !languageCompartment.get(view.state)) return;
-		view.dispatch({
-			effects: languageCompartment.reconfigure(
-				getLanguageExtension(newFileName, languageOptions(newFileName)),
-			),
-		});
+		if (isAlthreadFile(newFileName)) {
+			view.dispatch({
+				effects: languageCompartment.reconfigure(
+					editor_lang(languageOptions(newFileName)),
+				),
+			});
+			return;
+		}
+		// Plain text until the language package is loaded.
+		view.dispatch({ effects: languageCompartment.reconfigure([]) });
+		loadOtherLanguage(newFileName)
+			.then((language) => {
+				const current = editor.editorView();
+				if (current && currentFileName === newFileName) {
+					current.dispatch({
+						effects: languageCompartment.reconfigure(language),
+					});
+				}
+			})
+			.catch((error) =>
+				console.warn(`Could not load highlighting for ${newFileName}`, error),
+			);
 	};
 
 	// Initialize with basic setup and theme
@@ -381,7 +400,9 @@ const createEditor = ({
 
 	// Add compartments for dynamic extensions
 	editor.createExtension(
-		languageCompartment.of(getLanguageExtension(filePath, languageOptions(filePath))),
+		languageCompartment.of(
+			isAlthreadFile(filePath) ? editor_lang(languageOptions(filePath)) : [],
+		),
 	);
 	editor.createExtension(lintGutter());
 	editor.createExtension(readOnlyCompartment.of([]));

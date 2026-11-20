@@ -625,3 +625,20 @@
 		padding: 8px 6px;
 	}
 }
+
+.package-link {
+	color: inherit;
+	text-decoration: none;
+}
+
+.dependency-item > .package-link {
+	display: flex;
+	align-items: center;
+	flex: 1;
+	min-width: 0;
+}
+
+.package-link:focus-visible {
+	outline: 2px solid var(--ifm-color-primary);
+	outline-offset: -2px;
+}

@@ -69,8 +69,6 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 	let lastSeenGlobalsRaw = "";
 	let lastSeenMessagesRaw = "";
 	let lastNode: VMStateSelection | null = null;
-	let wasGlobalsEmpty = false;
-	let wasMessagesEmpty = false;
 	let wasGlobalsCollapsed = false;
 	let wasMessagesCollapsed = false;
 
@@ -92,8 +90,6 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 		}
 
 		lastNode = node;
-		wasGlobalsEmpty = isGlobalsEmpty;
-		wasMessagesEmpty = isMessagesEmpty;
 	});
 
 	// Change tracking effect
@@ -218,16 +214,10 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 						<div
 							class={`section programs-section${processesCollapsed() ? " section-collapsed" : ""}`}
 						>
-							<div
+							<button
+								type="button"
 								class={`collapsible-header${!processesCollapsed() && !canCollapse() ? " header-locked" : ""}`}
 								onClick={toggleProcesses}
-								onKeyDown={(e) => {
-									if (e.key === "Enter" || e.key === " ") {
-										e.preventDefault();
-										toggleProcesses();
-									}
-								}}
-								role="button"
 								tabIndex={!processesCollapsed() && !canCollapse() ? -1 : 0}
 								aria-expanded={!processesCollapsed()}
 								aria-controls={processesId}
@@ -245,7 +235,7 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 								<i class="codicon codicon-debug-all header-section-icon"></i>
 								<span class="section-label">Processes</span>
 								<span class="header-count">{vmState().locals.length}</span>
-							</div>
+							</button>
 							<div
 								id={processesId}
 								class={`section-body${processesCollapsed() ? " section-body-hidden" : ""}`}

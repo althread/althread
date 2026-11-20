@@ -1,4 +1,3 @@
-import { offsetAt, rangeAt, uriToPath, pathToUri } from "./protocol.ts";
 import type {
 	CompletionItem,
 	Hover,
@@ -6,6 +5,7 @@ import type {
 	Position,
 	SignatureHelp,
 } from "./protocol.ts";
+import { offsetAt, pathToUri, rangeAt, uriToPath } from "./protocol.ts";
 
 interface Token {
 	value: string;
@@ -376,9 +376,9 @@ export class LanguageWorkspace {
 						const parts = bindingType.startsWith("tuple(")
 							? typeParts(bindingType)
 							: [];
-						split(pattern.slice(1, -1)).forEach((p, n) =>
-							bind(p, parts[n] || "unknown"),
-						);
+						split(pattern.slice(1, -1)).forEach((p, n) => {
+							bind(p, parts[n] || "unknown");
+						});
 					} else if (pattern[0]?.kind === "word" && pattern[0].value !== "_") {
 						add(
 							pattern[0],
@@ -923,11 +923,10 @@ export class LanguageWorkspace {
 			string,
 			{ range: ReturnType<typeof rangeAt>; newText: string }[]
 		> = {};
-		for (const location of references)
-			(changes[location.uri] ??= []).push({
-				range: location.range,
-				newText: newName,
-			});
+		for (const location of references) {
+			changes[location.uri] ??= [];
+			changes[location.uri].push({ range: location.range, newText: newName });
+		}
 		return { changes };
 	}
 	signatureHelp(uri: string, position: Position): SignatureHelp | null {

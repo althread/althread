@@ -6,11 +6,9 @@ import {
 	indentNodeProp,
 	LRLanguage,
 } from "@codemirror/language";
-
-import { languageExtensions, type LanguageOptions } from "../../lsp/extension";
-
 import { althreadHighlight } from "../../../lezer/highlight.js";
 import { parser } from "../../../lezer/parser.js";
+import { type LanguageOptions, languageExtensions } from "../../lsp/extension";
 
 const parserWithMetadata = parser.configure({
 	props: [

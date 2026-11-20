@@ -1,30 +1,30 @@
-import { snippet, type CompletionContext } from "@codemirror/autocomplete";
+import { type CompletionContext, snippet } from "@codemirror/autocomplete";
 import { linter, lintGutter } from "@codemirror/lint";
 import {
 	EditorSelection,
+	type Extension,
 	StateEffect,
 	StateField,
-	type Extension,
 } from "@codemirror/state";
 import {
 	EditorView,
-	ViewPlugin,
 	hoverTooltip,
 	keymap,
+	type Panel,
 	showPanel,
 	showTooltip,
-	type Panel,
 	type Tooltip,
+	ViewPlugin,
 	type ViewUpdate,
 } from "@codemirror/view";
 import { LanguageClient } from "./client.ts";
-import { offsetAt, pathToUri, positionAt, uriToPath } from "./protocol.ts";
 import type {
 	Location,
 	RequestParams,
 	RequestResults,
 	TextEdit,
 } from "./protocol.ts";
+import { offsetAt, pathToUri, positionAt, uriToPath } from "./protocol.ts";
 
 export interface LanguageOptions {
 	filePath: string;

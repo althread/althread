@@ -1,11 +1,11 @@
 import { LanguageWorkspace } from "./analysis.ts";
-import { rangeAt, uriToPath } from "./protocol.ts";
 import type {
 	Diagnostic,
 	Notification,
 	Request,
 	RequestResults,
 } from "./protocol.ts";
+import { rangeAt, uriToPath } from "./protocol.ts";
 
 export interface CompilerError {
 	message?: string;

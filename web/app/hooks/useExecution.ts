@@ -5,7 +5,7 @@
  * (interactive) mode, so that the UI components only have to render it.
  */
 
-import { formatAlthreadError, type FormattedError } from "@utils/error";
+import { type FormattedError, formatAlthreadError } from "@utils/error";
 import { getFileContentFromVirtualFS } from "@utils/fileSystemUtils";
 import {
 	buildGraphFromNodes,
@@ -104,11 +104,13 @@ export function createExecutionController(deps: ExecutionDeps) {
 
 	// ---- Linear trace (run, counterexample replay, interactive) ------------
 	const [traceNodes, setTraceNodes] = createSignal<GraphNode[]>([]);
-	const [traceGraph, setTraceGraph] = createSignal<GraphBuildResult>(EMPTY_GRAPH);
+	const [traceGraph, setTraceGraph] =
+		createSignal<GraphBuildResult>(EMPTY_GRAPH);
 	const [stepLines, setStepLines] = createSignal<number[][]>([]);
 
 	// ---- Model checking ------------------------------------------------------
-	const [checkGraph, setCheckGraph] = createSignal<GraphBuildResult>(EMPTY_GRAPH);
+	const [checkGraph, setCheckGraph] =
+		createSignal<GraphBuildResult>(EMPTY_GRAPH);
 	const [checkStateCount, setCheckStateCount] = createSignal(0);
 	const [counterexample, setCounterexample] = createSignal<GraphNode[]>([]);
 
@@ -413,7 +415,9 @@ export function createExecutionController(deps: ExecutionDeps) {
 		setInteractiveFinished(options.length === 0);
 		setInteractiveDeadlock(false);
 		if (options.length === 0) {
-			setExecutionOutput((s) => appendNotice(s, "Program execution completed."));
+			setExecutionOutput((s) =>
+				appendNotice(s, "Program execution completed."),
+			);
 			setStatus({
 				tone: "success",
 				icon: "pass",

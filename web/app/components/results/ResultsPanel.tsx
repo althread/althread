@@ -1,6 +1,4 @@
 import ErrorDisplay from "@components/error/ErrorDisplay";
-import { renderMessageFlowGraph } from "@components/graph/CommGraph";
-import Graph from "@components/graph/Graph";
 import VMStateInspector from "@components/graph/VMStateInspector";
 import InteractiveChoices from "@components/interactive/InteractiveChoices";
 import Resizable from "@corvu/resizable";
@@ -10,6 +8,7 @@ import {
 	createEffect,
 	For,
 	type JSX,
+	lazy,
 	Match,
 	on,
 	onCleanup,
@@ -17,6 +16,10 @@ import {
 	Switch,
 } from "solid-js";
 import "./ResultsPanel.css";
+
+// vis-network is heavy: only load the graphs when they are displayed.
+const Graph = lazy(() => import("@components/graph/Graph"));
+const MessageFlowGraph = lazy(() => import("@components/graph/CommGraph"));
 
 interface ResultsPanelProps {
 	exec: ExecutionController;
@@ -162,7 +165,10 @@ export default function ResultsPanel(props: ResultsPanelProps) {
 	const renderStates = () => (
 		<Switch>
 			<Match when={exec.mode() === "check" && exec.busy() === "check"}>
-				<EmptyState icon="loading codicon-modifier-spin" title="Model checking…">
+				<EmptyState
+					icon="loading codicon-modifier-spin"
+					title="Model checking…"
+				>
 					Exploring every reachable state of the program.
 				</EmptyState>
 			</Match>
@@ -181,12 +187,11 @@ export default function ResultsPanel(props: ResultsPanelProps) {
 							fallback={
 								<EmptyState icon="graph" title="Graph too large to display">
 									{exec.checkStateCount().toLocaleString()} states were
-									explored, above the display limit of{" "}
-									{MAX_VISIBLE_GRAPH_NODES}.
+									explored, above the display limit of {MAX_VISIBLE_GRAPH_NODES}
+									.
 									<Show when={exec.counterexample().length > 0}>
 										{" "}
-										Use “Replay counterexample” to inspect the violating
-										trace.
+										Use “Replay counterexample” to inspect the violating trace.
 									</Show>
 								</EmptyState>
 							}
@@ -230,7 +235,9 @@ export default function ResultsPanel(props: ResultsPanelProps) {
 
 	const renderContent = () => (
 		<Switch>
-			<Match when={exec.activeTab() === "step" && exec.mode() === "interactive"}>
+			<Match
+				when={exec.activeTab() === "step" && exec.mode() === "interactive"}
+			>
 				<InteractiveChoices
 					choices={exec.choices()}
 					finished={exec.interactiveFinished()}
@@ -251,8 +258,7 @@ export default function ResultsPanel(props: ResultsPanelProps) {
 						when={exec.executionOutput() || exec.structuredError()}
 						fallback={
 							<EmptyState icon="output" title="No execution trace">
-								The instructions executed by each process will be listed
-								here.
+								The instructions executed by each process will be listed here.
 							</EmptyState>
 						}
 					>
@@ -290,13 +296,10 @@ export default function ResultsPanel(props: ResultsPanelProps) {
 							</EmptyState>
 						}
 					>
-						{renderMessageFlowGraph(
-							exec.messageFlow(),
-							exec.mode() === "interactive"
-								? exec.traceNodes().slice(1).map((n) => n.vm)
-								: [],
-							props.editor,
-						)}
+						<MessageFlowGraph
+							events={exec.messageFlow()}
+							editor={props.editor}
+						/>
 					</Show>
 				</div>
 			</Match>
@@ -343,8 +346,7 @@ export default function ResultsPanel(props: ResultsPanelProps) {
 								active: exec.activeTab() === tab.id,
 								"execution-error":
 									tab.id === "execution" && exec.executionError(),
-								highlighted:
-									tab.id === "step" && exec.activeTab() !== "step",
+								highlighted: tab.id === "step" && exec.activeTab() !== "step",
 							}}
 							onClick={() => exec.setActiveTab(tab.id)}
 							title={tab.label}

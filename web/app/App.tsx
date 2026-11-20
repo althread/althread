@@ -97,8 +97,9 @@ const CLOSED_FILE_DIALOG: FileDialogState = {
 export default function App() {
 	const sharedEditorFile = loadSharedEditorFileFromUrl();
 
-	const [mockFileSystem, setMockFileSystem] =
-		createSignal<FileSystemEntry[]>(loadFileSystem());
+	const [mockFileSystem, setMockFileSystem] = createSignal<FileSystemEntry[]>(
+		loadFileSystem(),
+	);
 	const [selectedFiles, setSelectedFiles] = createSignal<string[]>([]);
 	const [creationError, setCreationError] = createSignal<string | null>(null);
 	const [didAutoOpenDefault, setDidAutoOpenDefault] = createSignal(
@@ -528,8 +529,7 @@ export default function App() {
 			class="vscode-button"
 			classList={{
 				primary: props.primary,
-				active:
-					props.action === "interactive" && exec.mode() === "interactive",
+				active: props.action === "interactive" && exec.mode() === "interactive",
 			}}
 			disabled={!canExecute() || exec.busy() !== null}
 			title={actionTitle(props.label, props.shortcut)}
@@ -554,7 +554,7 @@ export default function App() {
 					<h3>Althread</h3>
 				</div>
 				<div class="actions">
-					<div class="action-group" role="group" aria-label="Execution">
+					<div class="action-group">
 						<ActionButton
 							action="run"
 							label="Run"
@@ -628,11 +628,7 @@ export default function App() {
 
 					<Resizable.Handle class="Resizable-handle" />
 
-					<Resizable.Panel
-						class="editor-panel"
-						initialSize={0.5}
-						minSize={0.2}
-					>
+					<Resizable.Panel class="editor-panel" initialSize={0.5} minSize={0.2}>
 						<FileTabs
 							openFiles={editorManager.openFiles()}
 							activeFile={editorManager.activeFile()}
@@ -654,11 +650,7 @@ export default function App() {
 
 					<Resizable.Handle class="Resizable-handle" />
 
-					<Resizable.Panel
-						class="right-panel"
-						initialSize={0.3}
-						minSize={0.15}
-					>
+					<Resizable.Panel class="right-panel" initialSize={0.3} minSize={0.15}>
 						<ResultsPanel
 							exec={exec}
 							editor={editor}

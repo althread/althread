@@ -16,3 +16,7 @@ tsify = { workspace = true }
 fastrand = { workspace = true }
 web-sys = { workspace = true, features = ["console"] }
 console_error_panic_hook = { workspace = true }
+
+# The function-name section is ~75% of the module size: strip it in web builds.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-O", "--strip-debug", "--strip-producers"]

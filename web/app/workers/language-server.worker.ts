@@ -1,5 +1,5 @@
-import { LanguageServer } from "../lsp/server.ts";
 import type { Notification, Request } from "../lsp/protocol.ts";
+import { LanguageServer } from "../lsp/server.ts";
 
 // Independent of the execution/model-checking worker so an exhaustive check
 // cannot block completions or navigation. WASM is only needed for diagnostics.

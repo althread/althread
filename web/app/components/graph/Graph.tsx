@@ -1,4 +1,5 @@
 import { useGraphMaximizeHotkeys } from "@hooks/useGraphMaximizeHotkeys";
+import { MAX_VISIBLE_GRAPH_NODES } from "@utils/graphBuilders";
 import { createEffect, createSignal, on, onCleanup, untrack } from "solid-js";
 import vis from "vis-network/dist/vis-network.esm";
 import { exportStatesToCSV } from "./exportToCSV";
@@ -10,7 +11,6 @@ import {
 	formatState,
 	setupNodeClickZoom,
 } from "./visHelpers";
-import { MAX_VISIBLE_GRAPH_NODES } from "@utils/graphBuilders";
 import { themes } from "./visOptions";
 
 interface GraphProps {
@@ -267,6 +267,7 @@ export default (props: GraphProps) => {
 					<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
 						<h3 style="margin: 0;">Node State</h3>
 						<button
+							type="button"
 							style={`background: none; border: none; color: ${graphOverlayStyles().buttonColor}; cursor: pointer;`}
 							onClick={() => setSelectedNodeContent(null)}
 						>

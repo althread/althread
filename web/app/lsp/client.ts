@@ -1,9 +1,9 @@
-import { pathToUri } from "./protocol.ts";
 import type {
 	Notification,
 	RequestParams,
 	RequestResults,
 } from "./protocol.ts";
+import { pathToUri } from "./protocol.ts";
 
 export class LanguageClient {
 	private worker: Worker;

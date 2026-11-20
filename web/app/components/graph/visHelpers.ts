@@ -39,7 +39,7 @@ export function createGraphToolbarHandlers(
 	getNetwork: () => Network | null,
 	getContainer: () => HTMLDivElement | undefined,
 	toggleMaximized: () => void,
-	toggleDetails: () => void,
+	toggleDetails: () => void = () => {},
 ) {
 	const handleMaximize = () => {
 		toggleMaximized();

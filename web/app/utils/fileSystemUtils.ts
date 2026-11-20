@@ -149,11 +149,11 @@ export function buildVirtualFileSystem(
 			virtualFS[fullPath] = content;
 		} else if (entry.type === "directory" && entry.children) {
 			// Process all children recursively
-			entry.children.forEach((child) => processEntry(child, fullPath));
+			for (const child of entry.children) processEntry(child, fullPath);
 		}
 	}
 
-	entries.forEach((entry) => processEntry(entry));
+	for (const entry of entries) processEntry(entry);
 	return virtualFS;
 }
 

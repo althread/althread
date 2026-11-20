@@ -46,6 +46,8 @@ currently report the first error, including the source path for imported errors.
 With Node.js 22 and project dependencies installed:
 
 ```sh
+pnpm typecheck
+pnpm check
 pnpm check:lsp
 pnpm test:lsp
 pnpm build

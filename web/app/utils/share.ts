@@ -62,9 +62,16 @@ const decodeBase64Url = (encodedContent: string): string | null => {
 const sanitizeFileName = (fileName: string | null): string => {
 	const trimmed = fileName?.trim() || DEFAULT_SHARED_FILE_NAME;
 	const baseName =
-		trimmed.split(/[\\/]/).filter((segment) => segment.length > 0).pop() ||
-		DEFAULT_SHARED_FILE_NAME;
-	const safeName = baseName.replace(/[<>:"|?*\u0000-\u001F]/g, "-").trim();
+		trimmed
+			.split(/[\\/]/)
+			.filter((segment) => segment.length > 0)
+			.pop() || DEFAULT_SHARED_FILE_NAME;
+	// Replace characters that are invalid in file names, including control characters.
+	const safeName = Array.from(baseName, (char) =>
+		char.charCodeAt(0) < 0x20 || '<>:"|?*'.includes(char) ? "-" : char,
+	)
+		.join("")
+		.trim();
 
 	if (safeName.length === 0) {
 		return DEFAULT_SHARED_FILE_NAME;

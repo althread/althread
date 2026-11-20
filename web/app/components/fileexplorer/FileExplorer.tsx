@@ -105,7 +105,7 @@ const FileEntry = (props: {
 		return path === "deps" || path.startsWith("deps/");
 	};
 
-	const handleClick = (e: MouseEvent) => {
+	const handleClick = (e: MouseEvent | KeyboardEvent) => {
 		// Handle multi-selection with Cmd/Ctrl and Shift
 		if (e.metaKey || e.ctrlKey) {
 			// Cmd/Ctrl click: toggle selection
@@ -420,7 +420,7 @@ const FileEntry = (props: {
 			});
 		};
 
-		const handleDirectoryClick = (e: MouseEvent) => {
+		const handleDirectoryClick = (e: MouseEvent | KeyboardEvent) => {
 			// Always toggle the folder open/closed state when clicking anywhere on the directory row
 			setIsOpen(!isOpen());
 			// Also handle selection
@@ -428,8 +428,10 @@ const FileEntry = (props: {
 		};
 
 		return (
+			// biome-ignore lint/a11y/useSemanticElements: tree group that is also a drag-and-drop target, not a form fieldset
 			<div
 				class="directory"
+				role="group"
 				classList={{
 					"drag-over": isDragOver(),
 					dragging: isDragging(),
@@ -441,10 +443,27 @@ const FileEntry = (props: {
 			>
 				<div
 					class="directory-header"
+					role="treeitem"
+					tabIndex={0}
+					aria-expanded={isOpen()}
+					aria-selected={isSelected()}
 					classList={{
 						"read-only": isInDepsDirectory(currentPath),
 					}}
 					onClick={handleDirectoryClick}
+					onKeyDown={(e) => {
+						if (e.target !== e.currentTarget) return;
+						if (e.key === "Enter" || e.key === " ") {
+							e.preventDefault();
+							handleDirectoryClick(e);
+						} else if (e.key === "ArrowRight" && !isOpen()) {
+							e.preventDefault();
+							setIsOpen(true);
+						} else if (e.key === "ArrowLeft" && isOpen()) {
+							e.preventDefault();
+							setIsOpen(false);
+						}
+					}}
 					onContextMenu={handleRightClick}
 					draggable={!isInDepsDirectory(currentPath)}
 					onDragStart={handleDragStart}
@@ -591,22 +610,31 @@ const FileEntry = (props: {
 							left: `${contextMenuPos().x}px`,
 							"z-index": 1000,
 						}}
+						role="menu"
 						onClick={(e) => e.stopPropagation()}
+						onKeyDown={(e) => {
+							e.stopPropagation();
+							if (e.key === "Escape") setShowContextMenu(false);
+						}}
 					>
-						<button onClick={handleCopy}>
+						<button type="button" onClick={handleCopy}>
 							<i class="codicon codicon-copy"></i>
 							Copy
 						</button>
-						<button onClick={handlePaste} disabled={!props.isPasteEnabled}>
+						<button
+							type="button"
+							onClick={handlePaste}
+							disabled={!props.isPasteEnabled}
+						>
 							<i class="codicon codicon-clippy"></i>
 							Paste
 						</button>
 						<div class="context-menu-separator"></div>
-						<button onClick={handleRename}>
+						<button type="button" onClick={handleRename}>
 							<i class="codicon codicon-edit"></i>
 							Rename
 						</button>
-						<button onClick={handleDelete}>
+						<button type="button" onClick={handleDelete}>
 							<i class="codicon codicon-trash"></i>
 							Delete
 						</button>
@@ -619,6 +647,9 @@ const FileEntry = (props: {
 	return (
 		<div
 			class="file"
+			role="treeitem"
+			tabIndex={0}
+			aria-selected={isSelected()}
 			draggable={!isInDepsDirectory(currentPath)}
 			onDragStart={handleDragStart}
 			onDragEnd={handleDragEnd}
@@ -633,6 +664,13 @@ const FileEntry = (props: {
 				"has-context-menu": showContextMenu(),
 			}}
 			onClick={handleClick}
+			onKeyDown={(e) => {
+				if (e.target !== e.currentTarget) return;
+				if (e.key === "Enter" || e.key === " ") {
+					e.preventDefault();
+					handleClick(e);
+				}
+			}}
 		>
 			<Show
 				when={isRenaming()}
@@ -686,22 +724,35 @@ const FileEntry = (props: {
 						left: `${contextMenuPos().x}px`,
 						"z-index": 1000,
 					}}
+					role="menu"
 					onClick={(e) => e.stopPropagation()}
+					onKeyDown={(e) => {
+						e.stopPropagation();
+						if (e.key === "Escape") setShowContextMenu(false);
+					}}
 				>
-					<button onClick={handleCopy}>
+					<button type="button" onClick={handleCopy}>
 						<i class="codicon codicon-copy"></i>
 						Copy
 					</button>
-					<button onClick={handlePaste} disabled={!props.isPasteEnabled}>
+					<button
+						type="button"
+						onClick={handlePaste}
+						disabled={!props.isPasteEnabled}
+					>
 						<i class="codicon codicon-clippy"></i>
 						Paste
 					</button>
 					<div class="context-menu-separator"></div>
-					<button onClick={handleRename}>
+					<button type="button" onClick={handleRename}>
 						<i class="codicon codicon-edit"></i>
 						Rename
 					</button>
-					<button class="context-menu-delete-btn" onClick={handleDelete}>
+					<button
+						type="button"
+						class="context-menu-delete-btn"
+						onClick={handleDelete}
+					>
 						<i class="codicon codicon-trash"></i>
 						Delete
 					</button>
@@ -1130,8 +1181,9 @@ const FileExplorer = (props: FileExplorerProps) => {
 	};
 
 	return (
-		<div
+		<section
 			class="file-explorer"
+			aria-label="File explorer"
 			classList={{ "drag-over": isDragOver() }}
 			onDragOver={handleDragOver}
 			onDragLeave={handleDragLeave}
@@ -1141,6 +1193,7 @@ const FileExplorer = (props: FileExplorerProps) => {
 				<h3>Explorer</h3>
 				<div class="file-explorer-actions">
 					<button
+						type="button"
 						onClick={() => {
 							// Determine parent path based on selection
 							let parentPath = "";
@@ -1173,6 +1226,7 @@ const FileExplorer = (props: FileExplorerProps) => {
 						<i class="codicon codicon-new-file"></i>
 					</button>
 					<button
+						type="button"
 						onClick={() => {
 							// Determine parent path based on selection
 							let parentPath = "";
@@ -1205,6 +1259,7 @@ const FileExplorer = (props: FileExplorerProps) => {
 						<i class="codicon codicon-new-folder"></i>
 					</button>
 					<button
+						type="button"
 						class="header-action-btn"
 						title="Download all files as .zip"
 						onClick={async () => {
@@ -1271,6 +1326,12 @@ const FileExplorer = (props: FileExplorerProps) => {
 			</div>
 			<div
 				class="file-explorer-content"
+				role="tree"
+				aria-multiselectable="true"
+				tabIndex={-1}
+				onKeyDown={(e) => {
+					if (e.key === "Escape") props.onSelectionChange([]);
+				}}
 				onClick={(e) => {
 					// Only clear selection if clicking on the content area itself, not on child elements
 					if (e.target === e.currentTarget) {
@@ -1357,7 +1418,7 @@ const FileExplorer = (props: FileExplorerProps) => {
 					</div>
 				</Show>
 			</div>
-		</div>
+		</section>
 	);
 };
 
