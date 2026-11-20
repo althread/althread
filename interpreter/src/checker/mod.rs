@@ -20,7 +20,7 @@ mod product;
 mod ltl_integration_tests;
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{hash_map::Entry, HashMap, VecDeque},
     rc::Rc,
 };
 
@@ -30,26 +30,27 @@ use serde::ser::{Serialize, SerializeStruct, Serializer};
 use crate::{
     compiler::CompiledProject,
     error::{AlthreadError, AlthreadResult, ErrorType},
-    vm::{instruction::Instruction, GlobalAction, VM},
+    vm::{instruction::Instruction, CheckerState, GlobalAction, ScheduledStep, VM},
 };
 
 pub type StateId = usize;
 
 #[derive(Debug, Clone)]
-pub struct StateLink {
-    pub instructions: Vec<Instruction>,
+pub struct StateLink<'a> {
+    pub instructions: Vec<&'a Instruction>,
     pub actions: Vec<GlobalAction>,
     pub lines: Vec<usize>,
     pub pid: usize,
     pub name: String,
     pub to: StateId,
+    step: Option<ScheduledStep>,
 }
 
 #[derive(Debug)]
-pub struct GraphNode {
+pub struct GraphNode<'a> {
     pub level: usize,
     pub predecessor: Option<StateId>,
-    pub successors: Vec<StateLink>,
+    pub successors: Vec<StateLink<'a>>,
     pub eventually: bool,
     pub expanded: bool,
 }
@@ -57,7 +58,7 @@ pub struct GraphNode {
 #[derive(Debug)]
 pub struct StateGraph<'a> {
     pub states: Vec<Rc<VM<'a>>>,
-    pub nodes: Vec<GraphNode>,
+    pub nodes: Vec<GraphNode<'a>>,
     pub initial_state: StateId,
     pub exhaustive: bool,
     /// Index of the first loop edge in the returned LTL counterexample path.
@@ -65,7 +66,13 @@ pub struct StateGraph<'a> {
     pub violation_cycle_start: Option<usize>,
 }
 
-impl std::fmt::Display for StateLink {
+impl StateLink<'_> {
+    pub fn is_initial_marker(&self) -> bool {
+        self.step.is_none() && self.name == "_init_"
+    }
+}
+
+impl std::fmt::Display for StateLink<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -75,7 +82,7 @@ impl std::fmt::Display for StateLink {
     }
 }
 
-impl Serialize for StateLink {
+impl Serialize for StateLink<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -90,7 +97,7 @@ impl Serialize for StateLink {
         state.end()
     }
 }
-impl Serialize for GraphNode {
+impl Serialize for GraphNode<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -118,7 +125,7 @@ impl<'a> Serialize for StateGraph<'a> {
                 .iter()
                 .zip(self.nodes.iter())
                 .map(|(vm, node)| (vm.as_ref(), node))
-                .collect::<Vec<(&VM, &GraphNode)>>(),
+                .collect::<Vec<_>>(),
         )?;
         state.serialize_field("exhaustive", &self.exhaustive)?;
         state.serialize_field("violation_cycle_start", &self.violation_cycle_start)?;
@@ -126,7 +133,7 @@ impl<'a> Serialize for StateGraph<'a> {
     }
 }
 
-impl GraphNode {
+impl GraphNode<'_> {
     pub fn new(predecessor: Option<StateId>, level: usize) -> Self {
         Self {
             level,
@@ -164,12 +171,36 @@ impl<'a> StateGraph<'a> {
     pub fn vm(&self, state_id: StateId) -> &Rc<VM<'a>> {
         &self.states[state_id]
     }
+
+    /// Re-execute the exact scheduled steps to recover path-specific message IDs.
+    pub fn replay_path(
+        &self,
+        path: &[StateLink<'a>],
+        mut visit: impl FnMut(&StateLink<'a>, &VM<'a>, &[GlobalAction]),
+    ) -> AlthreadResult<()> {
+        let mut vm = self.vm(self.initial_state).as_ref().clone();
+        for link in path {
+            if let Some(step) = &link.step {
+                let info = vm.advance(step)?.ok_or_else(|| {
+                    AlthreadError::new(
+                        ErrorType::RuntimeError,
+                        None,
+                        "Counterexample step could not be replayed".to_string(),
+                    )
+                })?;
+                visit(link, &vm, &info.actions);
+            } else {
+                visit(link, &vm, &[]);
+            }
+        }
+        Ok(())
+    }
 }
 
-fn collect_instruction_lines(instructions: &[Instruction]) -> Vec<usize> {
+fn collect_instruction_lines(instructions: &[&Instruction]) -> Vec<usize> {
     let mut lines: Vec<usize> = instructions
         .iter()
-        .map(|instruction| instruction.pos.clone().unwrap_or_default().line())
+        .filter_map(|instruction| instruction.pos.as_ref().map(|pos| pos.line()))
         .filter(|line| *line > 0)
         .collect();
     lines.sort();
@@ -194,7 +225,7 @@ fn build_state_graph<'a>(
     let initial_vm = Rc::new(init_vm);
     let mut state_graph = StateGraph::new(initial_vm.clone());
     let mut known_states = HashMap::new();
-    known_states.insert(initial_vm, state_graph.initial_state);
+    known_states.insert(CheckerState(initial_vm), state_graph.initial_state);
 
     let mut next_nodes = VecDeque::new();
     next_nodes.push_back(state_graph.initial_state);
@@ -202,34 +233,35 @@ fn build_state_graph<'a>(
     while let Some(current_state) = next_nodes.pop_front() {
         let current_vm = state_graph.vm(current_state).clone();
         let current_level = state_graph.nodes[current_state].level;
-        let successors = current_vm.next()?;
+        let successors = current_vm.successors()?;
         let mut fully_expanded = true;
 
-        for (name, pid, instructions, actions, vm) in successors.into_iter() {
+        for (step, info, vm) in successors {
             let next_vm = Rc::new(vm);
-            let lines = collect_instruction_lines(&instructions);
-            let next_state = if let Some(existing_state) = known_states.get(&next_vm) {
-                *existing_state
-            } else {
-                if max_states.is_some_and(|max| state_graph.nodes.len() >= max) {
-                    state_graph.exhaustive = false;
-                    fully_expanded = false;
-                    continue;
+            let next_state = match known_states.entry(CheckerState(next_vm.clone())) {
+                Entry::Occupied(entry) => *entry.get(),
+                Entry::Vacant(entry) => {
+                    if max_states.is_some_and(|max| state_graph.nodes.len() >= max) {
+                        state_graph.exhaustive = false;
+                        fully_expanded = false;
+                        continue;
+                    }
+                    let new_state =
+                        state_graph.push_state(next_vm, Some(current_state), current_level + 1);
+                    entry.insert(new_state);
+                    next_nodes.push_back(new_state);
+                    new_state
                 }
-                let new_state =
-                    state_graph.push_state(next_vm.clone(), Some(current_state), current_level + 1);
-                known_states.insert(next_vm.clone(), new_state);
-                next_nodes.push_back(new_state);
-                new_state
             };
 
             state_graph.nodes[current_state].successors.push(StateLink {
                 to: next_state,
-                lines,
-                instructions,
-                actions,
-                pid,
-                name,
+                lines: collect_instruction_lines(&info.instructions),
+                instructions: info.instructions,
+                actions: info.actions,
+                pid: info.prog_id,
+                name: info.prog_name,
+                step: Some(step),
             });
         }
 
@@ -238,6 +270,41 @@ fn build_state_graph<'a>(
 
     Ok(state_graph)
 }
+#[derive(Debug)]
+pub enum Verdict<'a> {
+    Verified,
+    Violated {
+        path: Vec<StateLink<'a>>,
+        cycle_start: Option<usize>,
+    },
+    Inconclusive,
+}
+
+#[derive(Debug)]
+pub struct CheckResult<'a> {
+    pub verdict: Verdict<'a>,
+    pub graph: StateGraph<'a>,
+}
+
+/// Check the project and return its verdict together with the explored graph.
+pub fn check(
+    compiled_project: &CompiledProject,
+    max_states: Option<usize>,
+) -> AlthreadResult<CheckResult<'_>> {
+    let (path, graph) = check_program(compiled_project, max_states)?;
+    let verdict = if !path.is_empty() {
+        Verdict::Violated {
+            path,
+            cycle_start: graph.violation_cycle_start,
+        }
+    } else if graph.exhaustive {
+        Verdict::Verified
+    } else {
+        Verdict::Inconclusive
+    };
+    Ok(CheckResult { verdict, graph })
+}
+
 /// Return a nonempty counterexample when a property is violated. LTL witnesses
 /// include a closed loop, whose first edge is `graph.violation_cycle_start`.
 /// An empty path proves the properties only when `graph.exhaustive` is true;
@@ -245,7 +312,7 @@ fn build_state_graph<'a>(
 pub fn check_program<'a>(
     compiled_project: &'a CompiledProject,
     max_states: Option<usize>,
-) -> AlthreadResult<(Vec<StateLink>, StateGraph<'a>)> {
+) -> AlthreadResult<(Vec<StateLink<'a>>, StateGraph<'a>)> {
     if !compiled_project.compiled_ltl_formulas.is_empty() {
         println!(
             "Found {} compiled LTL formulas in the project",
@@ -263,6 +330,9 @@ pub fn check_program<'a>(
     for current_state in 0..state_graph.nodes.len() {
         let check_ret = state_graph.vm(current_state).check_invariants();
         if let Err(e) = check_ret {
+            if !matches!(e.error_type, ErrorType::InvariantError) {
+                return Err(e);
+            }
             let mut path = Vec::new();
             let mut back_node = current_state;
 
@@ -279,6 +349,7 @@ pub fn check_program<'a>(
                     actions: vec![],
                     pid: 0,
                     name: "_init_".to_string(),
+                    step: None,
                 });
                 return Ok((path, state_graph));
             }
@@ -413,7 +484,7 @@ pub fn check_program<'a>(
 pub fn reconstruct_path<'a>(
     mut vec_vm: Vec<StateId>,
     state_graph: &StateGraph<'a>,
-) -> AlthreadResult<Vec<StateLink>> {
+) -> AlthreadResult<Vec<StateLink<'a>>> {
     let mut ret_path = Vec::new();
     let mut back_node = vec_vm.pop().unwrap();
 
@@ -441,11 +512,14 @@ pub fn reconstruct_path<'a>(
 fn check_program_with_ltl<'a>(
     compiled_project: &'a CompiledProject,
     max_states: Option<usize>,
-) -> AlthreadResult<(Vec<StateLink>, StateGraph<'a>)> {
+) -> AlthreadResult<(Vec<StateLink<'a>>, StateGraph<'a>)> {
     let mut state_graph = build_state_graph(compiled_project, max_states)?;
 
     for state_id in 0..state_graph.nodes.len() {
         if let Err(error) = state_graph.vm(state_id).check_invariants() {
+            if !matches!(error.error_type, ErrorType::InvariantError) {
+                return Err(error);
+            }
             let mut path = build_violation_path(&state_graph, state_id);
             if path.is_empty() {
                 path.push(StateLink {
@@ -455,6 +529,7 @@ fn check_program_with_ltl<'a>(
                     actions: vec![],
                     pid: 0,
                     name: "_init_".to_string(),
+                    step: None,
                 });
             }
             return Ok((path, state_graph));
@@ -479,7 +554,7 @@ fn check_program_with_ltl<'a>(
     Ok((vec![], state_graph))
 }
 
-fn build_violation_path(state_graph: &StateGraph<'_>, target: StateId) -> Vec<StateLink> {
+fn build_violation_path<'a>(state_graph: &StateGraph<'a>, target: StateId) -> Vec<StateLink<'a>> {
     let mut path = Vec::new();
     let mut current = target;
     while let Some(predecessor) = state_graph.nodes[current].predecessor {

@@ -43,7 +43,7 @@ import {
 	getFileContentFromVirtualFS,
 	getPathFromId,
 } from "@utils/fileSystemUtils"; // Add buildVirtualFileSystem here
-import { buildGraphFromNodes, vmStateSignature } from "@utils/graphBuilders";
+import { buildGraphFromNodes } from "@utils/graphBuilders";
 // Import our new modules
 import {
 	type EditorTheme,
@@ -725,13 +725,13 @@ export default function App() {
 	};
 
 	const getCheckTooLargeStatus = (result: CheckResult) => {
-		if (result.path.length > 0) {
+		if (result.verdict === "violated") {
 			if (result.exhaustive) {
 				return "Verification result: a violation was found.";
 			}
 			return "Verification result: a violation was found before exploration completed. The counterexample is valid, but the explored graph is partial.";
 		}
-		if (result.exhaustive) {
+		if (result.verdict === "verified") {
 			return "Verification result: the check succeeded with no violation.";
 		}
 		return "Verification result: exploration stopped before the check could complete.";
@@ -958,42 +958,6 @@ export default function App() {
 		setInteractiveMessageFlow([]);
 		setInteractiveVmStates([]);
 		setActiveAction(null);
-	};
-
-	const buildCounterexampleReplay = (
-		pathNodes: GraphNode[],
-		graphNodes: GraphNode[],
-	) => {
-		if (!pathNodes || pathNodes.length === 0) {
-			return {
-				replayNodes: [] as GraphNode[],
-				replayStepLines: [] as number[][],
-			};
-		}
-
-		const initialGraphNode = graphNodes.find(
-			(node) => node.metadata.level === 0,
-		);
-		let replayNodes = [...pathNodes];
-
-		if (initialGraphNode) {
-			const initialKey = vmStateSignature(initialGraphNode.vm);
-			const firstPathKey = vmStateSignature(pathNodes[0].vm);
-			if (initialKey !== firstPathKey) {
-				replayNodes = [initialGraphNode, ...pathNodes];
-			}
-		}
-
-		const replayStepLines: number[][] = [];
-		for (let i = 0; i < replayNodes.length - 1; i++) {
-			const rawLines = replayNodes[i + 1]?.metadata?.lines || [];
-			const normalizedLines = rawLines
-				.map((line: number) => Number(line))
-				.filter((line: number) => Number.isFinite(line) && line > 0);
-			replayStepLines.push(normalizedLines);
-		}
-
-		return { replayNodes, replayStepLines };
 	};
 
 	const resetInteractiveMode = async () => {
@@ -1518,7 +1482,7 @@ export default function App() {
 										DEFAULT_WEB_CHECK_MAX_STATES,
 									);
 
-									if (res.path.length > 0) {
+									if (res.verdict === "violated") {
 										if (res.exhaustive) {
 											setOut(
 												"Violation found! See the highlighted path in the VM states graph.",
@@ -1528,29 +1492,20 @@ export default function App() {
 												"Violation found before exploration completed. The counterexample is valid, but the explored graph is partial. See the highlighted path in the VM states graph.",
 											);
 										}
-									} else if (res.exhaustive) {
-										setOut("Verification complete: No execution errors found.");
+									} else if (res.verdict === "verified") {
+										setOut(
+											"Verification complete: No property violations found.",
+										);
 									} else {
 										setOut(
-											"Warning: Exploration limit reached. The state space was not fully explored. No violation found in the explored part.",
+											"Verification inconclusive: The state limit was reached.",
 										);
 									}
 									setCheckTooLargeStatus(getCheckTooLargeStatus(res));
 
-									if (res.path.length > 0) {
-										const replay = buildCounterexampleReplay(
-											res.path,
-											res.nodes,
-										);
-										setCounterexampleReplayNodes(replay.replayNodes);
-										setCounterexampleReplayStepLines(replay.replayStepLines);
-									} else {
-										setCounterexampleReplayNodes([]);
-										setCounterexampleReplayStepLines([]);
-									}
-
-									const violationPathStates = res.path.map(
-										(pathItem) => pathItem.vm,
+									setCounterexampleReplayNodes(res.path);
+									setCounterexampleReplayStepLines(
+										res.path.slice(1).map((node) => node.metadata.lines ?? []),
 									);
 
 									if (res.nodes.length > MAX_VISIBLE_GRAPH_NODES) {
@@ -1559,7 +1514,7 @@ export default function App() {
 									} else {
 										const builtGraph = buildGraphFromNodes(res.nodes, {
 											mode: "check",
-											violationPathStates,
+											violationPath: res.violation_path,
 											theme: theme(),
 										});
 

@@ -492,24 +492,46 @@ pub fn check(
         .compile(Path::new(filepath), virtual_filesystem, &mut input_map)
         .map_err(error_to_js)?;
 
-    let (path, state_graph) =
-        checker::check_program(&compiled_project, max_states).map_err(error_to_js)?;
+    let checked = checker::check(&compiled_project, max_states).map_err(error_to_js)?;
+    let state_graph = checked.graph;
     let omit_transition_details = state_graph.nodes.len() > WEB_GRAPH_DETAILS_THRESHOLD;
 
-    // Convert path to GraphNode structure
-    let path_nodes: Vec<GraphNode> = path
-        .iter()
-        .enumerate()
-        .map(|(idx, state_link)| GraphNode {
-            vm: create_vm_state(state_graph.vm(state_link.to)),
-            metadata: NodeMetadata {
-                level: idx,
-                step_index: None,
-                successors: None,
-                lines: Some(state_link.lines.clone()),
-            },
-        })
-        .collect();
+    let mut path_nodes = Vec::new();
+    let mut violation_path = Vec::new();
+    let (verdict, cycle_start) = match checked.verdict {
+        checker::Verdict::Verified => (CheckVerdict::Verified, None),
+        checker::Verdict::Inconclusive => (CheckVerdict::Inconclusive, None),
+        checker::Verdict::Violated { path, cycle_start } => {
+            let initial = state_graph.initial_state;
+            violation_path.push(initial);
+            if !path[0].is_initial_marker() {
+                path_nodes.push(GraphNode {
+                    vm: create_vm_state(state_graph.vm(initial)),
+                    metadata: NodeMetadata {
+                        level: 0,
+                        step_index: None,
+                        successors: None,
+                        lines: None,
+                    },
+                });
+            }
+            state_graph
+                .replay_path(&path, |link, vm, _| {
+                    violation_path.push(link.to);
+                    path_nodes.push(GraphNode {
+                        vm: create_vm_state(vm),
+                        metadata: NodeMetadata {
+                            level: path_nodes.len(),
+                            step_index: None,
+                            successors: None,
+                            lines: Some(link.lines.clone()),
+                        },
+                    });
+                })
+                .map_err(error_to_js)?;
+            (CheckVerdict::Violated, cycle_start)
+        }
+    };
 
     // Convert state graph nodes to GraphNode structure
     let graph_nodes: Vec<GraphNode> = state_graph
@@ -552,10 +574,12 @@ pub fn check(
         .collect();
 
     let result = CheckResult {
+        verdict,
+        violation_path,
         path: path_nodes,
         nodes: graph_nodes,
         exhaustive: state_graph.exhaustive,
-        violation_cycle_start: state_graph.violation_cycle_start,
+        violation_cycle_start: cycle_start,
     };
 
     Ok(to_js(&result))

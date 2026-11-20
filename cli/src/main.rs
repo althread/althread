@@ -82,36 +82,40 @@ pub fn compile_command(cli_args: &CompileCommand) {
 }
 
 pub fn check_command(cli_args: &CheckCommand) {
-    use althread::checker::ltl::{
-        automaton::BuchiAutomaton, compiled::CompiledLtlExpression, debug,
+    use althread::checker::{
+        ltl::{automaton::BuchiAutomaton, compiled::CompiledLtlExpression, debug},
+        Verdict,
     };
+    const CHECK_ERROR: i32 = 3;
 
-    // Read file
+    fn read_error(error: &dyn Error) -> ! {
+        eprintln!("Could not read checker input: {error}");
+        exit(CHECK_ERROR);
+    }
     let (source, path) = match cli_args.common.input.clone() {
         args::Input::Stdin => {
-            let mut buf = Vec::new();
-            let _ = std::io::stdin().read_to_end(&mut buf);
-            (
-                String::from_utf8(buf).expect("Could not read stdin"),
-                PathBuf::from("./stdin.alt"),
-            )
+            let mut source = String::new();
+            stdin()
+                .read_to_string(&mut source)
+                .unwrap_or_else(|e| read_error(&e));
+            (source, PathBuf::from("./stdin.alt"))
         }
         args::Input::Path(path) => (
-            fs::read_to_string(&path).expect("Could not read file"),
+            fs::read_to_string(&path).unwrap_or_else(|e| read_error(&e)),
             path,
         ),
     };
 
-    let mut input_map = HashMap::new();
-    input_map.insert(path.to_string_lossy().to_string(), source.clone());
-
-    let ast = parse_with_options(&source, &path.to_string_lossy(), &input_map);
-
+    let mut input_map = HashMap::from([(path.to_string_lossy().into_owned(), source.clone())]);
+    let ast = parser::parse_ast(&source, &path.to_string_lossy()).unwrap_or_else(|e| {
+        e.report(&input_map);
+        exit(CHECK_ERROR);
+    });
     let compiled_project = ast
         .compile(&path, StandardFileSystem, &mut input_map)
         .unwrap_or_else(|e| {
             e.report(&input_map);
-            exit(1);
+            exit(CHECK_ERROR);
         });
 
     // LTL Debug output
@@ -159,76 +163,74 @@ pub fn check_command(cli_args: &CheckCommand) {
         }
     }
 
-    let checked = checker::check_program(&compiled_project, Some(cli_args.max_states as usize))
+    let checked = checker::check(&compiled_project, Some(cli_args.max_states as usize))
         .unwrap_or_else(|e| {
             e.report(&input_map);
-            exit(1);
+            exit(CHECK_ERROR);
         });
 
-    // Show state graph if requested
     if show_all || cli_args.show_state_graph {
         println!("=== State Graph Summary ===");
-        println!("Total states: {}", checked.1.nodes.len());
-        println!("Exhaustive: {}", checked.1.exhaustive);
-        // More detailed state graph could be output as DOT here
+        println!("Total states: {}", checked.graph.nodes.len());
+        println!("Exhaustive: {}", checked.graph.exhaustive);
     }
 
-    if !checked.1.exhaustive {
-        println!(
-            "{}",
-            format!(
-                "Warning: Maximum number of states ({}) reached. The search was not exhaustive.",
-                cli_args.max_states
-            )
-            .yellow()
-        );
-        if checked.0.is_empty() {
-            println!(
-                "{}",
-                "Note: Liveness properties (eventually) were not checked because the state space is incomplete."
-                    .italic()
-            );
-        } else {
-            println!(
-                "{}",
-                "Note: The reported counterexample is valid, but verification stopped early at the state limit."
-                    .italic()
-            );
+    let status = match checked.verdict {
+        Verdict::Verified => {
+            println!("✓ Verified");
+            0
         }
-    }
-
-    if checked.0.is_empty() {
-        println!("✓ No invariant violated");
-    } else {
-        println!("✗ Invariant violated");
-        for (index, link) in checked.0.iter().enumerate() {
-            if checked.1.violation_cycle_start == Some(index) {
-                println!("-- start of repeating counterexample cycle --");
-            }
+        Verdict::Inconclusive => {
             println!(
-                "{}",
-                format!("-- {}#{} --", link.name, link.pid).style(if link.pid == 0 {
-                    MAIN_STYLE
-                } else {
-                    PROCESS_PALETTE[(link.pid.saturating_sub(1)) % PROCESS_PALETTE.len()]
-                })
+                "Verification inconclusive: state limit ({}) reached.",
+                cli_args.max_states
             );
-            for line_num in &link.lines {
-                if let Some(line) = source.lines().nth(line_num.saturating_sub(1)) {
-                    println!("{:4} | {}", line_num, line);
+            4
+        }
+        Verdict::Violated { path, cycle_start } => {
+            println!("✗ Property violated");
+            if !checked.graph.exhaustive {
+                println!(
+                    "Counterexample found within the state limit ({}).",
+                    cli_args.max_states
+                );
+            }
+            for (index, link) in path.iter().enumerate() {
+                if cycle_start == Some(index) {
+                    println!("-- start of repeating counterexample cycle --");
+                }
+                println!(
+                    "{}",
+                    format!("-- {}#{} --", link.name, link.pid).style(if link.pid == 0 {
+                        MAIN_STYLE
+                    } else {
+                        PROCESS_PALETTE[(link.pid.saturating_sub(1)) % PROCESS_PALETTE.len()]
+                    })
+                );
+                for line_num in &link.lines {
+                    if let Some(line) = source.lines().nth(line_num.saturating_sub(1)) {
+                        println!("{:4} | {}", line_num, line);
+                    }
                 }
             }
+            println!("Violation path: {} steps", path.len());
+            1
         }
-    }
+    };
 
     println!("\nVerification Statistics:");
-    println!("  States explored: {}", checked.1.nodes.len());
-    let max_depth = checked.1.nodes.iter().map(|n| n.level).max().unwrap_or(0);
+    println!("  States explored: {}", checked.graph.nodes.len());
+    let max_depth = checked
+        .graph
+        .nodes
+        .iter()
+        .map(|n| n.level)
+        .max()
+        .unwrap_or(0);
     println!("  Maximum depth:  {}", max_depth);
 
-    if !checked.0.is_empty() {
-        println!("  Violation path: {} steps", checked.0.len());
-        exit(1);
+    if status != 0 {
+        exit(status);
     }
 }
 

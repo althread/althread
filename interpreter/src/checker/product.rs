@@ -157,7 +157,12 @@ impl ProductGraph {
         }
     }
 
-    fn state_link(&self, from: usize, edge_index: usize, vm_graph: &StateGraph<'_>) -> StateLink {
+    fn state_link<'a>(
+        &self,
+        from: usize,
+        edge_index: usize,
+        vm_graph: &StateGraph<'a>,
+    ) -> StateLink<'a> {
         let edge = self.nodes[from].successors[edge_index];
         let vm = self.nodes[from].state.vm;
         if let Some(index) = edge.vm_edge {
@@ -170,6 +175,7 @@ impl ProductGraph {
                 lines: vec![],
                 pid: 0,
                 name: "_stutter_".to_string(),
+                step: None,
             }
         }
     }
@@ -201,12 +207,12 @@ impl ProductGraph {
         path
     }
 
-    fn witness(
+    fn witness<'a>(
         &self,
         component: &[usize],
         targets: &[usize],
-        vm_graph: &StateGraph<'_>,
-    ) -> (Vec<StateLink>, usize) {
+        vm_graph: &StateGraph<'a>,
+    ) -> (Vec<StateLink<'a>>, usize) {
         let start = targets[0];
         let mut prefix = Vec::new();
         let mut current = start;
@@ -247,11 +253,11 @@ impl ProductGraph {
     }
 }
 
-pub(super) fn check_formula(
-    vm_graph: &StateGraph<'_>,
+pub(super) fn check_formula<'a>(
+    vm_graph: &StateGraph<'a>,
     formula: &CompiledLtlExpression,
     automaton: &BuchiAutomaton,
-) -> AlthreadResult<Option<(Vec<StateLink>, usize)>> {
+) -> AlthreadResult<Option<(Vec<StateLink<'a>>, usize)>> {
     let formulas = std::slice::from_ref(formula);
     let automatons = std::slice::from_ref(automaton);
     let initial = quantifier::initialize_monitoring(

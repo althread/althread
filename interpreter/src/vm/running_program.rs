@@ -69,20 +69,29 @@ pub struct RunningProgramState<'a> {
 
 impl PartialEq for RunningProgramState<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-            && self.memory == other.memory
-            && self.name == other.name
-            && self.instruction_pointer == other.instruction_pointer
-            // Code is immutable and shared by all states of a compiled project.
-            && std::ptr::eq(self.current_code, other.current_code)
-            && self.frame_pointer == other.frame_pointer
-            && self.call_stack == other.call_stack
-            && self.clock == other.clock
+        self.clock == other.clock && self.same_execution_state(other)
     }
 }
 
 impl Hash for RunningProgramState<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
+        self.hash_execution_state(state);
+        self.clock.hash(state);
+    }
+}
+
+impl<'a> RunningProgramState<'a> {
+    pub(super) fn same_execution_state(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.memory == other.memory
+            && self.name == other.name
+            && self.instruction_pointer == other.instruction_pointer
+            && std::ptr::eq(self.current_code, other.current_code)
+            && self.frame_pointer == other.frame_pointer
+            && self.call_stack == other.call_stack
+    }
+
+    pub(super) fn hash_execution_state<H: Hasher>(&self, state: &mut H) {
         self.id.hash(state);
         self.memory.hash(state);
         self.name.hash(state);
@@ -91,11 +100,8 @@ impl Hash for RunningProgramState<'_> {
         self.current_code.len().hash(state);
         self.frame_pointer.hash(state);
         self.call_stack.hash(state);
-        self.clock.hash(state);
     }
-}
 
-impl<'a> RunningProgramState<'a> {
     fn destructure_tuple_at_offset(
         &mut self,
         tuple_offset: usize,
@@ -243,17 +249,19 @@ impl<'a> RunningProgramState<'a> {
         self.frame_pointer
     }
 
-    pub fn current_instruction(&self) -> AlthreadResult<&Instruction> {
+    pub fn current_instruction(&self) -> AlthreadResult<&'a Instruction> {
         self.current_code
             .get(self.instruction_pointer)
-            .ok_or(AlthreadError::new(
-                ErrorType::InstructionNotAllowed,
-                None,
-                format!(
+            .ok_or_else(|| {
+                AlthreadError::new(
+                    ErrorType::InstructionNotAllowed,
+                    None,
+                    format!(
                 "the current instruction pointer points to no instruction (pointer:{}, program:{})",
                 self.instruction_pointer, self.name
             ),
-            ))
+                )
+            })
     }
 
     pub fn has_terminated(&self) -> bool {
@@ -270,15 +278,25 @@ impl<'a> RunningProgramState<'a> {
         channels: &mut Channels,
         next_pid: &mut usize,
     ) -> AlthreadResult<(GlobalActions, Vec<Instruction>)> {
+        let (actions, instructions) = self.next_global_borrowed(globals, channels, next_pid)?;
+        Ok((actions, instructions.into_iter().cloned().collect()))
+    }
+
+    pub(super) fn next_global_borrowed(
+        &mut self,
+        globals: &mut GlobalMemory,
+        channels: &mut Channels,
+        next_pid: &mut usize,
+    ) -> AlthreadResult<(GlobalActions, Vec<&'a Instruction>)> {
         let mut instructions = Vec::new();
         let mut actions = Vec::new();
         let mut wait = false;
         let mut end = false;
         loop {
-            let (at_actions, at_instructions) = self.next_atomic(globals, channels, next_pid)?;
+            let at_actions =
+                self.next_atomic_borrowed(globals, channels, next_pid, &mut instructions)?;
 
             actions.extend(at_actions.actions);
-            instructions.extend(at_instructions);
 
             if at_actions.wait {
                 wait = true;
@@ -307,7 +325,17 @@ impl<'a> RunningProgramState<'a> {
         next_pid: &mut usize,
     ) -> AlthreadResult<(GlobalActions, Vec<Instruction>)> {
         let mut instructions = Vec::new();
+        let result = self.next_atomic_borrowed(globals, channels, next_pid, &mut instructions)?;
+        Ok((result, instructions.into_iter().cloned().collect()))
+    }
 
+    fn next_atomic_borrowed(
+        &mut self,
+        globals: &mut GlobalMemory,
+        channels: &mut Channels,
+        next_pid: &mut usize,
+        instructions: &mut Vec<&'a Instruction>,
+    ) -> AlthreadResult<GlobalActions> {
         let mut result = GlobalActions {
             actions: Vec::new(),
             wait: false,
@@ -315,7 +343,7 @@ impl<'a> RunningProgramState<'a> {
         };
         // if the next instruction is not the start of an atomic block, we execute the next instruction
         if !self.current_instruction()?.is_atomic_start() {
-            instructions.push(self.current_instruction()?.clone());
+            instructions.push(self.current_instruction()?);
             let action = self.next(globals, channels, next_pid)?;
             if let Some(action) = action {
                 if action == GlobalAction::Wait {
@@ -326,11 +354,11 @@ impl<'a> RunningProgramState<'a> {
                     result.actions.push(action);
                 }
             }
-            return Ok((result, instructions));
+            return Ok(result);
         }
         // else we execute all the instructions until the end of the atomic block
         loop {
-            instructions.push(self.current_instruction()?.clone());
+            instructions.push(self.current_instruction()?);
             let action = self.next(globals, channels, next_pid)?;
             if let Some(action) = action {
                 if action == GlobalAction::Wait {
@@ -344,7 +372,7 @@ impl<'a> RunningProgramState<'a> {
                 break;
             }
         }
-        Ok((result, instructions))
+        Ok(result)
     }
 
     fn next(
@@ -353,7 +381,7 @@ impl<'a> RunningProgramState<'a> {
         channels: &mut Channels,
         next_pid: &mut usize,
     ) -> AlthreadResult<Option<GlobalAction>> {
-        let cur_inst = self.current_instruction()?.clone();
+        let cur_inst = self.current_instruction()?;
 
         let mut action = None;
 
@@ -478,7 +506,7 @@ impl<'a> RunningProgramState<'a> {
                             .expect(format!("global variable '{}' not found", identifier).as_str()),
                         &lit,
                     )
-                    .map_err(str_to_expr_error(cur_inst.pos))?;
+                    .map_err(str_to_expr_error(cur_inst.pos.clone()))?;
 
                 globals.insert(identifier.clone(), lit);
                 action = Some(GlobalAction::Write(identifier.clone()));
@@ -502,7 +530,7 @@ impl<'a> RunningProgramState<'a> {
 
                 self.memory[len - 1 - index] = operator
                     .apply(&self.memory[len - 1 - *index], &lit)
-                    .map_err(str_to_expr_error(cur_inst.pos))?;
+                    .map_err(str_to_expr_error(cur_inst.pos.clone()))?;
                 1
             }
             InstructionType::Unstack { unstack_len } => {
@@ -664,7 +692,7 @@ impl<'a> RunningProgramState<'a> {
                                     // should never happen
                                     return Err(AlthreadError::new(
                                         ErrorType::RuntimeError,
-                                        cur_inst.pos,
+                                        cur_inst.pos.clone(),
                                         format!("function {} expects a tuple as argument", name),
                                     ));
                                 }
@@ -833,23 +861,7 @@ impl<'a> RunningProgramState<'a> {
                     self.memory.pop();
                 }
 
-                let mut targets = Vec::new();
-                let connections = channels.get_connections();
-                for (from_pid, name) in connections.keys() {
-                    if *from_pid == self.id && name.starts_with(pattern) {
-                        targets.push(name.clone());
-                    }
-                }
-
-                let waiting = channels.get_waiting_send();
-                for (from_pid, name) in waiting.keys() {
-                    if *from_pid == self.id && name.starts_with(pattern) {
-                        if !targets.contains(name) {
-                            targets.push(name.clone());
-                        }
-                    }
-                }
-                targets.sort();
+                let targets = channels.broadcast_targets(self.id, pattern);
 
                 let mut send_infos = Vec::new();
 
@@ -932,7 +944,7 @@ impl<'a> RunningProgramState<'a> {
                     .map_err(|msg| {
                         AlthreadError::new(
                             ErrorType::RuntimeError,
-                            cur_inst.pos,
+                            cur_inst.pos.clone(),
                             format!("Failed to connect channels: {}", msg),
                         )
                     })?;

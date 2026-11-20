@@ -201,10 +201,20 @@ pub struct RunResult {
     pub runtime_error: Option<RuntimeErrorInfo>,
 }
 
+#[derive(Serialize, Tsify)]
+#[serde(rename_all = "snake_case")]
+pub enum CheckVerdict {
+    Verified,
+    Violated,
+    Inconclusive,
+}
+
 /// Result from checking a program
 #[derive(Serialize, Tsify)]
 #[tsify(into_wasm_abi)]
 pub struct CheckResult {
+    pub verdict: CheckVerdict,
+    pub violation_path: Vec<usize>,
     pub path: Vec<GraphNode>,
     pub nodes: Vec<GraphNode>,
     pub exhaustive: bool,

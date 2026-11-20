@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    hash::{Hash, Hasher},
+};
 
 use crate::ast::token::literal::Literal;
 
@@ -9,7 +12,7 @@ pub type ChannelsState = BTreeMap<(usize, String), Vec<Literal>>;
 pub type ChannelLinkKey = (usize, String, usize, String);
 pub type PendingDeliveriesState = BTreeMap<ChannelLinkKey, Vec<Literal>>;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Channels {
     /// states represent the input buffer of the channel
     /// that a process can read from.
@@ -17,8 +20,8 @@ pub struct Channels {
     /// The value is a vector of literals
     /// the literals are tuples of the values that are sent
     states: ChannelsState,
-    connections: HashMap<(usize, String), (usize, String)>,
-    waiting_send: HashMap<(usize, String), Vec<Literal>>,
+    connections: BTreeMap<(usize, String), (usize, String)>,
+    waiting_send: ChannelsState,
 
     /// Messages that have been sent but not yet delivered to the receiver mailbox.
     /// Keyed by (from_pid, from_channel, to_pid, to_channel).
@@ -44,8 +47,8 @@ impl Channels {
     pub fn new() -> Self {
         Self {
             states: BTreeMap::new(),
-            connections: HashMap::new(),
-            waiting_send: HashMap::new(),
+            connections: BTreeMap::new(),
+            waiting_send: BTreeMap::new(),
             pending_deliveries: BTreeMap::new(),
         }
     }
@@ -234,6 +237,60 @@ impl Channels {
         &self.states
     }
 
+    pub(super) fn same_execution_state(&self, other: &Self) -> bool {
+        fn same_queues<K: Eq>(
+            left: &BTreeMap<K, Vec<Literal>>,
+            right: &BTreeMap<K, Vec<Literal>>,
+        ) -> bool {
+            left.len() == right.len()
+                && left
+                    .iter()
+                    .zip(right)
+                    .all(|((left_key, left), (right_key, right))| {
+                        left_key == right_key
+                            && left
+                                .iter()
+                                .map(message_payload)
+                                .eq(right.iter().map(message_payload))
+                    })
+        }
+
+        self.connections == other.connections
+            && same_queues(&self.states, &other.states)
+            && same_queues(&self.pending_deliveries, &other.pending_deliveries)
+            && same_queues(&self.waiting_send, &other.waiting_send)
+    }
+
+    pub(super) fn hash_execution_state<H: Hasher>(&self, state: &mut H) {
+        fn hash_queues<K: Hash, H: Hasher>(queues: &BTreeMap<K, Vec<Literal>>, state: &mut H) {
+            queues.len().hash(state);
+            for (key, messages) in queues {
+                key.hash(state);
+                messages.len().hash(state);
+                for message in messages {
+                    message_payload(message).hash(state);
+                }
+            }
+        }
+
+        self.connections.hash(state);
+        hash_queues(&self.states, state);
+        hash_queues(&self.pending_deliveries, state);
+        hash_queues(&self.waiting_send, state);
+    }
+
+    pub(super) fn broadcast_targets(&self, pid: usize, pattern: &str) -> Vec<String> {
+        self.connections
+            .keys()
+            .chain(self.waiting_send.keys())
+            .filter(|(sender, name)| *sender == pid && name.starts_with(pattern))
+            .map(|(_, name)| name)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .cloned()
+            .collect()
+    }
+
     pub fn get_states(&self) -> ChannelsState {
         return self.states.clone();
     }
@@ -243,15 +300,35 @@ impl Channels {
     }
 
     pub fn get_connections(&self) -> HashMap<(usize, String), (usize, String)> {
-        self.connections.clone()
+        self.connections
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect()
     }
 
     pub fn get_waiting_send(&self) -> HashMap<(usize, String), Vec<Literal>> {
-        self.waiting_send.clone()
+        self.waiting_send
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect()
     }
 }
 
+// Only the payload is visible to instructions. The envelope identifies a
+// particular send in an execution trace.
+fn message_payload(message: &Literal) -> &Literal {
+    let Literal::Tuple(fields) = message else {
+        unreachable!("channel queues contain message envelopes");
+    };
+    &fields[1]
+}
+
 pub fn parse_message_tuple(msg: &Literal) -> Option<(usize, usize, String)> {
+    let (sender_id, sender_clock) = message_trace_id(msg)?;
+    Some((sender_id, sender_clock, message_payload(msg).to_string()))
+}
+
+pub(super) fn message_trace_id(msg: &Literal) -> Option<(usize, usize)> {
     // Expected format: ((sender_id, sender_clock), content)
     let Literal::Tuple(msg_tuple) = msg else {
         return None;
@@ -272,13 +349,43 @@ pub fn parse_message_tuple(msg: &Literal) -> Option<(usize, usize, String)> {
         return None;
     };
 
-    let content = msg_tuple.get(1)?.to_string();
-    Some((*sender_id as usize, *sender_clock as usize, content))
+    Some((*sender_id as usize, *sender_clock as usize))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn checker_channel_identity_ignores_trace_ids_but_keeps_fifo_payloads() {
+        use std::collections::hash_map::DefaultHasher;
+
+        let mut left = Channels::new();
+        let mut right = Channels::new();
+        left.send(0, "out".into(), Literal::Int(1), 1);
+        left.send(0, "out".into(), Literal::Int(2), 2);
+        left.send(0, "other".into(), Literal::Int(3), 3);
+
+        right.send(0, "other".into(), Literal::Int(3), 4);
+        right.send(0, "out".into(), Literal::Int(1), 5);
+        right.send(0, "out".into(), Literal::Int(2), 6);
+
+        let hash = |channels: &Channels| {
+            let mut state = DefaultHasher::new();
+            channels.hash_execution_state(&mut state);
+            state.finish()
+        };
+        assert_ne!(left, right);
+        assert!(left.same_execution_state(&right));
+        assert_eq!(hash(&left), hash(&right));
+
+        right
+            .waiting_send
+            .get_mut(&(0, "out".into()))
+            .unwrap()
+            .swap(0, 1);
+        assert!(!left.same_execution_state(&right));
+    }
 
     #[test]
     fn send_is_not_immediately_visible_until_delivery() {

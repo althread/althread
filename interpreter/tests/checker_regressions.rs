@@ -352,3 +352,59 @@ fn distinct_formula_scaling() {
         );
     }
 }
+
+#[test]
+fn invariant_failure_is_a_verdict_even_on_a_partial_graph() {
+    use althread::checker::{check, Verdict};
+
+    let project = compile("shared { let X = 1; } main { X = 0; } always { X == 0; }");
+    let result = check(&project, Some(1)).unwrap();
+    assert!(!result.graph.exhaustive);
+    assert!(matches!(result.verdict, Verdict::Violated { .. }));
+}
+
+#[test]
+fn send_clock_does_not_prevent_a_cycle_and_replay_recovers_message_ids() {
+    use althread::{
+        checker::{check, Verdict},
+        vm::GlobalAction,
+    };
+
+    let project = compile(
+        "main {
+            channel self.out (int)> self.in;
+            loop { send out(1); await receive in(x); }
+        }
+        check { eventually false; }",
+    );
+    let result = check(&project, Some(20)).unwrap();
+    assert!(result.graph.exhaustive);
+    let Verdict::Violated {
+        mut path,
+        cycle_start,
+    } = result.verdict
+    else {
+        panic!("expected a liveness counterexample");
+    };
+    assert_lasso(&path, &result.graph);
+
+    // Replay an extra lap to cross an edge that reused an earlier VM state.
+    path.extend_from_within(cycle_start.unwrap()..);
+    let mut sends = Vec::new();
+    let mut deliveries = Vec::new();
+    result
+        .graph
+        .replay_path(&path, |_, _, actions| {
+            for action in actions {
+                match action {
+                    GlobalAction::Send(send) => sends.push(send.n_msg),
+                    GlobalAction::Deliver(delivery) => deliveries.push(delivery.sender_clock),
+                    _ => {}
+                }
+            }
+        })
+        .unwrap();
+    assert!(sends.len() >= 2 && deliveries.len() >= 2);
+    assert_eq!(sends.as_slice(), (1..=sends.len()).collect::<Vec<_>>());
+    assert_eq!(deliveries.as_slice(), &sends[..deliveries.len()]);
+}

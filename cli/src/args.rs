@@ -73,8 +73,11 @@ pub struct CompileCommand {
     pub common: SharedArgs,
 }
 
-/// Compiles an input file into a supported output format
+/// Check which properties hold over the program's reachable states.
 #[derive(Debug, Clone, Parser)]
+#[command(
+    after_help = "Exit codes: 0 verified, 1 violated, 2 invalid arguments, 3 input or checker error, 4 inconclusive."
+)]
 pub struct CheckCommand {
     /// Shared arguments
     #[clap(flatten)]
