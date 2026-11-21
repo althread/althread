@@ -238,10 +238,7 @@ export default function App() {
 		};
 	};
 
-	const exec = createExecutionController({
-		getContext: executionContext,
-		theme,
-	});
+	const exec = createExecutionController({ getContext: executionContext });
 
 	/** Lines temporarily highlighted while hovering an interactive choice. */
 	const [previewLines, setPreviewLines] = createSignal<number[] | null>(null);

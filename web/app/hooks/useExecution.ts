@@ -59,7 +59,6 @@ export interface ExecutionContext {
 interface ExecutionDeps {
 	/** Returns what is needed to execute the active file, or null if nothing can be executed. */
 	getContext: () => ExecutionContext | null;
-	theme: () => "dark" | "light";
 }
 
 const EMPTY_GRAPH: GraphBuildResult = { nodes: [], edges: [] };
@@ -143,7 +142,6 @@ export function createExecutionController(deps: ExecutionDeps) {
 			buildGraphFromNodes(nodes, {
 				mode: "run",
 				stepLines: lines,
-				theme: deps.theme(),
 			}),
 		);
 	};
@@ -311,7 +309,6 @@ export function createExecutionController(deps: ExecutionDeps) {
 						: buildGraphFromNodes(res.nodes, {
 								mode: "check",
 								violationPath: res.violation_path,
-								theme: deps.theme(),
 							}),
 				);
 
@@ -583,7 +580,11 @@ export function createExecutionController(deps: ExecutionDeps) {
 		const nodes = traceNodes();
 		if (nodes.length === 0) return;
 		const clamped = Math.max(0, Math.min(index, nodes.length - 1));
-		setSelectedVM({ vm: nodes[clamped].vm as VMState, stepIndex: clamped });
+		setSelectedVM({
+			vm: nodes[clamped].vm as VMState,
+			stepIndex: clamped,
+			nodeIndex: clamped,
+		});
 	};
 
 	const reset = () => {

@@ -41,6 +41,12 @@
 	color: var(--app-icon-muted);
 }
 
+.header-subtitle {
+	font-weight: normal;
+	text-transform: none;
+	color: var(--app-text-soft);
+}
+
 .close-btn {
 	background: none;
 	border: none;

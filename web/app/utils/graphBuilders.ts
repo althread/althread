@@ -18,8 +18,10 @@ interface GraphBuildOptions {
 	mode?: "run" | "check";
 	stepLines?: number[][];
 	violationPath?: number[];
-	theme?: "dark" | "light";
 }
+
+/** Role of a node in the state graph, used to pick its color. */
+export type GraphNodeKind = "initial" | "violation" | "final" | "normal";
 
 export function stableStringify(value: unknown): string {
 	if (value === null || value === undefined) return JSON.stringify(value);
@@ -45,12 +47,7 @@ export function buildGraphFromNodes(
 	nodes: GraphNode[],
 	options: GraphBuildOptions = {},
 ): GraphBuildResult {
-	const {
-		mode = "check",
-		stepLines = [],
-		violationPath = [],
-		theme = "dark",
-	} = options;
+	const { mode = "check", stepLines = [], violationPath = [] } = options;
 	const visNodes: VisGraphNode[] = [];
 	const visEdges: VisGraphEdge[] = [];
 	const violationNodeSet = new Set(violationPath);
@@ -62,61 +59,43 @@ export function buildGraphFromNodes(
 	for (let i = 0; i < nodes.length; i++) {
 		const node = nodes[i];
 		const metadata = node.metadata;
-
-		// Create a summary label for the node
-		const processCount = node.vm.locals.length;
-		const label =
-			mode === "run"
-				? `${i}` // Run mode: show sequential index
-				: `${i}`; // Check mode: show node index
-
-		// Create detailed state for tooltip
-		const globalCount = Object.keys(node.vm.globals).length;
-		const channelCount = node.vm.channels.length;
-		const pendingCount = node.vm.pending_deliveries.length;
-
-		const title = `Level: ${metadata.level}\nProcesses: ${processCount}\nGlobals: ${globalCount}\nChannels: ${channelCount}\nPending: ${pendingCount}`;
-
-		// Determine node color based on mode and violation path
 		const isViolationNode = mode === "check" && violationNodeSet.has(i);
+		const isFinal =
+			mode === "run"
+				? i === nodes.length - 1
+				: (metadata.successors?.length ?? 0) === 0;
+		const kind: GraphNodeKind =
+			i === 0
+				? "initial"
+				: isViolationNode
+					? "violation"
+					: isFinal
+						? "final"
+						: "normal";
 
-		let backgroundColor: string;
-		let borderColor: string;
-		let fontColor: string;
-		if (mode === "run") {
-			backgroundColor = "#314d31";
-			borderColor = "#a6dfa6";
-			fontColor = theme === "dark" ? "#ffffff" : "#1a3a1a";
-		} else {
-			backgroundColor = isViolationNode ? "#4d3131" : "#314d31";
-			borderColor = isViolationNode ? "#ec9999" : "#a6dfa6";
-			fontColor =
-				theme === "dark" ? "#ffffff" : isViolationNode ? "#8b1a1a" : "#1a3a1a";
-		}
+		const name = mode === "run" ? `Step ${i}` : `State ${i}`;
+		const details = [
+			mode === "check" ? `depth ${metadata.level}` : null,
+			kind === "initial" ? "initial state" : null,
+			kind === "final"
+				? mode === "run"
+					? "last state"
+					: "no successor"
+				: null,
+			isViolationNode ? "on the counterexample" : null,
+		].filter(Boolean);
 
 		visNodes.push({
 			id: i,
-			label,
+			label: "",
 			level: metadata.level,
-			color: {
-				background: backgroundColor,
-				border: borderColor,
-				highlight: {
-					border: "hsla(29.329, 66.552%, 52.544%)",
-					background: backgroundColor,
-				},
-				hover: {
-					border: "hsla(29.329, 66.552%, 52.544%)",
-					background: backgroundColor,
-				},
-			},
-			font: { size: 10, color: fontColor } as any,
-			borderWidth: 1,
-			title,
+			kind,
+			title: details.length ? `${name} · ${details.join(" · ")}` : name,
 			// Unified format for both run and check modes
 			rawState: {
 				vm: node.vm,
 				stepIndex: mode === "run" ? i : undefined,
+				nodeIndex: i,
 				level: metadata.level,
 			},
 			isViolationNode,
@@ -154,10 +133,7 @@ export function buildGraphFromNodes(
 						label: edgeLabel,
 						lines: succ.lines.map((l: number) => Number(l)),
 						font: { size: 0 }, // Hidden by default
-						color: isViolationEdge
-							? { color: "#ec9999", highlight: "#ec9999", hover: "#ec9999" }
-							: undefined,
-						width: isViolationEdge ? 2 : undefined,
+						isViolationEdge,
 					});
 				}
 			}

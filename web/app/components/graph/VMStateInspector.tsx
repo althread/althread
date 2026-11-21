@@ -58,6 +58,13 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 		return props.node?.vm ?? null;
 	});
 
+	const title = () => {
+		const node = props.node;
+		if (node?.stepIndex !== undefined) return `Step ${node.stepIndex}`;
+		if (node?.nodeIndex !== undefined) return `State ${node.nodeIndex}`;
+		return "State Details";
+	};
+
 	const getChannelsForProcess = (pid: number): ChannelState[] => {
 		const s = state();
 		if (!s) return [];
@@ -173,7 +180,15 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 			<div class="inspector-header">
 				<div class="header-title">
 					<i class="codicon codicon-debug-console"></i>
-					<span>State Details</span>
+					<span>{title()}</span>
+					<Show
+						when={
+							props.node?.level !== undefined &&
+							props.node?.stepIndex === undefined
+						}
+					>
+						<span class="header-subtitle">depth {props.node?.level}</span>
+					</Show>
 				</div>
 				<button
 					type="button"
