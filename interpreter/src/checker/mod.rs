@@ -49,11 +49,28 @@ pub struct StateLink<'a> {
     step: Option<ScheduledStep>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GraphEdge {
+    pub to: StateId,
+    pub(crate) step: ScheduledStep,
+}
+
+impl Serialize for GraphEdge {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("GraphEdge", 1)?;
+        state.serialize_field("to", &self.to)?;
+        state.end()
+    }
+}
+
 #[derive(Debug)]
-pub struct GraphNode<'a> {
+pub struct GraphNode {
     pub level: usize,
     pub predecessor: Option<StateId>,
-    pub successors: Vec<StateLink<'a>>,
+    pub successors: Vec<GraphEdge>,
     pub eventually: bool,
     pub expanded: bool,
 }
@@ -61,7 +78,7 @@ pub struct GraphNode<'a> {
 #[derive(Debug)]
 pub struct StateGraph<'a> {
     pub states: Vec<Rc<VM<'a>>>,
-    pub nodes: Vec<GraphNode<'a>>,
+    pub nodes: Vec<GraphNode>,
     pub initial_state: StateId,
     pub exhaustive: bool,
     /// Index of the first loop edge in the returned LTL counterexample path.
@@ -100,12 +117,11 @@ impl Serialize for StateLink<'_> {
         state.end()
     }
 }
-impl Serialize for GraphNode<'_> {
+impl Serialize for GraphNode {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        // 3 is the number of fields in the struct.
         let mut state = serializer.serialize_struct("GraphNode", 5)?;
         state.serialize_field("level", &self.level)?;
         state.serialize_field("predecessor", &self.predecessor)?;
@@ -136,7 +152,7 @@ impl<'a> Serialize for StateGraph<'a> {
     }
 }
 
-impl GraphNode<'_> {
+impl GraphNode {
     pub fn new(predecessor: Option<StateId>, level: usize) -> Self {
         Self {
             level,
@@ -173,6 +189,41 @@ impl<'a> StateGraph<'a> {
 
     pub fn vm(&self, state_id: StateId) -> &Rc<VM<'a>> {
         &self.states[state_id]
+    }
+
+    /// Re-execute a single stored graph edge to build its full `StateLink` details
+    /// (instructions, actions, lines, process name/id) on demand.
+    pub fn materialize_edge(
+        &self,
+        from: StateId,
+        edge: &GraphEdge,
+    ) -> AlthreadResult<StateLink<'a>> {
+        let mut vm = self.vm(from).as_ref().clone();
+        let info = vm.advance(&edge.step)?.ok_or_else(|| {
+            AlthreadError::new(
+                ErrorType::RuntimeError,
+                None,
+                "Stored graph edge could not be materialized".to_string(),
+            )
+        })?;
+        Ok(StateLink {
+            to: edge.to,
+            lines: collect_instruction_lines(&info.instructions),
+            instructions: info.instructions,
+            actions: info.actions,
+            pid: info.prog_id,
+            name: info.prog_name,
+            step: Some(edge.step.clone()),
+        })
+    }
+
+    /// Materialize full `StateLink` details for all outgoing edges of `state_id`.
+    pub fn successor_links(&self, state_id: StateId) -> AlthreadResult<Vec<StateLink<'a>>> {
+        self.nodes[state_id]
+            .successors
+            .iter()
+            .map(|edge| self.materialize_edge(state_id, edge))
+            .collect()
     }
 
     /// Re-execute the exact scheduled steps to recover path-specific message IDs.
@@ -249,10 +300,10 @@ fn build_state_graph<'a>(
     while let Some(current_state) = next_nodes.pop_front() {
         let current_vm = state_graph.vm(current_state).clone();
         let current_level = state_graph.nodes[current_state].level;
-        let successors = current_vm.successors()?;
+        let successors = current_vm.successors_lightweight()?;
         let mut fully_expanded = true;
 
-        for (step, info, vm) in successors {
+        for (step, vm) in successors {
             let next_vm = Rc::new(vm);
             let mut newly_discovered = false;
             let next_state = match known_states.entry(CheckerState(next_vm.clone())) {
@@ -264,7 +315,7 @@ fn build_state_graph<'a>(
                         continue;
                     }
                     let new_state =
-                        state_graph.push_state(next_vm.clone(), Some(current_state), current_level + 1);
+                        state_graph.push_state(next_vm, Some(current_state), current_level + 1);
                     entry.insert(new_state);
                     next_nodes.push_back(new_state);
                     newly_discovered = true;
@@ -272,15 +323,12 @@ fn build_state_graph<'a>(
                 }
             };
 
-            state_graph.nodes[current_state].successors.push(StateLink {
-                to: next_state,
-                lines: collect_instruction_lines(&info.instructions),
-                instructions: info.instructions,
-                actions: info.actions,
-                pid: info.prog_id,
-                name: info.prog_name,
-                step: Some(step),
-            });
+            state_graph.nodes[current_state]
+                .successors
+                .push(GraphEdge {
+                    to: next_state,
+                    step,
+                });
 
             if newly_discovered && check_invariants {
                 if let Err(err) = state_graph.vm(next_state).check_invariants() {
@@ -356,7 +404,7 @@ pub fn check_program<'a>(
     let (state_graph, invariant_violation) = build_state_graph(compiled_project, max_states)?;
 
     if let Some((violated_state, error)) = invariant_violation {
-        let mut path = build_violation_path(&state_graph, violated_state);
+        let mut path = build_violation_path(&state_graph, violated_state)?;
         if path.is_empty() {
             path.push(StateLink {
                 to: violated_state,
@@ -382,17 +430,15 @@ pub fn reconstruct_path<'a>(
     let mut back_node = vec_vm.pop().unwrap();
 
     while let Some(pred) = vec_vm.pop() {
-        ret_path.push(
-            state_graph
-                .nodes
-                .get(pred)
-                .unwrap()
-                .successors
-                .iter()
-                .find(|x| x.to == back_node)
-                .unwrap()
-                .clone(),
-        );
+        let edge = state_graph
+            .nodes
+            .get(pred)
+            .unwrap()
+            .successors
+            .iter()
+            .find(|x| x.to == back_node)
+            .unwrap();
+        ret_path.push(state_graph.materialize_edge(pred, edge)?);
 
         back_node = pred;
     }
@@ -409,7 +455,7 @@ fn check_program_with_ltl<'a>(
     let (mut state_graph, invariant_violation) = build_state_graph(compiled_project, max_states)?;
 
     if let Some((state_id, error)) = invariant_violation {
-        let mut path = build_violation_path(&state_graph, state_id);
+        let mut path = build_violation_path(&state_graph, state_id)?;
         if path.is_empty() {
             path.push(StateLink {
                 to: state_id,
@@ -442,18 +488,21 @@ fn check_program_with_ltl<'a>(
     Ok((vec![], state_graph))
 }
 
-fn build_violation_path<'a>(state_graph: &StateGraph<'a>, target: StateId) -> Vec<StateLink<'a>> {
+fn build_violation_path<'a>(
+    state_graph: &StateGraph<'a>,
+    target: StateId,
+) -> AlthreadResult<Vec<StateLink<'a>>> {
     let mut path = Vec::new();
     let mut current = target;
     while let Some(predecessor) = state_graph.nodes[current].predecessor {
-        let link = state_graph.nodes[predecessor]
+        let edge = state_graph.nodes[predecessor]
             .successors
             .iter()
-            .find(|link| link.to == current)
+            .find(|edge| edge.to == current)
             .expect("every discovered VM state has its predecessor edge");
-        path.push(link.clone());
+        path.push(state_graph.materialize_edge(predecessor, edge)?);
         current = predecessor;
     }
     path.reverse();
-    path
+    Ok(path)
 }

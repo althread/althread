@@ -289,20 +289,46 @@ impl<'a> RunningProgramState<'a> {
         next_pid: &mut usize,
     ) -> AlthreadResult<(GlobalActions, Vec<&'a Instruction>)> {
         let mut instructions = Vec::new();
+        let actions =
+            self.next_global_internal(globals, channels, next_pid, true, Some(&mut instructions))?;
+        Ok((actions, instructions))
+    }
+
+    pub(super) fn next_global_lightweight(
+        &mut self,
+        globals: &mut GlobalMemory,
+        channels: &mut Channels,
+        next_pid: &mut usize,
+    ) -> AlthreadResult<GlobalActions> {
+        self.next_global_internal(globals, channels, next_pid, false, None)
+    }
+
+    fn next_global_internal(
+        &mut self,
+        globals: &mut GlobalMemory,
+        channels: &mut Channels,
+        next_pid: &mut usize,
+        record_trace: bool,
+        mut instructions: Option<&mut Vec<&'a Instruction>>,
+    ) -> AlthreadResult<GlobalActions> {
         let mut actions = Vec::new();
         let mut wait = false;
         let mut end = false;
         loop {
-            let at_actions =
-                self.next_atomic_borrowed(globals, channels, next_pid, &mut instructions)?;
+            let (at_wait, at_end) = self.next_atomic_borrowed(
+                globals,
+                channels,
+                next_pid,
+                record_trace,
+                &mut actions,
+                instructions.as_deref_mut(),
+            )?;
 
-            actions.extend(at_actions.actions);
-
-            if at_actions.wait {
+            if at_wait {
                 wait = true;
                 break;
             }
-            if at_actions.end {
+            if at_end {
                 end = true;
                 break;
             }
@@ -310,7 +336,7 @@ impl<'a> RunningProgramState<'a> {
                 break;
             }
         }
-        Ok((GlobalActions { actions, wait, end }, instructions))
+        Ok(GlobalActions { actions, wait, end })
     }
 
     pub fn is_next_instruction_global(&mut self) -> bool {
@@ -325,8 +351,19 @@ impl<'a> RunningProgramState<'a> {
         next_pid: &mut usize,
     ) -> AlthreadResult<(GlobalActions, Vec<Instruction>)> {
         let mut instructions = Vec::new();
-        let result = self.next_atomic_borrowed(globals, channels, next_pid, &mut instructions)?;
-        Ok((result, instructions.into_iter().cloned().collect()))
+        let mut actions = Vec::new();
+        let (wait, end) = self.next_atomic_borrowed(
+            globals,
+            channels,
+            next_pid,
+            true,
+            &mut actions,
+            Some(&mut instructions),
+        )?;
+        Ok((
+            GlobalActions { actions, wait, end },
+            instructions.into_iter().cloned().collect(),
+        ))
     }
 
     fn next_atomic_borrowed(
@@ -334,45 +371,45 @@ impl<'a> RunningProgramState<'a> {
         globals: &mut GlobalMemory,
         channels: &mut Channels,
         next_pid: &mut usize,
-        instructions: &mut Vec<&'a Instruction>,
-    ) -> AlthreadResult<GlobalActions> {
-        let mut result = GlobalActions {
-            actions: Vec::new(),
-            wait: false,
-            end: false,
-        };
+        record_trace: bool,
+        actions: &mut Vec<GlobalAction>,
+        mut instructions: Option<&mut Vec<&'a Instruction>>,
+    ) -> AlthreadResult<(bool, bool)> {
         // if the next instruction is not the start of an atomic block, we execute the next instruction
         if !self.current_instruction()?.is_atomic_start() {
-            instructions.push(self.current_instruction()?);
-            let action = self.next(globals, channels, next_pid)?;
+            if let Some(insts) = instructions.as_deref_mut() {
+                insts.push(self.current_instruction()?);
+            }
+            let action = self.next(globals, channels, next_pid, record_trace)?;
             if let Some(action) = action {
                 if action == GlobalAction::Wait {
-                    result.wait = true;
+                    return Ok((true, false));
                 } else if action == GlobalAction::EndProgram {
-                    result.end = true;
+                    return Ok((false, true));
                 } else {
-                    result.actions.push(action);
+                    actions.push(action);
                 }
             }
-            return Ok(result);
+            return Ok((false, false));
         }
         // else we execute all the instructions until the end of the atomic block
         loop {
-            instructions.push(self.current_instruction()?);
-            let action = self.next(globals, channels, next_pid)?;
+            if let Some(insts) = instructions.as_deref_mut() {
+                insts.push(self.current_instruction()?);
+            }
+            let action = self.next(globals, channels, next_pid, record_trace)?;
             if let Some(action) = action {
                 if action == GlobalAction::Wait {
-                    result.wait = true;
-                    break;
+                    return Ok((true, false));
                 } else {
-                    result.actions.push(action);
+                    actions.push(action);
                 }
             }
             if self.current_instruction()?.is_atomic_end() {
                 break;
             }
         }
-        Ok(result)
+        Ok((false, false))
     }
 
     fn next(
@@ -380,6 +417,7 @@ impl<'a> RunningProgramState<'a> {
         globals: &mut GlobalMemory,
         channels: &mut Channels,
         next_pid: &mut usize,
+        record_trace: bool,
     ) -> AlthreadResult<Option<GlobalAction>> {
         let cur_inst = self.current_instruction()?;
 
@@ -632,24 +670,31 @@ impl<'a> RunningProgramState<'a> {
             } => {
                 match name.as_str() {
                     "print" => {
-                        let lit = self
-                            .memory
-                            .last()
-                            .expect("Panic: stack is empty, cannot perform function call")
-                            .clone();
+                        if record_trace {
+                            let lit = self
+                                .memory
+                                .last()
+                                .expect("Panic: stack is empty, cannot perform function call")
+                                .clone();
 
-                        for _ in 0..*unstack_len {
-                            self.memory.pop();
+                            for _ in 0..*unstack_len {
+                                self.memory.pop();
+                            }
+
+                            let str_val = lit
+                                .into_tuple()
+                                .unwrap_or_default()
+                                .iter()
+                                .map(|lit| lit.to_string())
+                                .collect::<Vec<_>>()
+                                .join(" ");
+                            action = Some(GlobalAction::Print(str_val));
+                        } else {
+                            for _ in 0..*unstack_len {
+                                self.memory.pop();
+                            }
+                            action = Some(GlobalAction::Print(String::new()));
                         }
-
-                        let str_val = lit
-                            .into_tuple()
-                            .unwrap_or_default()
-                            .iter()
-                            .map(|lit| lit.to_string())
-                            .collect::<Vec<_>>()
-                            .join(" ");
-                        action = Some(GlobalAction::Print(str_val));
                         self.memory.push(Literal::Null);
 
                         1
@@ -832,19 +877,24 @@ impl<'a> RunningProgramState<'a> {
                     self.memory.pop();
                 }
                 self.clock += 1;
-                let _receiver =
-                    channels.send(self.id, channel_name.clone(), value.clone(), self.clock);
-                action = Some(GlobalAction::Send(crate::vm::SendInfo {
-                    from: crate::vm::ProcessInfo {
-                        process_id: self.id,
-                        process_name: self.name.clone(),
-                    },
-                    to: crate::vm::ChannelInfo {
-                        channel_name: channel_name.clone(),
-                    },
-                    message: value,
-                    n_msg: self.clock,
-                }));
+                if record_trace {
+                    let _receiver =
+                        channels.send(self.id, channel_name.clone(), value.clone(), self.clock);
+                    action = Some(GlobalAction::Send(crate::vm::SendInfo {
+                        from: crate::vm::ProcessInfo {
+                            process_id: self.id,
+                            process_name: self.name.clone(),
+                        },
+                        to: crate::vm::ChannelInfo {
+                            channel_name: channel_name.clone(),
+                        },
+                        message: value,
+                        n_msg: self.clock,
+                    }));
+                } else {
+                    let _receiver = channels.send(self.id, channel_name.clone(), value, self.clock);
+                    action = Some(GlobalAction::Broadcast(Vec::new()));
+                }
                 1
             }
             InstructionType::Broadcast {
@@ -863,23 +913,32 @@ impl<'a> RunningProgramState<'a> {
 
                 let targets = channels.broadcast_targets(self.id, pattern);
 
-                let mut send_infos = Vec::new();
+                if record_trace {
+                    let mut send_infos = Vec::with_capacity(targets.len());
 
-                for name in targets {
-                    self.clock += 1;
-                    let _receiver = channels.send(self.id, name.clone(), value.clone(), self.clock);
-                    send_infos.push(crate::vm::SendInfo {
-                        from: crate::vm::ProcessInfo {
-                            process_id: self.id,
-                            process_name: self.name.clone(),
-                        },
-                        to: crate::vm::ChannelInfo { channel_name: name },
-                        message: value.clone(),
-                        n_msg: self.clock,
-                    });
+                    for name in targets {
+                        self.clock += 1;
+                        let _receiver =
+                            channels.send(self.id, name.clone(), value.clone(), self.clock);
+                        send_infos.push(crate::vm::SendInfo {
+                            from: crate::vm::ProcessInfo {
+                                process_id: self.id,
+                                process_name: self.name.clone(),
+                            },
+                            to: crate::vm::ChannelInfo { channel_name: name },
+                            message: value.clone(),
+                            n_msg: self.clock,
+                        });
+                    }
+
+                    action = Some(GlobalAction::Broadcast(send_infos));
+                } else {
+                    for name in targets {
+                        self.clock += 1;
+                        let _receiver = channels.send(self.id, name, value.clone(), self.clock);
+                    }
+                    action = Some(GlobalAction::Broadcast(Vec::new()));
                 }
-
-                action = Some(GlobalAction::Broadcast(send_infos));
                 1
             }
             InstructionType::ChannelPeek(channel_name) => {

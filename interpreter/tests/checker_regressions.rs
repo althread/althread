@@ -30,12 +30,16 @@ fn assert_lasso(path: &[StateLink], graph: &StateGraph<'_>) {
             assert!(node.expanded && node.successors.is_empty());
             assert_eq!(edge.to, current);
         } else {
-            assert!(node.successors.iter().any(|candidate| {
-                candidate.to == edge.to
-                    && candidate.pid == edge.pid
-                    && candidate.instructions == edge.instructions
-                    && candidate.actions == edge.actions
-            }));
+            assert!(graph
+                .successor_links(current)
+                .unwrap()
+                .iter()
+                .any(|candidate| {
+                    candidate.to == edge.to
+                        && candidate.pid == edge.pid
+                        && candidate.instructions == edge.instructions
+                        && candidate.actions == edge.actions
+                }));
         }
         current = edge.to;
     }

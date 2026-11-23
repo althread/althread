@@ -165,13 +165,13 @@ impl ProductGraph {
         from: usize,
         edge_index: usize,
         vm_graph: &StateGraph<'a>,
-    ) -> StateLink<'a> {
+    ) -> AlthreadResult<StateLink<'a>> {
         let edge = self.nodes[from].successors[edge_index];
         let vm = self.nodes[from].state.vm;
         if let Some(index) = edge.vm_edge {
-            vm_graph.nodes[vm].successors[index].clone()
+            vm_graph.materialize_edge(vm, &vm_graph.nodes[vm].successors[index])
         } else {
-            StateLink {
+            Ok(StateLink {
                 to: vm,
                 instructions: vec![],
                 actions: vec![],
@@ -179,7 +179,7 @@ impl ProductGraph {
                 pid: 0,
                 name: "_stutter_".to_string(),
                 step: None,
-            }
+            })
         }
     }
 
@@ -215,12 +215,12 @@ impl ProductGraph {
         component: &[usize],
         targets: &[usize],
         vm_graph: &StateGraph<'a>,
-    ) -> (Vec<StateLink<'a>>, usize) {
+    ) -> AlthreadResult<(Vec<StateLink<'a>>, usize)> {
         let start = targets[0];
         let mut prefix = Vec::new();
         let mut current = start;
         while let Some((previous, edge)) = self.nodes[current].predecessor {
-            prefix.push(self.state_link(previous, edge, vm_graph));
+            prefix.push(self.state_link(previous, edge, vm_graph)?);
             current = previous;
         }
         prefix.reverse();
@@ -247,12 +247,10 @@ impl ProductGraph {
             cycle.push((start, index));
             cycle.extend(self.route(edge.to, start, &in_component));
         }
-        prefix.extend(
-            cycle
-                .into_iter()
-                .map(|(from, edge)| self.state_link(from, edge, vm_graph)),
-        );
-        (prefix, cycle_start)
+        for (from, edge) in cycle {
+            prefix.push(self.state_link(from, edge, vm_graph)?);
+        }
+        Ok((prefix, cycle_start))
     }
 }
 
@@ -415,7 +413,7 @@ pub(super) fn check_formula<'a>(
                 automaton,
                 matches!(formula, CompiledLtlExpression::Exists { .. }),
             ) {
-                return Ok(Some(product.witness(&component, &targets, vm_graph)));
+                return Ok(Some(product.witness(&component, &targets, vm_graph)?));
             }
         }
     }

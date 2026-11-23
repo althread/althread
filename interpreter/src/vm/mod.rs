@@ -456,6 +456,101 @@ impl<'a> VM<'a> {
             .collect())
     }
 
+    pub(crate) fn successors_lightweight(&self) -> AlthreadResult<Vec<(ScheduledStep, Self)>> {
+        if self.running_programs.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut successors = Vec::new();
+        for &pid in &self.executable_programs {
+            if self.waiting_programs.contains_key(&pid) {
+                continue;
+            }
+            let mut vm = self.clone();
+            if vm.step_program_lightweight(pid)? {
+                successors.push((ScheduledStep::Program(pid), vm));
+            }
+        }
+        if self.channels.has_pending_deliveries() {
+            for link in self.channels.pending_links() {
+                let mut vm = self.clone();
+                vm.step_delivery_lightweight(link.clone());
+                successors.push((ScheduledStep::Deliver(link), vm));
+            }
+        }
+        Ok(successors)
+    }
+
+    fn step_program_lightweight(&mut self, pid: usize) -> AlthreadResult<bool> {
+        let program = self
+            .running_programs
+            .get_mut(pid)
+            .expect("program is executable but not found in running programs");
+
+        if program.has_terminated() {
+            return Ok(false);
+        }
+
+        let actions = program.next_global_lightweight(
+            &mut self.globals,
+            &mut self.channels,
+            &mut self.next_program_id,
+        )?;
+        if actions.wait {
+            if !actions.actions.is_empty() {
+                return Err(AlthreadError::new(
+                    ErrorType::RuntimeError,
+                    None,
+                    "A process reached `wait` after producing global actions in the same step. Wait guards must stay side-effect free, and successful wait branches must complete before a later wait is reported.".to_string(),
+                ));
+            }
+
+            let dependencies = match &self
+                .running_programs
+                .get(pid)
+                .expect("program is waiting but not found in running programs")
+                .current_instruction()
+                .expect("waiting on no instruction")
+                .control
+            {
+                InstructionType::WaitStart { dependencies, .. } => dependencies.clone(),
+                _ => unreachable!("waiting on an instruction that is not a WaitStart instruction"),
+            };
+
+            if self.wait_dependencies_satisfied_now(pid, &dependencies) {
+                return self.step_program_lightweight(pid);
+            }
+
+            self.executable_programs.remove(&pid);
+            self.waiting_programs.insert(pid, dependencies);
+            return Ok(false);
+        }
+
+        self.process_runtime_actions(&actions.actions);
+        if actions.end {
+            self.executable_programs.remove(&pid);
+            self.waiting_programs.remove(&pid);
+        }
+
+        Ok(true)
+    }
+
+    fn step_delivery_lightweight(&mut self, link: ChannelLinkKey) {
+        let delivery_info = self
+            .channels
+            .deliver_one(link)
+            .expect("pending link must have a deliverable message");
+
+        if let Some(dependency) = self.waiting_programs.get(&delivery_info.to.program_id) {
+            if dependency
+                .channels_state
+                .contains(&delivery_info.to.channel_name)
+            {
+                self.waiting_programs.remove(&delivery_info.to.program_id);
+                self.executable_programs.insert(delivery_info.to.program_id);
+            }
+        }
+    }
+
     pub(crate) fn successors(
         &self,
     ) -> AlthreadResult<Vec<(ScheduledStep, ExecutionStepInfo<&'a Instruction>, Self)>> {

@@ -546,40 +546,38 @@ fn check_core(
     let graph_nodes: Vec<GraphNode> = if omit_graph_nodes {
         Vec::new()
     } else {
-        state_graph
-            .nodes
-            .iter()
-            .enumerate()
-            .map(|(idx, node)| {
-                let successors = Some(
-                    node.successors
-                        .iter()
-                        .map(|succ| Successor {
-                            to_index: succ.to,
-                            lines: succ.lines.clone(),
-                            instructions: succ
-                                .instructions
-                                .iter()
-                                .map(|i| format!("{:?}", i))
-                                .collect(),
-                            actions: succ.actions.iter().map(|a| format!("{:?}", a)).collect(),
-                            pid: succ.pid,
-                            name: succ.name.clone(),
-                        })
-                        .collect(),
-                );
+        let mut nodes = Vec::with_capacity(state_count);
+        for (idx, node) in state_graph.nodes.iter().enumerate() {
+            let successors = Some(
+                state_graph
+                    .successor_links(idx)?
+                    .into_iter()
+                    .map(|succ| Successor {
+                        to_index: succ.to,
+                        lines: succ.lines,
+                        instructions: succ
+                            .instructions
+                            .iter()
+                            .map(|i| format!("{:?}", i))
+                            .collect(),
+                        actions: succ.actions.iter().map(|a| format!("{:?}", a)).collect(),
+                        pid: succ.pid,
+                        name: succ.name,
+                    })
+                    .collect(),
+            );
 
-                GraphNode {
-                    vm: create_vm_state(state_graph.vm(idx)),
-                    metadata: NodeMetadata {
-                        level: node.level,
-                        step_index: None,
-                        successors,
-                        lines: None,
-                    },
-                }
-            })
-            .collect()
+            nodes.push(GraphNode {
+                vm: create_vm_state(state_graph.vm(idx)),
+                metadata: NodeMetadata {
+                    level: node.level,
+                    step_index: None,
+                    successors,
+                    lines: None,
+                },
+            });
+        }
+        nodes
     };
 
     Ok(CheckResult {
