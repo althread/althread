@@ -87,7 +87,7 @@
 	border-radius: 4px;
 	border: 1px solid var(--app-border-strong);
 	font-size: 11px;
-	font-family: "Menlo", "Monaco", "Courier New", monospace;
+	font-family: var(--app-font-mono);
 	color: var(--app-text-soft);
 }
 
@@ -113,7 +113,7 @@
 	flex-direction: column;
 	gap: 2px;
 	min-width: 0;
-	font-family: "Menlo", "Monaco", "Courier New", monospace;
+	font-family: var(--app-font-mono);
 	font-size: 12px;
 }
 

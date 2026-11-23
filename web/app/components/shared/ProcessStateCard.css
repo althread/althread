@@ -25,7 +25,7 @@
 .process-id,
 .process-pc,
 .process-line {
-	font-family: "Consolas", "Monaco", monospace;
+	font-family: var(--app-font-mono);
 	font-size: 12px;
 	padding: 4px 8px;
 	background: var(--app-surface);
@@ -78,7 +78,7 @@
 }
 
 .channel-name {
-	font-family: "Consolas", "Monaco", monospace;
+	font-family: var(--app-font-mono);
 	color: var(--app-syntax-function);
 	font-weight: 500;
 }
@@ -107,7 +107,7 @@
 }
 
 .channel-value-item {
-	font-family: "Consolas", "Monaco", monospace;
+	font-family: var(--app-font-mono);
 	font-size: 12px;
 	padding: 4px 6px;
 	background: var(--app-surface);

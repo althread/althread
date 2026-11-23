@@ -7,7 +7,7 @@
 }
 
 .variable-item {
-	font-family: "Consolas", "Monaco", monospace;
+	font-family: var(--app-font-mono);
 	font-size: 13px;
 	padding: 4px 8px;
 	background: var(--app-surface);

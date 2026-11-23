@@ -14,7 +14,6 @@ interface GraphPalette {
 	nodes: Record<GraphNodeKind, Swatch>;
 	edge: string;
 	violationEdge: string;
-	label: { color: string; background: string };
 }
 
 export const palettes: Record<GraphTheme, GraphPalette> = {
@@ -27,7 +26,6 @@ export const palettes: Record<GraphTheme, GraphPalette> = {
 		},
 		edge: "#6b6b6b",
 		violationEdge: "#f48771",
-		label: { color: "#e0e0e0", background: "rgba(30, 30, 30, 0.9)" },
 	},
 	light: {
 		nodes: {
@@ -38,7 +36,6 @@ export const palettes: Record<GraphTheme, GraphPalette> = {
 		},
 		edge: "#b5a796",
 		violationEdge: "#c4314b",
-		label: { color: "#3d3228", background: "rgba(255, 248, 239, 0.95)" },
 	},
 };
 
@@ -51,7 +48,7 @@ export function nodeStyle(kind: GraphNodeKind | undefined, theme: GraphTheme) {
 	};
 }
 
-/** vis-network style of an edge. Labels stay hidden until the edge is selected. */
+/** vis-network style of an edge. Labels are never drawn: the selected edge is described in a chip. */
 export function edgeStyle(isViolationEdge: boolean, theme: GraphTheme) {
 	const color = isViolationEdge
 		? palettes[theme].violationEdge
@@ -60,18 +57,6 @@ export function edgeStyle(isViolationEdge: boolean, theme: GraphTheme) {
 		color: { color, highlight: THEME_PRIMARY, hover: THEME_PRIMARY },
 		width: isViolationEdge ? 2 : 1,
 		font: { size: 0 },
-	};
-}
-
-/** Font used to show the label of the selected edge. */
-export function edgeLabelFont(theme: GraphTheme) {
-	const label = palettes[theme].label;
-	return {
-		size: 12,
-		color: label.color,
-		background: label.background,
-		strokeWidth: 0,
-		face: 'Menlo, Monaco, "Courier New", monospace',
 	};
 }
 

@@ -463,7 +463,7 @@ export function languageExtensions(options: LanguageOptions): {
 			EditorView.baseTheme({
 				".cm-lsp-info": {
 					padding: "6px 10px",
-					fontFamily: "monospace",
+					fontFamily: "var(--app-font-mono)",
 					whiteSpace: "pre-wrap",
 					maxWidth: "600px",
 				},

@@ -79,24 +79,21 @@
 	--app-focus-border: rgba(14, 99, 156, 0.3);
 	--header-height: 52px;
 	--app-on-primary: #1a1206;
+	--app-font-ui:
+		"Inter", system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell,
+		"Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji",
+		"Segoe UI Emoji";
+	--app-font-mono:
+		"JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas,
+		"DejaVu Sans Mono", monospace;
+	--app-radius-sm: 4px;
+	--app-radius: 6px;
+	--app-radius-lg: 8px;
 	background-color: var(--background-graphics);
 	color: var(--app-text);
-	font-family:
-		system-ui,
-		-apple-system,
-		Segoe UI,
-		Roboto,
-		Ubuntu,
-		Cantarell,
-		Noto Sans,
-		BlinkMacSystemFont,
-		"Segoe UI",
-		Helvetica,
-		Arial,
-		sans-serif,
-		"Apple Color Emoji",
-		"Segoe UI Emoji",
-		"Segoe UI Symbol";
+	font-family: var(--app-font-ui);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
 
 :root[data-theme="light"] {
@@ -323,15 +320,60 @@ body {
 }
 
 .state-graph {
+	--graph-dot: color-mix(in srgb, var(--app-text-soft) 22%, transparent);
 	height: 100%;
 	flex: 1 1 0%;
 	min-height: 0;
-	background: var(--app-surface);
-	border: 1.5px solid var(--app-border);
-	box-shadow: 0 2px 16px rgba(0, 0, 0, 0.25);
+	background-color: var(--app-surface);
 	position: relative;
 	overflow: hidden;
 	/* Prevent resize loops */
+}
+
+/* Dot grid drawn behind the canvas; Graph.tsx keeps it in sync with pan/zoom. */
+.graph-canvas {
+	width: 100%;
+	height: 100%;
+	background-image: radial-gradient(var(--graph-dot) 1px, transparent 1.2px);
+	background-size: 18px 18px;
+}
+
+.graph-edge-chip {
+	position: absolute;
+	left: 10px;
+	bottom: 10px;
+	z-index: 10;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	max-width: calc(100% - 70px);
+	padding: 5px 10px;
+	border: 1px solid var(--app-border);
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--app-surface-elevated) 92%, transparent);
+	box-shadow: 0 4px 14px var(--app-shadow-sm);
+	backdrop-filter: blur(6px);
+	font-size: 12px;
+	color: var(--app-text-muted);
+	pointer-events: none;
+	white-space: nowrap;
+}
+
+.graph-edge-chip .codicon {
+	font-size: 13px;
+	color: var(--ifm-color-primary);
+}
+
+.graph-edge-chip-label {
+	font-family: var(--app-font-mono);
+	color: var(--app-text);
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.graph-edge-chip-lines {
+	color: var(--app-text-soft);
+	font-variant-numeric: tabular-nums;
 }
 
 .state-graph.maximized {
@@ -364,7 +406,7 @@ body {
 .console pre {
 	margin: 0;
 	padding: 1rem;
-	font-family: "Menlo", "Monaco", "Courier New", monospace;
+	font-family: var(--app-font-mono);
 	font-size: 13px;
 	line-height: 1.5;
 	color: var(--app-text-muted);
@@ -707,24 +749,37 @@ body {
 	right: 10px;
 	display: flex;
 	flex-direction: column;
-	gap: 10px;
+	gap: 2px;
+	padding: 3px;
 	z-index: 10;
+	background: color-mix(in srgb, var(--app-surface-elevated) 92%, transparent);
+	border: 1px solid var(--app-border);
+	border-radius: var(--app-radius-lg);
+	box-shadow: 0 4px 14px var(--app-shadow-sm);
+	backdrop-filter: blur(6px);
 }
 
 .graph-toolbar button {
 	display: flex;
-	padding: 0.5rem;
-	background: var(--app-surface-hover);
-	border: 1px solid var(--app-border-strong);
-	color: var(--app-text-muted);
-	border-radius: 2px;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	background: transparent;
+	border: none;
+	color: var(--app-text-soft);
+	border-radius: var(--app-radius-sm);
 	cursor: pointer;
 	font-size: 15px;
+	transition:
+		background-color 0.15s,
+		color 0.15s;
 }
 
 .graph-toolbar button:hover {
-	background: var(--app-surface-elevated);
-	border-color: var(--app-border-strong);
+	background: var(--app-surface-hover);
+	color: var(--app-text);
 }
 
 .vm-state-popup {
@@ -738,7 +793,7 @@ body {
 	max-height: 250px;
 	max-width: 250px;
 	overflow: hidden;
-	font-family: "Menlo", "Monaco", "Courier New", monospace;
+	font-family: var(--app-font-mono);
 	font-size: 12px;
 	display: flex;
 	flex-direction: column;

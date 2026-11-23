@@ -191,7 +191,7 @@
 }
 
 .results-empty code {
-	font-family: "Menlo", "Monaco", "Courier New", monospace;
+	font-family: var(--app-font-mono);
 	font-size: 11.5px;
 	color: var(--app-syntax-keyword);
 }

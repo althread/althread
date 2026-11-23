@@ -141,12 +141,7 @@ const highlightField = StateField.define<DecorationSet>({
 
 						// Background Highlight
 						decorations.push(
-							Decoration.line({
-								attributes: {
-									style:
-										"background-color: rgba(255, 165, 0, 0.2); border-left: 3px solid orange;",
-								},
-							}).range(line.from),
+							Decoration.line({ class: "cm-exec-line" }).range(line.from),
 						);
 
 						// Badge Widget (at the end of the line)
@@ -201,104 +196,180 @@ const basicSetup: Extension = (() => [
 	]),
 ])();
 
+const editorPalettes = {
+	dark: {
+		text: "#c9d1d9",
+		background: "#1e1e1e",
+		gutterText: "#5a5f69",
+		gutterActiveText: "#c9d1d9",
+		activeLine: "rgba(255, 255, 255, 0.035)",
+		caret: "#f0a24b",
+		selection: "rgba(64, 120, 192, 0.45)",
+		selectionFocused: "rgba(64, 120, 192, 0.55)",
+		selectionMatch: "rgba(255, 217, 102, 0.12)",
+		tooltipBg: "#252526",
+		tooltipText: "#dddddd",
+		tooltipBorder: "#3c3c3c",
+		completionSelected: "#04395e",
+		completionSelectedText: "#ffffff",
+		execLine: "rgba(232, 146, 52, 0.16)",
+		execBorder: "#e89234",
+		badgeBg: "rgba(232, 146, 52, 0.22)",
+		badgeText: "#f5b56a",
+		foldMarker: "#6b707a",
+	},
+	light: {
+		text: "#2f3441",
+		background: "#fbf6ee",
+		gutterText: "#b0a493",
+		gutterActiveText: "#4a3d2f",
+		activeLine: "rgba(160, 120, 70, 0.07)",
+		caret: "#c96f1a",
+		selection: "rgba(245, 184, 96, 0.35)",
+		selectionFocused: "rgba(245, 184, 96, 0.45)",
+		selectionMatch: "rgba(209, 136, 38, 0.15)",
+		tooltipBg: "#fffaf2",
+		tooltipText: "#2f3441",
+		tooltipBorder: "#dccfbf",
+		completionSelected: "#f1dfc4",
+		completionSelectedText: "#2a1f14",
+		execLine: "rgba(214, 125, 30, 0.14)",
+		execBorder: "#d67d1e",
+		badgeBg: "rgba(201, 111, 26, 0.14)",
+		badgeText: "#9a4f0c",
+		foldMarker: "#b0a493",
+	},
+} as const;
+
 const createEditorTheme = (theme: CodeEditorTheme) => {
 	const isDark = theme === "dark";
+	const c = editorPalettes[theme];
 
 	return EditorView.theme(
 		{
 			"&": {
-				color: isDark ? "#abb2bf" : "#2f3441",
-				backgroundColor: isDark ? "#1e1e1e" : "#f7f1e7",
+				color: c.text,
+				backgroundColor: c.background,
+				fontSize: "13.5px",
 			},
-			".cm-tooltip": {
-				backgroundColor: isDark ? "#252526" : "#fffaf2",
-				color: isDark ? "#ddd" : "#2f3441",
-				border: `1px solid ${isDark ? "#555" : "#c6bda9"}`,
+			"&.cm-focused": {
+				outline: "none",
 			},
-			".cm-tooltip-autocomplete ul li[aria-selected]": {
-				backgroundColor: isDark ? "#094771" : "#d9e8f5",
-				color: isDark ? "#fff" : "#16324c",
+			".cm-scroller": {
+				fontFamily: "var(--app-font-mono)",
+				lineHeight: "1.65",
+				fontVariantLigatures: "contextual",
 			},
 			".cm-content": {
-				caretColor: isDark ? "#528bff" : "#0f6bbd",
+				caretColor: c.caret,
+				padding: "10px 0 40px",
+			},
+			".cm-line": {
+				padding: "0 16px 0 6px",
 			},
 			".cm-cursor, .cm-dropCursor": {
-				borderLeft: `2px solid ${isDark ? "#528bff" : "#0f6bbd"}`,
+				borderLeft: `2px solid ${c.caret}`,
 			},
-			"&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
-				backgroundColor: isDark
-					? "rgba(38, 79, 120, 0.70) !important"
-					: "rgba(245, 184, 96, 0.38) !important",
-			},
-			".cm-selectionLayer": {
-				mixBlendMode: "normal",
-			},
-			".cm-selectionLayer .cm-selectionBackground": {
-				mixBlendMode: "normal",
+			"&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground":
+				{
+					backgroundColor: `${c.selectionFocused} !important`,
+				},
+			".cm-selectionBackground": {
+				backgroundColor: `${c.selection} !important`,
 			},
 			".cm-content ::selection": {
-				backgroundColor: isDark
-					? "rgba(38, 79, 120, 1.00)"
-					: "rgba(245, 184, 96, 0.52)",
-			},
-			".cm-gutters": {
-				backgroundColor: isDark ? "#1e1e1e" : "#efe5d6",
-				color: isDark ? "#5c6370" : "#8b7f72",
-				borderRight: `1px solid ${isDark ? "#333" : "#dccfbf"}`,
-				minWidth: "60px",
-			},
-			".cm-lineNumbers": {
-				minWidth: "40px",
-				paddingRight: "8px",
-				textAlign: "right",
-			},
-			".cm-lineNumbers .cm-gutterElement": {
-				minWidth: "32px",
-				textAlign: "right",
-			},
-			".cm-activeLineGutter": {
-				backgroundColor: isDark ? "#3a3f4b" : "#e5d9c5",
+				backgroundColor: c.selectionFocused,
 			},
 			".cm-activeLine": {
-				backgroundColor: isDark
-					? "rgba(58, 63, 75, 0.35)"
-					: "rgba(196, 148, 88, 0.10)",
-				boxShadow: isDark
-					? "inset 0 0 0 1px rgba(255, 255, 255, 0.06)"
-					: "inset 0 0 0 1px rgba(163, 118, 63, 0.14)",
+				backgroundColor: c.activeLine,
 			},
 			".cm-selectionMatch": {
-				backgroundColor: isDark
-					? "rgba(255, 217, 102, 0.15)"
-					: "rgba(209, 136, 38, 0.16)",
+				backgroundColor: c.selectionMatch,
 				borderRadius: "2px",
 			},
 			".cm-selectionMatch.cm-selectionMatch-main": {
-				backgroundColor: isDark
-					? "rgba(38, 79, 120, 0.30)"
-					: "rgba(214, 156, 75, 0.22)",
+				backgroundColor: "transparent",
 			},
-			".cm-foldGutter": {
-				width: "16px",
-				paddingLeft: "2px",
+			".cm-matchingBracket, &.cm-focused .cm-matchingBracket": {
+				backgroundColor: "transparent",
+				outline: `1px solid ${isDark ? "rgba(255,255,255,0.25)" : "rgba(90,60,30,0.3)"}`,
+				borderRadius: "2px",
+			},
+			".cm-gutters": {
+				backgroundColor: c.background,
+				color: c.gutterText,
+				border: "none",
+				paddingLeft: "8px",
+			},
+			".cm-lineNumbers .cm-gutterElement": {
+				minWidth: "28px",
+				padding: "0 4px 0 0",
+				textAlign: "right",
+				fontVariantNumeric: "tabular-nums",
+			},
+			".cm-activeLineGutter": {
+				backgroundColor: "transparent",
+				color: c.gutterActiveText,
+			},
+			".cm-foldGutter .cm-gutterElement": {
+				width: "14px",
+				color: c.foldMarker,
+				opacity: "0",
+				transition: "opacity 0.15s",
+				cursor: "pointer",
+			},
+			".cm-gutters:hover .cm-foldGutter .cm-gutterElement": {
+				opacity: "1",
 			},
 			".cm-lintGutter": {
-				width: "16px",
+				width: "12px",
 			},
-			".cm-scroller": {
-				fontFamily: "'Menlo', 'Monaco', 'Courier New', monospace",
-				fontSize: "13px",
-				lineHeight: "1.5",
+			".cm-tooltip": {
+				backgroundColor: c.tooltipBg,
+				color: c.tooltipText,
+				border: `1px solid ${c.tooltipBorder}`,
+				borderRadius: "6px",
+				boxShadow: isDark
+					? "0 6px 20px rgba(0, 0, 0, 0.45)"
+					: "0 6px 20px rgba(121, 89, 46, 0.16)",
+				overflow: "hidden",
+			},
+			".cm-tooltip-autocomplete > ul": {
+				fontFamily: "var(--app-font-mono)",
+				fontSize: "12.5px",
+				padding: "4px",
+			},
+			".cm-tooltip-autocomplete > ul > li": {
+				borderRadius: "4px",
+				padding: "2px 8px !important",
+			},
+			".cm-tooltip-autocomplete ul li[aria-selected]": {
+				backgroundColor: c.completionSelected,
+				color: c.completionSelectedText,
+			},
+			".cm-panels": {
+				backgroundColor: c.tooltipBg,
+				color: c.tooltipText,
+			},
+			".cm-panels.cm-panels-bottom": {
+				borderTop: `1px solid ${c.tooltipBorder}`,
+			},
+			// Lines executed by the selected step / state.
+			".cm-exec-line": {
+				backgroundColor: c.execLine,
+				boxShadow: `inset 3px 0 0 ${c.execBorder}`,
 			},
 			".cm-process-badge": {
-				backgroundColor: isDark ? "orange" : "#c96f1a",
-				color: isDark ? "black" : "#fffaf2",
-				borderRadius: "4px",
-				padding: "0 4px",
-				fontSize: "10px",
-				fontWeight: "bold",
-				marginLeft: "10px",
-				verticalAlign: "middle",
+				backgroundColor: c.badgeBg,
+				color: c.badgeText,
+				borderRadius: "999px",
+				padding: "0 7px",
+				fontFamily: "var(--app-font-ui)",
+				fontSize: "10.5px",
+				fontWeight: "600",
+				lineHeight: "16px",
+				marginLeft: "12px",
+				verticalAlign: "1px",
 				display: "inline-block",
 			},
 		},

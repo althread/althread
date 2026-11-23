@@ -242,12 +242,28 @@ export default function App() {
 
 	/** Lines temporarily highlighted while hovering an interactive choice. */
 	const [previewLines, setPreviewLines] = createSignal<number[] | null>(null);
+	/** Lines of the transition (graph edge) the user clicked last. */
+	const [edgeLines, setEdgeLines] = createSignal<number[] | null>(null);
+
+	// An edge highlight only lasts until another state is picked or the results change.
+	createEffect(
+		on(
+			[exec.selectedVM, exec.traceGraph, exec.checkGraph],
+			() => setEdgeLines(null),
+			{ defer: true },
+		),
+	);
 
 	// Highlight in the editor the lines of the selected state (or hovered choice).
 	createEffect(() => {
 		const preview = previewLines();
 		if (preview && preview.length > 0) {
 			editor.highlightLines?.(preview);
+			return;
+		}
+		const edge = edgeLines();
+		if (edge && edge.length > 0) {
+			editor.highlightLines?.(edge);
 			return;
 		}
 
@@ -275,6 +291,7 @@ export default function App() {
 			() => editorManager.activeFile()?.id,
 			() => {
 				setPreviewLines(null);
+				setEdgeLines(null);
 				if (exec.mode() === "interactive") exec.stopInteractive();
 			},
 			{ defer: true },
@@ -669,6 +686,7 @@ export default function App() {
 							runShortcut={runShortcut}
 							onErrorFileClick={handleErrorFileClick}
 							onPreviewLines={setPreviewLines}
+							onEdgeLines={setEdgeLines}
 						/>
 					</Resizable.Panel>
 				</Resizable>

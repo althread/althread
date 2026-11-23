@@ -35,6 +35,6 @@
 
 .literal-process {
 	color: var(--app-syntax-type);
-	font-family: "Consolas", "Monaco", "Courier New", monospace;
+	font-family: var(--app-font-mono);
 	font-size: 0.95em;
 }

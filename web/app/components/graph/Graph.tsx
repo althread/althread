@@ -1,6 +1,13 @@
 import { useGraphMaximizeHotkeys } from "@hooks/useGraphMaximizeHotkeys";
 import { MAX_VISIBLE_GRAPH_NODES } from "@utils/graphBuilders";
-import { createEffect, createSignal, on, onCleanup, untrack } from "solid-js";
+import {
+	createEffect,
+	createSignal,
+	on,
+	onCleanup,
+	Show,
+	untrack,
+} from "solid-js";
 import vis from "vis-network/dist/vis-network.esm";
 import { exportStatesToCSV } from "./exportToCSV";
 import GraphToolbar from "./GraphToolbar";
@@ -11,12 +18,7 @@ import {
 	formatState,
 	revealNode,
 } from "./visHelpers";
-import {
-	edgeLabelFont,
-	edgeStyle,
-	networkOptions,
-	nodeStyle,
-} from "./visOptions";
+import { edgeStyle, networkOptions, nodeStyle } from "./visOptions";
 
 interface GraphProps {
 	nodes: any[];
@@ -34,12 +36,21 @@ interface GraphProps {
 export { MAX_VISIBLE_GRAPH_NODES };
 
 /** Below this zoom level nodes are too small to be clicked comfortably. */
-const MIN_INITIAL_SCALE = 0.6;
+const MIN_INITIAL_SCALE = 0.9;
+/** Distance between two dots of the background grid, in graph units. */
+const GRID_SPACING = 20;
+/** Smallest on-screen distance between two dots, in pixels. */
+const MIN_GRID_SPACING = 10;
 
 export default (props: GraphProps) => {
 	let container: HTMLDivElement | undefined;
 	let network: vis.Network | null = null;
 	let lastClickedNode: string | number | null = null;
+	/** The transition picked in the graph, described in a chip over the graph. */
+	const [selectedEdge, setSelectedEdge] = createSignal<{
+		label: string;
+		lines: number[];
+	} | null>(null);
 	const [maximized, setMaximized] = createSignal(false);
 	const [showDetails, setDetails] = createSignal(false);
 	const [selectedNodeContent, setSelectedNodeContent] = createSignal<
@@ -132,28 +143,45 @@ export default (props: GraphProps) => {
 			props.onNodeSelect?.(rawState || null);
 		};
 
+		// vis-network runs this handler while it processes the pointer-up event.
+		// An exception here would leave its gesture recognizer believing the
+		// button is still pressed: the graph would then follow the mouse.
 		// Clicking selects (no zoom). Clicking an edge keeps the node selection.
 		net.on("click", (params) => {
-			if (params.nodes?.length > 0) {
-				selectNodeById(params.nodes[0]);
-			} else if (!params.edges?.length) {
-				net.unselectAll();
-				selectNodeById(null);
+			try {
+				if (params.nodes?.length > 0) {
+					setSelectedEdge(null);
+					selectNodeById(params.nodes[0]);
+				} else if (params.edges?.length > 0) {
+					const edgeId = params.edges[0];
+					const edge: any = edges.get(edgeId);
+					if (!edge) return;
+					setSelectedEdge({
+						label: String(edge.label ?? ""),
+						lines: [...new Set<number>(edge.lines ?? [])],
+					});
+					props.onEdgeClick?.(edgeId, edge);
+				} else {
+					net.unselectAll();
+					setSelectedEdge(null);
+					selectNodeById(null);
+				}
+			} catch (error) {
+				console.error("Graph click handler failed:", error);
 			}
 		});
 
-		// Show the label of the selected edge (hidden otherwise).
-		net.on("selectEdge", (params) => {
-			const edgeId = params.edges[0];
-			const edge = edgeId !== undefined ? edges.get(edgeId) : null;
-			if (!edge) return;
-			edges.update({ id: edgeId, font: edgeLabelFont(theme) });
-			props.onEdgeClick?.(edgeId, edge);
-		});
-		net.on("deselectEdge", (params) => {
-			const edgeId = params.previousSelection.edges[0];
-			if (edgeId !== undefined) edges.update({ id: edgeId, font: { size: 0 } });
-		});
+		// Keep the background dot grid attached to the graph while panning/zooming.
+		const syncGrid = () => {
+			if (!container) return;
+			let spacing = GRID_SPACING * net.getScale();
+			// Too dense once zoomed out: skip dots (multiples keep the alignment).
+			while (spacing < MIN_GRID_SPACING) spacing *= 2;
+			const origin = net.canvasToDOM({ x: 0, y: 0 });
+			container.style.backgroundSize = `${spacing}px ${spacing}px`;
+			container.style.backgroundPosition = `${origin.x}px ${origin.y}px`;
+		};
+		net.on("afterDrawing", syncGrid);
 
 		// The layout is static: fit once, then only the user moves the view.
 		// Long graphs would become unreadable once fitted: keep a minimum zoom
@@ -183,6 +211,7 @@ export default (props: GraphProps) => {
 				network.destroy();
 				network = null;
 			}
+			setSelectedEdge(null);
 		});
 	});
 
@@ -191,6 +220,7 @@ export default (props: GraphProps) => {
 			() => props.selectedNode,
 			(selected) => {
 				if (!network || selected === null || selected === undefined) return;
+				setSelectedEdge(null);
 				network.selectNodes([selected]);
 				// The user just clicked it: it is already visible.
 				if (selected === lastClickedNode) return;
@@ -232,7 +262,7 @@ export default (props: GraphProps) => {
 					</div>
 				</div>
 			) : (
-				<div ref={container} style="width: 100%; height: 100%;" />
+				<div ref={container} class="graph-canvas" />
 			)}
 
 			{!props.onNodeSelect && selectedNodeContent() && (
@@ -256,6 +286,21 @@ export default (props: GraphProps) => {
 					></div>
 				</div>
 			)}
+
+			<Show when={!isGraphTooLarge() && selectedEdge()}>
+				{(edge) => (
+					<div class="graph-edge-chip" role="status">
+						<i class="codicon codicon-arrow-right" />
+						<span class="graph-edge-chip-label">{edge().label}</span>
+						<Show when={edge().lines.length > 0}>
+							<span class="graph-edge-chip-lines">
+								{edge().lines.length === 1 ? "line" : "lines"}{" "}
+								{edge().lines.join(", ")}
+							</span>
+						</Show>
+					</div>
+				)}
+			</Show>
 
 			{!isGraphTooLarge() && showDetails() ? (
 				<MetadataDisplay nodes={props.nodes} />

@@ -239,7 +239,7 @@
 .project-version {
 	color: var(--ifm-color-primary-lighter);
 	font-size: 11px;
-	font-family: monospace;
+	font-family: var(--app-font-mono);
 }
 
 .add-dependency-section {
@@ -419,7 +419,7 @@
 .dependency-version {
 	font-size: 11px;
 	color: var(--ifm-color-primary-lighter);
-	font-family: monospace;
+	font-family: var(--app-font-mono);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -473,7 +473,7 @@
 .package-version {
 	font-size: 11px;
 	color: var(--ifm-color-primary-light);
-	font-family: monospace;
+	font-family: var(--app-font-mono);
 }
 
 .cached-package:hover {

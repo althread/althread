@@ -28,6 +28,8 @@ interface ResultsPanelProps {
 	runShortcut: string;
 	onErrorFileClick: (filePath: string, line?: number, col?: number) => void;
 	onPreviewLines: (lines: number[] | null) => void;
+	/** Highlights the lines of the transition clicked in a state graph. */
+	onEdgeLines: (lines: number[] | null) => void;
 }
 
 interface TabSpec {
@@ -102,7 +104,7 @@ export default function ResultsPanel(props: ResultsPanelProps) {
 	];
 
 	const highlightEdge = (_edgeId: string, edgeData: any) => {
-		if (edgeData?.lines) props.editor.highlightLines?.(edgeData.lines);
+		props.onEdgeLines(edgeData?.lines?.length ? edgeData.lines : null);
 	};
 
 	// Auto-scroll outputs to the latest line.

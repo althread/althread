@@ -64,7 +64,11 @@ export default function GraphToolbar(props: GraphToolbarProps) {
 					}
 				></i>
 			</button>
-			<button type="button" title="Recenter" onClick={props.onRecenter}>
+			<button
+				type="button"
+				title="Fit graph to view"
+				onClick={props.onRecenter}
+			>
 				<i class="codicon codicon-record"></i>
 			</button>
 
@@ -98,7 +102,11 @@ export default function GraphToolbar(props: GraphToolbarProps) {
 			</div>
 
 			<Show when={props.onDetails}>
-				<button type="button" title="Details" onClick={props.onDetails}>
+				<button
+					type="button"
+					title="Graph statistics"
+					onClick={props.onDetails}
+				>
 					<i class="codicon codicon-info"></i>
 				</button>
 			</Show>
