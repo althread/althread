@@ -3,13 +3,16 @@
 use std::collections::{HashMap, VecDeque};
 
 use super::{
+    fxhash::FxHashMap,
     ltl::{
-        automaton::BuchiAutomaton, compiled::CompiledLtlExpression, monitor::MonitoringState,
+        automaton::BuchiAutomaton,
+        compiled::CompiledLtlExpression,
+        monitor::{MonitoringState, PredicateCache},
         quantifier,
     },
     StateGraph, StateId, StateLink,
 };
-use crate::error::AlthreadResult;
+use crate::{ast::token::literal::Literal, error::AlthreadResult};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct ProductState {
@@ -34,7 +37,7 @@ struct ProductNode {
 #[derive(Default)]
 struct ProductGraph {
     nodes: Vec<ProductNode>,
-    known: HashMap<ProductState, usize>,
+    known: FxHashMap<ProductState, usize>,
 }
 
 impl ProductGraph {
@@ -276,39 +279,116 @@ pub(super) fn check_formula<'a>(
         );
     }
 
+    let top_quantifier = quantifier::analyze_formula(formula);
+    let quantifier_is_constant = top_quantifier
+        .as_ref()
+        .is_some_and(quantifier::TopLevelQuantifier::is_constant);
+    let quantifier_is_process_only = top_quantifier
+        .as_ref()
+        .is_some_and(quantifier::TopLevelQuantifier::is_process_only);
+    let mut domain_cache: Vec<Option<Vec<Literal>>> = if top_quantifier.is_some()
+        && !quantifier_is_constant
+    {
+        vec![None; vm_graph.nodes.len()]
+    } else {
+        Vec::new()
+    };
+    let mut pred_cache = PredicateCache::new(vm_graph.nodes.len(), automaton.states.len());
+
     // Newly interned nodes are appended once, so a cursor is also a BFS queue.
     let mut cursor = 0;
     while cursor < product.nodes.len() {
-        let current = product.nodes[cursor].state.clone();
-        let vm_node = &vm_graph.nodes[current.vm];
-        let mut successors: Vec<_> = vm_node
-            .successors
-            .iter()
-            .enumerate()
-            .map(|(index, edge)| (edge.to, Some(index)))
-            .collect();
-        if vm_node.expanded && successors.is_empty() {
-            successors.push((current.vm, None));
-        }
-        for (next_vm, vm_edge) in successors {
-            for mut monitors in current
-                .monitors
-                .get_possible_successors(vm_graph.vm(next_vm), automatons)?
-            {
-                // Advance existing instances first. Newly spawned instances
-                // consume this observation only when their initials are tested.
-                quantifier::update_monitors_for_new_processes(
-                    formulas,
-                    automatons,
-                    &mut monitors,
-                    vm_graph.vm(current.vm),
-                    vm_graph.vm(next_vm),
-                )?;
-                for monitors in monitors.initial_choices() {
+        let current_vm_id = product.nodes[cursor].state.vm;
+        let current_monitors = product.nodes[cursor].state.monitors.clone();
+        let vm_node = &vm_graph.nodes[current_vm_id];
+        let stutter = vm_node.expanded && vm_node.successors.is_empty();
+        let edge_count = if stutter { 1 } else { vm_node.successors.len() };
+
+        for pos in 0..edge_count {
+            let (next_vm_id, vm_edge) = if stutter {
+                (current_vm_id, None)
+            } else {
+                (vm_node.successors[pos].to, Some(pos))
+            };
+            let next_vm = vm_graph.vm(next_vm_id);
+            let current_vm = vm_graph.vm(current_vm_id);
+
+            let check_new_domain = match &top_quantifier {
+                None => false,
+                Some(_) if quantifier_is_constant => false,
+                Some(_) if quantifier_is_process_only => {
+                    next_vm.running_programs.len() > current_vm.running_programs.len()
+                }
+                Some(_) => next_vm_id != current_vm_id,
+            };
+
+            let new_elements: Option<Vec<Literal>> = if check_new_domain {
+                let q = top_quantifier.as_ref().unwrap();
+                if domain_cache[current_vm_id].is_none() {
+                    domain_cache[current_vm_id] =
+                        Some(quantifier::eval_quantifier_domain(q, current_vm)?);
+                }
+                if domain_cache[next_vm_id].is_none() {
+                    domain_cache[next_vm_id] =
+                        Some(quantifier::eval_quantifier_domain(q, next_vm)?);
+                }
+                let cur_elems = domain_cache[current_vm_id].as_ref().unwrap();
+                let next_elems = domain_cache[next_vm_id].as_ref().unwrap();
+                let diff: Vec<Literal> = next_elems
+                    .iter()
+                    .filter(|elem| !cur_elems.contains(elem))
+                    .cloned()
+                    .collect();
+                if diff.is_empty() { None } else { Some(diff) }
+            } else {
+                None
+            };
+
+            for mut monitors in current_monitors.get_possible_successors_single_cached(
+                next_vm_id,
+                next_vm,
+                automaton,
+                &mut pred_cache,
+            )? {
+                let mut added_any = false;
+                if let (Some(q), Some(diff)) = (&top_quantifier, &new_elements) {
+                    // Advance existing instances first. Newly spawned instances
+                    // consume this observation only when their initials are tested.
+                    for element in diff {
+                        let mut bindings = HashMap::with_capacity(1);
+                        bindings.insert(q.var_name.clone(), element.clone());
+                        if monitors.add_monitors_for_enabled_initial_states_cached(
+                            0,
+                            next_vm_id,
+                            automaton,
+                            bindings,
+                            next_vm,
+                            &mut pred_cache,
+                        )? {
+                            added_any = true;
+                        }
+                    }
+                }
+
+                if added_any {
+                    for monitors in monitors.initial_choices() {
+                        let edge_index = product.nodes[cursor].successors.len();
+                        let to = product.intern(
+                            ProductState {
+                                vm: next_vm_id,
+                                monitors,
+                            },
+                            Some((cursor, edge_index)),
+                        );
+                        product.nodes[cursor]
+                            .successors
+                            .push(ProductEdge { to, vm_edge });
+                    }
+                } else {
                     let edge_index = product.nodes[cursor].successors.len();
                     let to = product.intern(
                         ProductState {
-                            vm: next_vm,
+                            vm: next_vm_id,
                             monitors,
                         },
                         Some((cursor, edge_index)),

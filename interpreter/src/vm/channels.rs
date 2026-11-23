@@ -74,10 +74,12 @@ impl Channels {
         if let Some((to_program_id, to_channel_name)) =
             self.connections.get(&(program_id, channel_name.clone()))
         {
+            let to_program_id = *to_program_id;
+            let to_channel_name = to_channel_name.clone();
             let link_key: ChannelLinkKey = (
                 program_id,
-                channel_name.clone(),
-                *to_program_id,
+                channel_name,
+                to_program_id,
                 to_channel_name.clone(),
             );
             self.pending_deliveries
@@ -86,13 +88,13 @@ impl Channels {
                 .push(msg);
 
             return Some(ReceiverInfo {
-                program_id: *to_program_id,
-                channel_name: to_channel_name.clone(),
+                program_id: to_program_id,
+                channel_name: to_channel_name,
             });
         }
 
         self.waiting_send
-            .entry((program_id, channel_name.clone()))
+            .entry((program_id, channel_name))
             .or_insert(vec![])
             .push(msg);
 
@@ -289,6 +291,18 @@ impl Channels {
             .into_iter()
             .cloned()
             .collect()
+    }
+
+    pub fn pending_deliveries(&self) -> &PendingDeliveriesState {
+        &self.pending_deliveries
+    }
+
+    pub fn connections(&self) -> &BTreeMap<(usize, String), (usize, String)> {
+        &self.connections
+    }
+
+    pub fn waiting_send(&self) -> &ChannelsState {
+        &self.waiting_send
     }
 
     pub fn get_states(&self) -> ChannelsState {

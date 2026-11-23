@@ -310,7 +310,7 @@ export function createExecutionController(deps: ExecutionDeps) {
 				ctx.virtualFS,
 				WEB_CHECK_MAX_STATES,
 			);
-			const states = res.nodes.length;
+			const states = res.state_count ?? res.nodes.length;
 
 			batch(() => {
 				setCheckStateCount(states);
@@ -319,7 +319,7 @@ export function createExecutionController(deps: ExecutionDeps) {
 				setCounterexampleDebug(res.path_debug ?? "");
 				setCounterexampleMessageFlow(res.path_message_flow_events ?? []);
 				setCheckGraph(
-					states > MAX_VISIBLE_GRAPH_NODES
+					states > MAX_VISIBLE_GRAPH_NODES || res.nodes.length === 0
 						? EMPTY_GRAPH
 						: buildGraphFromNodes(res.nodes, {
 								mode: "check",

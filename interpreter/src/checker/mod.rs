@@ -13,6 +13,7 @@
 //! 4. Find strongly connected components covering every acceptance set
 //! 5. An accepting cycle means the negated formula is satisfiable → original violated
 
+pub(crate) mod fxhash;
 pub mod ltl;
 mod product;
 
@@ -20,9 +21,11 @@ mod product;
 mod ltl_integration_tests;
 
 use std::{
-    collections::{hash_map::Entry, HashMap, VecDeque},
+    collections::{hash_map::Entry, VecDeque},
     rc::Rc,
 };
+
+use fxhash::FxHashMap;
 
 use ltl::{automaton::BuchiAutomaton, compiled::CompiledLtlExpression};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
@@ -211,7 +214,7 @@ fn collect_instruction_lines(instructions: &[&Instruction]) -> Vec<usize> {
 fn build_state_graph<'a>(
     compiled_project: &'a CompiledProject,
     max_states: Option<usize>,
-) -> AlthreadResult<StateGraph<'a>> {
+) -> AlthreadResult<(StateGraph<'a>, Option<(StateId, AlthreadError)>)> {
     if max_states == Some(0) {
         return Err(AlthreadError::new(
             ErrorType::RuntimeError,
@@ -219,12 +222,25 @@ fn build_state_graph<'a>(
             "The state limit must be at least 1".to_string(),
         ));
     }
+    let check_invariants = !compiled_project.always_conditions.is_empty();
+
     let mut init_vm = VM::new(compiled_project);
     init_vm.start(0);
 
     let initial_vm = Rc::new(init_vm);
     let mut state_graph = StateGraph::new(initial_vm.clone());
-    let mut known_states = HashMap::new();
+    if check_invariants {
+        if let Err(err) = initial_vm.check_invariants() {
+            if !matches!(err.error_type, ErrorType::InvariantError) {
+                return Err(err);
+            }
+            let initial_state = state_graph.initial_state;
+            state_graph.exhaustive = false;
+            return Ok((state_graph, Some((initial_state, err))));
+        }
+    }
+
+    let mut known_states: FxHashMap<CheckerState<'a>, StateId> = FxHashMap::default();
     known_states.insert(CheckerState(initial_vm), state_graph.initial_state);
 
     let mut next_nodes = VecDeque::new();
@@ -238,6 +254,7 @@ fn build_state_graph<'a>(
 
         for (step, info, vm) in successors {
             let next_vm = Rc::new(vm);
+            let mut newly_discovered = false;
             let next_state = match known_states.entry(CheckerState(next_vm.clone())) {
                 Entry::Occupied(entry) => *entry.get(),
                 Entry::Vacant(entry) => {
@@ -247,9 +264,10 @@ fn build_state_graph<'a>(
                         continue;
                     }
                     let new_state =
-                        state_graph.push_state(next_vm, Some(current_state), current_level + 1);
+                        state_graph.push_state(next_vm.clone(), Some(current_state), current_level + 1);
                     entry.insert(new_state);
                     next_nodes.push_back(new_state);
+                    newly_discovered = true;
                     new_state
                 }
             };
@@ -263,12 +281,22 @@ fn build_state_graph<'a>(
                 name: info.prog_name,
                 step: Some(step),
             });
+
+            if newly_discovered && check_invariants {
+                if let Err(err) = state_graph.vm(next_state).check_invariants() {
+                    if !matches!(err.error_type, ErrorType::InvariantError) {
+                        return Err(err);
+                    }
+                    state_graph.exhaustive = false;
+                    return Ok((state_graph, Some((next_state, err))));
+                }
+            }
         }
 
         state_graph.nodes[current_state].expanded = fully_expanded;
     }
 
-    Ok(state_graph)
+    Ok((state_graph, None))
 }
 #[derive(Debug)]
 pub enum Verdict<'a> {
@@ -325,159 +353,24 @@ pub fn check_program<'a>(
         return check_program_with_ltl(compiled_project, max_states);
     }
 
-    let mut state_graph = build_state_graph(compiled_project, max_states)?;
+    let (state_graph, invariant_violation) = build_state_graph(compiled_project, max_states)?;
 
-    for current_state in 0..state_graph.nodes.len() {
-        let check_ret = state_graph.vm(current_state).check_invariants();
-        if let Err(e) = check_ret {
-            if !matches!(e.error_type, ErrorType::InvariantError) {
-                return Err(e);
-            }
-            let mut path = Vec::new();
-            let mut back_node = current_state;
-
-            if state_graph.nodes[back_node].predecessor.is_none() {
-                let lines = if let Some(pos) = &e.pos {
-                    vec![pos.line()]
-                } else {
-                    vec![]
-                };
-                path.push(StateLink {
-                    to: back_node,
-                    lines,
-                    instructions: vec![],
-                    actions: vec![],
-                    pid: 0,
-                    name: "_init_".to_string(),
-                    step: None,
-                });
-                return Ok((path, state_graph));
-            }
-
-            while let Some(pred) = state_graph.nodes[back_node].predecessor {
-                path.push(
-                    state_graph
-                        .nodes
-                        .get(pred)
-                        .unwrap()
-                        .successors
-                        .iter()
-                        .find(|x| x.to == back_node)
-                        .unwrap()
-                        .clone(),
-                );
-                back_node = pred;
-            }
-
-            return Ok((path.into_iter().rev().collect(), state_graph));
-        } else if check_ret.is_ok_and(|x| x == 1) {
-            state_graph.nodes[current_state].eventually = true;
+    if let Some((violated_state, error)) = invariant_violation {
+        let mut path = build_violation_path(&state_graph, violated_state);
+        if path.is_empty() {
+            path.push(StateLink {
+                to: violated_state,
+                lines: error.pos.map(|pos| vec![pos.line()]).unwrap_or_default(),
+                instructions: vec![],
+                actions: vec![],
+                pid: 0,
+                name: "_init_".to_string(),
+                step: None,
+            });
         }
+        return Ok((path, state_graph));
     }
 
-    // If the search was not exhaustive, we cannot check eventually violations
-    if !state_graph.exhaustive {
-        return Ok((vec![], state_graph));
-    }
-
-    // Now check for eventually violations using path exploration
-
-    // path visit is used to keep track of the successors we've already checked
-    let mut path_visit: Vec<usize> = Vec::new();
-    let mut path = Vec::new();
-    let mut path_set = std::collections::HashSet::new();
-    // if root node check eventually condition no path can exist
-    if state_graph.nodes[state_graph.initial_state].eventually {
-        return Ok((vec![], state_graph));
-    }
-
-    path.push(state_graph.initial_state);
-    path_set.insert(state_graph.initial_state);
-    // no successors have yet been visited
-    path_visit.push(0);
-
-    while !path.is_empty() {
-        let curr_state = {
-            let temp = path.last().unwrap();
-            *temp
-        };
-
-        let mut visited_succ = path_visit.pop().unwrap();
-
-        // get all the successors of the current node
-        let mut succ = Vec::new();
-        for link in state_graph.nodes[curr_state]
-            .successors
-            .iter()
-            .skip(visited_succ)
-        {
-            succ.push(link.clone());
-        }
-
-        // if the current node have no successors then we found an invalid path of execution
-        if succ.is_empty() && visited_succ == 0 {
-            let ret = reconstruct_path(path, &state_graph);
-
-            match ret {
-                Ok(vec) => {
-                    return Ok((vec.into_iter().rev().collect(), state_graph));
-                }
-                Err(e) => {
-                    return Err(AlthreadError::new(
-                        ErrorType::ExpressionError,
-                        None,
-                        e.message,
-                    ))
-                }
-            }
-        }
-
-        // we search an explorable path in the successors list
-        let mut explorable_path = false;
-        while !succ.is_empty() && !explorable_path {
-            let curr_succ = succ.pop().unwrap();
-            visited_succ += 1;
-
-            // if the successor is already in the path we found an invalid execution path
-            if path_set.contains(&curr_succ.to) {
-                // If it is in the path, we push it temporarily just to have it for reconstruction,
-                // OR we can reconstruct including the cycle closing edge.
-                path.push(curr_succ.to.clone());
-                let ret = reconstruct_path(path, &state_graph);
-                match ret {
-                    Ok(vec) => return Ok((vec.into_iter().rev().collect(), state_graph)),
-                    // safety purpose
-                    Err(e) => {
-                        return Err(AlthreadError::new(
-                            ErrorType::ExpressionError,
-                            None,
-                            e.message,
-                        ))
-                    }
-                }
-            }
-
-            // we get the corresponding graphnode and check wheter he has the eventually flag or not
-            let graph_node = &state_graph.nodes[curr_succ.to];
-            if !graph_node.eventually {
-                explorable_path = true;
-                path.push(curr_succ.to);
-                path_set.insert(curr_succ.to);
-                // we update the number of visited successors of the current node
-                path_visit.push(visited_succ);
-                // we then init the number of visited successors from the new node in the path
-                path_visit.push(0);
-            }
-        }
-        // if no explorable path was found we condemn this node (it is a dead end)
-        if !explorable_path {
-            state_graph.nodes[curr_state].eventually = true;
-            let popped = path.pop();
-            if let Some(p) = popped {
-                path_set.remove(&p);
-            }
-        }
-    }
     Ok((vec![], state_graph))
 }
 
@@ -513,27 +406,22 @@ fn check_program_with_ltl<'a>(
     compiled_project: &'a CompiledProject,
     max_states: Option<usize>,
 ) -> AlthreadResult<(Vec<StateLink<'a>>, StateGraph<'a>)> {
-    let mut state_graph = build_state_graph(compiled_project, max_states)?;
+    let (mut state_graph, invariant_violation) = build_state_graph(compiled_project, max_states)?;
 
-    for state_id in 0..state_graph.nodes.len() {
-        if let Err(error) = state_graph.vm(state_id).check_invariants() {
-            if !matches!(error.error_type, ErrorType::InvariantError) {
-                return Err(error);
-            }
-            let mut path = build_violation_path(&state_graph, state_id);
-            if path.is_empty() {
-                path.push(StateLink {
-                    to: state_id,
-                    lines: error.pos.map(|pos| vec![pos.line()]).unwrap_or_default(),
-                    instructions: vec![],
-                    actions: vec![],
-                    pid: 0,
-                    name: "_init_".to_string(),
-                    step: None,
-                });
-            }
-            return Ok((path, state_graph));
+    if let Some((state_id, error)) = invariant_violation {
+        let mut path = build_violation_path(&state_graph, state_id);
+        if path.is_empty() {
+            path.push(StateLink {
+                to: state_id,
+                lines: error.pos.map(|pos| vec![pos.line()]).unwrap_or_default(),
+                instructions: vec![],
+                actions: vec![],
+                pid: 0,
+                name: "_init_".to_string(),
+                step: None,
+            });
         }
+        return Ok((path, state_graph));
     }
 
     for formula in &compiled_project.compiled_ltl_formulas {

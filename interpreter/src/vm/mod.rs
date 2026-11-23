@@ -122,7 +122,7 @@ pub struct VM<'a> {
 
     /// The programs that are waiting for a condition to be true
     /// The condition depends on the global variables that are in the HashSet
-    waiting_programs: HashMap<usize, WaitDependency>,
+    waiting_programs: BTreeMap<usize, WaitDependency>,
     next_program_id: usize,
     rng: Rng,
 
@@ -141,7 +141,7 @@ impl<'a> VM<'a> {
             always_conditions: &compiled_project.always_conditions,
             program_debug_info: &compiled_project.program_debug_info,
             next_program_id: 0,
-            waiting_programs: HashMap::new(),
+            waiting_programs: BTreeMap::new(),
             rng: Rng::new(),
             stdlib: compiled_project.stdlib.clone(),
         }
@@ -462,23 +462,24 @@ impl<'a> VM<'a> {
         if self.running_programs.is_empty() {
             return Ok(Vec::new());
         }
-        let steps = self
-            .executable_programs
-            .iter()
-            .filter(|pid| !self.waiting_programs.contains_key(pid))
-            .copied()
-            .map(ScheduledStep::Program)
-            .chain(
-                self.channels
-                    .pending_links()
-                    .into_iter()
-                    .map(ScheduledStep::Deliver),
-            );
         let mut successors = Vec::new();
-        for step in steps {
+        for &pid in &self.executable_programs {
+            if self.waiting_programs.contains_key(&pid) {
+                continue;
+            }
+            let step = ScheduledStep::Program(pid);
             let mut vm = self.clone();
             if let Some(info) = vm.advance(&step)? {
                 successors.push((step, info, vm));
+            }
+        }
+        if self.channels.has_pending_deliveries() {
+            for link in self.channels.pending_links() {
+                let step = ScheduledStep::Deliver(link);
+                let mut vm = self.clone();
+                if let Some(info) = vm.advance(&step)? {
+                    successors.push((step, info, vm));
+                }
             }
         }
         Ok(successors)
@@ -626,7 +627,7 @@ impl<'a> VM<'a> {
             //if _deps.contains(&var_name) { //TODO improve by checking if the variable is in the dependencies
             // Check if the condition is true
             // create a small memory stack with the value of the variables
-            let mut memory = Vec::new();
+            let mut memory = Vec::with_capacity(read_vars.len());
             for var_name in read_vars.iter() {
                 if let Some(proc_name) = var_name.strip_prefix("$.procs.") {
                     let values = self
@@ -693,10 +694,11 @@ impl VM<'_> {
         self.globals.hash(state);
         self.executable_programs.hash(state);
         self.next_program_id.hash(state);
-        // The dependency sets are checked by equality.
-        let mut waiting_ids: Vec<_> = self.waiting_programs.keys().collect();
-        waiting_ids.sort_unstable();
-        waiting_ids.hash(state);
+        // BTreeMap keys are already sorted; dependency sets are checked by equality.
+        self.waiting_programs.len().hash(state);
+        for id in self.waiting_programs.keys() {
+            id.hash(state);
+        }
     }
 
     fn same_execution_state(&self, other: &Self) -> bool {
@@ -1116,12 +1118,9 @@ impl<'a> Serialize for VM<'a> {
             .collect();
 
         s.serialize_field("locals", &serializable_program_states)?;
-        s.serialize_field(
-            "pending_deliveries",
-            &self.channels.get_pending_deliveries(),
-        )?;
-        s.serialize_field("waiting_send", &self.channels.get_waiting_send())?;
-        s.serialize_field("channel_connections", &self.channels.get_connections())?;
+        s.serialize_field("pending_deliveries", self.channels.pending_deliveries())?;
+        s.serialize_field("waiting_send", self.channels.waiting_send())?;
+        s.serialize_field("channel_connections", self.channels.connections())?;
 
         s.end()
     }

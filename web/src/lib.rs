@@ -115,7 +115,7 @@ fn create_vm_state(vm: &VM) -> VMState {
 
     let pending_deliveries = vm
         .channels
-        .get_pending_deliveries()
+        .pending_deliveries()
         .iter()
         .map(|((f_pid, f_chan, t_pid, t_chan), values)| PendingDelivery {
             from_pid: *f_pid,
@@ -128,7 +128,7 @@ fn create_vm_state(vm: &VM) -> VMState {
 
     let waiting_send = vm
         .channels
-        .get_waiting_send()
+        .waiting_send()
         .iter()
         .map(|((pid, name), values)| WaitingSend {
             pid: *pid,
@@ -139,7 +139,7 @@ fn create_vm_state(vm: &VM) -> VMState {
 
     let channel_connections = vm
         .channels
-        .get_connections()
+        .connections()
         .iter()
         .map(
             |((from_pid, from_channel), (to_pid, to_channel))| ChannelConnection {
@@ -246,7 +246,7 @@ fn collect_step_actions(
     stdout: &mut Vec<String>,
     message_flow_events: &mut Vec<MessageFlowEvent>,
 ) {
-    let connections = vm.channels.get_connections();
+    let connections = vm.channels.connections();
     let mut cached_vm_state: Option<VMState> = None;
 
     for action in actions {
@@ -489,7 +489,8 @@ fn check_core(
 
     let checked = checker::check(&compiled_project, max_states)?;
     let state_graph = checked.graph;
-    let omit_transition_details = state_graph.nodes.len() > WEB_GRAPH_DETAILS_THRESHOLD;
+    let state_count = state_graph.nodes.len();
+    let omit_graph_nodes = state_count > WEB_GRAPH_DETAILS_THRESHOLD;
 
     let mut path_nodes = Vec::new();
     let mut violation_path = Vec::new();
@@ -540,16 +541,17 @@ fn check_core(
         }
     };
 
-    // Convert state graph nodes to GraphNode structure
-    let graph_nodes: Vec<GraphNode> = state_graph
-        .nodes
-        .iter()
-        .enumerate()
-        .map(|(idx, node)| {
-            let successors = if omit_transition_details {
-                None
-            } else {
-                Some(
+    // Only serialize the full state graph when the UI can actually render it.
+    // Above the display threshold, the frontend only uses `state_count` and `path`.
+    let graph_nodes: Vec<GraphNode> = if omit_graph_nodes {
+        Vec::new()
+    } else {
+        state_graph
+            .nodes
+            .iter()
+            .enumerate()
+            .map(|(idx, node)| {
+                let successors = Some(
                     node.successors
                         .iter()
                         .map(|succ| Successor {
@@ -565,23 +567,24 @@ fn check_core(
                             name: succ.name.clone(),
                         })
                         .collect(),
-                )
-            };
+                );
 
-            GraphNode {
-                vm: create_vm_state(state_graph.vm(idx)),
-                metadata: NodeMetadata {
-                    level: node.level,
-                    step_index: None,
-                    successors,
-                    lines: None,
-                },
-            }
-        })
-        .collect();
+                GraphNode {
+                    vm: create_vm_state(state_graph.vm(idx)),
+                    metadata: NodeMetadata {
+                        level: node.level,
+                        step_index: None,
+                        successors,
+                        lines: None,
+                    },
+                }
+            })
+            .collect()
+    };
 
     Ok(CheckResult {
         verdict,
+        state_count,
         violation_path,
         path: path_nodes,
         path_stdout,
@@ -1080,5 +1083,20 @@ main {
             next = step.next_states;
         }
         assert!(saw_delivery_choice);
+    }
+
+    #[test]
+    fn check_omits_graph_nodes_above_display_threshold_but_keeps_state_count() {
+        let source = r#"
+shared { let A = 0; let B = 0; }
+program IncA() { for i in 0..10 { A = A + 1; } }
+program IncB() { for i in 0..10 { B = B + 1; } }
+main { run IncA(); run IncB(); }
+check { always A >= 0 && B >= 0; }
+"#;
+        let res = check_core(source, "main.alt", fs_for(source), Some(1000)).unwrap();
+        assert!(matches!(res.verdict, CheckVerdict::Verified));
+        assert!(res.state_count > 200);
+        assert!(res.nodes.is_empty());
     }
 }

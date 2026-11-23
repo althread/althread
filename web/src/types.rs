@@ -214,6 +214,7 @@ pub enum CheckVerdict {
 #[tsify(into_wasm_abi)]
 pub struct CheckResult {
     pub verdict: CheckVerdict,
+    pub state_count: usize,
     pub violation_path: Vec<usize>,
     pub path: Vec<GraphNode>,
     pub path_stdout: Vec<String>,

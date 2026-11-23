@@ -177,10 +177,34 @@ fn function_return_addresses_are_part_of_state() {
 fn function_state_merging_must_not_hide_invariant_failure() {
     let project = compile("shared { let X: int = 0; } fn f() -> void { X = 0; } main { f(); f(); X = 1; } always { X == 0; }");
     let (path, graph) = check_program(&project, Some(100)).unwrap();
-    assert!(graph.exhaustive);
     assert!(
         !path.is_empty(),
         "The checker omitted the reachable state X=1"
+    );
+    assert!(graph
+        .vm(path.last().unwrap().to)
+        .check_invariants()
+        .is_err());
+}
+
+#[test]
+fn invariant_violation_stops_bfs_early() {
+    let project = compile(
+        r#"
+shared { let A = 0; let B = 0; let C = 0; }
+program IncA() { for i in 0..10 { A = A + 1; } }
+program IncB() { for i in 0..10 { B = B + 1; } }
+program IncC() { for i in 0..10 { C = C + 1; } }
+main { run IncA(); run IncB(); run IncC(); }
+always { A < 2; }
+"#,
+    );
+    let (path, graph) = check_program(&project, Some(10_000)).unwrap();
+    assert!(!path.is_empty());
+    assert!(
+        graph.nodes.len() < 500,
+        "expected early exit on invariant violation, explored {} states",
+        graph.nodes.len()
     );
     assert!(graph
         .vm(path.last().unwrap().to)

@@ -190,10 +190,14 @@ pub fn check_command(cli_args: &CheckCommand) {
         Verdict::Violated { path, cycle_start } => {
             println!("✗ Property violated");
             if !checked.graph.exhaustive {
-                println!(
-                    "Counterexample found within the state limit ({}).",
-                    cli_args.max_states
-                );
+                if checked.graph.nodes.len() >= cli_args.max_states as usize {
+                    println!(
+                        "Counterexample found within the state limit ({}).",
+                        cli_args.max_states
+                    );
+                } else {
+                    println!("Stopped exploration upon finding a counterexample.");
+                }
             }
             for (index, link) in path.iter().enumerate() {
                 if cycle_start == Some(index) {
