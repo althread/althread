@@ -259,8 +259,8 @@ export default function App() {
 			editor.highlightLines?.(specs);
 			return;
 		}
-		if (selection?.stepIndex !== undefined) {
-			const lines = exec.stepLines()[selection.stepIndex];
+		if (selection?.stepIndex !== undefined && selection.stepIndex > 0) {
+			const lines = exec.stepLines()[selection.stepIndex - 1];
 			if (lines?.length) {
 				editor.highlightLines?.(lines);
 				return;
@@ -456,13 +456,27 @@ export default function App() {
 		setGlobalFileCreation({ type: "file", parentPath: "" });
 	};
 
-	const handleErrorFileClick = (filePath: string) => {
+	const handleErrorFileClick = (
+		filePath: string,
+		line?: number,
+		col?: number,
+	) => {
 		if (!findFileByPath(mockFileSystem(), filePath)) {
 			console.warn(`File not found: ${filePath}`);
 			return;
 		}
 		editorManager.handleFileSelect(filePath, mockFileSystem());
 		showSidebarView("explorer");
+		const view = editor.safeEditorView();
+		if (view && typeof line === "number" && line > 0) {
+			const targetLine = view.state.doc.line(
+				Math.min(line, view.state.doc.lines),
+			);
+			const columnOffset = Math.max(0, (col ?? 1) - 1);
+			const anchor = Math.min(targetLine.from + columnOffset, targetLine.to);
+			view.dispatch({ selection: { anchor }, scrollIntoView: true });
+			view.focus();
+		}
 	};
 
 	// ---- Rendering ---------------------------------------------------------------

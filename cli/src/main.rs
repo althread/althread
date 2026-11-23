@@ -266,12 +266,17 @@ pub fn run_interactive(
         for (idx, (name, pid, insts, actions, nvm)) in next_states.iter().enumerate() {
             println!("======= VM next ({}) =======", idx);
             let preview_line: String = if let Some(first) = insts.first() {
-                if first.pos.is_some() {
-                    source
-                        .lines()
-                        .nth(first.pos.as_ref().unwrap().line())
-                        .unwrap_or_default()
-                        .to_string()
+                if let Some(pos) = first.pos.as_ref() {
+                    let line_num = pos.line();
+                    if line_num > 0 {
+                        source
+                            .lines()
+                            .nth(line_num - 1)
+                            .unwrap_or_default()
+                            .to_string()
+                    } else {
+                        "?".to_string()
+                    }
                 } else {
                     "?".to_string()
                 }
@@ -402,25 +407,24 @@ pub fn run_command(cli_args: &RunCommand) {
         if cli_args.verbose || cli_args.debug {
             let mut prev_line = 0;
             for inst in info.instructions.iter() {
-                if inst.pos.clone().unwrap_or_default().line() != 0
-                    && prev_line != inst.pos.clone().unwrap_or_default().line()
-                {
+                let line_num = inst.pos.as_ref().map_or(0, |pos| pos.line());
+                if line_num != 0 && prev_line != line_num {
                     println!(
                         "#{}:{} {}",
                         info.prog_id,
-                        inst.pos.clone().unwrap_or_default().line(),
+                        line_num,
                         source
                             .lines()
-                            .nth(inst.pos.clone().unwrap_or_default().line() - 1)
+                            .nth(line_num - 1)
                             .unwrap_or_default()
                             .style(if info.prog_id == 0 {
                                 MAIN_STYLE
                             } else {
                                 PROCESS_PALETTE
-                                    [((info.prog_id - 1) as usize) % PROCESS_PALETTE.len()]
+                                    [(info.prog_id - 1) % PROCESS_PALETTE.len()]
                             })
                     );
-                    prev_line = inst.pos.clone().unwrap_or_default().line();
+                    prev_line = line_num;
                 }
                 if cli_args.verbose {
                     println!("\t\t\t#{}:{}", info.prog_id, inst);
@@ -434,18 +438,18 @@ pub fn run_command(cli_args: &RunCommand) {
                 None => println!("{}_{}: prog not found", info.prog_name, info.prog_id),
             }
         }
-        if info.invariant_error.is_err() {
-            info.invariant_error.unwrap_err().report(&input_map);
-            break;
+        if let Err(err) = info.invariant_error {
+            err.report(&input_map);
+            exit(1);
         }
 
-        vm_execution.push(vm.clone());
-        if vm_set.contains(&vm) {
+        if cli_args.verbose {
+            vm_execution.push(vm.clone());
+        }
+        if !vm_set.insert(vm.clone()) {
             println!("===== Loop detected =====");
-            vm_set.insert(vm.clone());
             break;
         }
-        vm_set.insert(vm.clone());
     }
 
     if !vm.is_finished() && step_count >= cli_args.max_steps {

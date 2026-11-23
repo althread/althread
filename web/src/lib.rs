@@ -6,8 +6,9 @@ use std::path::Path;
 use wasm_bindgen::prelude::*;
 
 use althread::ast::token::literal::Literal;
+use althread::compiler::CompiledProject;
 use althread::module_resolver::VirtualFileSystem;
-use althread::vm::VM;
+use althread::vm::{instruction::Instruction, VM};
 use althread::{checker, error::AlthreadError, vm::GlobalAction};
 use console_error_panic_hook;
 
@@ -23,33 +24,6 @@ fn to_js<T: Serialize>(value: &T) -> JsValue {
     value
         .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
         .unwrap()
-}
-
-fn find_delivered_message(
-    prev_channels: &althread::vm::channels::ChannelsState,
-    next_channels: &althread::vm::channels::ChannelsState,
-) -> Option<((usize, String), Literal)> {
-    for (key, next_state) in next_channels.iter() {
-        let prev_len = prev_channels.get(key).map(|s| s.len()).unwrap_or(0);
-        if next_state.len() == prev_len + 1 {
-            if let Some(msg) = next_state.last() {
-                return Some(((key.0, key.1.clone()), msg.clone()));
-            }
-        }
-    }
-    None
-}
-
-fn delivery_preview(prev_vm: &althread::vm::VM, next_vm: &althread::vm::VM) -> Option<String> {
-    let prev_channels = prev_vm.current_state().1;
-    let next_channels = next_vm.current_state().1;
-    let ((receiver_pid, channel_name), msg) = find_delivered_message(prev_channels, next_channels)?;
-    let (sender_pid, sender_clock, content) =
-        althread::vm::channels::parse_message_tuple(&msg).unwrap_or((0, 0, msg.to_string()));
-    Some(format!(
-        "deliver {},{} <- {} @{} : {}",
-        receiver_pid, channel_name, sender_pid, sender_clock, content
-    ))
 }
 
 fn message_payload_string(message: &Literal) -> String {
@@ -81,6 +55,24 @@ fn runtime_error_info(err: AlthreadError) -> RuntimeErrorInfo {
     }
 }
 
+fn parse_virtual_fs(virtual_fs: JsValue) -> Result<HashMap<String, String>, JsValue> {
+    serde_wasm_bindgen::from_value(virtual_fs)
+        .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))
+}
+
+fn compile_source(
+    source: &str,
+    filepath: &str,
+    fs_map: HashMap<String, String>,
+) -> Result<CompiledProject, AlthreadError> {
+    let virtual_filesystem = VirtualFileSystem::new(fs_map);
+    let mut input_map = HashMap::new();
+    input_map.insert(filepath.to_string(), source.to_string());
+
+    let ast = althread::parser::parse_ast(source, filepath)?;
+    ast.compile(Path::new(filepath), virtual_filesystem, &mut input_map)
+}
+
 // Convert a VM Literal to a typed web Literal
 fn value_to_literal(value: &althread::ast::token::literal::Literal) -> types::Literal {
     use althread::ast::token::literal::Literal as VmLiteral;
@@ -102,7 +94,7 @@ fn value_to_literal(value: &althread::ast::token::literal::Literal) -> types::Li
 }
 
 // Helper function to create typed VM state from VM
-fn create_vm_state(vm: &althread::vm::VM) -> VMState {
+fn create_vm_state(vm: &VM) -> VMState {
     let current_state = vm.current_state();
 
     let globals = current_state
@@ -247,60 +239,155 @@ fn create_vm_state(vm: &althread::vm::VM) -> VMState {
     }
 }
 
-#[wasm_bindgen]
-pub fn initialize() {
-    console_error_panic_hook::set_once();
+fn collect_step_actions(
+    actions: &[GlobalAction],
+    vm: &VM,
+    lines: &[usize],
+    stdout: &mut Vec<String>,
+    message_flow_events: &mut Vec<MessageFlowEvent>,
+) {
+    let connections = vm.channels.get_connections();
+    let mut cached_vm_state: Option<VMState> = None;
+
+    for action in actions {
+        match action {
+            GlobalAction::Print(s_print) => stdout.push(s_print.clone()),
+            GlobalAction::Send(info) => {
+                let receiver_id = connections
+                    .get(&(info.from.process_id, info.to.channel_name.clone()))
+                    .map(|(pid, _chan)| *pid)
+                    .unwrap_or(0);
+                let vm_state = cached_vm_state
+                    .get_or_insert_with(|| create_vm_state(vm))
+                    .clone();
+
+                message_flow_events.push(MessageFlowEvent {
+                    sender: info.from.process_id,
+                    receiver: receiver_id,
+                    evt_type: SEND,
+                    message: info.to.channel_name.clone(),
+                    number: info.n_msg,
+                    actor_prog_name: info.from.process_name.clone(),
+                    vm_state,
+                    lines: lines.to_vec(),
+                });
+            }
+            GlobalAction::Broadcast(send_infos) => {
+                for send_info in send_infos {
+                    let receiver_id = connections
+                        .get(&(send_info.from.process_id, send_info.to.channel_name.clone()))
+                        .map(|(pid, _chan)| *pid)
+                        .unwrap_or(0);
+                    let vm_state = cached_vm_state
+                        .get_or_insert_with(|| create_vm_state(vm))
+                        .clone();
+
+                    message_flow_events.push(MessageFlowEvent {
+                        sender: send_info.from.process_id,
+                        receiver: receiver_id,
+                        evt_type: SEND,
+                        message: send_info.to.channel_name.clone(),
+                        number: send_info.n_msg,
+                        actor_prog_name: send_info.from.process_name.clone(),
+                        vm_state,
+                        lines: lines.to_vec(),
+                    });
+                }
+            }
+            GlobalAction::Deliver(info) => {
+                let vm_state = cached_vm_state
+                    .get_or_insert_with(|| create_vm_state(vm))
+                    .clone();
+
+                message_flow_events.push(MessageFlowEvent {
+                    sender: info.from.process_id,
+                    receiver: info.to.process_id,
+                    evt_type: RECV,
+                    message: message_payload_string(&info.message),
+                    number: info.sender_clock,
+                    actor_prog_name: info.to.process_name.clone(),
+                    vm_state,
+                    lines: lines.to_vec(),
+                });
+            }
+            _ => {}
+        }
+    }
 }
 
-#[wasm_bindgen]
-pub fn compile(source: &str, file_path: &str, virtual_fs: JsValue) -> Result<String, JsValue> {
-    // Convert the JS file system to a Rust HashMap
-    let fs_map: HashMap<String, String> = serde_wasm_bindgen::from_value(virtual_fs)
-        .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
-
-    // Create virtual filesystem
-    let virtual_filesystem = VirtualFileSystem::new(fs_map);
-
-    let mut input_map = HashMap::new();
-    input_map.insert(file_path.to_string(), source.to_string());
-
-    let ast = althread::parser::parse_ast(&source, file_path).map_err(error_to_js)?;
-
-    println!("{}", &ast);
-
-    let compiled_project = ast
-        .compile(Path::new(file_path), virtual_filesystem, &mut input_map)
-        .map_err(error_to_js)?;
-
-    println!("{}", compiled_project.to_string());
-    Ok(format!("{}", compiled_project))
+fn format_state_display(vm: &VM) -> Vec<String> {
+    let current_state = vm.current_state();
+    let mut state_display_info = Vec::new();
+    state_display_info.push(format!("global: {:?}", current_state.0));
+    for ((channel_pid, cname), state) in current_state.1.iter() {
+        state_display_info.push(format!("channel {},{}", channel_pid, cname));
+        for v in state.iter() {
+            state_display_info.push(format!("  * {}", v));
+        }
+    }
+    for (local_pid, local_state) in current_state.2.iter().enumerate() {
+        state_display_info.push(format!(
+            "{} ({}): {:?}",
+            local_pid,
+            local_state.1,
+            local_state
+                .0
+                .iter()
+                .map(|v| format!("{}", v))
+                .collect::<Vec<String>>()
+                .join(", ")
+        ));
+    }
+    state_display_info
 }
 
-#[wasm_bindgen]
-pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue, JsValue> {
-    // Convert the JS file system to a Rust HashMap
-    let fs_map: HashMap<String, String> = serde_wasm_bindgen::from_value(virtual_fs)
-        .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
+fn build_next_state_options(
+    next_states: &[(String, usize, Vec<Instruction>, Vec<GlobalAction>, VM<'_>)],
+) -> Vec<NextStateOption> {
+    next_states
+        .iter()
+        .map(|(name, pid, instructions, actions, _nvm)| {
+            let lines: Vec<usize> = instructions
+                .iter()
+                .filter_map(|inst| inst.pos.as_ref().map(|p| p.line()))
+                .collect();
 
-    // Create virtual filesystem
-    let virtual_filesystem = VirtualFileSystem::new(fs_map);
+            let instruction_strings: Vec<String> = if instructions.is_empty() {
+                let delivery = actions.iter().find_map(|action| match action {
+                    GlobalAction::Deliver(info) => Some(format!(
+                        "DELIVER {} <- {}#{} : {}",
+                        info.channel_name,
+                        info.from.process_name,
+                        info.from.process_id,
+                        message_payload_string(&info.message)
+                    )),
+                    _ => None,
+                });
+                delivery.into_iter().collect()
+            } else {
+                instructions.iter().map(|inst| inst.to_string()).collect()
+            };
 
-    let mut input_map = HashMap::new();
-    input_map.insert(filepath.to_string(), source.to_string());
+            NextStateOption {
+                prog_name: name.clone(),
+                prog_id: *pid,
+                instructions: instruction_strings,
+                lines,
+            }
+        })
+        .collect()
+}
 
-    let ast = althread::parser::parse_ast(&source, filepath).map_err(error_to_js)?;
+fn run_core(
+    source: &str,
+    filepath: &str,
+    fs_map: HashMap<String, String>,
+    seed: u64,
+) -> Result<RunResult, AlthreadError> {
+    let compiled_project = compile_source(source, filepath, fs_map)?;
 
-    println!("{}", &ast);
-
-    // Use compile_with_filesystem instead of compile
-    let compiled_project = ast
-        .compile(Path::new(filepath), virtual_filesystem, &mut input_map)
-        .map_err(error_to_js)?;
-
-    // Rest of the function stays exactly the same
-    let mut vm = althread::vm::VM::new(&compiled_project);
-
-    vm.start(fastrand::u64(0..(1 << 32)));
+    let mut vm = VM::new(&compiled_project);
+    vm.start(seed);
 
     let mut result = String::new();
     let mut stdout = vec![];
@@ -315,8 +402,7 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
             lines: None,
         },
     }];
-    let mut vm_history = vec![vm.clone()]; // For tracking channel states
-    let mut i = 0; //index for nodes
+    let mut i = 0; // index for nodes
     let mut runtime_error = None;
     let mut max_steps_reached = false;
 
@@ -348,95 +434,23 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
                 lines: Some(lines.clone()),
             },
         });
-        vm_history.push(vm.clone());
-
-        // Helper to get program name by ID
-        let get_prog_name = |prog_id: usize, vm_instance: &VM| -> String {
-            vm_instance
-                .running_programs
-                .iter()
-                .find(|p| p.id == prog_id)
-                .map(|p| p.name.clone())
-                .unwrap_or_else(|| format!("PID_{}", prog_id)) // Fallback
-        };
-
-        println!("{}", get_prog_name(info.prog_id, &vm));
 
         for inst in info.instructions.iter() {
             result.push_str(&format!("#{}: {}\n", info.prog_id, inst));
         }
 
-        let instruction_lines: Vec<usize> = info
-            .instructions
-            .iter()
-            .filter_map(|inst| inst.pos.as_ref().map(|p| p.line()))
-            .collect();
+        collect_step_actions(
+            &info.actions,
+            &vm,
+            &lines,
+            &mut stdout,
+            &mut message_flow_graph,
+        );
 
-        for action in info.actions.iter() {
-            match action {
-                GlobalAction::Print(s_print) => stdout.push(s_print.clone()),
-                GlobalAction::Send(info) => {
-                    let receiver_id = vm
-                        .channels
-                        .get_connections()
-                        .get(&(info.from.process_id, info.to.channel_name.clone()))
-                        .map(|(pid, _chan)| *pid)
-                        .unwrap_or(0);
-
-                    message_flow_graph.push(MessageFlowEvent {
-                        sender: info.from.process_id,
-                        receiver: receiver_id,
-                        evt_type: SEND,
-                        message: info.to.channel_name.clone(),
-                        number: info.n_msg,
-                        actor_prog_name: info.from.process_name.clone(),
-                        vm_state: create_vm_state(&vm),
-                        lines: instruction_lines.clone(),
-                    });
-                }
-                GlobalAction::Broadcast(send_infos) => {
-                    for send_info in send_infos {
-                        let receiver_id = vm
-                            .channels
-                            .get_connections()
-                            .get(&(send_info.from.process_id, send_info.to.channel_name.clone()))
-                            .map(|(pid, _chan)| *pid)
-                            .unwrap_or(0);
-
-                        message_flow_graph.push(MessageFlowEvent {
-                            sender: send_info.from.process_id,
-                            receiver: receiver_id,
-                            evt_type: SEND,
-                            message: send_info.to.channel_name.clone(),
-                            number: send_info.n_msg,
-                            actor_prog_name: send_info.from.process_name.clone(),
-                            vm_state: create_vm_state(&vm),
-                            lines: instruction_lines.clone(),
-                        });
-                    }
-                }
-                GlobalAction::Deliver(info) => {
-                    message_flow_graph.push(MessageFlowEvent {
-                        sender: info.from.process_id,
-                        receiver: info.to.process_id,
-                        evt_type: RECV,
-                        message: message_payload_string(&info.message),
-                        number: info.sender_clock,
-                        actor_prog_name: info.to.process_name.clone(),
-                        vm_state: create_vm_state(&vm),
-                        lines: instruction_lines.clone(),
-                    });
-                }
-                _ => {}
-            }
-        }
-        if info.invariant_error.is_err() {
-            let err = info.invariant_error.unwrap_err();
-            result.push_str(&format!(
-                "Invariant error at line {}: {}\n",
-                err.pos.unwrap().line(),
-                err.message
-            ));
+        if let Err(err) = info.invariant_error {
+            let line = err.pos.as_ref().map_or(0, |pos| pos.line());
+            result.push_str(&format!("Invariant error at line {}: {}\n", line, err.message));
+            runtime_error = Some(runtime_error_info(err));
             break;
         }
         i += 1;
@@ -452,7 +466,7 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
         .filter_map(|node| node.metadata.lines.clone())
         .collect();
 
-    let result = RunResult {
+    Ok(RunResult {
         debug: result,
         stdout,
         message_flow_events: message_flow_graph,
@@ -460,44 +474,29 @@ pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue,
         step_lines,
         max_steps_reached,
         runtime_error,
-    };
-
-    Ok(to_js(&result))
+    })
 }
 
-#[wasm_bindgen]
-pub fn check(
+fn check_core(
     source: &str,
     filepath: &str,
-    virtual_fs: JsValue,
+    fs_map: HashMap<String, String>,
     max_states: Option<usize>,
-) -> Result<JsValue, JsValue> {
+) -> Result<CheckResult, AlthreadError> {
     const WEB_GRAPH_DETAILS_THRESHOLD: usize = 200;
 
-    // Convert the JS file system to a Rust HashMap
-    let fs_map: HashMap<String, String> = serde_wasm_bindgen::from_value(virtual_fs)
-        .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
+    let compiled_project = compile_source(source, filepath, fs_map)?;
 
-    // Create virtual filesystem
-    let virtual_filesystem = VirtualFileSystem::new(fs_map);
-
-    let mut input_map = HashMap::new();
-    input_map.insert(filepath.to_string(), source.to_string());
-
-    let ast = althread::parser::parse_ast(&source, filepath).map_err(error_to_js)?;
-
-    println!("{}", &ast);
-
-    let compiled_project = ast
-        .compile(Path::new(filepath), virtual_filesystem, &mut input_map)
-        .map_err(error_to_js)?;
-
-    let checked = checker::check(&compiled_project, max_states).map_err(error_to_js)?;
+    let checked = checker::check(&compiled_project, max_states)?;
     let state_graph = checked.graph;
     let omit_transition_details = state_graph.nodes.len() > WEB_GRAPH_DETAILS_THRESHOLD;
 
     let mut path_nodes = Vec::new();
     let mut violation_path = Vec::new();
+    let mut path_stdout = Vec::new();
+    let mut path_debug = String::new();
+    let mut path_message_flow_events = Vec::new();
+
     let (verdict, cycle_start) = match checked.verdict {
         checker::Verdict::Verified => (CheckVerdict::Verified, None),
         checker::Verdict::Inconclusive => (CheckVerdict::Inconclusive, None),
@@ -515,20 +514,28 @@ pub fn check(
                     },
                 });
             }
-            state_graph
-                .replay_path(&path, |link, vm, _| {
-                    violation_path.push(link.to);
-                    path_nodes.push(GraphNode {
-                        vm: create_vm_state(vm),
-                        metadata: NodeMetadata {
-                            level: path_nodes.len(),
-                            step_index: None,
-                            successors: None,
-                            lines: Some(link.lines.clone()),
-                        },
-                    });
-                })
-                .map_err(error_to_js)?;
+            state_graph.replay_path(&path, |link, vm, actions| {
+                violation_path.push(link.to);
+                for inst in &link.instructions {
+                    path_debug.push_str(&format!("#{}: {}\n", link.pid, inst));
+                }
+                collect_step_actions(
+                    actions,
+                    vm,
+                    &link.lines,
+                    &mut path_stdout,
+                    &mut path_message_flow_events,
+                );
+                path_nodes.push(GraphNode {
+                    vm: create_vm_state(vm),
+                    metadata: NodeMetadata {
+                        level: path_nodes.len(),
+                        step_index: None,
+                        successors: None,
+                        lines: Some(link.lines.clone()),
+                    },
+                });
+            })?;
             (CheckVerdict::Violated, cycle_start)
         }
     };
@@ -573,15 +580,227 @@ pub fn check(
         })
         .collect();
 
-    let result = CheckResult {
+    Ok(CheckResult {
         verdict,
         violation_path,
         path: path_nodes,
+        path_stdout,
+        path_debug,
+        path_message_flow_events,
         nodes: graph_nodes,
         exhaustive: state_graph.exhaustive,
         violation_cycle_start: cycle_start,
+    })
+}
+
+enum InteractiveError {
+    Althread(AlthreadError),
+    Message(String),
+}
+
+impl From<AlthreadError> for InteractiveError {
+    fn from(err: AlthreadError) -> Self {
+        Self::Althread(err)
+    }
+}
+
+impl InteractiveError {
+    fn into_js(self) -> JsValue {
+        match self {
+            Self::Althread(err) => error_to_js(err),
+            Self::Message(msg) => JsValue::from_str(&msg),
+        }
+    }
+}
+
+fn replay_interactive_history<'a>(
+    vm: &mut VM<'a>,
+    history: &[usize],
+) -> Result<(), InteractiveError> {
+    for &selected_index in history {
+        let next_states = vm.next()?;
+        if next_states.is_empty() {
+            return Err(InteractiveError::Message(
+                "No next state during replay".to_string(),
+            ));
+        }
+        if selected_index >= next_states.len() {
+            return Err(InteractiveError::Message(format!(
+                "Invalid selection index {} in history",
+                selected_index
+            )));
+        }
+        let (_, _, _, _, new_vm) = next_states.into_iter().nth(selected_index).unwrap();
+        *vm = new_vm;
+    }
+    Ok(())
+}
+
+fn start_interactive_core(
+    source: &str,
+    filepath: &str,
+    fs_map: HashMap<String, String>,
+) -> Result<InteractiveSessionState, AlthreadError> {
+    let compiled_project = compile_source(source, filepath, fs_map)?;
+
+    let mut vm = VM::new(&compiled_project);
+    vm.start(0); // Use deterministic seed for interactive mode
+
+    let next_states = vm.next()?;
+    if next_states.is_empty() && !vm.is_finished() {
+        return Err(vm.deadlock_error());
+    }
+
+    let next_state_options = build_next_state_options(&next_states);
+
+    Ok(InteractiveSessionState {
+        next_states: next_state_options,
+        current_state: create_vm_state(&vm),
+        state_display: vec![],
+        output: vec![],
+    })
+}
+
+fn get_next_interactive_core(
+    source: &str,
+    filepath: &str,
+    fs_map: HashMap<String, String>,
+    history: &[usize],
+) -> Result<InteractiveSessionState, InteractiveError> {
+    let compiled_project = compile_source(source, filepath, fs_map)?;
+
+    let mut vm = VM::new(&compiled_project);
+    vm.start(0);
+    replay_interactive_history(&mut vm, history)?;
+
+    let next_states = vm.next()?;
+    if next_states.is_empty() && !vm.is_finished() {
+        return Err(InteractiveError::Althread(vm.deadlock_error()));
+    }
+
+    let next_state_options = build_next_state_options(&next_states);
+
+    Ok(InteractiveSessionState {
+        next_states: next_state_options,
+        current_state: create_vm_state(&vm),
+        state_display: format_state_display(&vm),
+        output: vec![],
+    })
+}
+
+fn execute_interactive_step_core(
+    source: &str,
+    filepath: &str,
+    fs_map: HashMap<String, String>,
+    history: &[usize],
+    selected_index: usize,
+) -> Result<InteractiveStepResult, InteractiveError> {
+    let compiled_project = compile_source(source, filepath, fs_map)?;
+
+    let mut vm = VM::new(&compiled_project);
+    vm.start(0);
+    replay_interactive_history(&mut vm, history)?;
+
+    let next_states = vm.next()?;
+    if selected_index >= next_states.len() {
+        return Err(InteractiveError::Message(format!(
+            "Invalid selection index {}",
+            selected_index
+        )));
+    }
+
+    let (name, pid, instructions, actions, execution_vm) =
+        next_states.into_iter().nth(selected_index).unwrap();
+
+    let mut message_flow_events: Vec<MessageFlowEvent> = Vec::new();
+    let mut step_output: Vec<String> = Vec::new();
+    let mut step_debug = String::new();
+
+    let step_lines: Vec<usize> = instructions
+        .iter()
+        .filter_map(|inst| inst.pos.as_ref().map(|p| p.line()))
+        .collect();
+
+    for inst in &instructions {
+        step_debug.push_str(&format!("#{}: {}\n", pid, inst));
+    }
+
+    collect_step_actions(
+        &actions,
+        &execution_vm,
+        &step_lines,
+        &mut step_output,
+        &mut message_flow_events,
+    );
+
+    let executed_instructions = if instructions.is_empty() && name.starts_with("__deliver__") {
+        let delivery = message_flow_events.iter().find_map(|action| {
+            (action.evt_type == RECV).then(|| {
+                format!(
+                    "deliver {} <- {} : {}",
+                    action.receiver, action.sender, action.message
+                )
+            })
+        });
+        vec![delivery.unwrap_or_else(|| "deliver <unknown>".to_string())]
+    } else {
+        instructions.iter().map(|inst| inst.to_string()).collect()
     };
 
+    let (following_states, deadlock) = match execution_vm.next() {
+        Ok(states) if states.is_empty() && !execution_vm.is_finished() => {
+            (vec![], Some(runtime_error_info(execution_vm.deadlock_error())))
+        }
+        Ok(states) => (build_next_state_options(&states), None),
+        Err(err) => return Err(InteractiveError::Althread(err)),
+    };
+
+    Ok(InteractiveStepResult {
+        executed_step: ExecutedStepInfo {
+            prog_name: name,
+            prog_id: pid,
+            instructions: executed_instructions,
+        },
+        output: step_output,
+        debug: step_debug,
+        new_state: create_vm_state(&execution_vm),
+        message_flow_events,
+        state_display: format_state_display(&execution_vm),
+        lines: step_lines,
+        next_states: following_states,
+        deadlock,
+    })
+}
+
+#[wasm_bindgen]
+pub fn initialize() {
+    console_error_panic_hook::set_once();
+}
+
+#[wasm_bindgen]
+pub fn compile(source: &str, file_path: &str, virtual_fs: JsValue) -> Result<String, JsValue> {
+    let fs_map = parse_virtual_fs(virtual_fs)?;
+    let compiled_project = compile_source(source, file_path, fs_map).map_err(error_to_js)?;
+    Ok(format!("{}", compiled_project))
+}
+
+#[wasm_bindgen]
+pub fn run(source: &str, filepath: &str, virtual_fs: JsValue) -> Result<JsValue, JsValue> {
+    let fs_map = parse_virtual_fs(virtual_fs)?;
+    let seed = fastrand::u64(0..(1 << 32));
+    let result = run_core(source, filepath, fs_map, seed).map_err(error_to_js)?;
+    Ok(to_js(&result))
+}
+
+#[wasm_bindgen]
+pub fn check(
+    source: &str,
+    filepath: &str,
+    virtual_fs: JsValue,
+    max_states: Option<usize>,
+) -> Result<JsValue, JsValue> {
+    let fs_map = parse_virtual_fs(virtual_fs)?;
+    let result = check_core(source, filepath, fs_map, max_states).map_err(error_to_js)?;
     Ok(to_js(&result))
 }
 
@@ -694,66 +913,8 @@ pub fn start_interactive_session(
     filepath: &str,
     virtual_fs: JsValue,
 ) -> Result<JsValue, JsValue> {
-    // Convert the JS file system to a Rust HashMap
-    let fs_map: HashMap<String, String> = serde_wasm_bindgen::from_value(virtual_fs)
-        .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
-
-    // Create virtual filesystem
-    let virtual_filesystem = VirtualFileSystem::new(fs_map);
-
-    let mut input_map = HashMap::new();
-    input_map.insert(filepath.to_string(), source.to_string());
-
-    let ast = althread::parser::parse_ast(&source, filepath).map_err(error_to_js)?;
-
-    let compiled_project = ast
-        .compile(Path::new(filepath), virtual_filesystem, &mut input_map)
-        .map_err(error_to_js)?;
-
-    let mut vm = althread::vm::VM::new(&compiled_project);
-    vm.start(0); // Use deterministic seed for interactive mode
-
-    // Get initial next states
-    let next_states = vm.next().map_err(error_to_js)?;
-
-    if next_states.is_empty() {
-        let result = InteractiveSessionState {
-            next_states: vec![],
-            current_state: create_vm_state(&vm),
-            state_display: vec![],
-            output: vec![],
-        };
-        return Ok(to_js(&result));
-    }
-
-    // Convert the result to NextStateOption format
-    let next_state_options: Vec<NextStateOption> = next_states
-        .into_iter()
-        .map(|(name, pid, instructions, _actions, _nvm)| {
-            let lines: Vec<usize> = instructions
-                .iter()
-                .filter_map(|inst| inst.pos.as_ref().map(|p| p.line()))
-                .collect();
-
-            let instruction_strings: Vec<String> =
-                instructions.iter().map(|inst| inst.to_string()).collect();
-
-            NextStateOption {
-                prog_name: name,
-                prog_id: pid,
-                instructions: instruction_strings,
-                lines,
-            }
-        })
-        .collect();
-
-    let result = InteractiveSessionState {
-        next_states: next_state_options,
-        current_state: create_vm_state(&vm),
-        state_display: vec![],
-        output: vec![],
-    };
-
+    let fs_map = parse_virtual_fs(virtual_fs)?;
+    let result = start_interactive_core(source, filepath, fs_map).map_err(error_to_js)?;
     Ok(to_js(&result))
 }
 
@@ -764,104 +925,12 @@ pub fn get_next_interactive_states(
     virtual_fs: JsValue,
     execution_history: JsValue,
 ) -> Result<JsValue, JsValue> {
-    // Convert the JS file system to a Rust HashMap
-    let fs_map: HashMap<String, String> = serde_wasm_bindgen::from_value(virtual_fs)
-        .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
-
-    // Parse execution history
+    let fs_map = parse_virtual_fs(virtual_fs)?;
     let history: Vec<usize> = serde_wasm_bindgen::from_value(execution_history)
         .map_err(|e| JsValue::from_str(&format!("Failed to parse execution history: {}", e)))?;
 
-    // Create virtual filesystem
-    let virtual_filesystem = VirtualFileSystem::new(fs_map);
-
-    let mut input_map = HashMap::new();
-    input_map.insert(filepath.to_string(), source.to_string());
-
-    let ast = althread::parser::parse_ast(&source, filepath).map_err(error_to_js)?;
-
-    let compiled_project = ast
-        .compile(Path::new(filepath), virtual_filesystem, &mut input_map)
-        .map_err(error_to_js)?;
-
-    let mut vm = althread::vm::VM::new(&compiled_project);
-    vm.start(0); // Use deterministic seed for interactive mode
-
-    // Replay execution history
-    for &selected_index in &history {
-        let next_states = vm.next().map_err(error_to_js)?;
-        if selected_index >= next_states.len() {
-            return Err(JsValue::from_str(&format!(
-                "Invalid selection index {} in history",
-                selected_index
-            )));
-        }
-        let (_, _, _, _, new_vm) = next_states.into_iter().nth(selected_index).unwrap();
-        vm = new_vm;
-    }
-
-    // Get next possible states - web-safe error handling
-    let next_states = vm.next().map_err(error_to_js)?;
-
-    if next_states.is_empty() {
-        return Err(JsValue::from_str(
-            "No next states available (execution finished)",
-        ));
-    }
-
-    // Convert next states to NextStateOption format
-    let next_state_options: Vec<NextStateOption> = next_states
-        .iter()
-        .map(|(name, pid, instructions, _actions, _nvm)| {
-            let lines: Vec<usize> = instructions
-                .iter()
-                .filter_map(|inst| inst.pos.as_ref().map(|p| p.line()))
-                .collect();
-
-            let instruction_strings: Vec<String> =
-                instructions.iter().map(|inst| inst.to_string()).collect();
-
-            NextStateOption {
-                prog_name: name.clone(),
-                prog_id: *pid,
-                instructions: instruction_strings,
-                lines,
-            }
-        })
-        .collect();
-
-    let current_state = vm.current_state();
-
-    // Generate state display information similar to run_interactive
-    let mut state_display_info = Vec::new();
-    state_display_info.push(format!("global: {:?}", current_state.0));
-    for ((channel_pid, cname), state) in current_state.1.iter() {
-        state_display_info.push(format!("channel {},{}", channel_pid, cname));
-        for v in state.iter() {
-            state_display_info.push(format!("  * {}", v));
-        }
-    }
-    for (local_pid, local_state) in current_state.2.iter().enumerate() {
-        state_display_info.push(format!(
-            "{} ({}): {:?}",
-            local_pid,
-            local_state.1,
-            local_state
-                .0
-                .iter()
-                .map(|v| format!("{}", v))
-                .collect::<Vec<String>>()
-                .join(", ")
-        ));
-    }
-
-    let result = InteractiveSessionState {
-        next_states: next_state_options,
-        current_state: create_vm_state(&vm),
-        state_display: state_display_info,
-        output: vec![],
-    };
-
+    let result = get_next_interactive_core(source, filepath, fs_map, &history)
+        .map_err(InteractiveError::into_js)?;
     Ok(to_js(&result))
 }
 
@@ -873,178 +942,143 @@ pub fn execute_interactive_step(
     execution_history: JsValue,
     selected_index: usize,
 ) -> Result<JsValue, JsValue> {
-    // Convert the JS file system to a Rust HashMap
-    let fs_map: HashMap<String, String> = serde_wasm_bindgen::from_value(virtual_fs)
-        .map_err(|e| JsValue::from_str(&format!("Failed to parse virtual filesystem: {}", e)))?;
-
-    // Parse execution history
+    let fs_map = parse_virtual_fs(virtual_fs)?;
     let history: Vec<usize> = serde_wasm_bindgen::from_value(execution_history)
         .map_err(|e| JsValue::from_str(&format!("Failed to parse execution history: {}", e)))?;
 
-    // Create virtual filesystem
-    let virtual_filesystem = VirtualFileSystem::new(fs_map);
+    let result = execute_interactive_step_core(source, filepath, fs_map, &history, selected_index)
+        .map_err(InteractiveError::into_js)?;
+    Ok(to_js(&result))
+}
 
-    let mut input_map = HashMap::new();
-    input_map.insert(filepath.to_string(), source.to_string());
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let ast = althread::parser::parse_ast(&source, filepath).map_err(error_to_js)?;
+    fn fs_for(source: &str) -> HashMap<String, String> {
+        HashMap::from([("main.alt".to_string(), source.to_string())])
+    }
 
-    let compiled_project = ast
-        .compile(Path::new(filepath), virtual_filesystem, &mut input_map)
-        .map_err(error_to_js)?;
+    #[test]
+    fn run_reports_invariant_violation_as_runtime_error_not_step_limit() {
+        let source = r#"
+shared { let X = 0; }
+always { X == 0; }
+main {
+    X = 1;
+    X = 2;
+}
+"#;
+        let res = run_core(source, "main.alt", fs_for(source), 0).unwrap();
+        assert!(!res.max_steps_reached);
+        let err = res
+            .runtime_error
+            .expect("invariant violation should populate runtime_error");
+        assert_eq!(err.error_type, "InvariantError");
+        assert!(err.message.contains("invariant"));
+    }
 
-    let mut vm = althread::vm::VM::new(&compiled_project);
-    vm.start(0); // Use deterministic seed for interactive mode
+    #[test]
+    fn check_counterexample_collects_message_flow_and_stdout() {
+        let source = r#"
+shared { let Done = false; }
+program Worker() {
+    await receive inp(v) => {
+        print("got", v);
+        Done = true;
+    }
+}
+main {
+    let w = run Worker();
+    channel self.out (int)> w.inp;
+    send out(42);
+}
+always { !Done; }
+"#;
+        let res = check_core(source, "main.alt", fs_for(source), Some(200)).unwrap();
+        assert!(matches!(res.verdict, CheckVerdict::Violated));
+        assert!(res.path_stdout.iter().any(|line| line.contains("got 42")));
+        assert!(res
+            .path_message_flow_events
+            .iter()
+            .any(|evt| evt.evt_type == SEND));
+        assert!(res
+            .path_message_flow_events
+            .iter()
+            .any(|evt| evt.evt_type == RECV));
+        assert!(!res.path_debug.is_empty());
+    }
 
-    // Replay execution history
-    for &step_index in &history {
-        let next_states = vm.next().map_err(error_to_js)?;
-        if next_states.is_empty() {
-            return Err(JsValue::from_str("No next state during replay"));
+    #[test]
+    fn interactive_step_finishes_cleanly_without_error() {
+        let source = "main { print(1); }";
+        let initial = start_interactive_core(source, "main.alt", fs_for(source)).unwrap();
+        assert!(!initial.next_states.is_empty());
+
+        let mut history = Vec::new();
+        let mut last_next = initial.next_states;
+        while !last_next.is_empty() {
+            let step = execute_interactive_step_core(source, "main.alt", fs_for(source), &history, 0)
+                .unwrap_or_else(|_| panic!("step failed"));
+            assert!(step.deadlock.is_none());
+            history.push(0);
+            last_next = step.next_states;
         }
-        if step_index >= next_states.len() {
-            return Err(JsValue::from_str(&format!(
-                "Invalid selection index {} in history",
-                step_index
-            )));
-        }
-        let (_, _, _, _, new_vm) = next_states.into_iter().nth(step_index).unwrap();
-        vm = new_vm;
+
+        let after = get_next_interactive_core(source, "main.alt", fs_for(source), &history)
+            .unwrap_or_else(|_| panic!("get_next_interactive_core should succeed at completion"));
+        assert!(after.next_states.is_empty());
     }
 
-    // Get next possible states for this step - web-safe error handling
-    let next_states = vm.next().map_err(error_to_js)?;
+    #[test]
+    fn interactive_mode_detects_deadlock_and_describes_deliveries() {
+        let deadlock_source = r#"
+shared { let Ready = false; }
+main {
+    await Ready;
+}
+"#;
+        let err = start_interactive_core(deadlock_source, "main.alt", fs_for(deadlock_source))
+            .err()
+            .expect("initial deadlock should be reported");
+        assert!(err.message.to_lowercase().contains("deadlock"));
 
-    if next_states.is_empty() {
-        return Ok(serde_wasm_bindgen::to_value(&serde_json::json!({
-            "finished": true,
-            "message": "No next state"
-        }))
-        .unwrap());
-    }
-
-    if selected_index >= next_states.len() {
-        return Err(JsValue::from_str(&format!(
-            "Invalid selection index {}",
-            selected_index
-        )));
-    }
-
-    // Execute the selected transition.
-    // NOTE: vm.next() contains both program steps and delivery steps.
-    let (name, pid, instructions, actions, new_vm) =
-        next_states.into_iter().nth(selected_index).unwrap();
-
-    let execution_vm = new_vm.clone();
-    let mut message_flow_events: Vec<MessageFlowEvent> = Vec::new();
-    let mut step_output: Vec<String> = Vec::new();
-    let mut step_debug = String::new();
-
-    let step_lines: Vec<usize> = instructions
-        .iter()
-        .filter_map(|inst| inst.pos.as_ref().map(|p| p.line()))
-        .collect();
-
-    // Capture debug info from the instructions
-    for inst in instructions.iter() {
-        step_debug.push_str(&format!("#{}: {}\n", pid, inst));
-    }
-
-    for action in actions {
-        match action {
-            GlobalAction::Print(s) => step_output.push(s),
-            GlobalAction::Send(info) => {
-                let receiver_id = execution_vm
-                    .channels
-                    .get_connections()
-                    .get(&(info.from.process_id, info.to.channel_name.clone()))
-                    .map(|(pid, _chan)| *pid)
-                    .unwrap_or(0);
-
-                message_flow_events.push(MessageFlowEvent {
-                    sender: info.from.process_id,
-                    receiver: receiver_id,
-                    evt_type: SEND,
-                    message: info.to.channel_name,
-                    number: info.n_msg,
-                    actor_prog_name: info.from.process_name,
-                    vm_state: create_vm_state(&execution_vm),
-                    lines: step_lines.clone(),
-                });
-            }
-            GlobalAction::Deliver(info) => {
-                message_flow_events.push(MessageFlowEvent {
-                    sender: info.from.process_id,
-                    receiver: info.to.process_id,
-                    evt_type: RECV,
-                    message: message_payload_string(&info.message),
-                    number: info.sender_clock,
-                    actor_prog_name: info.to.process_name,
-                    vm_state: create_vm_state(&execution_vm),
-                    lines: step_lines.clone(),
-                });
-            }
-            _ => {}
-        }
-    }
-
-    // If we executed a delivery step, provide a useful executed_step string.
-    let executed_instructions = if instructions.is_empty() && name.starts_with("__deliver__") {
-        let mut delivery = None;
-        for action in &message_flow_events {
-            if action.evt_type == RECV {
-                delivery = Some(format!(
-                    "deliver {} <- {} : {}",
-                    action.receiver, action.sender, action.message
-                ));
+        let msg_source = r#"
+program Worker() {
+    await receive inp(v) => { print(v); }
+}
+main {
+    let w = run Worker();
+    channel self.out (int)> w.inp;
+    send out(7);
+}
+"#;
+        let mut history = Vec::new();
+        let mut saw_delivery_choice = false;
+        let mut next = start_interactive_core(msg_source, "main.alt", fs_for(msg_source))
+            .unwrap()
+            .next_states;
+        for _ in 0..10 {
+            if let Some(choice) = next
+                .iter()
+                .find(|c| c.prog_name.starts_with("__deliver__"))
+            {
+                assert!(choice
+                    .instructions
+                    .iter()
+                    .any(|inst| inst.starts_with("DELIVER ")));
+                saw_delivery_choice = true;
                 break;
             }
+            if next.is_empty() {
+                break;
+            }
+            let step =
+                execute_interactive_step_core(msg_source, "main.alt", fs_for(msg_source), &history, 0)
+                    .unwrap_or_else(|_| panic!("step failed"));
+            history.push(0);
+            next = step.next_states;
         }
-        vec![delivery.unwrap_or_else(|| "deliver <unknown>".to_string())]
-    } else {
-        instructions
-            .iter()
-            .map(|inst| inst.to_string())
-            .collect::<Vec<String>>()
-    };
-
-    // Generate state display information
-    let current_state = execution_vm.current_state();
-    let mut state_display_info = Vec::new();
-    state_display_info.push(format!("global: {:?}", current_state.0));
-    for ((channel_pid, cname), state) in current_state.1.iter() {
-        state_display_info.push(format!("channel {},{}", channel_pid, cname));
-        for v in state.iter() {
-            state_display_info.push(format!("  * {}", v));
-        }
+        assert!(saw_delivery_choice);
     }
-    for (local_pid, local_state) in current_state.2.iter().enumerate() {
-        state_display_info.push(format!(
-            "{} ({}): {:?}",
-            local_pid,
-            local_state.1,
-            local_state
-                .0
-                .iter()
-                .map(|v| format!("{}", v))
-                .collect::<Vec<String>>()
-                .join(", ")
-        ));
-    }
-
-    let result = InteractiveStepResult {
-        executed_step: ExecutedStepInfo {
-            prog_name: name,
-            prog_id: pid,
-            instructions: executed_instructions,
-        },
-        output: step_output,
-        debug: step_debug,
-        new_state: create_vm_state(&execution_vm),
-        message_flow_events,
-        state_display: state_display_info,
-        lines: step_lines,
-    };
-
-    Ok(to_js(&result))
 }

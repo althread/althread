@@ -189,7 +189,11 @@ impl<'a> VM<'a> {
                 GlobalAction::EndProgram => {
                     panic!("EndProgram action should not be in the list of actions");
                 }
-                GlobalAction::Exit => self.running_programs.clear(),
+                GlobalAction::Exit => {
+                    self.running_programs.clear();
+                    self.executable_programs.clear();
+                    self.waiting_programs.clear();
+                }
                 GlobalAction::Print(_) => {}
                 GlobalAction::Send(_) => {}
                 GlobalAction::Broadcast(_) => {}
@@ -267,32 +271,7 @@ impl<'a> VM<'a> {
         );
 
         if candidates.is_empty() {
-            return Err(AlthreadError::new(
-                ErrorType::RuntimeError,
-                None,
-                format!(
-                    "All programs are waiting, deadlock:\n{}",
-                    self.waiting_programs
-                        .iter()
-                        .map(|(id, dep)| format!(
-                            "-{}#{} at line {}: {:?}",
-                            self.running_programs.get(*id).unwrap().name,
-                            id,
-                            self.running_programs
-                                .get(*id)
-                                .unwrap()
-                                .current_instruction()
-                                .unwrap()
-                                .pos
-                                .as_ref()
-                                .unwrap()
-                                .line(),
-                            dep
-                        ))
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                ),
-            ));
+            return Err(self.deadlock_error());
         }
 
         let choice_idx = self.rng.usize(0..candidates.len());
@@ -569,10 +548,55 @@ impl<'a> VM<'a> {
         }
     }
 
+    pub fn deadlock_error(&self) -> AlthreadError {
+        let mut details: Vec<String> = self
+            .waiting_programs
+            .iter()
+            .map(|(id, dep)| {
+                let (name, line) = self
+                    .running_programs
+                    .get(*id)
+                    .map(|program| {
+                        let line = program
+                            .current_instruction()
+                            .ok()
+                            .and_then(|inst| inst.pos.as_ref())
+                            .map_or(0, |pos| pos.line());
+                        (program.name.as_str(), line)
+                    })
+                    .unwrap_or(("unknown", 0));
+                format!("-{name}#{id} at line {line}: {dep:?}")
+            })
+            .collect();
+
+        if details.is_empty() {
+            for &id in &self.executable_programs {
+                if let Some(program) = self.running_programs.get(id) {
+                    if program.has_terminated() {
+                        continue;
+                    }
+                    let line = program
+                        .current_instruction()
+                        .ok()
+                        .and_then(|inst| inst.pos.as_ref())
+                        .map_or(0, |pos| pos.line());
+                    details.push(format!("-{}#{} at line {}", program.name, id, line));
+                }
+            }
+        }
+
+        AlthreadError::new(
+            ErrorType::RuntimeError,
+            None,
+            format!("All programs are waiting, deadlock:\n{}", details.join("\n")),
+        )
+    }
+
     pub fn is_finished(&self) -> bool {
-        self.executable_programs.is_empty()
-            && !self.channels.has_pending_deliveries()
-            && self.waiting_programs.is_empty()
+        self.running_programs.is_empty()
+            || (self.executable_programs.is_empty()
+                && !self.channels.has_pending_deliveries()
+                && self.waiting_programs.is_empty())
     }
 
     pub fn new_memory() -> Memory {
@@ -1016,6 +1040,30 @@ main {
             .unwrap();
 
         assert!(block_index < tail_index);
+    }
+
+    #[test]
+    fn deadlock_error_formats_blocked_programs_and_exit_marks_vm_finished() {
+        let deadlock_source = r#"
+shared { let Ready = false; }
+main {
+    await Ready;
+}
+"#;
+        let mut vm = compile_vm(deadlock_source);
+        assert!(vm.next().unwrap().is_empty());
+        assert!(!vm.is_finished());
+        let err = vm.deadlock_error();
+        assert!(err.message.contains("deadlock"));
+        assert!(err.message.contains("main#0"));
+
+        // After hitting wait in next_random, deadlock error is returned without panicking.
+        let random_err = vm.next_random().unwrap_err();
+        assert!(random_err.message.contains("deadlock"));
+
+        // GlobalAction::Exit must clear executable and waiting sets so is_finished() is true.
+        vm.process_runtime_actions(&[GlobalAction::Exit]);
+        assert!(vm.is_finished());
     }
 }
 

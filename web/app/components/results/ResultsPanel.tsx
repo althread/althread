@@ -26,7 +26,7 @@ interface ResultsPanelProps {
 	editor: any;
 	theme: "dark" | "light";
 	runShortcut: string;
-	onErrorFileClick: (filePath: string) => void;
+	onErrorFileClick: (filePath: string, line?: number, col?: number) => void;
 	onPreviewLines: (lines: number[] | null) => void;
 }
 
@@ -272,10 +272,20 @@ export default function ResultsPanel(props: ResultsPanelProps) {
 									fallback={<pre>{exec.executionOutput()}</pre>}
 								>
 									{(error) => (
-										<ErrorDisplay
-											error={error()}
-											onFileClick={props.onErrorFileClick}
-										/>
+										<>
+											<ErrorDisplay
+												error={error()}
+												onFileClick={props.onErrorFileClick}
+											/>
+											<Show
+												when={
+													exec.executionOutput() &&
+													exec.executionOutput() !== error().message
+												}
+											>
+												<pre>{exec.executionOutput()}</pre>
+											</Show>
+										</>
 									)}
 								</Show>
 							</div>
@@ -299,6 +309,7 @@ export default function ResultsPanel(props: ResultsPanelProps) {
 						<MessageFlowGraph
 							events={exec.messageFlow()}
 							editor={props.editor}
+							theme={props.theme}
 						/>
 					</Show>
 				</div>

@@ -15,7 +15,6 @@ import { workerClient } from "@utils/workerClient";
 import { batch, createSignal } from "solid-js";
 import {
 	execute_interactive_step,
-	get_next_interactive_states,
 	start_interactive_session,
 } from "../../pkg/althread_web";
 import type {
@@ -112,6 +111,12 @@ export function createExecutionController(deps: ExecutionDeps) {
 		createSignal<GraphBuildResult>(EMPTY_GRAPH);
 	const [checkStateCount, setCheckStateCount] = createSignal(0);
 	const [counterexample, setCounterexample] = createSignal<GraphNode[]>([]);
+	const [counterexampleStdout, setCounterexampleStdout] = createSignal<
+		string[]
+	>([]);
+	const [counterexampleDebug, setCounterexampleDebug] = createSignal("");
+	const [counterexampleMessageFlow, setCounterexampleMessageFlow] =
+		createSignal<MessageFlowEvent[]>([]);
 
 	// ---- Interactive mode ----------------------------------------------------
 	const [choices, setChoices] = createSignal<NextStateOption[]>([]);
@@ -229,12 +234,16 @@ export function createExecutionController(deps: ExecutionDeps) {
 					setActiveTab("console");
 				} else if (runtimeError) {
 					const info = formatError(runtimeError, ctx.filePath);
-					setExecutionOutput(appendNotice(res.debug, info.message));
+					setStructuredError(info);
+					setExecutionOutput(res.debug);
 					setExecutionError(true);
 					setStatus({
 						tone: "error",
 						icon: "error",
-						title: "Runtime error",
+						title:
+							runtimeError.error_type === "InvariantError"
+								? "Invariant violated"
+								: "Runtime error",
 						detail: summarizeError(runtimeError),
 					});
 					setActiveTab("execution");
@@ -279,6 +288,9 @@ export function createExecutionController(deps: ExecutionDeps) {
 			setCheckGraph(EMPTY_GRAPH);
 			setCheckStateCount(0);
 			setCounterexample([]);
+			setCounterexampleStdout([]);
+			setCounterexampleDebug("");
+			setCounterexampleMessageFlow([]);
 			// Switch mode right away so the previous run graph is not displayed while checking.
 			setMode("check");
 			setBusy("check");
@@ -303,6 +315,9 @@ export function createExecutionController(deps: ExecutionDeps) {
 			batch(() => {
 				setCheckStateCount(states);
 				setCounterexample(res.path);
+				setCounterexampleStdout(res.path_stdout ?? []);
+				setCounterexampleDebug(res.path_debug ?? "");
+				setCounterexampleMessageFlow(res.path_message_flow_events ?? []);
 				setCheckGraph(
 					states > MAX_VISIBLE_GRAPH_NODES
 						? EMPTY_GRAPH
@@ -361,6 +376,9 @@ export function createExecutionController(deps: ExecutionDeps) {
 	const replayCounterexample = () => {
 		const path = counterexample();
 		if (path.length === 0) return;
+		const replayedStdout = counterexampleStdout();
+		const replayedDebug = counterexampleDebug();
+		const replayedMessageFlow = counterexampleMessageFlow();
 
 		batch(() => {
 			clearOutputs();
@@ -369,6 +387,8 @@ export function createExecutionController(deps: ExecutionDeps) {
 				path,
 				path.slice(1).map((node) => node.metadata.lines ?? []),
 			);
+			setStdout(replayedStdout.join("\n"));
+			setMessageFlow(replayedMessageFlow);
 			setStatus({
 				tone: "error",
 				icon: "debug-alt",
@@ -376,7 +396,7 @@ export function createExecutionController(deps: ExecutionDeps) {
 				detail: `${plural(path.length - 1, "step")} leading to the violation. Use ← / → to walk through it.`,
 			});
 			setExecutionOutput(
-				"Counter-example replay loaded from the checker path.",
+				replayedDebug || "Counter-example replay loaded from the checker path.",
 			);
 			setActiveTab("vm_states");
 		});
@@ -510,17 +530,10 @@ export function createExecutionController(deps: ExecutionDeps) {
 					[...stepLines(), stepResult.lines || []],
 				);
 
-				try {
-					const res = get_next_interactive_states(
-						ctx.source,
-						ctx.filePath,
-						ctx.virtualFS,
-						newHistory,
-					);
-					applyNextStates(res.next_states);
-				} catch (e) {
-					if (!isDeadlockError(e)) throw e;
-					applyNextStates(undefined, e);
+				if (stepResult.deadlock) {
+					applyNextStates(undefined, stepResult.deadlock);
+				} else {
+					applyNextStates(stepResult.next_states);
 				}
 				selectTraceStep(traceNodes().length - 1);
 			} catch (e: any) {
@@ -594,6 +607,9 @@ export function createExecutionController(deps: ExecutionDeps) {
 			setCheckGraph(EMPTY_GRAPH);
 			setCheckStateCount(0);
 			setCounterexample([]);
+			setCounterexampleStdout([]);
+			setCounterexampleDebug("");
+			setCounterexampleMessageFlow([]);
 			setMode("none");
 			setStatus(null);
 			setActiveTab("console");

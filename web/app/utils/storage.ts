@@ -25,7 +25,14 @@ export const loadFileSystem = (): FileSystemEntry[] => {
 	};
 
 	if (stored) {
-		return addIds(JSON.parse(stored));
+		try {
+			const parsed = JSON.parse(stored);
+			if (Array.isArray(parsed)) {
+				return addIds(parsed);
+			}
+		} catch (error) {
+			console.warn("Invalid file system in localStorage, resetting:", error);
+		}
 	}
 	// Default file system if nothing stored
 	return addIds([{ name: "main.alt", type: "file" }]);

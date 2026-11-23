@@ -216,6 +216,9 @@ pub struct CheckResult {
     pub verdict: CheckVerdict,
     pub violation_path: Vec<usize>,
     pub path: Vec<GraphNode>,
+    pub path_stdout: Vec<String>,
+    pub path_debug: String,
+    pub path_message_flow_events: Vec<MessageFlowEvent>,
     pub nodes: Vec<GraphNode>,
     pub exhaustive: bool,
     /// First transition in the repeating part of an LTL counterexample.
@@ -233,6 +236,9 @@ pub struct InteractiveStepResult {
     pub message_flow_events: Vec<MessageFlowEvent>,
     pub state_display: Vec<String>,
     pub lines: Vec<usize>,
+    pub next_states: Vec<NextStateOption>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deadlock: Option<RuntimeErrorInfo>,
 }
 
 /// Interactive session state information

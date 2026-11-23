@@ -314,14 +314,14 @@ pub fn check_program<'a>(
     max_states: Option<usize>,
 ) -> AlthreadResult<(Vec<StateLink<'a>>, StateGraph<'a>)> {
     if !compiled_project.compiled_ltl_formulas.is_empty() {
-        println!(
+        log::debug!(
             "Found {} compiled LTL formulas in the project",
             compiled_project.compiled_ltl_formulas.len()
         );
         for (i, formula) in compiled_project.compiled_ltl_formulas.iter().enumerate() {
-            println!("Compiled LTL Formula #{}: {}", i + 1, formula);
+            log::debug!("Compiled LTL Formula #{}: {}", i + 1, formula);
         }
-        println!("Starting LTL verification...");
+        log::debug!("Starting LTL verification...");
         return check_program_with_ltl(compiled_project, max_states);
     }
 

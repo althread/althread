@@ -229,11 +229,12 @@ const searchSenderNode = (
  * send/receive event and an arrow from each send to its receive. Clicking an
  * event shows its details and the VM state at that time.
  */
-export const renderMessageFlowGraph = (
-	commGraphData: MessageFlowEvent[],
-	editor?: any,
-) => {
-	let container!: HTMLDivElement;
+export default function MessageFlowGraph(props: {
+	events: MessageFlowEvent[];
+	editor?: any;
+	theme?: "dark" | "light";
+}) {
+	let container: HTMLDivElement | undefined;
 	let network: vis.Network | null = null;
 	let popupRef: HTMLDivElement | undefined;
 	const [maximized, setMaximized] = createSignal(false);
@@ -248,7 +249,8 @@ export const renderMessageFlowGraph = (
 	});
 	const [isPopupReady, setIsPopupReady] = createSignal(false);
 	const currentTheme = () =>
-		document.documentElement.dataset.theme === "light" ? "light" : "dark";
+		props.theme ??
+		(document.documentElement.dataset.theme === "light" ? "light" : "dark");
 	const palette = () =>
 		currentTheme() === "light"
 			? {
@@ -274,26 +276,23 @@ export const renderMessageFlowGraph = (
 		horizontal: "left" | "right";
 	}>({ vertical: "bottom", horizontal: "right" });
 
-	if (!commGraphData || commGraphData.length === 0) {
-		return (
-			<pre>
-				The communication graph will appear here (if any communication events
-				are recorded).
-			</pre>
-		);
-	}
-
 	createEffect(() => {
-		// Clear matchedSendNodeIds for each new graph
-		// matchedSendNodeIds.clear();
-		const matchedSendNodeIds = new Set<string>();
+		const commGraphData = props.events;
+		const colors = palette();
+		setPopupVisible(false);
+		setPopupContent(null);
 
+		if (!container || !commGraphData || commGraphData.length === 0) {
+			return;
+		}
+
+		const matchedSendNodeIds = new Set<string>();
 		const nodes = new vis.DataSet<FlowNode>();
 		const edges = new vis.DataSet<FlowEdge>();
 		const processes: Map<number, string> = new Map();
 
 		// extract processes name to make one line per process
-		commGraphData.forEach((event) => {
+		for (const event of commGraphData) {
 			const getProcessName = (pid: number) => {
 				const prog = event.vm_state?.locals?.find((p) => p.pid === pid);
 				return prog ? prog.name : `P${pid}`;
@@ -312,11 +311,11 @@ export const renderMessageFlowGraph = (
 					processes.set(event.sender, getProcessName(event.sender));
 				}
 			}
-		});
+		}
 
 		const ySpacing = 150; // space between processes vertically
 		const xStart = -50;
-		const xEnd = 450;
+		const xEnd = Math.max(450, xStart + 20 + commGraphData.length * 50 + 40);
 
 		// lines generation
 		processes.forEach((processName, index) => {
@@ -327,7 +326,7 @@ export const renderMessageFlowGraph = (
 				x: xStart,
 				shape: "dot",
 				size: 1,
-				color: palette().line,
+				color: colors.line,
 			};
 			const endNode: FlowNode = {
 				id: `p${index}_end`,
@@ -335,13 +334,13 @@ export const renderMessageFlowGraph = (
 				x: xEnd,
 				shape: "dot",
 				size: 1,
-				color: palette().line,
+				color: colors.line,
 			};
 			nodes.add([startNode, endNode]);
 			edges.add({
 				from: startNode.id,
 				to: endNode.id,
-				color: palette().line,
+				color: colors.line,
 				width: 2,
 			}); // line for each process
 
@@ -352,29 +351,20 @@ export const renderMessageFlowGraph = (
 				label: `P${index} \n(${processName})`,
 				shape: "text",
 				size: 0,
-				color: palette().line,
+				color: colors.line,
 				font: {
 					size: 18,
-					color: palette().line,
+					color: colors.line,
 				},
 			};
 
 			nodes.add(processNumberNode);
 		});
 
-		// message arrows
-		let i: number = 0;
+		// message event dots
 		commGraphData.forEach((event, eventIndex) => {
 			const nodeId = buildMessageNodeId(event, eventIndex);
 			const isBroadcast = event.receiver === undefined;
-
-			//lengthen the process lines for each new event so it doesnt go overboard
-			processes.forEach((_, processNumber) => {
-				nodes.update({
-					id: `p${processNumber}_end`,
-					x: 500 + commGraphData.length * 1.5 * i,
-				} as FlowNode);
-			});
 
 			// a reception is drawn on the receiver line, a send on the sender line
 			const yposLine =
@@ -383,15 +373,14 @@ export const renderMessageFlowGraph = (
 			const msgNode: FlowNode = {
 				id: nodeId,
 				y: yposLine * ySpacing,
-				x: xStart + 20 + i * 50,
+				x: xStart + 20 + eventIndex * 50,
 				shape: "dot",
 				size: 5,
-				color: palette().node,
+				color: colors.node,
 				event: event,
 				broadcast: isBroadcast,
 			};
 			nodes.add(msgNode);
-			i++;
 		});
 
 		nodes.forEach((node) => {
@@ -405,7 +394,7 @@ export const renderMessageFlowGraph = (
 						lines: node.event.lines,
 						font: {
 							size: 20,
-							color: palette().line,
+							color: colors.line,
 							align: "middle",
 							background: "none",
 							strokeWidth: 0,
@@ -416,8 +405,6 @@ export const renderMessageFlowGraph = (
 				}
 			}
 		});
-
-		const data = { nodes: nodes.get(), edges: edges.get() };
 
 		const options = {
 			layout: {
@@ -432,10 +419,8 @@ export const renderMessageFlowGraph = (
 			},
 		};
 
-		network = new vis.Network(container, data, options);
-		network.once("stabilized", () => {
-			if (network) network.fit();
-		});
+		network = new vis.Network(container, { nodes, edges }, options);
+		network.fit({ animation: false });
 
 		/* to display the associated vm state when clicking on an event node */
 		let previous_node_id: string | null = null;
@@ -447,6 +432,8 @@ export const renderMessageFlowGraph = (
 					id: previous_node_id,
 					color: previous_node_colour,
 				} as FlowNode);
+				previous_node_id = null;
+				previous_node_colour = null;
 				setPopupVisible(false);
 			}
 			if (event.nodes.length > 0) {
@@ -466,22 +453,22 @@ export const renderMessageFlowGraph = (
 					setIsPopupReady(false);
 					setPopupContent(node.event);
 					setPopupPosition({ x: pos.x, y: pos.y });
-					setPopupAlignment({ vertical: "bottom", horizontal: "right" }); // <--- Reset alignment on new popup
+					setPopupAlignment({ vertical: "bottom", horizontal: "right" });
 					setPopupVisible(true);
 					previous_node_id = node_id;
 					previous_node_colour = node.color;
-					nodes.update({ id: node_id, color: palette().active } as FlowNode);
+					nodes.update({ id: node_id, color: colors.active } as FlowNode);
 
 					// Also highlight lines if available
 					if (node.event.lines?.length) {
-						editor?.highlightLines?.(node.event.lines);
+						props.editor?.highlightLines?.(node.event.lines);
 					}
 				}
 			} else if (event.edges.length > 0) {
 				const edgeId = event.edges[0];
 				const edge = edges.get(edgeId as string);
 				if (edge?.lines?.length) {
-					editor?.highlightLines?.(edge.lines);
+					props.editor?.highlightLines?.(edge.lines);
 				}
 			} else {
 				setPopupVisible(false);
@@ -489,7 +476,10 @@ export const renderMessageFlowGraph = (
 		});
 
 		onCleanup(() => {
-			if (network) network.destroy();
+			if (network) {
+				network.destroy();
+				network = null;
+			}
 		});
 	});
 
@@ -579,13 +569,21 @@ export const renderMessageFlowGraph = (
 		);
 
 	return (
-		<>
+		<Show
+			when={props.events && props.events.length > 0}
+			fallback={
+				<pre>
+					The communication graph will appear here (if any communication events
+					are recorded).
+				</pre>
+			}
+		>
 			<div class={`state-graph${maximized() ? " maximized" : ""}`}>
 				<div ref={container} style="height: 100%;" />
 				<GraphToolbar
 					onFullscreen={handleMaximize}
 					onRecenter={handleRecenter}
-					onDownloadCSV={() => exportCommGraphToCSV(commGraphData)}
+					onDownloadCSV={() => exportCommGraphToCSV(props.events)}
 					onDownload={handleDownload}
 					isFullscreen={maximized()}
 				/>
@@ -607,14 +605,6 @@ export const renderMessageFlowGraph = (
 					</div>
 				)}
 			</div>
-		</>
+		</Show>
 	);
-};
-
-/** Component wrapper so that the graph (and vis-network) can be lazy-loaded. */
-export default function MessageFlowGraph(props: {
-	events: MessageFlowEvent[];
-	editor?: any;
-}) {
-	return <>{renderMessageFlowGraph(props.events, props.editor)}</>;
 }
