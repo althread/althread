@@ -17,7 +17,7 @@ self.onmessage = async (event) => {
 	try {
 		await ensureInitialized();
 
-		let result;
+		let result: unknown;
 		switch (type) {
 			case "run":
 				result = run(payload.source, payload.filePath, payload.virtualFS);

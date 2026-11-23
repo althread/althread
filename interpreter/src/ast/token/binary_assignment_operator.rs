@@ -1,9 +1,5 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
-use crate::{ast::node::NodeBuilder, error::AlthreadResult, no_rule, parser::Rule};
-
 use super::literal::Literal;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -27,22 +23,6 @@ impl BinaryAssignmentOperator {
             Self::DivideAssign => left.divide(right),
             Self::ModuloAssign => left.modulo(right),
             Self::OrAssign => left.or(right),
-        }
-    }
-}
-
-impl NodeBuilder for BinaryAssignmentOperator {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let pair = pairs.next().unwrap();
-        match pair.as_rule() {
-            Rule::ASSIGN_OP => Ok(Self::Assign),
-            Rule::ADD_ASSIGN_OP => Ok(Self::AddAssign),
-            Rule::SUB_ASSIGN_OP => Ok(Self::SubtractAssign),
-            Rule::MUL_ASSIGN_OP => Ok(Self::MultiplyAssign),
-            Rule::DIV_ASSIGN_OP => Ok(Self::DivideAssign),
-            Rule::MOD_ASSIGN_OP => Ok(Self::ModuloAssign),
-            Rule::OR_ASSIGN_OP => Ok(Self::OrAssign),
-            _ => Err(no_rule!(pair, "BinaryAssignmentOperator", filepath)),
         }
     }
 }

@@ -11,30 +11,13 @@ import {
 	indentWithTab,
 	toggleComment,
 } from "@codemirror/commands";
-import { cpp } from "@codemirror/lang-cpp";
-import { css } from "@codemirror/lang-css";
-import { html } from "@codemirror/lang-html";
-// Import additional language supports
-import { javascript } from "@codemirror/lang-javascript";
-import { json } from "@codemirror/lang-json";
-import { markdown } from "@codemirror/lang-markdown";
-import { python } from "@codemirror/lang-python";
-import { rust } from "@codemirror/lang-rust";
 import {
 	bracketMatching,
-	defaultHighlightStyle,
 	foldGutter,
 	foldKeymap,
-	HighlightStyle,
 	indentOnInput,
-	syntaxHighlighting,
 } from "@codemirror/language";
-import {
-	type Diagnostic,
-	linter,
-	lintGutter,
-	lintKeymap,
-} from "@codemirror/lint";
+import { lintGutter, lintKeymap } from "@codemirror/lint";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import {
 	Compartment,
@@ -58,50 +41,58 @@ import {
 	rectangularSelection,
 	WidgetType,
 } from "@codemirror/view";
-import { Tag, tags as t, tags } from "@lezer/highlight";
 import { createCodeMirror } from "solid-codemirror";
-import { createSignal, onMount } from "solid-js";
+import { createEffect } from "solid-js";
+import type { LanguageOptions } from "../../lsp/extension";
 import {
 	type CodeEditorTheme,
 	createCustomSyntaxHighlighting,
 } from "./custom-style";
 import editor_lang from "./editor-lang";
 
-// Language detection based on file extension
-const getLanguageExtension = (filePath: string): Extension => {
-	const extension = filePath.split(".").pop()?.toLowerCase();
+const fileExtension = (filePath: string) =>
+	filePath.split(".").pop()?.toLowerCase() ?? "";
 
+const isAlthreadFile = (filePath: string) => fileExtension(filePath) === "alt";
+
+/**
+ * Highlighting for non-Althread files. The language packages are loaded on
+ * demand so that they are not part of the main bundle.
+ */
+const loadOtherLanguage = async (filePath: string): Promise<Extension> => {
+	const extension = fileExtension(filePath);
 	switch (extension) {
 		case "js":
 		case "jsx":
 		case "ts":
 		case "tsx":
-			return javascript({ jsx: true, typescript: extension.includes("ts") });
+			return (await import("@codemirror/lang-javascript")).javascript({
+				jsx: extension.endsWith("x"),
+				typescript: extension.startsWith("ts"),
+			});
 		case "css":
-			return css();
+			return (await import("@codemirror/lang-css")).css();
 		case "html":
 		case "htm":
-			return html();
+			return (await import("@codemirror/lang-html")).html();
 		case "json":
-			return json();
+			return (await import("@codemirror/lang-json")).json();
 		case "md":
 		case "markdown":
-			return markdown();
+			return (await import("@codemirror/lang-markdown")).markdown();
 		case "py":
-			return python();
+			return (await import("@codemirror/lang-python")).python();
 		case "rs":
-			return rust();
+			return (await import("@codemirror/lang-rust")).rust();
 		case "cpp":
 		case "cc":
 		case "cxx":
 		case "c":
 		case "h":
 		case "hpp":
-			return cpp();
-		case "alt":
-			return editor_lang(); // Your custom language
+			return (await import("@codemirror/lang-cpp")).cpp();
 		default:
-			return javascript(); // Default to JavaScript for unknown files
+			return []; // plain text
 	}
 };
 
@@ -150,12 +141,7 @@ const highlightField = StateField.define<DecorationSet>({
 
 						// Background Highlight
 						decorations.push(
-							Decoration.line({
-								attributes: {
-									style:
-										"background-color: rgba(255, 165, 0, 0.2); border-left: 3px solid orange;",
-								},
-							}).range(line.from),
+							Decoration.line({ class: "cm-exec-line" }).range(line.from),
 						);
 
 						// Badge Widget (at the end of the line)
@@ -210,95 +196,180 @@ const basicSetup: Extension = (() => [
 	]),
 ])();
 
+const editorPalettes = {
+	dark: {
+		text: "#c9d1d9",
+		background: "#1e1e1e",
+		gutterText: "#5a5f69",
+		gutterActiveText: "#c9d1d9",
+		activeLine: "rgba(255, 255, 255, 0.035)",
+		caret: "#f0a24b",
+		selection: "rgba(64, 120, 192, 0.45)",
+		selectionFocused: "rgba(64, 120, 192, 0.55)",
+		selectionMatch: "rgba(255, 217, 102, 0.12)",
+		tooltipBg: "#252526",
+		tooltipText: "#dddddd",
+		tooltipBorder: "#3c3c3c",
+		completionSelected: "#04395e",
+		completionSelectedText: "#ffffff",
+		execLine: "rgba(232, 146, 52, 0.16)",
+		execBorder: "#e89234",
+		badgeBg: "rgba(232, 146, 52, 0.22)",
+		badgeText: "#f5b56a",
+		foldMarker: "#6b707a",
+	},
+	light: {
+		text: "#2f3441",
+		background: "#fbf6ee",
+		gutterText: "#b0a493",
+		gutterActiveText: "#4a3d2f",
+		activeLine: "rgba(160, 120, 70, 0.07)",
+		caret: "#c96f1a",
+		selection: "rgba(245, 184, 96, 0.35)",
+		selectionFocused: "rgba(245, 184, 96, 0.45)",
+		selectionMatch: "rgba(209, 136, 38, 0.15)",
+		tooltipBg: "#fffaf2",
+		tooltipText: "#2f3441",
+		tooltipBorder: "#dccfbf",
+		completionSelected: "#f1dfc4",
+		completionSelectedText: "#2a1f14",
+		execLine: "rgba(214, 125, 30, 0.14)",
+		execBorder: "#d67d1e",
+		badgeBg: "rgba(201, 111, 26, 0.14)",
+		badgeText: "#9a4f0c",
+		foldMarker: "#b0a493",
+	},
+} as const;
+
 const createEditorTheme = (theme: CodeEditorTheme) => {
 	const isDark = theme === "dark";
+	const c = editorPalettes[theme];
 
 	return EditorView.theme(
 		{
 			"&": {
-				color: isDark ? "#abb2bf" : "#2f3441",
-				backgroundColor: isDark ? "#1e1e1e" : "#f7f1e7",
+				color: c.text,
+				backgroundColor: c.background,
+				fontSize: "13.5px",
+			},
+			"&.cm-focused": {
+				outline: "none",
+			},
+			".cm-scroller": {
+				fontFamily: "var(--app-font-mono)",
+				lineHeight: "1.65",
+				fontVariantLigatures: "contextual",
 			},
 			".cm-content": {
-				caretColor: isDark ? "#528bff" : "#0f6bbd",
+				caretColor: c.caret,
+				padding: "10px 0 40px",
+			},
+			".cm-line": {
+				padding: "0 16px 0 6px",
 			},
 			".cm-cursor, .cm-dropCursor": {
-				borderLeft: `2px solid ${isDark ? "#528bff" : "#0f6bbd"}`,
+				borderLeft: `2px solid ${c.caret}`,
 			},
-			"&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
-				backgroundColor: isDark
-					? "rgba(38, 79, 120, 0.70) !important"
-					: "rgba(245, 184, 96, 0.38) !important",
-			},
-			".cm-selectionLayer": {
-				mixBlendMode: "normal",
-			},
-			".cm-selectionLayer .cm-selectionBackground": {
-				mixBlendMode: "normal",
+			"&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground":
+				{
+					backgroundColor: `${c.selectionFocused} !important`,
+				},
+			".cm-selectionBackground": {
+				backgroundColor: `${c.selection} !important`,
 			},
 			".cm-content ::selection": {
-				backgroundColor: isDark
-					? "rgba(38, 79, 120, 1.00)"
-					: "rgba(245, 184, 96, 0.52)",
-			},
-			".cm-gutters": {
-				backgroundColor: isDark ? "#1e1e1e" : "#efe5d6",
-				color: isDark ? "#5c6370" : "#8b7f72",
-				borderRight: `1px solid ${isDark ? "#333" : "#dccfbf"}`,
-				minWidth: "60px",
-			},
-			".cm-lineNumbers": {
-				minWidth: "40px",
-				paddingRight: "8px",
-				textAlign: "right",
-			},
-			".cm-lineNumbers .cm-gutterElement": {
-				minWidth: "32px",
-				textAlign: "right",
-			},
-			".cm-activeLineGutter": {
-				backgroundColor: isDark ? "#3a3f4b" : "#e5d9c5",
+				backgroundColor: c.selectionFocused,
 			},
 			".cm-activeLine": {
-				backgroundColor: isDark
-					? "rgba(58, 63, 75, 0.35)"
-					: "rgba(196, 148, 88, 0.10)",
-				boxShadow: isDark
-					? "inset 0 0 0 1px rgba(255, 255, 255, 0.06)"
-					: "inset 0 0 0 1px rgba(163, 118, 63, 0.14)",
+				backgroundColor: c.activeLine,
 			},
 			".cm-selectionMatch": {
-				backgroundColor: isDark
-					? "rgba(255, 217, 102, 0.15)"
-					: "rgba(209, 136, 38, 0.16)",
+				backgroundColor: c.selectionMatch,
 				borderRadius: "2px",
 			},
 			".cm-selectionMatch.cm-selectionMatch-main": {
-				backgroundColor: isDark
-					? "rgba(38, 79, 120, 0.30)"
-					: "rgba(214, 156, 75, 0.22)",
+				backgroundColor: "transparent",
 			},
-			".cm-foldGutter": {
-				width: "16px",
-				paddingLeft: "2px",
+			".cm-matchingBracket, &.cm-focused .cm-matchingBracket": {
+				backgroundColor: "transparent",
+				outline: `1px solid ${isDark ? "rgba(255,255,255,0.25)" : "rgba(90,60,30,0.3)"}`,
+				borderRadius: "2px",
+			},
+			".cm-gutters": {
+				backgroundColor: c.background,
+				color: c.gutterText,
+				border: "none",
+				paddingLeft: "8px",
+			},
+			".cm-lineNumbers .cm-gutterElement": {
+				minWidth: "28px",
+				padding: "0 4px 0 0",
+				textAlign: "right",
+				fontVariantNumeric: "tabular-nums",
+			},
+			".cm-activeLineGutter": {
+				backgroundColor: "transparent",
+				color: c.gutterActiveText,
+			},
+			".cm-foldGutter .cm-gutterElement": {
+				width: "14px",
+				color: c.foldMarker,
+				opacity: "0",
+				transition: "opacity 0.15s",
+				cursor: "pointer",
+			},
+			".cm-gutters:hover .cm-foldGutter .cm-gutterElement": {
+				opacity: "1",
 			},
 			".cm-lintGutter": {
-				width: "16px",
+				width: "12px",
 			},
-			".cm-scroller": {
-				fontFamily: "'Menlo', 'Monaco', 'Courier New', monospace",
-				fontSize: "13px",
-				lineHeight: "1.5",
+			".cm-tooltip": {
+				backgroundColor: c.tooltipBg,
+				color: c.tooltipText,
+				border: `1px solid ${c.tooltipBorder}`,
+				borderRadius: "6px",
+				boxShadow: isDark
+					? "0 6px 20px rgba(0, 0, 0, 0.45)"
+					: "0 6px 20px rgba(121, 89, 46, 0.16)",
+				overflow: "hidden",
+			},
+			".cm-tooltip-autocomplete > ul": {
+				fontFamily: "var(--app-font-mono)",
+				fontSize: "12.5px",
+				padding: "4px",
+			},
+			".cm-tooltip-autocomplete > ul > li": {
+				borderRadius: "4px",
+				padding: "2px 8px !important",
+			},
+			".cm-tooltip-autocomplete ul li[aria-selected]": {
+				backgroundColor: c.completionSelected,
+				color: c.completionSelectedText,
+			},
+			".cm-panels": {
+				backgroundColor: c.tooltipBg,
+				color: c.tooltipText,
+			},
+			".cm-panels.cm-panels-bottom": {
+				borderTop: `1px solid ${c.tooltipBorder}`,
+			},
+			// Lines executed by the selected step / state.
+			".cm-exec-line": {
+				backgroundColor: c.execLine,
+				boxShadow: `inset 3px 0 0 ${c.execBorder}`,
 			},
 			".cm-process-badge": {
-				backgroundColor: isDark ? "orange" : "#c96f1a",
-				color: isDark ? "black" : "#fffaf2",
-				borderRadius: "4px",
-				padding: "0 4px",
-				fontSize: "10px",
-				fontWeight: "bold",
-				marginLeft: "10px",
-				verticalAlign: "middle",
+				backgroundColor: c.badgeBg,
+				color: c.badgeText,
+				borderRadius: "999px",
+				padding: "0 7px",
+				fontFamily: "var(--app-font-ui)",
+				fontSize: "10.5px",
+				fontWeight: "600",
+				lineHeight: "16px",
+				marginLeft: "12px",
+				verticalAlign: "1px",
 				display: "inline-block",
 			},
 		},
@@ -307,21 +378,30 @@ const createEditorTheme = (theme: CodeEditorTheme) => {
 };
 
 const createEditor = ({
-	compile,
 	defaultValue,
 	onValueChange,
 	filePath = "main.alt",
 	theme = "dark",
+	getWorkspace,
+	onNavigate,
+	onWorkspaceChange,
 }: {
-	compile: (code: string) => Promise<any>;
 	defaultValue: string | undefined;
 	onValueChange: undefined | ((value: string) => void);
 	filePath?: string;
 	theme?: CodeEditorTheme;
+	getWorkspace?: LanguageOptions["getWorkspace"];
+	onNavigate?: LanguageOptions["onNavigate"];
+	onWorkspaceChange?: LanguageOptions["onWorkspaceChange"];
 }) => {
+	let currentContent = defaultValue ?? "";
+	let requestedReadOnly = false;
 	const editor = createCodeMirror({
 		value: defaultValue,
-		onValueChange: onValueChange,
+		onValueChange: (value) => {
+			currentContent = value;
+			onValueChange?.(value);
+		},
 	});
 
 	// Store current filename for language detection
@@ -329,75 +409,42 @@ const createEditor = ({
 
 	// Create compartments for dynamic extensions
 	const languageCompartment = new Compartment();
-	const linterCompartment = new Compartment();
 	const readOnlyCompartment = new Compartment();
 	const themeCompartment = new Compartment();
 	const syntaxCompartment = new Compartment();
 
-	// Create linter only for .alt files, but always include lintGutter for consistent spacing
-	const createLinterExtension = (filePath: string): Extension => {
-		if (filePath.endsWith(".alt")) {
-			const regexpLinter = linter(async (view) => {
-				console.log("linting .alt file");
-				const diagnostics: Diagnostic[] = [];
-
-				const code = view.state.doc.toString();
-
-				try {
-					await compile(code);
-				} catch (e: any) {
-					console.log("Lint error:", e);
-
-					// Check if error has position information
-					if (
-						e.pos &&
-						typeof e.pos.start === "number" &&
-						typeof e.pos.end === "number"
-					) {
-						diagnostics.push({
-							from: e.pos.start,
-							to: e.pos.end,
-							severity: "error",
-							message: e.message || "Compilation error",
-						});
-					} else {
-						// If no position info, highlight the entire document or first line
-						const docLength = view.state.doc.length;
-						if (docLength > 0) {
-							const firstLineEnd = view.state.doc.line(1).to;
-							diagnostics.push({
-								from: 0,
-								to: Math.min(firstLineEnd, docLength),
-								severity: "error",
-								message: e.message || "Compilation error",
-							});
-						}
-					}
-				}
-				return diagnostics;
-			});
-			return [regexpLinter, lintGutter()];
-		}
-		// For non-.alt files, still include lintGutter for consistent spacing, but no actual linter
-		return [lintGutter()];
-	};
-
-	// Function to update language and linter
+	const languageOptions = (path: string): LanguageOptions => ({
+		filePath: path,
+		getWorkspace,
+		onNavigate,
+		onWorkspaceChange,
+	});
 	const updateLanguage = (newFileName: string) => {
-		console.log(`Switching to language for: ${newFileName}`);
 		currentFileName = newFileName;
-
-		// Update language extension
-		const newLanguageExtension = getLanguageExtension(newFileName);
-		editor.editorView().dispatch({
-			effects: languageCompartment.reconfigure(newLanguageExtension),
-		});
-
-		// Update linter extension (only for .alt files, but always include gutter)
-		const newLinterExtension = createLinterExtension(newFileName);
-		editor.editorView().dispatch({
-			effects: linterCompartment.reconfigure(newLinterExtension),
-		});
+		const view = editor.editorView();
+		if (!view || !languageCompartment.get(view.state)) return;
+		if (isAlthreadFile(newFileName)) {
+			view.dispatch({
+				effects: languageCompartment.reconfigure(
+					editor_lang(languageOptions(newFileName)),
+				),
+			});
+			return;
+		}
+		// Plain text until the language package is loaded.
+		view.dispatch({ effects: languageCompartment.reconfigure([]) });
+		loadOtherLanguage(newFileName)
+			.then((language) => {
+				const current = editor.editorView();
+				if (current && currentFileName === newFileName) {
+					current.dispatch({
+						effects: languageCompartment.reconfigure(language),
+					});
+				}
+			})
+			.catch((error) =>
+				console.warn(`Could not load highlighting for ${newFileName}`, error),
+			);
 	};
 
 	// Initialize with basic setup and theme
@@ -424,9 +471,11 @@ const createEditor = ({
 
 	// Add compartments for dynamic extensions
 	editor.createExtension(
-		languageCompartment.of(getLanguageExtension(filePath)),
+		languageCompartment.of(
+			isAlthreadFile(filePath) ? editor_lang(languageOptions(filePath)) : [],
+		),
 	);
-	editor.createExtension(linterCompartment.of(createLinterExtension(filePath)));
+	editor.createExtension(lintGutter());
 	editor.createExtension(readOnlyCompartment.of([]));
 	editor.createExtension(highlightField);
 
@@ -444,6 +493,7 @@ const createEditor = ({
 
 	// Safe content update function
 	const safeUpdateContent = (content: string) => {
+		currentContent = content;
 		const view = safeEditorView();
 		if (view) {
 			try {
@@ -466,6 +516,7 @@ const createEditor = ({
 
 	// Function to toggle read-only mode
 	const setReadOnly = (isReadOnly: boolean) => {
+		requestedReadOnly = isReadOnly;
 		const view = safeEditorView();
 		if (view) {
 			try {
@@ -481,6 +532,16 @@ const createEditor = ({
 		}
 		return false;
 	};
+
+	// A file can be selected before Solid mounts the editor. Apply the latest
+	// requested buffer, URI and access mode as soon as its view is available.
+	createEffect(() => {
+		const view = editor.editorView();
+		if (!view) return;
+		safeUpdateContent(currentContent);
+		updateLanguage(currentFileName);
+		setReadOnly(requestedReadOnly);
+	});
 
 	// Function to highlight specific lines
 	const highlightLines = (

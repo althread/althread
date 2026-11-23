@@ -229,8 +229,7 @@
 	color: var(--app-syntax-keyword);
 }
 
-/* Graph toolbar */
-.app-shell[data-theme="light"] .graph-toolbar button,
+/* Header icon button */
 .app-shell[data-theme="light"] .theme-toggle-button {
 	box-shadow: 0 8px 22px rgba(121, 89, 46, 0.1);
 }

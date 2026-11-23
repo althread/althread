@@ -1,11 +1,11 @@
 import { For, Show } from "solid-js";
-import type { CallFrame } from "../../types/vm-state";
+import type { CallFrame, Literal } from "../../types/vm-state";
 import VariableDisplay from "./VariableDisplay";
 import "./CallFrameDisplay.css";
 
 interface CallFrameDisplayProps {
 	frames: CallFrame[];
-	fallbackMemory?: string[];
+	fallbackMemory?: Literal[];
 }
 
 export default function CallFrameDisplay(props: CallFrameDisplayProps) {

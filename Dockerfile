@@ -1,31 +1,17 @@
 # Stage 1: Build
-FROM rust:1.80-slim-bookworm AS builder
+# Follow stable Rust, as in CI; dependencies require Rust 2024 support.
+FROM rust:1-slim-bookworm AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/src/althread
 
-# Copy the workspace manifest and the project files
-COPY Cargo.toml Cargo.lock ./
-COPY cli/Cargo.toml cli/
-COPY interpreter/Cargo.toml interpreter/
-COPY web/Cargo.toml web/
+# Copy the entire project
+COPY . .
 
-# Create dummy source files to pre-build dependencies
-RUN mkdir -p cli/src interpreter/src web/src && \
-    touch cli/src/main.rs interpreter/src/lib.rs web/src/lib.rs
-
-# Build dependencies (this layer will be cached)
-RUN cargo build --release -p althread-cli
-
-# Copy the actual source code
-COPY cli/src cli/src
-COPY interpreter/src interpreter/src
-
-# Re-build with actual source
-# We need to touch the main.rs to ensure cargo re-builds it
-RUN touch cli/src/main.rs && cargo build --release -p althread-cli
+# Build the project
+RUN cargo build --locked --release -p althread-cli
 
 # Stage 2: Runtime
 FROM debian:bookworm-slim

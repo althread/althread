@@ -3,7 +3,7 @@ use std::{cmp, fmt};
 #[derive(Debug, PartialEq, cmp::Eq, Hash)]
 pub enum ConditionKeyword {
     Always,
-    Never,
+    Never, // not used anymore
 }
 
 impl fmt::Display for ConditionKeyword {

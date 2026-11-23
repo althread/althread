@@ -2,6 +2,7 @@ import type { FileSystemEntry } from "@components/fileexplorer/FileExplorer";
 import FileExplorer from "@components/fileexplorer/FileExplorer";
 import type { SearchResult } from "@components/search/SearchView";
 import SearchView from "@components/search/SearchView";
+import { isMac, modKey } from "@utils/platform";
 import { loadFileContent } from "@utils/storage";
 import { createEffect, createSignal, onCleanup, Show } from "solid-js";
 import HelpView from "./HelpView";
@@ -66,16 +67,6 @@ export default function Sidebar(props: SidebarProps) {
 			setInternalActiveView(view);
 		}
 	};
-
-	const isMac = (() => {
-		const userAgentData = (navigator as any).userAgentData;
-		return (
-			userAgentData?.platform?.toLowerCase().includes("mac") ||
-			navigator.userAgent.toLowerCase().includes("mac")
-		);
-	})();
-
-	const getModifierKey = () => (isMac ? "Cmd" : "Ctrl");
 
 	// Handle tab clicks with collapse logic
 	const handleTabClick = (view: SidebarView) => {
@@ -152,11 +143,11 @@ export default function Sidebar(props: SidebarProps) {
 			}
 
 			if (entry.children) {
-				entry.children.forEach((child) => addFileToResults(child, fullPath));
+				for (const child of entry.children) addFileToResults(child, fullPath);
 			}
 		};
 
-		props.files.forEach((entry) => addFileToResults(entry));
+		for (const entry of props.files) addFileToResults(entry);
 		return results;
 	};
 
@@ -164,30 +155,34 @@ export default function Sidebar(props: SidebarProps) {
 		<div class={`sidebar ${props.isCollapsed ? "collapsed" : ""}`}>
 			<div class="sidebar-tabs">
 				<button
+					type="button"
 					class={`sidebar-tab ${activeView() === "explorer" ? "active" : ""}`}
 					onClick={() => handleTabClick("explorer")}
-					title={`File Explorer (${getModifierKey()}+Shift+E)`}
+					title={`File Explorer (${modKey}+Shift+E)`}
 				>
 					<i class="codicon codicon-files"></i>
 				</button>
 				<button
+					type="button"
 					class={`sidebar-tab ${activeView() === "search" ? "active" : ""}`}
 					onClick={() => handleTabClick("search")}
-					title={`Search (${getModifierKey()}+Shift+F)`}
+					title={`Search (${modKey}+Shift+F)`}
 				>
 					<i class="codicon codicon-search"></i>
 				</button>
 				<button
+					type="button"
 					class={`sidebar-tab ${activeView() === "packages" ? "active" : ""}`}
 					onClick={() => handleTabClick("packages")}
-					title={`Package Manager (${getModifierKey()}+Shift+P)`}
+					title={`Package Manager (${modKey}+Shift+P)`}
 				>
 					<i class="codicon codicon-package"></i>
 				</button>
 				<button
+					type="button"
 					class={`sidebar-tab ${activeView() === "help" ? "active" : ""}`}
 					onClick={() => handleTabClick("help")}
-					title={`Help & Resources (${getModifierKey()}+Shift+I)`}
+					title={`Help & Resources (${modKey}+Shift+I)`}
 				>
 					<i class="codicon codicon-question"></i>
 				</button>

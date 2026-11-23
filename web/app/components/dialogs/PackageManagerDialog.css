@@ -101,7 +101,7 @@
 .dependency-version {
 	margin-right: 1rem;
 	color: #7f8c8d;
-	font-family: monospace;
+	font-family: var(--app-font-mono);
 }
 
 .cache-section {
@@ -135,7 +135,7 @@
 .package-version {
 	margin-right: 1rem;
 	color: #7f8c8d;
-	font-family: monospace;
+	font-family: var(--app-font-mono);
 }
 
 .package-type {

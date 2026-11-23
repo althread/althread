@@ -50,9 +50,10 @@ export interface VisGraphNode {
 	font?: {
 		color?: string;
 	};
+	kind?: "initial" | "violation" | "final" | "normal";
 	title?: string;
 	fullLabel?: string;
-	rawState?: VMState | { state: VMState; stepIndex: number };
+	rawState?: VMStateSelection;
 }
 
 /**
@@ -72,6 +73,7 @@ export interface VisGraphEdge {
 				hover?: string;
 		  };
 	width?: number;
+	isViolationEdge?: boolean;
 	font?: {
 		size?: number;
 		color?: string;
@@ -100,6 +102,7 @@ export interface GraphBuildResult {
 export interface VMStateSelection {
 	vm: VMState;
 	stepIndex?: number; // Optional: only present in run mode for step navigation
+	nodeIndex?: number; // Index of the node in its graph
 	level?: number; // Optional: only present in check mode for level info
 }
 

@@ -4,29 +4,24 @@
  * Unified graph building for both run and check modes using GraphNode structure.
  */
 
-import { nodeToString } from "@components/graph/Node";
 import type {
 	GraphBuildResult,
 	GraphNode,
 	VisGraphEdge,
 	VisGraphNode,
-	VMState,
 } from "../types/vm-state";
 
-// Helper to create a compatible object for nodeToString
-function vmStateToNode(vm: VMState): any {
-	// nodeToString expects the old Map-based format, but we can pass our typed VMState
-	// The function will work with the new structure
-	return vm;
-}
+/** Above this number of nodes the state graph is not rendered. */
+export const MAX_VISIBLE_GRAPH_NODES = 200;
 
 interface GraphBuildOptions {
 	mode?: "run" | "check";
 	stepLines?: number[][];
-	violationPath?: string[];
-	violationPathStates?: VMState[];
-	theme?: "dark" | "light";
+	violationPath?: number[];
 }
+
+/** Role of a node in the state graph, used to pick its color. */
+export type GraphNodeKind = "initial" | "violation" | "final" | "normal";
 
 export function stableStringify(value: unknown): string {
 	if (value === null || value === undefined) return JSON.stringify(value);
@@ -45,43 +40,6 @@ export function stableStringify(value: unknown): string {
 	return JSON.stringify(value);
 }
 
-export function vmStateSignature(vm: VMState): string {
-	const normalized = {
-		globals: Object.entries(vm.globals || {})
-			.sort(([a], [b]) => a.localeCompare(b))
-			.map(([key, value]) => ({ key, value })),
-		channels: [...(vm.channels || [])]
-			.map((channel) => ({ ...channel }))
-			.sort((a, b) => a.pid - b.pid || a.name.localeCompare(b.name)),
-		pending_deliveries: [...(vm.pending_deliveries || [])]
-			.map((delivery) => ({ ...delivery }))
-			.sort(
-				(a, b) =>
-					a.from_pid - b.from_pid ||
-					a.from_channel.localeCompare(b.from_channel) ||
-					a.to_pid - b.to_pid ||
-					a.to_channel.localeCompare(b.to_channel),
-			),
-		waiting_send: [...(vm.waiting_send || [])]
-			.map((waiting) => ({ ...waiting }))
-			.sort((a, b) => a.pid - b.pid || a.name.localeCompare(b.name)),
-		channel_connections: [...(vm.channel_connections || [])]
-			.map((connection) => ({ ...connection }))
-			.sort(
-				(a, b) =>
-					a.from.pid - b.from.pid ||
-					a.from.channel.localeCompare(b.from.channel) ||
-					a.to.pid - b.to.pid ||
-					a.to.channel.localeCompare(b.to.channel),
-			),
-		locals: [...(vm.locals || [])]
-			.map((local) => ({ ...local }))
-			.sort((a, b) => a.pid - b.pid || a.name.localeCompare(b.name)),
-	};
-
-	return stableStringify(normalized);
-}
-
 /**
  * Build vis.js graph from GraphNode array (works for both run and check modes)
  */
@@ -89,105 +47,55 @@ export function buildGraphFromNodes(
 	nodes: GraphNode[],
 	options: GraphBuildOptions = {},
 ): GraphBuildResult {
-	const {
-		mode = "check",
-		stepLines = [],
-		violationPath = [],
-		violationPathStates = [],
-		theme = "dark",
-	} = options;
+	const { mode = "check", stepLines = [], violationPath = [] } = options;
 	const visNodes: VisGraphNode[] = [];
 	const visEdges: VisGraphEdge[] = [];
-	const hasViolationPathStates = violationPathStates.length > 0;
-	const needsViolationSignatures = mode === "check" && hasViolationPathStates;
-	const nodeSignatures = needsViolationSignatures
-		? nodes.map((node) => vmStateSignature(node.vm))
-		: [];
-	const violationPathSignatures = needsViolationSignatures
-		? violationPathStates.map((state) => vmStateSignature(state))
-		: [];
-	const violationNodeSet = new Set(violationPathSignatures);
+	const violationNodeSet = new Set(violationPath);
 	const violationEdgeSet = new Set<string>();
-	const fallbackViolationLabelSet = new Set(violationPath);
-	const needsFallbackLabels =
-		mode === "check" &&
-		!needsViolationSignatures &&
-		fallbackViolationLabelSet.size > 0;
-
-	for (let i = 0; i < violationPathSignatures.length - 1; i++) {
-		const from = violationPathSignatures[i];
-		const to = violationPathSignatures[i + 1];
-		violationEdgeSet.add(`${from}->${to}`);
+	for (let i = 0; i < violationPath.length - 1; i++) {
+		violationEdgeSet.add(`${violationPath[i]}->${violationPath[i + 1]}`);
 	}
 
 	for (let i = 0; i < nodes.length; i++) {
 		const node = nodes[i];
 		const metadata = node.metadata;
-
-		// Create a summary label for the node
-		const processCount = node.vm.locals.length;
-		const label =
+		const isViolationNode = mode === "check" && violationNodeSet.has(i);
+		const isFinal =
 			mode === "run"
-				? `${i}` // Run mode: show sequential index
-				: `${i}`; // Check mode: show node index
+				? i === nodes.length - 1
+				: (metadata.successors?.length ?? 0) === 0;
+		const kind: GraphNodeKind =
+			i === 0
+				? "initial"
+				: isViolationNode
+					? "violation"
+					: isFinal
+						? "final"
+						: "normal";
 
-		// Create detailed state for tooltip
-		const globalCount = Object.keys(node.vm.globals).length;
-		const channelCount = node.vm.channels.length;
-		const pendingCount = node.vm.pending_deliveries.length;
-
-		const title = `Level: ${metadata.level}\nProcesses: ${processCount}\nGlobals: ${globalCount}\nChannels: ${channelCount}\nPending: ${pendingCount}`;
-
-		// Determine node color based on mode and violation path
-		const nodeSignature = needsViolationSignatures
-			? nodeSignatures[i]
-			: undefined;
-		const nodeLabel = needsFallbackLabels
-			? nodeToString(vmStateToNode(node.vm))
-			: undefined;
-		const isViolationNode =
-			mode === "check" &&
-			(needsViolationSignatures
-				? typeof nodeSignature === "string" &&
-					violationNodeSet.has(nodeSignature)
-				: typeof nodeLabel === "string" &&
-					fallbackViolationLabelSet.has(nodeLabel));
-
-		let backgroundColor, borderColor, fontColor;
-		if (mode === "run") {
-			backgroundColor = "#314d31";
-			borderColor = "#a6dfa6";
-			fontColor = theme === "dark" ? "#ffffff" : "#1a3a1a";
-		} else {
-			backgroundColor = isViolationNode ? "#4d3131" : "#314d31";
-			borderColor = isViolationNode ? "#ec9999" : "#a6dfa6";
-			fontColor =
-				theme === "dark" ? "#ffffff" : isViolationNode ? "#8b1a1a" : "#1a3a1a";
-		}
+		const name = mode === "run" ? `Step ${i}` : `State ${i}`;
+		const details = [
+			mode === "check" ? `depth ${metadata.level}` : null,
+			kind === "initial" ? "initial state" : null,
+			kind === "final"
+				? mode === "run"
+					? "last state"
+					: "no successor"
+				: null,
+			isViolationNode ? "on the counterexample" : null,
+		].filter(Boolean);
 
 		visNodes.push({
 			id: i,
-			label,
+			label: "",
 			level: metadata.level,
-			color: {
-				background: backgroundColor,
-				border: borderColor,
-				highlight: {
-					border: "hsla(29.329, 66.552%, 52.544%)",
-					background: backgroundColor,
-				},
-				hover: {
-					border: "hsla(29.329, 66.552%, 52.544%)",
-					background: backgroundColor,
-				},
-			},
-			font: { size: 10, color: fontColor } as any,
-			borderWidth: 1,
-			title,
+			kind,
+			title: details.length ? `${name} · ${details.join(" · ")}` : name,
 			// Unified format for both run and check modes
 			rawState: {
 				vm: node.vm,
 				stepIndex: mode === "run" ? i : undefined,
+				nodeIndex: i,
 				level: metadata.level,
 			},
 			isViolationNode,
@@ -214,14 +122,9 @@ export function buildGraphFromNodes(
 				for (const succ of metadata.successors) {
 					const edgeLabel =
 						succ.name + "#" + succ.pid + ": " + succ.lines.join(",");
-					const toSignature = needsViolationSignatures
-						? nodeSignatures[succ.to_index]
-						: undefined;
-					const isViolationEdge =
-						needsViolationSignatures &&
-						typeof toSignature === "string" &&
-						typeof nodeSignature === "string" &&
-						violationEdgeSet.has(`${nodeSignature}->${toSignature}`);
+					const isViolationEdge = violationEdgeSet.has(
+						`${i}->${succ.to_index}`,
+					);
 
 					visEdges.push({
 						id: `e${i}-${succ.to_index}-${succIndex++}`,
@@ -230,10 +133,7 @@ export function buildGraphFromNodes(
 						label: edgeLabel,
 						lines: succ.lines.map((l: number) => Number(l)),
 						font: { size: 0 }, // Hidden by default
-						color: isViolationEdge
-							? { color: "#ec9999", highlight: "#ec9999", hover: "#ec9999" }
-							: undefined,
-						width: isViolationEdge ? 2 : undefined,
+						isViolationEdge,
 					});
 				}
 			}

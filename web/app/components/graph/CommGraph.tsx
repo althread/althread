@@ -1,38 +1,56 @@
 import { LiteralDisplay } from "@components/shared/Literal";
 import { useGraphMaximizeHotkeys } from "@hooks/useGraphMaximizeHotkeys";
-import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
+import {
+	createEffect,
+	createSignal,
+	For,
+	type JSX,
+	onCleanup,
+	Show,
+} from "solid-js";
+import type { DataSet } from "vis-data";
 import vis from "vis-network/dist/vis-network.esm";
+import type {
+	Literal,
+	MessageFlowEvent,
+	ProgramState,
+} from "../../types/vm-state";
 import { exportCommGraphToCSV } from "./exportToCSV";
 import GraphToolbar from "./GraphToolbar";
-import type { Node } from "./Node";
-import type { ProgramStateJS } from "./State";
 import { createGraphToolbarHandlers } from "./visHelpers";
 
-interface MessageFlowEvent {
-	sender: number; // id of the sending process
-	receiver: number; // id of the receiving process
-	evt_type: number; //send or receive
-	message: string; // for SEND: channel name, for RECV: message content
-	number: number; // message sequence number (nmsg_sent for SEND, clock for RECV)
-	actor_prog_name: string; // Name of the program performing this action
-	vm_state: any;
-}
-
-interface MessageNode {
+/** Node of the message flow graph: process lines, labels and message events. */
+interface FlowNode {
 	id: string;
-	y: number;
 	x: number;
+	y: number;
 	shape: string;
 	size: number;
-	event: MessageFlowEvent | null;
-	broadcast: boolean | null;
 	color: string;
+	label?: string;
+	font?: { size: number; color: string };
+	/** Only set on message event nodes. */
+	event?: MessageFlowEvent;
+	broadcast?: boolean;
 }
 
-const buildMessageNodeId = (event: MessageFlowEvent, index: number) => {
-	const evtType = String.fromCharCode(event.evt_type);
+interface FlowEdge {
+	id?: string;
+	from: string;
+	to: string;
+	color: string;
+	width?: number;
+	label?: string;
+	lines?: number[];
+	arrows?: string;
+	font?: Record<string, unknown>;
+}
 
-	if (evtType === "r") {
+const SEND_EVENT = "s".charCodeAt(0);
+const RECEIVE_EVENT = "r".charCodeAt(0);
+
+const buildMessageNodeId = (event: MessageFlowEvent, index: number) => {
+	if (event.evt_type === RECEIVE_EVENT) {
 		return `p${event.receiver}_recv_from${event.sender}_${event.number}_${index}`;
 	}
 
@@ -48,211 +66,177 @@ const getMessageEdgeColor = (event: MessageFlowEvent) =>
 		? MAIN_MESSAGE_EDGE_COLOR
 		: DEFAULT_MESSAGE_EDGE_COLOR;
 
+/** Renders literals separated by ", " (DOM nodes cannot be joined as strings). */
+const LiteralList = (props: { values: Literal[] }) => (
+	<For each={props.values}>
+		{(value, i) => (
+			<>
+				{i() > 0 && ", "}
+				<LiteralDisplay value={value} />
+			</>
+		)}
+	</For>
+);
+
+const EmptyNote = (props: { children: JSX.Element }) => (
+	<p style={{ "padding-left": "1rem", "font-style": "italic" }}>
+		{props.children}
+	</p>
+);
+
 const VmStatePopup = (props: { event: MessageFlowEvent }) => {
-	const [activeTab, setActiveTab] = createSignal("details");
-	const vmState: Node = props.event.vm_state;
-
-	if (!vmState) {
-		return <div>VM state is not available.</div>;
-	}
-
-	const eventType = String.fromCharCode(props.event.evt_type);
+	const [activeTab, setActiveTab] = createSignal<"details" | "vmState">(
+		"details",
+	);
+	const vmState = () => props.event.vm_state;
+	const globals = () => Object.entries(vmState()?.globals ?? {});
+	const channelsOf = (pid: number) =>
+		(vmState()?.channels ?? []).filter((c) => c.pid === pid);
 
 	return (
-		<div class="vm-state-popup-content">
-			<div class="popup-tabs">
-				<button
-					class={`popup-tab-button ${activeTab() === "details" ? "active" : ""}`}
-					onClick={() => setActiveTab("details")}
-				>
-					Event Details
-				</button>
-				<button
-					class={`popup-tab-button ${activeTab() === "vmState" ? "active" : ""}`}
-					onClick={() => setActiveTab("vmState")}
-				>
-					VM State
-				</button>
-			</div>
-			<div class="popup-tab-content">
-				<Show when={activeTab() === "details"}>
-					<p>
-						<strong>Type:</strong> {eventType === "s" ? "Send" : "Receive"}
-					</p>
-					<p>
-						<strong>Sender:</strong> {props.event.sender}
-					</p>
-					<p>
-						<strong>Receiver:</strong> {props.event.receiver ?? "Broadcast"}
-					</p>
-					<p>
-						<strong>Message:</strong> {props.event.message}
-					</p>
-				</Show>
-				<Show when={activeTab() === "vmState"}>
-					<div>
-						<strong>Globals:</strong>
-						{vmState.globals && vmState.globals.size > 0 ? (
-							<ul>
-								<For each={Array.from(vmState.globals.entries())}>
-									{([key, value]) => (
-										<li>
-											{String(key)} = <LiteralDisplay value={value} />
-										</li>
+		<Show when={vmState()} fallback={<div>VM state is not available.</div>}>
+			<div class="vm-state-popup-content">
+				<div class="popup-tabs">
+					<button
+						type="button"
+						class={`popup-tab-button ${activeTab() === "details" ? "active" : ""}`}
+						onClick={() => setActiveTab("details")}
+					>
+						Event Details
+					</button>
+					<button
+						type="button"
+						class={`popup-tab-button ${activeTab() === "vmState" ? "active" : ""}`}
+						onClick={() => setActiveTab("vmState")}
+					>
+						VM State
+					</button>
+				</div>
+				<div class="popup-tab-content">
+					<Show when={activeTab() === "details"}>
+						<p>
+							<strong>Type:</strong>{" "}
+							{props.event.evt_type === SEND_EVENT ? "Send" : "Receive"}
+						</p>
+						<p>
+							<strong>Sender:</strong> {props.event.sender}
+						</p>
+						<p>
+							<strong>Receiver:</strong> {props.event.receiver ?? "Broadcast"}
+						</p>
+						<p>
+							<strong>Message:</strong> {props.event.message}
+						</p>
+					</Show>
+					<Show when={activeTab() === "vmState"}>
+						<div>
+							<strong>Globals:</strong>
+							<Show
+								when={globals().length > 0}
+								fallback={<EmptyNote>No global variables.</EmptyNote>}
+							>
+								<ul>
+									<For each={globals()}>
+										{([key, value]) => (
+											<li>
+												{key} = <LiteralDisplay value={value} />
+											</li>
+										)}
+									</For>
+								</ul>
+							</Show>
+						</div>
+						<div>
+							<strong>Program States & Channels:</strong>
+							<Show
+								when={(vmState()?.locals.length ?? 0) > 0}
+								fallback={<EmptyNote>No running programs</EmptyNote>}
+							>
+								<For each={vmState()?.locals}>
+									{(prog: ProgramState) => (
+										<div class="program-state">
+											<p>
+												<strong>Program {prog.name}</strong> (pid {prog.pid},
+												clock {prog.clock})
+											</p>
+											<ul>
+												<li>
+													<strong>pc:</strong> {prog.instruction_pointer}
+												</li>
+												<li>
+													<strong>stack:</strong> [
+													<LiteralList values={prog.memory} />]
+												</li>
+												<li>
+													<strong>Channels:</strong>
+													<Show
+														when={channelsOf(prog.pid).length > 0}
+														fallback={
+															<EmptyNote>No active input channels.</EmptyNote>
+														}
+													>
+														<ul>
+															<For each={channelsOf(prog.pid)}>
+																{(channel) => (
+																	<li>
+																		{channel.name} &lt;- [
+																		<LiteralList values={channel.values} />]
+																	</li>
+																)}
+															</For>
+														</ul>
+													</Show>
+												</li>
+											</ul>
+										</div>
 									)}
 								</For>
-							</ul>
-						) : (
-							<p style={{ "padding-left": "1rem", "font-style": "italic" }}>
-								No global variables.
-							</p>
-						)}
-					</div>
-					<div>
-						<strong>Program States & Channels:</strong>
-						{vmState.locals && vmState.locals.length > 0 ? (
-							vmState.locals.map((prog_state: ProgramStateJS) => (
-								<div class="program-state">
-									<p>
-										<strong>Program {prog_state.name}</strong> (pid{" "}
-										{prog_state.pid}, clock {prog_state.clock})
-									</p>
-									<ul>
-										<li>
-											<strong>pc:</strong> {prog_state.instruction_pointer}
-										</li>
-										<li>
-											<strong>stack:</strong> [
-											{prog_state.memory
-												.map((v) => <LiteralDisplay value={v} />)
-												.join(", ")}
-											]
-										</li>
-										<li>
-											<strong>Channels:</strong>
-											{(() => {
-												const programChannels: any[] = [];
-												if (vmState.channels && vmState.channels.size > 0) {
-													for (const [
-														key,
-														value,
-													] of vmState.channels.entries()) {
-														if (
-															Array.isArray(key) &&
-															key.length === 2 &&
-															key[0] === prog_state.pid
-														) {
-															const channelName = key[1];
-															programChannels.push(
-																<li>
-																	{channelName} &lt;-{" "}
-																	{Array.isArray(value)
-																		? value
-																				.map((l) => (
-																					<LiteralDisplay value={l} />
-																				))
-																				.join(",")
-																		: String(value)}
-																</li>,
-															);
-														}
-													}
-												}
-												return programChannels.length > 0 ? (
-													<ul>{programChannels}</ul>
-												) : (
-													<p
-														style={{
-															"padding-left": "1rem",
-															"font-style": "italic",
-														}}
-													>
-														No active input channels.
-													</p>
-												);
-											})()}
-										</li>
-									</ul>
-								</div>
-							))
-						) : (
-							<p style={{ "padding-left": "1rem", "font-style": "italic" }}>
-								No running programs
-							</p>
-						)}
-					</div>
-				</Show>
+							</Show>
+						</div>
+					</Show>
+				</div>
 			</div>
-		</div>
+		</Show>
 	);
 };
 
-export const printCommGrapEventList = (eventl: any) => {
-	//debug purpose
-	try {
-		if (eventl.length === 0) {
-			return <pre>No MessageFlow events recorded.</pre>;
-		} else
-			return (
-				<>
-					{eventl && eventl.length > 0 ? (
-						<ul>
-							{eventl.map((event, index) => (
-								<li>
-									{event.sender} →{" "}
-									{event.receiver == null ? "Broadcast" : event.receiver}:{" "}
-									{event.message}
-								</li>
-							))}
-						</ul>
-					) : (
-						<p>No MessageFlow events recorded.</p>
-					)}
-				</>
-			);
-	} catch (e) {
-		console.log(e.message);
-		return <div class="console">erreur d'affichage : {e.message}</div>;
-	}
-};
-
+/** Finds the not-yet-matched send node corresponding to a receive event. */
 const searchSenderNode = (
-	graphNodes,
-	receivingEvent,
+	graphNodes: DataSet<FlowNode>,
+	receivingEvent: MessageFlowEvent,
 	matchedIds: Set<string>,
-) => {
-	// searches for the sending event corresponding to the receiving event
-	let sender_node;
+): FlowNode | undefined => {
+	let senderNode: FlowNode | undefined;
 	graphNodes.forEach((node) => {
 		if (
 			node.event &&
-			node.event.evt_type === 115 &&
+			node.event.evt_type === SEND_EVENT &&
 			node.event.sender === receivingEvent.sender &&
 			node.event.receiver === receivingEvent.receiver &&
 			node.event.number === receivingEvent.number &&
-			!matchedIds.has(node.id) // Check if the sender node has already been matched
+			!matchedIds.has(node.id)
 		) {
-			sender_node = node;
+			senderNode = node;
 		}
 	});
 
-	if (sender_node) {
-		matchedIds.add(sender_node.id); // Mark this sender node as matched
-	}
-	return sender_node;
+	if (senderNode) matchedIds.add(senderNode.id);
+	return senderNode;
 };
 
-export const renderMessageFlowGraph = (
-	commGraphData,
-	vm_states,
-	editor?: any,
-) => {
-	//returns div element to display the message flow graph and the vm states popup on click
-	//prog_list = array of program names (strings)
-	//commGraphData = array of communication events
-	let container!: HTMLDivElement;
+/**
+ * Message sequence diagram: one horizontal line per process, one dot per
+ * send/receive event and an arrow from each send to its receive. Clicking an
+ * event shows its details and the VM state at that time.
+ */
+export default function MessageFlowGraph(props: {
+	events: MessageFlowEvent[];
+	editor?: any;
+	theme?: "dark" | "light";
+}) {
+	let container: HTMLDivElement | undefined;
 	let network: vis.Network | null = null;
-	let popupRef: HTMLDivElement;
+	let popupRef: HTMLDivElement | undefined;
 	const [maximized, setMaximized] = createSignal(false);
 	const [popupVisible, setPopupVisible] = createSignal(false);
 	const [popupContent, setPopupContent] = createSignal<MessageFlowEvent | null>(
@@ -265,7 +249,8 @@ export const renderMessageFlowGraph = (
 	});
 	const [isPopupReady, setIsPopupReady] = createSignal(false);
 	const currentTheme = () =>
-		document.documentElement.dataset.theme === "light" ? "light" : "dark";
+		props.theme ??
+		(document.documentElement.dataset.theme === "light" ? "light" : "dark");
 	const palette = () =>
 		currentTheme() === "light"
 			? {
@@ -291,36 +276,29 @@ export const renderMessageFlowGraph = (
 		horizontal: "left" | "right";
 	}>({ vertical: "bottom", horizontal: "right" });
 
-	if (!commGraphData || commGraphData.length === 0) {
-		return (
-			<pre>
-				The communication graph will appear here (if any communication events
-				are recorded).
-			</pre>
-		);
-	}
-
 	createEffect(() => {
-		// Clear matchedSendNodeIds for each new graph
-		// matchedSendNodeIds.clear();
-		const matchedSendNodeIds = new Set<string>();
+		const commGraphData = props.events;
+		const colors = palette();
+		setPopupVisible(false);
+		setPopupContent(null);
 
-		const nodes = new vis.DataSet();
-		const edges = new vis.DataSet();
-		const processLines = new Map(); //coordinates of start&end of each process line
+		if (!container || !commGraphData || commGraphData.length === 0) {
+			return;
+		}
+
+		const matchedSendNodeIds = new Set<string>();
+		const nodes = new vis.DataSet<FlowNode>();
+		const edges = new vis.DataSet<FlowEdge>();
 		const processes: Map<number, string> = new Map();
 
 		// extract processes name to make one line per process
-		commGraphData.forEach((event: MessageFlowEvent) => {
-			const evt_type = String.fromCharCode(event.evt_type);
-
+		for (const event of commGraphData) {
 			const getProcessName = (pid: number) => {
-				if (!event.vm_state || !event.vm_state.locals) return `P${pid}`;
-				const prog = event.vm_state.locals.find((p: any) => p.pid === pid);
+				const prog = event.vm_state?.locals?.find((p) => p.pid === pid);
 				return prog ? prog.name : `P${pid}`;
 			};
 
-			if (evt_type === "s") {
+			if (event.evt_type === SEND_EVENT) {
 				processes.set(event.sender, event.actor_prog_name);
 				// Ensure receiver is also created if it's a unicast send
 				if (event.receiver !== undefined && !processes.has(event.receiver)) {
@@ -333,114 +311,90 @@ export const renderMessageFlowGraph = (
 					processes.set(event.sender, getProcessName(event.sender));
 				}
 			}
-		});
+		}
 
 		const ySpacing = 150; // space between processes vertically
 		const xStart = -50;
-		const xEnd = 450;
+		const xEnd = Math.max(450, xStart + 20 + commGraphData.length * 50 + 40);
 
 		// lines generation
 		processes.forEach((processName, index) => {
 			// define two nodes for each process (start and end of the line)
-			const startNode = {
+			const startNode: FlowNode = {
 				id: `p${index}_start`,
 				y: index * ySpacing,
 				x: xStart,
 				shape: "dot",
 				size: 1,
-				color: palette().line,
+				color: colors.line,
 			};
-			const endNode = {
+			const endNode: FlowNode = {
 				id: `p${index}_end`,
 				y: index * ySpacing,
 				x: xEnd,
 				shape: "dot",
 				size: 1,
-				color: palette().line,
+				color: colors.line,
 			};
 			nodes.add([startNode, endNode]);
 			edges.add({
 				from: startNode.id,
 				to: endNode.id,
-				color: palette().line,
+				color: colors.line,
 				width: 2,
 			}); // line for each process
 
-			const processNumberNode = {
+			const processNumberNode: FlowNode = {
 				id: `p${index}_number`,
 				y: index * ySpacing,
 				x: xStart - 40,
 				label: `P${index} \n(${processName})`,
 				shape: "text",
 				size: 0,
-				color: palette().line,
+				color: colors.line,
 				font: {
 					size: 18,
-					color: palette().line,
+					color: colors.line,
 				},
 			};
 
 			nodes.add(processNumberNode);
-
-			processLines.set(index, { start: startNode.id, end: endNode.id });
 		});
 
-		// message arrows
-		let i: number = 0;
-		commGraphData.forEach((event: MessageFlowEvent, eventIndex: number) => {
-			let yposLine = 0;
-			const evt_type = String.fromCharCode(event.evt_type);
+		// message event dots
+		commGraphData.forEach((event, eventIndex) => {
 			const nodeId = buildMessageNodeId(event, eventIndex);
 			const isBroadcast = event.receiver === undefined;
 
-			//lengthen the process lines for each new event so it doesnt go overboard
-			processes.forEach((_, processNumber) => {
-				nodes.update({
-					id: `p${processNumber}_end`,
-					x: 500 + commGraphData.length * 1.5 * i,
-				});
-			});
+			// a reception is drawn on the receiver line, a send on the sender line
+			const yposLine =
+				event.evt_type === RECEIVE_EVENT ? event.receiver : event.sender;
 
-			if (evt_type === "r") {
-				/// evt_type === 114
-				yposLine = event.receiver; //reception -> node on receiver line
-			} else {
-				yposLine = event.sender;
-			}
-
-			const msgNode = {
+			const msgNode: FlowNode = {
 				id: nodeId,
 				y: yposLine * ySpacing,
-				x: xStart + 20 + i * 50,
+				x: xStart + 20 + eventIndex * 50,
 				shape: "dot",
 				size: 5,
-				color: palette().node,
+				color: colors.node,
 				event: event,
 				broadcast: isBroadcast,
 			};
 			nodes.add(msgNode);
-			i++;
 		});
 
-		nodes.forEach((item, id) => {
-			// item is a node object, id is its id
-			const node: MessageNode = item as MessageNode;
-			const evt_type =
-				node.event?.evt_type !== undefined
-					? String.fromCharCode(node.event.evt_type)
-					: "";
-
-			if (evt_type === "r") {
+		nodes.forEach((node) => {
+			if (node.event?.evt_type === RECEIVE_EVENT) {
 				const sender = searchSenderNode(nodes, node.event, matchedSendNodeIds);
 				if (sender) {
 					edges.add({
 						from: sender.id,
 						to: node.id,
-						label: node.event?.message,
-						lines: node.event?.lines,
+						label: node.event.message,
+						lines: node.event.lines,
 						font: {
 							size: 20,
-							color: palette().line,
+							color: colors.line,
 							align: "middle",
 							background: "none",
 							strokeWidth: 0,
@@ -451,8 +405,6 @@ export const renderMessageFlowGraph = (
 				}
 			}
 		});
-
-		const data = { nodes: nodes.get(), edges: edges.get() };
 
 		const options = {
 			layout: {
@@ -467,22 +419,25 @@ export const renderMessageFlowGraph = (
 			},
 		};
 
-		network = new vis.Network(container, data, options);
-		network.once("stabilized", () => {
-			if (network) network.fit();
-		});
+		network = new vis.Network(container, { nodes, edges }, options);
+		network.fit({ animation: false });
 
 		/* to display the associated vm state when clicking on an event node */
-		let previous_node_id: number | null = null;
+		let previous_node_id: string | null = null;
 		let previous_node_colour: string | null = null;
 		network.on("click", (event) => {
 			if (previous_node_id) {
 				//change previous clicked node back to its original colour
-				nodes.update({ id: previous_node_id, color: previous_node_colour });
+				nodes.update({
+					id: previous_node_id,
+					color: previous_node_colour,
+				} as FlowNode);
+				previous_node_id = null;
+				previous_node_colour = null;
 				setPopupVisible(false);
 			}
 			if (event.nodes.length > 0) {
-				const node_id = event.nodes[0];
+				const node_id = String(event.nodes[0]);
 				//popup creation & change node colour
 				if (
 					!(
@@ -493,31 +448,27 @@ export const renderMessageFlowGraph = (
 				) {
 					//clicked node is only one of the communication event
 					const node = nodes.get(node_id);
+					if (!node?.event) return;
 					const pos = event.pointer.DOM;
 					setIsPopupReady(false);
 					setPopupContent(node.event);
 					setPopupPosition({ x: pos.x, y: pos.y });
-					setPopupAlignment({ vertical: "bottom", horizontal: "right" }); // <--- Reset alignment on new popup
+					setPopupAlignment({ vertical: "bottom", horizontal: "right" });
 					setPopupVisible(true);
 					previous_node_id = node_id;
 					previous_node_colour = node.color;
-					nodes.update({ id: node_id, color: palette().active });
+					nodes.update({ id: node_id, color: colors.active } as FlowNode);
 
 					// Also highlight lines if available
-					if (
-						node.event &&
-						node.event.lines &&
-						editor &&
-						editor.highlightLines
-					) {
-						editor.highlightLines(node.event.lines);
+					if (node.event.lines?.length) {
+						props.editor?.highlightLines?.(node.event.lines);
 					}
 				}
 			} else if (event.edges.length > 0) {
 				const edgeId = event.edges[0];
-				const edge: any = edges.get(edgeId);
-				if (edge && edge.lines && editor && editor.highlightLines) {
-					editor.highlightLines(edge.lines);
+				const edge = edges.get(edgeId as string);
+				if (edge?.lines?.length) {
+					props.editor?.highlightLines?.(edge.lines);
 				}
 			} else {
 				setPopupVisible(false);
@@ -525,17 +476,19 @@ export const renderMessageFlowGraph = (
 		});
 
 		onCleanup(() => {
-			if (network) network.destroy();
+			if (network) {
+				network.destroy();
+				network = null;
+			}
 		});
 	});
 
 	createEffect(() => {
-		if (popupVisible() && popupRef) {
+		const popupEl = popupRef;
+		if (popupVisible() && popupEl) {
 			const reposition = () => {
-				if (!popupRef || !container) return;
-
+				if (!container) return;
 				const graphContainer = container;
-				const popupEl = popupRef;
 
 				const graphWidth = graphContainer.offsetWidth;
 				const graphHeight = graphContainer.offsetHeight;
@@ -596,7 +549,7 @@ export const renderMessageFlowGraph = (
 
 			// Use a ResizeObserver to automatically reposition the popup when its size changes (e.g., switching tabs).
 			const observer = new ResizeObserver(reposition);
-			observer.observe(popupRef);
+			observer.observe(popupEl);
 
 			onCleanup(() => {
 				observer.disconnect();
@@ -616,19 +569,27 @@ export const renderMessageFlowGraph = (
 		);
 
 	return (
-		<>
+		<Show
+			when={props.events && props.events.length > 0}
+			fallback={
+				<pre>
+					The communication graph will appear here (if any communication events
+					are recorded).
+				</pre>
+			}
+		>
 			<div class={`state-graph${maximized() ? " maximized" : ""}`}>
 				<div ref={container} style="height: 100%;" />
 				<GraphToolbar
 					onFullscreen={handleMaximize}
 					onRecenter={handleRecenter}
-					onDownloadCSV={() => exportCommGraphToCSV(commGraphData, vm_states)}
+					onDownloadCSV={() => exportCommGraphToCSV(props.events)}
 					onDownload={handleDownload}
 					isFullscreen={maximized()}
 				/>
 				{popupVisible() && popupContent() && (
 					<div
-						ref={popupRef!}
+						ref={popupRef}
 						class="vm-state-popup"
 						style={{
 							position: "absolute",
@@ -640,10 +601,10 @@ export const renderMessageFlowGraph = (
 							border: `1px solid ${palette().popupBorder}`,
 						}}
 					>
-						<VmStatePopup event={popupContent()!} />
+						<VmStatePopup event={popupContent() as MessageFlowEvent} />
 					</div>
 				)}
 			</div>
-		</>
+		</Show>
 	);
-};
+}

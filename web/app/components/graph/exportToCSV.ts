@@ -1,6 +1,8 @@
+import type { MessageFlowEvent, VMState } from "../../types/vm-state";
+import { literal } from "./Node";
+
 export const exportCommGraphToCSV = async (
-	commGraphData: any[],
-	vm_states?: any[],
+	commGraphData: MessageFlowEvent[],
 ) => {
 	// Helper function to escape CSV values properly
 	const escapeCSV = (value: any): string => {
@@ -178,42 +180,28 @@ export const exportStatesToCSV = async (nodes: any[], edges: any[]) => {
 	];
 
 	const nodeRows = nodes.map((node) => {
-		// Extract structured information from the node label
-		const label = node.label || "";
-
-		// Count programs - look for program headers
-		const programMatches = label.match(/\*Program [^*]+\*/g) || [];
-		const programCount = programMatches.length;
-
-		// Extract globals more carefully
-		const globalsSection = label.match(
-			/\*Globals:\*\n(.*?)\n\n\*Program States/s,
-		);
-		let globalVars = "None";
-		if (globalsSection) {
-			const globalLines = globalsSection[1]
-				.split("\n")
-				.map((line) => line.trim())
-				.filter((line) => line && !line.includes("_No global variables_"))
-				.map((line) => line.replace(/^\s*/, ""));
-			globalVars = globalLines.length > 0 ? globalLines.join("; ") : "None";
-		}
-
-		// Extract channel information more carefully - just count active channels
-		const channelMatches = label.match(/(\w+) <- ([^"]*?)(?=\n|$)/g) || [];
-		const activeChannelsCount = channelMatches.length;
-		const channelsSummary =
-			activeChannelsCount > 0
-				? `${activeChannelsCount} active channels`
-				: "No active channels";
+		const vm: VMState | undefined = node.rawState?.vm ?? node.rawState;
+		const globals = Object.entries(vm?.globals ?? {})
+			.map(([name, value]) => `${name} = ${literal(value)}`)
+			.join("; ");
+		const channels = (vm?.channels ?? []).filter((c) => c.values.length > 0);
 
 		return [
 			escapeCSV(node.id),
-			escapeCSV(node.level || ""),
+			escapeCSV(node.level ?? ""),
 			escapeCSV(node.isViolationNode || false),
-			escapeCSV(programCount),
-			escapeCSV(globalVars),
-			escapeCSV(channelsSummary),
+			escapeCSV(vm?.locals.length ?? 0),
+			escapeCSV(globals || "None"),
+			escapeCSV(
+				channels.length > 0
+					? channels
+							.map(
+								(c) =>
+									`${c.name}@${c.pid} <- [${c.values.map(literal).join(", ")}]`,
+							)
+							.join("; ")
+					: "No active channels",
+			),
 		];
 	});
 

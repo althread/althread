@@ -11,11 +11,11 @@ Imports in Althread are designed to be quite straightforward, maintaining simpli
 A single `import` block can be declared anywhere in your file. It contains a list of relative paths from the importing file to the target file, without the `.alt` extension (for importing modules organized with `mod.alt` files, see the [Modules & Packages](./packages-modules) guide):
 
 ```althread
-import [
+import {
     math,
     cool/fib,
     display
-]
+}
 ```
 
 Each item in the import list is a relative filepath. When importing from a subdirectory like `cool/fib`, the module becomes available under its filename (`fib` in this case).
@@ -25,11 +25,11 @@ Each item in the import list is a relative filepath. When importing from a subdi
 Once imported, you access elements from modules using dot notation:
 
 ```althread
-import [
+import {
     math,
     cool/fib,
     display
-]
+}
 
 main {
     // Call a function from 'math'
@@ -55,11 +55,11 @@ main {
 If you have naming conflicts or prefer shorter names, you can use aliasing with the `as` keyword:
 
 ```althread
-import [
+import {
     math,
     cool/fib as fibonacci,
     display as d
-]
+}
 
 main {
     print(math.max(7, 3));
@@ -76,7 +76,7 @@ Althread provides the `@private` directive to control access to module elements:
 - `program` blocks can also be marked as `@private`
 - Multiple `main` blocks can coexist if marked as `@private`
 - Shared variables are always importable and modifiable
-- Conditions (always/never/eventually) are imported but read-only
+- Conditions (always/eventually) are imported but read-only
 
 ```althread
 // In math.alt
@@ -96,7 +96,7 @@ fn max(a: int, b: int) -> int {
 
 ```althread
 // In main.alt
-import [math]
+import {math}
 
 main {
     print(math.max(5, 10));      // Works - public function
@@ -120,7 +120,7 @@ When you import a module, you get access to:
 - **Public functions**: Functions without the `@private` directive
 - **Public programs**: Program blocks without the `@private` directive  
 - **Shared variables**: All shared variables (always importable and modifiable)
-- **Conditions**: Always/never/eventually conditions (imported as read-only)
+- **Conditions**: Always/eventually conditions (imported as read-only)
 
 ## Channel Imports
 
@@ -139,11 +139,11 @@ Here's a comprehensive example showing various import features:
 
 ```althread
 // main.alt
-import [
+import {
     utils/math,
     algorithms/sorting as sort,
     display
-]
+}
 
 main {
     // Use imported functions

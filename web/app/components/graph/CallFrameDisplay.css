@@ -61,7 +61,7 @@
 }
 
 .frame-ip {
-	font-family: "Consolas", "Monaco", "Courier New", monospace;
+	font-family: var(--app-font-mono);
 }
 
 .frame-body {

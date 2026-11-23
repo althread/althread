@@ -6,6 +6,7 @@
 
 #[cfg(test)]
 mod tests {
+    use crate::module_resolver::StandardFileSystem;
     use crate::{
         checker::{
             check_program, ltl::automaton::BuchiAutomaton, ltl::compiled::CompiledLtlExpression,
@@ -13,7 +14,6 @@ mod tests {
         compiler::CompiledProject,
         error::AlthreadResult,
     };
-    use crate::{ast::Ast, module_resolver::StandardFileSystem};
     use std::collections::HashMap;
     use std::path::Path;
 
@@ -21,8 +21,7 @@ mod tests {
         let mut input_map = HashMap::new();
         input_map.insert("".to_string(), source.to_string());
 
-        let pairs = crate::parser::parse(source, "").unwrap();
-        let ast = Ast::build(pairs, "").unwrap();
+        let ast = crate::parser::parse_ast(source, "").unwrap();
         ast.compile(Path::new(""), StandardFileSystem, &mut input_map)
             .unwrap()
     }
@@ -43,7 +42,7 @@ mod tests {
         // So the automaton may be empty (which is correct)
         // We just verify construction doesn't panic
         println!("Automaton states: {}", automaton.states.len());
-        
+
         Ok(())
     }
 
@@ -85,18 +84,16 @@ check {
 
         let project = compile_from_source(source);
         let (violations, graph) = check_program(&project, Some(1000))?;
-        
+
         // Debug output
         println!("Number of violations: {}", violations.len());
         println!("Number of states: {}", graph.nodes.len());
-        
-        // This test is expected to find a violation (deadlock preventing termination)
-        // If it doesn't, there may be a bug in the checker
-        // For now, we document the current behavior
-        if violations.is_empty() {
-            println!("WARNING: No violation detected for deadlock case - possible bug in checker");
-        }
-        
+
+        assert!(
+            !violations.is_empty(),
+            "Deadlock must violate eventual termination"
+        );
+
         Ok(())
     }
 
@@ -145,7 +142,10 @@ check {
 
         let project = compile_from_source(source);
         let (violations, _graph) = check_program(&project, Some(1000))?;
-        assert!(violations.is_empty(), "Expected no LTL violation for guarded .at access");
+        assert!(
+            violations.is_empty(),
+            "Expected no LTL violation for guarded .at access"
+        );
         Ok(())
     }
 
@@ -176,7 +176,10 @@ check {
 
         let project = compile_from_source(source);
         let (violations, _graph) = check_program(&project, Some(1000))?;
-        assert!(violations.is_empty(), "Expected no LTL violation for always X >= 0");
+        assert!(
+            violations.is_empty(),
+            "Expected no LTL violation for always X >= 0"
+        );
         Ok(())
     }
 
@@ -203,12 +206,15 @@ check {
 
         let project = compile_from_source(source);
         let (violations, _graph) = check_program(&project, Some(1000))?;
-        assert!(!violations.is_empty(), "Expected LTL violation when X becomes negative");
+        assert!(
+            !violations.is_empty(),
+            "Expected LTL violation when X becomes negative"
+        );
         Ok(())
     }
 
     // ============================================================
-    // Liveness Property Tests  
+    // Liveness Property Tests
     // ============================================================
 
     #[test]
@@ -233,12 +239,16 @@ check {
 
         let project = compile_from_source(source);
         let (violations, _graph) = check_program(&project, Some(1000))?;
-        assert!(violations.is_empty(), "Expected no LTL violation - Done eventually becomes true");
+        assert!(
+            violations.is_empty(),
+            "Expected no LTL violation - Done eventually becomes true"
+        );
         Ok(())
     }
 
     #[test]
-    fn test_eventually_on_partial_graph_does_not_report_frontier_as_terminal() -> AlthreadResult<()> {
+    fn test_eventually_on_partial_graph_does_not_report_frontier_as_terminal() -> AlthreadResult<()>
+    {
         let source = r#"
 shared {
     let Step: int = 0;
@@ -261,9 +271,18 @@ check {
         let project = compile_from_source(source);
         let (violations, graph) = check_program(&project, Some(2))?;
 
-        assert!(violations.is_empty(), "Partial exploration must not invent a liveness counterexample at the frontier");
-        assert!(!graph.exhaustive, "Expected the graph to be truncated by the state limit");
-        assert!(graph.nodes.iter().any(|node| !node.expanded), "Expected at least one frontier node to remain unexpanded");
+        assert!(
+            violations.is_empty(),
+            "Partial exploration must not invent a liveness counterexample at the frontier"
+        );
+        assert!(
+            !graph.exhaustive,
+            "Expected the graph to be truncated by the state limit"
+        );
+        assert!(
+            graph.nodes.iter().any(|node| !node.expanded),
+            "Expected at least one frontier node to remain unexpanded"
+        );
         Ok(())
     }
 
@@ -271,7 +290,7 @@ check {
     fn test_eventually_shared_list_updates_are_observed() -> AlthreadResult<()> {
         let source = r#"
 shared {
-    let Global = [0..2];
+    let Global = 0..2;
 }
 
 program A() {
@@ -302,6 +321,37 @@ check {
     }
 
     #[test]
+    fn test_eventually_tuple_process_conjunction_reaches_end() -> AlthreadResult<()> {
+        let source = r#"
+shared {
+    let Workers : tuple(proc(A), proc(A));
+}
+
+program A() {
+    // ends immediately
+}
+
+main {
+    let a = run A();
+    let b = run A();
+    Workers = (a, b);
+}
+
+check {
+    eventually (Workers.0().reaches(end) && Workers.1().reaches(end));
+}
+"#;
+
+        let project = compile_from_source(source);
+        let (violations, _graph) = check_program(&project, Some(1000))?;
+        assert!(
+            violations.is_empty(),
+            "Expected no LTL violation when both process references in the tuple eventually reach end"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn test_eventually_violated() -> AlthreadResult<()> {
         let source = r#"
 shared {
@@ -326,15 +376,12 @@ check {
 
         let project = compile_from_source(source);
         let (violations, graph) = check_program(&project, Some(1000))?;
-        
+
         println!("Violations: {}", violations.len());
         println!("States: {}", graph.nodes.len());
-        
-        // This should detect a violation (Done never becomes true)
-        if violations.is_empty() {
-            println!("WARNING: No violation detected - possible bug");
-        }
-        
+
+        assert!(!violations.is_empty(), "Done remains false forever");
+
         Ok(())
     }
 
@@ -377,11 +424,11 @@ check {
 
         let project = compile_from_source(source);
         let (violations, graph) = check_program(&project, Some(1000))?;
-        
+
         println!("Response property test:");
         println!("  Violations: {}", violations.len());
         println!("  States: {}", graph.nodes.len());
-        
+
         Ok(())
     }
 
@@ -514,7 +561,10 @@ check {
 
         let project = compile_from_source(source);
         let (violations, _graph) = check_program(&project, Some(1000))?;
-        assert!(violations.is_empty(), "Expected no violations for multiple valid formulas");
+        assert!(
+            violations.is_empty(),
+            "Expected no violations for multiple valid formulas"
+        );
         Ok(())
     }
 
@@ -554,4 +604,3 @@ check {
         Ok(())
     }
 }
-

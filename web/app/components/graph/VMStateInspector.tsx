@@ -58,6 +58,13 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 		return props.node?.vm ?? null;
 	});
 
+	const title = () => {
+		const node = props.node;
+		if (node?.stepIndex !== undefined) return `Step ${node.stepIndex}`;
+		if (node?.nodeIndex !== undefined) return `State ${node.nodeIndex}`;
+		return "State Details";
+	};
+
 	const getChannelsForProcess = (pid: number): ChannelState[] => {
 		const s = state();
 		if (!s) return [];
@@ -69,8 +76,6 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 	let lastSeenGlobalsRaw = "";
 	let lastSeenMessagesRaw = "";
 	let lastNode: VMStateSelection | null = null;
-	let wasGlobalsEmpty = false;
-	let wasMessagesEmpty = false;
 	let wasGlobalsCollapsed = false;
 	let wasMessagesCollapsed = false;
 
@@ -92,8 +97,6 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 		}
 
 		lastNode = node;
-		wasGlobalsEmpty = isGlobalsEmpty;
-		wasMessagesEmpty = isMessagesEmpty;
 	});
 
 	// Change tracking effect
@@ -177,7 +180,15 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 			<div class="inspector-header">
 				<div class="header-title">
 					<i class="codicon codicon-debug-console"></i>
-					<span>State Details</span>
+					<span>{title()}</span>
+					<Show
+						when={
+							props.node?.level !== undefined &&
+							props.node?.stepIndex === undefined
+						}
+					>
+						<span class="header-subtitle">depth {props.node?.level}</span>
+					</Show>
 				</div>
 				<button
 					type="button"
@@ -218,16 +229,10 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 						<div
 							class={`section programs-section${processesCollapsed() ? " section-collapsed" : ""}`}
 						>
-							<div
+							<button
+								type="button"
 								class={`collapsible-header${!processesCollapsed() && !canCollapse() ? " header-locked" : ""}`}
 								onClick={toggleProcesses}
-								onKeyDown={(e) => {
-									if (e.key === "Enter" || e.key === " ") {
-										e.preventDefault();
-										toggleProcesses();
-									}
-								}}
-								role="button"
 								tabIndex={!processesCollapsed() && !canCollapse() ? -1 : 0}
 								aria-expanded={!processesCollapsed()}
 								aria-controls={processesId}
@@ -245,7 +250,7 @@ export default function VMStateInspector(props: VMStateInspectorProps) {
 								<i class="codicon codicon-debug-all header-section-icon"></i>
 								<span class="section-label">Processes</span>
 								<span class="header-count">{vmState().locals.length}</span>
-							</div>
+							</button>
 							<div
 								id={processesId}
 								class={`section-body${processesCollapsed() ? " section-body-hidden" : ""}`}

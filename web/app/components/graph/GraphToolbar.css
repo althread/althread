@@ -5,35 +5,38 @@
 
 .download-menu {
 	position: absolute;
-	top: 100%;
-	right: 0;
-	background: var(--app-surface-hover);
-	border: 1px solid var(--app-border-strong);
-	border-radius: 2px;
-	box-shadow: 0 4px 12px var(--app-shadow-lg);
+	top: -4px;
+	right: calc(100% + 8px);
+	background: var(--app-surface-elevated);
+	border: 1px solid var(--app-border);
+	border-radius: var(--app-radius-lg);
+	box-shadow: 0 8px 24px var(--app-shadow-lg);
 	z-index: 1000;
-	min-width: 145px;
-	margin-top: 4px;
+	min-width: 160px;
+	padding: 4px;
 	overflow: hidden;
 }
 
-.download-menu-item {
+.graph-toolbar .download-menu-item {
 	display: flex;
-	gap: 0;
-	justify-content: space-between;
+	align-items: center;
+	gap: 8px;
+	justify-content: flex-start;
 	width: 100%;
+	height: auto;
+	padding: 6px 8px;
 	background: transparent;
 	border: none;
+	border-radius: var(--app-radius-sm);
 	color: var(--app-text-muted);
 	cursor: pointer;
 	white-space: nowrap;
 	font-family: inherit;
 	font-size: 12px;
-	transition: background-color 0.2s ease;
 }
 
-.download-menu-item:hover {
-	background: var(--app-border-strong);
+.graph-toolbar .download-menu-item:hover {
+	background: var(--app-surface-hover);
 	color: var(--app-text);
 }
 
@@ -47,5 +50,5 @@
 .download-menu-item:focus-visible {
 	outline: 2px solid var(--ifm-color-primary);
 	outline-offset: -2px;
-	background: var(--app-border-strong);
+	background: var(--app-surface-hover);
 }

@@ -1,5 +1,13 @@
 import { useGraphMaximizeHotkeys } from "@hooks/useGraphMaximizeHotkeys";
-import { createEffect, createSignal, onCleanup } from "solid-js";
+import { MAX_VISIBLE_GRAPH_NODES } from "@utils/graphBuilders";
+import {
+	createEffect,
+	createSignal,
+	on,
+	onCleanup,
+	Show,
+	untrack,
+} from "solid-js";
 import vis from "vis-network/dist/vis-network.esm";
 import { exportStatesToCSV } from "./exportToCSV";
 import GraphToolbar from "./GraphToolbar";
@@ -8,27 +16,41 @@ import { nodeToString } from "./Node";
 import {
 	createGraphToolbarHandlers,
 	formatState,
-	setupNodeClickZoom,
+	revealNode,
 } from "./visHelpers";
-import { themes } from "./visOptions";
+import { edgeStyle, networkOptions, nodeStyle } from "./visOptions";
 
 interface GraphProps {
 	nodes: any[];
 	edges: any[];
 	vm_states?: any[];
-	setLoadingAction: (action: string | null) => void;
+	setLoadingAction?: (action: string | null) => void;
 	theme?: "light" | "dark";
 	onEdgeClick?: (edgeId: string, edgeData: any) => void;
 	onNodeSelect?: (node: any | null) => void;
 	tooLargeStatusMessage?: string;
-	ref?: (instance: { selectNode: (nodeId: string | number) => void }) => void;
+	/** Node to select (and focus) in the graph, e.g. the current step of a trace. */
+	selectedNode?: number | string | null;
 }
 
-export const MAX_VISIBLE_GRAPH_NODES = 200;
+export { MAX_VISIBLE_GRAPH_NODES };
+
+/** Below this zoom level nodes are too small to be clicked comfortably. */
+const MIN_INITIAL_SCALE = 0.9;
+/** Distance between two dots of the background grid, in graph units. */
+const GRID_SPACING = 20;
+/** Smallest on-screen distance between two dots, in pixels. */
+const MIN_GRID_SPACING = 10;
 
 export default (props: GraphProps) => {
 	let container: HTMLDivElement | undefined;
 	let network: vis.Network | null = null;
+	let lastClickedNode: string | number | null = null;
+	/** The transition picked in the graph, described in a chip over the graph. */
+	const [selectedEdge, setSelectedEdge] = createSignal<{
+		label: string;
+		lines: number[];
+	} | null>(null);
 	const [maximized, setMaximized] = createSignal(false);
 	const [showDetails, setDetails] = createSignal(false);
 	const [selectedNodeContent, setSelectedNodeContent] = createSignal<
@@ -40,17 +62,8 @@ export default (props: GraphProps) => {
 		if (!rawState) return null;
 		return rawState.vm ?? rawState.state ?? rawState;
 	};
-	const resolveNodeState = (node: any, originalNode: any) => {
-		return (
-			node?.rawState ??
-			originalNode?.rawState ??
-			node?.state ??
-			node?.vm_state ??
-			originalNode?.state ??
-			originalNode?.vm_state ??
-			null
-		);
-	};
+	const resolveNodeState = (node: any) =>
+		node?.rawState ?? node?.state ?? node?.vm_state ?? null;
 	const isDarkTheme = () => props.theme !== "light";
 	const graphOverlayStyles = () => ({
 		background: "var(--app-surface)",
@@ -66,7 +79,7 @@ export default (props: GraphProps) => {
 			if (props.onNodeSelect) {
 				props.onNodeSelect(null);
 			}
-			props.setLoadingAction(null);
+			props.setLoadingAction?.(null);
 			return;
 		}
 
@@ -74,119 +87,148 @@ export default (props: GraphProps) => {
 			return;
 		}
 
-		const nodes = new vis.DataSet(props.nodes || []);
-		const edges = new vis.DataSet(props.edges || []);
+		const theme = props.theme === "light" ? "light" : "dark";
+		const nodes = new vis.DataSet(
+			(props.nodes || []).map((node: any) => ({
+				...node,
+				...nodeStyle(node.kind, theme),
+			})),
+		);
+		// Edges going back to an earlier (or the same) level are drawn as arcs,
+		// so that cycles do not overlap the forward edges.
+		const levels = new Map<unknown, number>(
+			(props.nodes || []).map((node: any) => [node.id, node.level ?? 0]),
+		);
+		const edges = new vis.DataSet(
+			(props.edges || []).map((edge: any) => {
+				const isBackEdge =
+					(levels.get(edge.to) ?? 0) <= (levels.get(edge.from) ?? 0);
+				return {
+					...edge,
+					...edgeStyle(!!edge.isViolationEdge, theme),
+					...(isBackEdge
+						? { smooth: { enabled: true, type: "curvedCW", roundness: 0.35 } }
+						: {}),
+				};
+			}),
+		);
 
-		const data = {
-			nodes: nodes.get(),
-			edges: edges.get(),
-		};
+		network = new vis.Network(
+			container,
+			{ nodes, edges } as any,
+			networkOptions as any,
+		);
+		const net = network;
 
-		const isLargeGraph =
-			(props.nodes?.length || 0) > 1000 || (props.edges?.length || 0) > 3000;
-		const baseOptions: any =
-			props.theme === "dark" ? themes.dark : themes.light;
-		const options: any = isLargeGraph
-			? {
-					...baseOptions,
-					physics: { ...(baseOptions.physics || {}), enabled: false },
-					layout: { ...(baseOptions.layout || {}) },
-					interaction: { ...(baseOptions.interaction || {}) },
-				}
-			: baseOptions;
-		network = new vis.Network(container, data, options);
-
-		// Setup node click handler
-		setupNodeClickZoom(network, (nodeId) => {
+		const selectNodeById = (nodeId: string | number | null) => {
 			if (nodeId === null) {
 				setSelectedNodeContent(null);
-				if (props.onNodeSelect) props.onNodeSelect(null);
+				props.onNodeSelect?.(null);
 				return;
 			}
-			const node = nodes.get(nodeId);
-			const originalNode = (props.nodes || []).find(
-				(n: any) => String(n.id) === String(nodeId),
-			);
-			if (!node && !originalNode) {
+			const node: any = nodes.get(nodeId as any);
+			if (!node) {
 				setSelectedNodeContent(null);
-				if (props.onNodeSelect) props.onNodeSelect(null);
+				props.onNodeSelect?.(null);
 				return;
 			}
-
-			const fullLabel = node?.fullLabel ?? originalNode?.fullLabel;
-			const rawState = resolveNodeState(node, originalNode);
+			const rawState = resolveNodeState(node);
 			const vmState = resolveVMState(rawState);
-
-			if (fullLabel) {
-				setSelectedNodeContent(fullLabel);
+			if (node.fullLabel) {
+				setSelectedNodeContent(node.fullLabel);
 			} else if (vmState) {
 				setSelectedNodeContent(nodeToString(vmState));
 			}
-			if (props.onNodeSelect) {
-				props.onNodeSelect(rawState || null);
-			}
-		});
+			lastClickedNode = nodeId;
+			props.onNodeSelect?.(rawState || null);
+		};
 
-		// Setup edge click handler
-		network.on("selectEdge", (params) => {
-			if (params.edges.length > 0) {
-				const edgeId = params.edges[0];
-				const edge = edges.get(edgeId);
-
-				if (edge) {
-					// Update edge to show label with proper styling
-					edges.update({
-						id: edgeId,
-						font: {
-							size: 12,
-							color: isDarkTheme() ? "#cccccc" : "#544639",
-							background: isDarkTheme()
-								? "rgba(30, 30, 30, 0.8)"
-								: "rgba(255, 248, 239, 0.92)",
-							strokeWidth: 2,
-							strokeColor: isDarkTheme() ? "#000" : "#e7d8c3",
-						},
+		// vis-network runs this handler while it processes the pointer-up event.
+		// An exception here would leave its gesture recognizer believing the
+		// button is still pressed: the graph would then follow the mouse.
+		// Clicking selects (no zoom). Clicking an edge keeps the node selection.
+		net.on("click", (params) => {
+			try {
+				if (params.nodes?.length > 0) {
+					setSelectedEdge(null);
+					selectNodeById(params.nodes[0]);
+				} else if (params.edges?.length > 0) {
+					const edgeId = params.edges[0];
+					const edge: any = edges.get(edgeId);
+					if (!edge) return;
+					setSelectedEdge({
+						label: String(edge.label ?? ""),
+						lines: [...new Set<number>(edge.lines ?? [])],
 					});
-					// Call the onEdgeClick callback if provided
-					if (props.onEdgeClick) {
-						props.onEdgeClick(edgeId, edge);
-					}
+					props.onEdgeClick?.(edgeId, edge);
+				} else {
+					net.unselectAll();
+					setSelectedEdge(null);
+					selectNodeById(null);
 				}
+			} catch (error) {
+				console.error("Graph click handler failed:", error);
 			}
 		});
 
-		// Hide label when edge is deselected
-		network.on("deselectEdge", (params) => {
-			if (params.previousSelection.edges.length > 0) {
-				const edgeId = params.previousSelection.edges[0];
-				edges.update({
-					id: edgeId,
-					font: { size: 0 },
+		// Keep the background dot grid attached to the graph while panning/zooming.
+		const syncGrid = () => {
+			if (!container) return;
+			let spacing = GRID_SPACING * net.getScale();
+			// Too dense once zoomed out: skip dots (multiples keep the alignment).
+			while (spacing < MIN_GRID_SPACING) spacing *= 2;
+			const origin = net.canvasToDOM({ x: 0, y: 0 });
+			container.style.backgroundSize = `${spacing}px ${spacing}px`;
+			container.style.backgroundPosition = `${origin.x}px ${origin.y}px`;
+		};
+		net.on("afterDrawing", syncGrid);
+
+		// The layout is static: fit once, then only the user moves the view.
+		// Long graphs would become unreadable once fitted: keep a minimum zoom
+		// and start on the selected node (or the initial state).
+		net.fit({ animation: false });
+		const selected = untrack(() => props.selectedNode);
+		const hasSelection = selected !== null && selected !== undefined;
+		if (hasSelection) net.selectNodes([selected]);
+		if (net.getScale() < MIN_INITIAL_SCALE) {
+			const anchor = hasSelection ? selected : props.nodes[0]?.id;
+			const position = anchor !== undefined ? net.getPosition(anchor) : null;
+			if (position) {
+				// Leave some room on the left of the initial state.
+				const offset = hasSelection
+					? 0
+					: (container.clientWidth / 2 - 40) / MIN_INITIAL_SCALE;
+				net.moveTo({
+					position: { x: position.x + offset, y: position.y },
+					scale: MIN_INITIAL_SCALE,
 				});
 			}
-		});
-
-		if (isLargeGraph) {
-			if (network) {
-				network.fit({ animation: false });
-			}
-			props.setLoadingAction(null);
-		} else {
-			network.once("stabilized", () => {
-				if (network) {
-					network.fit();
-					props.setLoadingAction(null);
-				}
-			});
 		}
+		props.setLoadingAction?.(null);
 
 		onCleanup(() => {
 			if (network) {
 				network.destroy();
 				network = null;
 			}
+			setSelectedEdge(null);
 		});
 	});
+
+	createEffect(
+		on(
+			() => props.selectedNode,
+			(selected) => {
+				if (!network || selected === null || selected === undefined) return;
+				setSelectedEdge(null);
+				network.selectNodes([selected]);
+				// The user just clicked it: it is already visible.
+				if (selected === lastClickedNode) return;
+				revealNode(network, container, selected);
+			},
+			{ defer: true },
+		),
+	);
 
 	useGraphMaximizeHotkeys(setMaximized);
 
@@ -197,18 +239,6 @@ export default (props: GraphProps) => {
 			() => setMaximized((v: boolean) => !v),
 			() => setDetails((v: boolean) => !v),
 		);
-
-	// Expose methods via ref
-	if (props.ref) {
-		props.ref({
-			selectNode: (nodeId: string | number) => {
-				if (network) {
-					network.selectNodes([nodeId]);
-					network.focus(nodeId, { animation: true, scale: 1.5 });
-				}
-			},
-		});
-	}
 
 	return (
 		<div class={`state-graph${maximized() ? " maximized" : ""}`}>
@@ -232,7 +262,7 @@ export default (props: GraphProps) => {
 					</div>
 				</div>
 			) : (
-				<div ref={container} style="width: 100%; height: 100%;" />
+				<div ref={container} class="graph-canvas" />
 			)}
 
 			{!props.onNodeSelect && selectedNodeContent() && (
@@ -243,6 +273,7 @@ export default (props: GraphProps) => {
 					<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
 						<h3 style="margin: 0;">Node State</h3>
 						<button
+							type="button"
 							style={`background: none; border: none; color: ${graphOverlayStyles().buttonColor}; cursor: pointer;`}
 							onClick={() => setSelectedNodeContent(null)}
 						>
@@ -255,6 +286,21 @@ export default (props: GraphProps) => {
 					></div>
 				</div>
 			)}
+
+			<Show when={!isGraphTooLarge() && selectedEdge()}>
+				{(edge) => (
+					<div class="graph-edge-chip" role="status">
+						<i class="codicon codicon-arrow-right" />
+						<span class="graph-edge-chip-label">{edge().label}</span>
+						<Show when={edge().lines.length > 0}>
+							<span class="graph-edge-chip-lines">
+								{edge().lines.length === 1 ? "line" : "lines"}{" "}
+								{edge().lines.join(", ")}
+							</span>
+						</Show>
+					</div>
+				)}
+			</Show>
 
 			{!isGraphTooLarge() && showDetails() ? (
 				<MetadataDisplay nodes={props.nodes} />

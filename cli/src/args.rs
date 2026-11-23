@@ -12,7 +12,7 @@ pub enum Input {
     Path(PathBuf),
 }
 
-/// The Typst compiler.
+/// The Althread compiler, interpreter, and model checker.
 #[derive(Debug, Clone, Parser)]
 #[clap(name = "althread")]
 pub struct CliArguments {
@@ -36,7 +36,7 @@ pub enum Command {
     #[command(visible_alias = "r")]
     Run(RunCommand),
 
-    /// Compiles an input file into a supported output format
+    /// Runs randomized execution searches over multiple seeds
     #[command()]
     RandomSearch(RandomSearchCommand),
 
@@ -73,8 +73,11 @@ pub struct CompileCommand {
     pub common: SharedArgs,
 }
 
-/// Compiles an input file into a supported output format
+/// Check which properties hold over the program's reachable states.
 #[derive(Debug, Clone, Parser)]
+#[command(
+    after_help = "Exit codes: 0 verified, 1 violated, 2 invalid arguments, 3 input or checker error, 4 inconclusive."
+)]
 pub struct CheckCommand {
     /// Shared arguments
     #[clap(flatten)]
@@ -113,7 +116,7 @@ pub struct CheckCommand {
     pub max_states: u64,
 }
 
-/// Compiles an input file into a supported output format
+/// Runs an Althread input file
 #[derive(Debug, Clone, Parser)]
 pub struct RunCommand {
     /// Shared arguments
@@ -141,7 +144,7 @@ pub struct RunCommand {
     pub seed: Option<u64>,
 }
 
-/// Compiles an input file into a supported output format
+/// Runs randomized execution searches over multiple seeds
 #[derive(Debug, Clone, Parser)]
 pub struct RandomSearchCommand {
     /// Shared arguments
@@ -213,10 +216,10 @@ pub struct InstallCommand {
     pub force: bool,
 }
 
-/// Common arguments of compile, watch, and query.
+/// Common arguments of compile, run, random-search, and check.
 #[derive(Debug, Clone, Args)]
 pub struct SharedArgs {
-    /// Path to input Typst file. Use `-` to read input from stdin
+    /// Path to input Althread file. Use `-` to read input from stdin
     #[clap(value_parser = make_input_value_parser(), value_hint = ValueHint::FilePath)]
     pub input: Input,
 }

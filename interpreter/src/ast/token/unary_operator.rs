@@ -1,26 +1,10 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
-use crate::{ast::node::NodeBuilder, error::AlthreadResult, no_rule, parser::Rule};
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum UnaryOperator {
     Positive,
     Negative,
     Not,
-}
-
-impl NodeBuilder for UnaryOperator {
-    fn build(mut pairs: Pairs<Rule>, filepath: &str) -> AlthreadResult<Self> {
-        let pair = pairs.next().unwrap();
-        match pair.as_rule() {
-            Rule::POS_OP => Ok(Self::Positive),
-            Rule::NEG_OP => Ok(Self::Negative),
-            Rule::NOT_OP => Ok(Self::Not),
-            _ => Err(no_rule!(pair, "UnaryOperator", filepath)),
-        }
-    }
 }
 
 impl fmt::Display for UnaryOperator {

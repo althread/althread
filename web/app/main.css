@@ -77,24 +77,23 @@
 	--app-icon-color: #c5c5c5;
 	--app-icon-muted: #858585;
 	--app-focus-border: rgba(14, 99, 156, 0.3);
+	--header-height: 52px;
+	--app-on-primary: #1a1206;
+	--app-font-ui:
+		"Inter", system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell,
+		"Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji",
+		"Segoe UI Emoji";
+	--app-font-mono:
+		"JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas,
+		"DejaVu Sans Mono", monospace;
+	--app-radius-sm: 4px;
+	--app-radius: 6px;
+	--app-radius-lg: 8px;
 	background-color: var(--background-graphics);
 	color: var(--app-text);
-	font-family:
-		system-ui,
-		-apple-system,
-		Segoe UI,
-		Roboto,
-		Ubuntu,
-		Cantarell,
-		Noto Sans,
-		BlinkMacSystemFont,
-		"Segoe UI",
-		Helvetica,
-		Arial,
-		sans-serif,
-		"Apple Color Emoji",
-		"Segoe UI Emoji",
-		"Segoe UI Symbol";
+	font-family: var(--app-font-ui);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
 
 :root[data-theme="light"] {
@@ -186,20 +185,19 @@ body {
 
 #header {
 	margin: 0;
-	/* Includes vertical padding below (box-sizing keeps total height consistent). */
-	height: 62px;
+	height: var(--header-height);
 	box-sizing: border-box;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 2rem;
-	padding: 1rem 1rem 1rem 0.5rem;
+	gap: 1rem;
+	padding: 0 12px 0 4px;
 	background-color: var(--app-surface);
 	border-bottom: 1px solid var(--app-border);
 }
 
 .content-wrapper {
-	height: calc(100vh - 62px);
+	height: calc(100vh - var(--header-height));
 	overflow: hidden;
 	/* Prevent page-level scrolling */
 }
@@ -216,8 +214,7 @@ body {
 /* Collapsed sidebar container styles */
 .collapsed-sidebar-container {
 	position: absolute;
-	top: 62px;
-	/* Height of header */
+	top: var(--header-height);
 	left: 0;
 	bottom: 0;
 	z-index: 1000;
@@ -323,15 +320,60 @@ body {
 }
 
 .state-graph {
+	--graph-dot: color-mix(in srgb, var(--app-text-soft) 22%, transparent);
 	height: 100%;
 	flex: 1 1 0%;
 	min-height: 0;
-	background: var(--app-surface);
-	border: 1.5px solid var(--app-border);
-	box-shadow: 0 2px 16px rgba(0, 0, 0, 0.25);
+	background-color: var(--app-surface);
 	position: relative;
 	overflow: hidden;
 	/* Prevent resize loops */
+}
+
+/* Dot grid drawn behind the canvas; Graph.tsx keeps it in sync with pan/zoom. */
+.graph-canvas {
+	width: 100%;
+	height: 100%;
+	background-image: radial-gradient(var(--graph-dot) 1px, transparent 1.2px);
+	background-size: 18px 18px;
+}
+
+.graph-edge-chip {
+	position: absolute;
+	left: 10px;
+	bottom: 10px;
+	z-index: 10;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	max-width: calc(100% - 70px);
+	padding: 5px 10px;
+	border: 1px solid var(--app-border);
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--app-surface-elevated) 92%, transparent);
+	box-shadow: 0 4px 14px var(--app-shadow-sm);
+	backdrop-filter: blur(6px);
+	font-size: 12px;
+	color: var(--app-text-muted);
+	pointer-events: none;
+	white-space: nowrap;
+}
+
+.graph-edge-chip .codicon {
+	font-size: 13px;
+	color: var(--ifm-color-primary);
+}
+
+.graph-edge-chip-label {
+	font-family: var(--app-font-mono);
+	color: var(--app-text);
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.graph-edge-chip-lines {
+	color: var(--app-text-soft);
+	font-variant-numeric: tabular-nums;
 }
 
 .state-graph.maximized {
@@ -364,7 +406,7 @@ body {
 .console pre {
 	margin: 0;
 	padding: 1rem;
-	font-family: "Menlo", "Monaco", "Courier New", monospace;
+	font-family: var(--app-font-mono);
 	font-size: 13px;
 	line-height: 1.5;
 	color: var(--app-text-muted);
@@ -395,12 +437,15 @@ body {
 	display: flex;
 	align-items: center;
 	gap: 6px;
+	height: 30px;
+	box-sizing: border-box;
 	background-color: var(--app-surface-hover);
 	color: var(--app-text-muted);
 	border: 1px solid var(--app-border-strong);
-	padding: 4px 12px;
-	border-radius: 2px;
+	padding: 0 12px;
+	border-radius: 4px;
 	cursor: pointer;
+	font-family: inherit;
 	font-size: 13px;
 	transition:
 		background-color 0.2s,
@@ -411,16 +456,15 @@ body {
 .vscode-button:hover {
 	background-color: var(--app-surface-elevated);
 	border-color: var(--app-border-strong);
+	color: var(--app-text);
 }
 
 .vscode-button:disabled {
-	opacity: 0.8;
+	opacity: 0.6;
 	cursor: not-allowed;
 	background-color: var(--app-surface);
 	border-color: var(--app-border);
 	color: var(--app-text-soft);
-	pointer-events: none;
-	/* Prevent any interaction */
 }
 
 .vscode-button .codicon {
@@ -441,23 +485,85 @@ body {
 
 .vscode-button.active {
 	background-color: var(--app-surface-muted);
-	border: 1px solid var(--app-text);
+	border-color: var(--ifm-color-primary);
 	color: var(--app-text);
+}
+
+.vscode-button.primary {
+	background-color: var(--ifm-color-primary);
+	border-color: var(--ifm-color-primary);
+	color: var(--app-on-primary);
+	font-weight: 600;
+}
+
+.vscode-button.primary:hover {
+	background-color: var(--ifm-color-primary-light);
+	border-color: var(--ifm-color-primary-light);
+	color: var(--app-on-primary);
+}
+
+.vscode-button.primary:disabled {
+	background-color: color-mix(
+		in srgb,
+		var(--ifm-color-primary) 35%,
+		var(--app-surface)
+	);
+	border-color: transparent;
+	color: var(--app-text-soft);
+}
+
+.vscode-button.icon-only {
+	width: 30px;
+	padding: 0;
+	justify-content: center;
 }
 
 .actions {
 	display: flex;
 	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+.action-group {
+	display: flex;
+	align-items: center;
 	gap: 6px;
+}
+
+.actions-separator {
+	width: 1px;
+	height: 20px;
+	background: var(--app-border-strong);
 }
 
 .brand {
 	display: flex;
 	height: 100%;
 	align-items: center;
-	gap: 12px;
-	padding: 0.5rem;
+	gap: 8px;
+	padding: 0 0.5rem;
 	color: var(--app-text-muted);
+}
+
+.brand img {
+	height: 32px !important;
+}
+
+.brand h3 {
+	margin: 0;
+	font-size: 17px;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+}
+
+@media (max-width: 720px) {
+	.action-group .vscode-button span {
+		display: none;
+	}
+	.brand h3 {
+		display: none;
+	}
 }
 
 .Resizable-handle {
@@ -643,24 +749,37 @@ body {
 	right: 10px;
 	display: flex;
 	flex-direction: column;
-	gap: 10px;
+	gap: 2px;
+	padding: 3px;
 	z-index: 10;
+	background: color-mix(in srgb, var(--app-surface-elevated) 92%, transparent);
+	border: 1px solid var(--app-border);
+	border-radius: var(--app-radius-lg);
+	box-shadow: 0 4px 14px var(--app-shadow-sm);
+	backdrop-filter: blur(6px);
 }
 
 .graph-toolbar button {
 	display: flex;
-	padding: 0.5rem;
-	background: var(--app-surface-hover);
-	border: 1px solid var(--app-border-strong);
-	color: var(--app-text-muted);
-	border-radius: 2px;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	background: transparent;
+	border: none;
+	color: var(--app-text-soft);
+	border-radius: var(--app-radius-sm);
 	cursor: pointer;
 	font-size: 15px;
+	transition:
+		background-color 0.15s,
+		color 0.15s;
 }
 
 .graph-toolbar button:hover {
-	background: var(--app-surface-elevated);
-	border-color: var(--app-border-strong);
+	background: var(--app-surface-hover);
+	color: var(--app-text);
 }
 
 .vm-state-popup {
@@ -674,7 +793,7 @@ body {
 	max-height: 250px;
 	max-width: 250px;
 	overflow: hidden;
-	font-family: "Menlo", "Monaco", "Courier New", monospace;
+	font-family: var(--app-font-mono);
 	font-size: 12px;
 	display: flex;
 	flex-direction: column;
@@ -848,10 +967,4 @@ body {
 	overflow: auto;
 	flex: 1 1 0%;
 	min-height: 0;
-}
-
-@container right-panel (max-width: 450px) {
-	.tab_button span {
-		display: none;
-	}
 }

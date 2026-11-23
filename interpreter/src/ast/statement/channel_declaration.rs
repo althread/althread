@@ -1,63 +1,24 @@
 use std::fmt;
 
-use pest::iterators::Pairs;
-
 use crate::{
     ast::{
         display::{AstDisplay, Prefix},
-        node::{InstructionBuilder, Node, NodeBuilder},
-        token::datatype::DataType,
+        node::{InstructionBuilder, Node},
+        token::{datatype::DataType, identifier::Identifier},
     },
     compiler::{CompilerState, InstructionBuilderOk},
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
-    parser::Rule,
     vm::instruction::{Instruction, InstructionType},
 };
 
 #[derive(Debug, Clone)]
 pub struct ChannelDeclaration {
-    pub ch_left_prog: String,
+    pub ch_left_prog: Node<Identifier>,
     pub ch_left_name: String,
-    pub ch_right_prog: String,
+    pub ch_right_prog: Node<Identifier>,
     pub ch_right_name: String,
     pub datatypes: Vec<DataType>,
     // todo: direction
-}
-
-impl NodeBuilder for ChannelDeclaration {
-    fn build(mut pairs: Pairs<Rule>, _filepath: &str) -> AlthreadResult<Self> {
-        let mut left_pairs = pairs.next().unwrap().into_inner();
-        let left_prog = String::from(left_pairs.next().unwrap().as_str());
-        let mut left_parts = Vec::new();
-        while let Some(part) = left_pairs.next() {
-            left_parts.push(part.as_str());
-        }
-        let left_name = left_parts.join(".");
-
-        let mut datatypes: Vec<DataType> = Vec::new();
-
-        let types_pair = pairs.next();
-        for pair in types_pair.unwrap().into_inner() {
-            let datatype = DataType::from_str(pair.as_str());
-            datatypes.push(datatype);
-        }
-
-        let mut right_pairs = pairs.next().unwrap().into_inner();
-        let right_prog = String::from(right_pairs.next().unwrap().as_str());
-        let mut right_parts = Vec::new();
-        while let Some(part) = right_pairs.next() {
-            right_parts.push(part.as_str());
-        }
-        let right_name = right_parts.join(".");
-
-        Ok(Self {
-            ch_left_prog: left_prog,
-            ch_left_name: left_name,
-            ch_right_prog: right_prog,
-            ch_right_name: right_name,
-            datatypes,
-        })
-    }
 }
 
 fn get_var_id(
@@ -108,8 +69,8 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
     fn compile(&self, state: &mut CompilerState) -> AlthreadResult<InstructionBuilderOk> {
         let dec = &self.value;
 
-        let left_prog = get_prog_name(&dec.ch_left_prog, state, &self.pos)?;
-        let right_prog = get_prog_name(&dec.ch_right_prog, state, &self.pos)?;
+        let left_prog = get_prog_name(&dec.ch_left_prog.value.value, state, &self.pos)?;
+        let right_prog = get_prog_name(&dec.ch_right_prog.value.value, state, &self.pos)?;
 
         // check if a channel with the same name already exists on this program
         let left_key = (left_prog.clone(), dec.ch_left_name.clone());
@@ -129,7 +90,7 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
                             .map(|d| d.to_string())
                             .collect::<Vec<_>>()
                             .join(","),
-                        used.1.line
+                        used.1.line()
                     ),
                 ));
             }
@@ -145,7 +106,8 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
                     Some(self.pos.clone()),
                     format!(
                         "Channel already attached to program '{}' with different types at line {}",
-                        left_prog, pos.line
+                        left_prog,
+                        pos.line()
                     ),
                 ));
             }
@@ -172,7 +134,7 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
                             .map(|d| d.to_string())
                             .collect::<Vec<_>>()
                             .join(","),
-                        used.1.line
+                        used.1.line()
                     ),
                 ));
             }
@@ -188,7 +150,8 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
                     Some(self.pos.clone()),
                     format!(
                         "Channel already attached to program '{}' with different types at line {}",
-                        right_prog, pos.line
+                        right_prog,
+                        pos.line()
                     ),
                 ));
             }
@@ -200,8 +163,8 @@ impl InstructionBuilder for Node<ChannelDeclaration> {
 
         Ok(InstructionBuilderOk::from_instructions(vec![Instruction {
             control: InstructionType::Connect {
-                sender_pid: get_var_id(&dec.ch_left_prog, state, &self.pos)?,
-                receiver_pid: get_var_id(&dec.ch_right_prog, state, &self.pos)?,
+                sender_pid: get_var_id(&dec.ch_left_prog.value.value, state, &self.pos)?,
+                receiver_pid: get_var_id(&dec.ch_right_prog.value.value, state, &self.pos)?,
                 sender_channel: dec.ch_left_name.clone(),
                 receiver_channel: dec.ch_right_name.clone(),
             },

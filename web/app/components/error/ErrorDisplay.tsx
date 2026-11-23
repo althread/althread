@@ -3,7 +3,7 @@ import "./ErrorDisplay.css";
 
 interface ErrorDisplayProps {
 	error: FormattedError;
-	onFileClick?: (filePath: string) => void;
+	onFileClick?: (filePath: string, line?: number, col?: number) => void;
 }
 
 export default function ErrorDisplay(props: ErrorDisplayProps) {
@@ -27,8 +27,18 @@ export default function ErrorDisplay(props: ErrorDisplayProps) {
 								<button
 									type="button"
 									class="file-link"
-									onClick={() => props.onFileClick?.(filePath)}
-									title={`Click to open ${filePath}`}
+									onClick={() =>
+										props.onFileClick?.(
+											filePath,
+											props.error.line,
+											props.error.col,
+										)
+									}
+									title={
+										props.error.line
+											? `Click to open ${filePath} at line ${props.error.line}`
+											: `Click to open ${filePath}`
+									}
 								>
 									{filePath}
 								</button>
@@ -47,7 +57,13 @@ export default function ErrorDisplay(props: ErrorDisplayProps) {
 								<button
 									type="button"
 									class="file-link"
-									onClick={() => props.onFileClick?.(filePath)}
+									onClick={() =>
+										props.onFileClick?.(
+											filePath,
+											Number(lineNum),
+											Number(colNum),
+										)
+									}
 									title={`Click to open ${filePath} at line ${lineNum}`}
 								>
 									{filePath}

@@ -1,44 +1,17 @@
-use pest::{
-    error::{ErrorVariant, InputLocation, LineColLocation},
-    iterators::Pairs,
-    Parser,
+use crate::{
+    ast::Ast,
+    error::{register_source, AlthreadResult},
 };
-use pest_derive::Parser;
 
-use crate::error::{AlthreadError, ErrorType, Pos};
+#[path = "parser/chumsky_combinator.rs"]
+pub mod chumsky_backend;
+#[path = "parser/lexer.rs"]
+pub mod lexer;
+#[path = "parser/syntax.rs"]
+pub mod syntax;
+pub use chumsky_backend as chumsky_combinator;
 
-#[derive(Parser)]
-#[grammar = "althread.pest"]
-struct AlthreadParser;
-
-pub fn parse<'a>(source: &'a str, file_path: &str) -> Result<Pairs<'a, Rule>, AlthreadError> {
-    AlthreadParser::parse(Rule::program, source).map_err(|e| {
-        let mut pos = match e.line_col {
-            LineColLocation::Pos(pos) | LineColLocation::Span(pos, _) => Pos {
-                line: pos.0,
-                col: pos.1,
-                start: 0,
-                end: 0,
-                file_path: file_path.to_string(),
-            },
-        };
-        match e.location {
-            InputLocation::Pos(p) => {
-                pos.start = p;
-                pos.end = p + 1;
-            }
-            InputLocation::Span((start, end)) => {
-                pos.start = start;
-                pos.end = end;
-            }
-        };
-
-        let error_message = match e.variant {
-            ErrorVariant::ParsingError { positives, .. } => {
-                format!("Expected one of {:?}", positives)
-            }
-            ErrorVariant::CustomError { message } => message,
-        };
-        AlthreadError::new(ErrorType::SyntaxError, Some(pos), error_message)
-    })
+pub fn parse_ast(source: &str, file_path: &str) -> AlthreadResult<Ast> {
+    register_source(file_path, source);
+    chumsky_backend::parse_ast(source, file_path)
 }

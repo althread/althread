@@ -41,7 +41,6 @@ The `check` block contains an LTL (Linear Temporal Logic) formula.
 |-----------|------------------|-------------|
 | Always | `always ( P )` | P must be true now and for the entire future. |
 | Eventually | `eventually ( P )` | P must be true at some point (now or later). |
-| Next | `next ( P )` | P must be true in the next state. |
 | Until | `( P ) until ( Q )` | P must be true until Q becomes true (Q must happen). |
 | Implication | `if P { Q }` | If P is true, then Q must be true. |
 

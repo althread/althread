@@ -201,13 +201,29 @@ pub struct RunResult {
     pub runtime_error: Option<RuntimeErrorInfo>,
 }
 
+#[derive(Serialize, Tsify)]
+#[serde(rename_all = "snake_case")]
+pub enum CheckVerdict {
+    Verified,
+    Violated,
+    Inconclusive,
+}
+
 /// Result from checking a program
 #[derive(Serialize, Tsify)]
 #[tsify(into_wasm_abi)]
 pub struct CheckResult {
+    pub verdict: CheckVerdict,
+    pub state_count: usize,
+    pub violation_path: Vec<usize>,
     pub path: Vec<GraphNode>,
+    pub path_stdout: Vec<String>,
+    pub path_debug: String,
+    pub path_message_flow_events: Vec<MessageFlowEvent>,
     pub nodes: Vec<GraphNode>,
     pub exhaustive: bool,
+    /// First transition in the repeating part of an LTL counterexample.
+    pub violation_cycle_start: Option<usize>,
 }
 
 /// Result from an interactive step execution
@@ -221,6 +237,9 @@ pub struct InteractiveStepResult {
     pub message_flow_events: Vec<MessageFlowEvent>,
     pub state_display: Vec<String>,
     pub lines: Vec<usize>,
+    pub next_states: Vec<NextStateOption>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deadlock: Option<RuntimeErrorInfo>,
 }
 
 /// Interactive session state information

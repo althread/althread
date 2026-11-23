@@ -1,0 +1,147 @@
+.interactive-choices {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 12px 16px 16px;
+	overflow-y: auto;
+	flex: 1 1 0%;
+	min-height: 0;
+	outline: none;
+}
+
+.interactive-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.interactive-step-count {
+	font-size: 12px;
+	color: var(--app-text-soft);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+.interactive-step-count strong {
+	color: var(--app-text);
+	font-size: 13px;
+}
+
+.interactive-toolbar-actions {
+	display: flex;
+	gap: 4px;
+}
+
+.interactive-hint {
+	margin: 0;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--app-text-soft);
+}
+
+.choice-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.choice-item {
+	width: 100%;
+	display: grid;
+	grid-template-columns: 20px minmax(70px, auto) 1fr 18px;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 10px;
+	background: var(--app-surface-muted);
+	border: 1px solid var(--app-border);
+	border-radius: 6px;
+	color: var(--app-text-muted);
+	text-align: left;
+	font: inherit;
+	font-size: 13px;
+	cursor: pointer;
+	transition:
+		border-color 0.12s,
+		background-color 0.12s;
+}
+
+.choice-item:hover,
+.choice-item:focus-visible {
+	background: var(--app-surface-hover);
+	border-color: var(--ifm-color-primary);
+	color: var(--app-text);
+	outline: none;
+}
+
+.choice-key {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	border-radius: 4px;
+	border: 1px solid var(--app-border-strong);
+	font-size: 11px;
+	font-family: var(--app-font-mono);
+	color: var(--app-text-soft);
+}
+
+.choice-key:empty {
+	border-color: transparent;
+}
+
+.choice-process {
+	color: var(--ifm-color-primary);
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.choice-pid {
+	margin-left: 4px;
+	color: var(--app-text-soft);
+	font-weight: 400;
+	font-size: 11px;
+}
+
+.choice-code {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+	font-family: var(--app-font-mono);
+	font-size: 12px;
+}
+
+.choice-code code {
+	color: var(--app-text);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.choice-message-op {
+	color: var(--app-syntax-type);
+	font-size: 11px;
+	font-style: italic;
+}
+
+.choice-message-op .codicon {
+	font-size: 10px;
+}
+
+.choice-go {
+	color: var(--app-text-soft);
+	opacity: 0;
+	transition: opacity 0.12s;
+}
+
+.choice-item:hover .choice-go,
+.choice-item:focus-visible .choice-go {
+	opacity: 1;
+	color: var(--ifm-color-primary);
+}

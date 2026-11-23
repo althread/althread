@@ -19,7 +19,7 @@ use args::{
 use clap::Parser;
 use owo_colors::{OwoColorize, Style};
 
-use althread::{ast::Ast, checker, module_resolver::StandardFileSystem};
+use althread::{ast::Ast, checker, module_resolver::StandardFileSystem, parser};
 
 use crate::package::{DependencySpec, Package};
 
@@ -67,17 +67,7 @@ pub fn compile_command(cli_args: &CompileCommand) {
     let mut input_map = HashMap::new();
     input_map.insert(path.to_string_lossy().to_string(), source.clone());
 
-    // parse code with pest
-    let pairs = althread::parser::parse(&source, &path.to_string_lossy().to_string())
-        .unwrap_or_else(|e| {
-            e.report(&input_map);
-            exit(1);
-        });
-
-    let ast = Ast::build(pairs, &path.to_string_lossy().to_string()).unwrap_or_else(|e| {
-        e.report(&input_map);
-        exit(1);
-    });
+    let ast = parse_with_options(&source, &path.to_string_lossy(), &input_map);
 
     println!("{}", &ast);
 
@@ -92,53 +82,52 @@ pub fn compile_command(cli_args: &CompileCommand) {
 }
 
 pub fn check_command(cli_args: &CheckCommand) {
-    use althread::checker::ltl::{automaton::BuchiAutomaton, compiled::CompiledLtlExpression, debug};
+    use althread::checker::{
+        ltl::{automaton::BuchiAutomaton, compiled::CompiledLtlExpression, debug},
+        Verdict,
+    };
+    const CHECK_ERROR: i32 = 3;
 
-    // Read file
+    fn read_error(error: &dyn Error) -> ! {
+        eprintln!("Could not read checker input: {error}");
+        exit(CHECK_ERROR);
+    }
     let (source, path) = match cli_args.common.input.clone() {
         args::Input::Stdin => {
-            let mut buf = Vec::new();
-            let _ = std::io::stdin().read_to_end(&mut buf);
-            (
-                String::from_utf8(buf).expect("Could not read stdin"),
-                PathBuf::from("./stdin.alt"),
-            )
+            let mut source = String::new();
+            stdin()
+                .read_to_string(&mut source)
+                .unwrap_or_else(|e| read_error(&e));
+            (source, PathBuf::from("./stdin.alt"))
         }
         args::Input::Path(path) => (
-            fs::read_to_string(&path).expect("Could not read file"),
+            fs::read_to_string(&path).unwrap_or_else(|e| read_error(&e)),
             path,
         ),
     };
 
-    let mut input_map = HashMap::new();
-    input_map.insert(path.to_string_lossy().to_string(), source.clone());
-
-    // parse code with pest
-    let pairs = althread::parser::parse(&source, &path.to_string_lossy().to_string())
-        .unwrap_or_else(|e| {
-            e.report(&input_map);
-            exit(1);
-        });
-
-    let ast = Ast::build(pairs, &path.to_string_lossy().to_string()).unwrap_or_else(|e| {
+    let mut input_map = HashMap::from([(path.to_string_lossy().into_owned(), source.clone())]);
+    let ast = parser::parse_ast(&source, &path.to_string_lossy()).unwrap_or_else(|e| {
         e.report(&input_map);
-        exit(1);
+        exit(CHECK_ERROR);
     });
-
     let compiled_project = ast
         .compile(&path, StandardFileSystem, &mut input_map)
         .unwrap_or_else(|e| {
             e.report(&input_map);
-            exit(1);
+            exit(CHECK_ERROR);
         });
 
     // LTL Debug output
     let show_all = cli_args.show_all;
-    
+
     if !compiled_project.compiled_ltl_formulas.is_empty() {
         // Show negated formulas if requested
         if show_all || cli_args.show_negated {
-            println!("{}", debug::generate_negated_formulas_report(&compiled_project.compiled_ltl_formulas));
+            println!(
+                "{}",
+                debug::generate_negated_formulas_report(&compiled_project.compiled_ltl_formulas)
+            );
         }
 
         // Build and show automatons if requested
@@ -156,10 +145,13 @@ pub fn check_command(cli_args: &CheckCommand) {
                 .collect();
 
             if show_all || cli_args.show_automaton_text {
-                println!("{}", debug::generate_automaton_report(
-                    &compiled_project.compiled_ltl_formulas,
-                    &automatons,
-                ));
+                println!(
+                    "{}",
+                    debug::generate_automaton_report(
+                        &compiled_project.compiled_ltl_formulas,
+                        &automatons,
+                    )
+                );
             }
 
             if show_all || cli_args.show_automaton {
@@ -171,73 +163,78 @@ pub fn check_command(cli_args: &CheckCommand) {
         }
     }
 
-    let checked = checker::check_program(&compiled_project, Some(cli_args.max_states as usize))
+    let checked = checker::check(&compiled_project, Some(cli_args.max_states as usize))
         .unwrap_or_else(|e| {
             e.report(&input_map);
-            exit(1);
+            exit(CHECK_ERROR);
         });
 
-    // Show state graph if requested
     if show_all || cli_args.show_state_graph {
         println!("=== State Graph Summary ===");
-        println!("Total states: {}", checked.1.nodes.len());
-        println!("Exhaustive: {}", checked.1.exhaustive);
-        // More detailed state graph could be output as DOT here
+        println!("Total states: {}", checked.graph.nodes.len());
+        println!("Exhaustive: {}", checked.graph.exhaustive);
     }
 
-    if !checked.1.exhaustive {
-        println!(
-            "{}",
-            format!(
-                "Warning: Maximum number of states ({}) reached. The search was not exhaustive.",
-                cli_args.max_states
-            )
-            .yellow()
-        );
-        if checked.0.is_empty() {
-            println!(
-                "{}",
-                "Note: Liveness properties (eventually) were not checked because the state space is incomplete."
-                    .italic()
-            );
-        } else {
-            println!(
-                "{}",
-                "Note: The reported counterexample is valid, but verification stopped early at the state limit."
-                    .italic()
-            );
+    let status = match checked.verdict {
+        Verdict::Verified => {
+            println!("✓ Verified");
+            0
         }
-    }
-
-    if checked.0.is_empty() {
-        println!("✓ No invariant violated");
-    } else {
-        println!("✗ Invariant violated");
-        for link in checked.0.iter() {
+        Verdict::Inconclusive => {
             println!(
-                "{}",
-                format!("-- {}#{} --", link.name, link.pid).style(if link.pid == 0 {
-                    MAIN_STYLE
-                } else {
-                    PROCESS_PALETTE[(link.pid.saturating_sub(1)) % PROCESS_PALETTE.len()]
-                })
+                "Verification inconclusive: state limit ({}) reached.",
+                cli_args.max_states
             );
-            for line_num in &link.lines {
-                if let Some(line) = source.lines().nth(line_num.saturating_sub(1)) {
-                    println!("{:4} | {}", line_num, line);
+            4
+        }
+        Verdict::Violated { path, cycle_start } => {
+            println!("✗ Property violated");
+            if !checked.graph.exhaustive {
+                if checked.graph.nodes.len() >= cli_args.max_states as usize {
+                    println!(
+                        "Counterexample found within the state limit ({}).",
+                        cli_args.max_states
+                    );
+                } else {
+                    println!("Stopped exploration upon finding a counterexample.");
                 }
             }
+            for (index, link) in path.iter().enumerate() {
+                if cycle_start == Some(index) {
+                    println!("-- start of repeating counterexample cycle --");
+                }
+                println!(
+                    "{}",
+                    format!("-- {}#{} --", link.name, link.pid).style(if link.pid == 0 {
+                        MAIN_STYLE
+                    } else {
+                        PROCESS_PALETTE[(link.pid.saturating_sub(1)) % PROCESS_PALETTE.len()]
+                    })
+                );
+                for line_num in &link.lines {
+                    if let Some(line) = source.lines().nth(line_num.saturating_sub(1)) {
+                        println!("{:4} | {}", line_num, line);
+                    }
+                }
+            }
+            println!("Violation path: {} steps", path.len());
+            1
         }
-    }
+    };
 
     println!("\nVerification Statistics:");
-    println!("  States explored: {}", checked.1.nodes.len());
-    let max_depth = checked.1.nodes.iter().map(|n| n.level).max().unwrap_or(0);
+    println!("  States explored: {}", checked.graph.nodes.len());
+    let max_depth = checked
+        .graph
+        .nodes
+        .iter()
+        .map(|n| n.level)
+        .max()
+        .unwrap_or(0);
     println!("  Maximum depth:  {}", max_depth);
 
-    if !checked.0.is_empty() {
-        println!("  Violation path: {} steps", checked.0.len());
-        exit(1);
+    if status != 0 {
+        exit(status);
     }
 }
 
@@ -273,12 +270,17 @@ pub fn run_interactive(
         for (idx, (name, pid, insts, actions, nvm)) in next_states.iter().enumerate() {
             println!("======= VM next ({}) =======", idx);
             let preview_line: String = if let Some(first) = insts.first() {
-                if first.pos.is_some() {
-                    source
-                        .lines()
-                        .nth(first.pos.as_ref().unwrap().line)
-                        .unwrap_or_default()
-                        .to_string()
+                if let Some(pos) = first.pos.as_ref() {
+                    let line_num = pos.line();
+                    if line_num > 0 {
+                        source
+                            .lines()
+                            .nth(line_num - 1)
+                            .unwrap_or_default()
+                            .to_string()
+                    } else {
+                        "?".to_string()
+                    }
                 } else {
                     "?".to_string()
                 }
@@ -370,17 +372,7 @@ pub fn run_command(cli_args: &RunCommand) {
     let mut input_map = HashMap::new();
     input_map.insert(path.to_string_lossy().to_string(), source.clone());
 
-    // parse code with pest
-    let pairs = althread::parser::parse(&source, &path.to_string_lossy().to_string())
-        .unwrap_or_else(|e| {
-            e.report(&input_map);
-            exit(1);
-        });
-
-    let ast = Ast::build(pairs, &path.to_string_lossy().to_string()).unwrap_or_else(|e| {
-        e.report(&input_map);
-        exit(1);
-    });
+    let ast = parse_with_options(&source, &path.to_string_lossy(), &input_map);
 
     let compiled_project = ast
         .compile(&path, StandardFileSystem, &mut input_map)
@@ -419,25 +411,24 @@ pub fn run_command(cli_args: &RunCommand) {
         if cli_args.verbose || cli_args.debug {
             let mut prev_line = 0;
             for inst in info.instructions.iter() {
-                if inst.pos.clone().unwrap_or_default().line != 0
-                    && prev_line != inst.pos.clone().unwrap_or_default().line
-                {
+                let line_num = inst.pos.as_ref().map_or(0, |pos| pos.line());
+                if line_num != 0 && prev_line != line_num {
                     println!(
                         "#{}:{} {}",
                         info.prog_id,
-                        inst.pos.clone().unwrap_or_default().line,
+                        line_num,
                         source
                             .lines()
-                            .nth(inst.pos.clone().unwrap_or_default().line - 1)
+                            .nth(line_num - 1)
                             .unwrap_or_default()
                             .style(if info.prog_id == 0 {
                                 MAIN_STYLE
                             } else {
                                 PROCESS_PALETTE
-                                    [((info.prog_id - 1) as usize) % PROCESS_PALETTE.len()]
+                                    [(info.prog_id - 1) % PROCESS_PALETTE.len()]
                             })
                     );
-                    prev_line = inst.pos.clone().unwrap_or_default().line;
+                    prev_line = line_num;
                 }
                 if cli_args.verbose {
                     println!("\t\t\t#{}:{}", info.prog_id, inst);
@@ -451,18 +442,18 @@ pub fn run_command(cli_args: &RunCommand) {
                 None => println!("{}_{}: prog not found", info.prog_name, info.prog_id),
             }
         }
-        if info.invariant_error.is_err() {
-            info.invariant_error.unwrap_err().report(&input_map);
-            break;
+        if let Err(err) = info.invariant_error {
+            err.report(&input_map);
+            exit(1);
         }
 
-        vm_execution.push(vm.clone());
-        if vm_set.contains(&vm) {
+        if cli_args.verbose {
+            vm_execution.push(vm.clone());
+        }
+        if !vm_set.insert(vm.clone()) {
             println!("===== Loop detected =====");
-            vm_set.insert(vm.clone());
             break;
         }
-        vm_set.insert(vm.clone());
     }
 
     if !vm.is_finished() && step_count >= cli_args.max_steps {
@@ -524,17 +515,7 @@ pub fn random_search_command(cli_args: &RandomSearchCommand) {
     let mut input_map = HashMap::new();
     input_map.insert(path.to_string_lossy().to_string(), source.clone());
 
-    // parse code with pest
-    let pairs = althread::parser::parse(&source, &path.to_string_lossy().to_string())
-        .unwrap_or_else(|e| {
-            e.report(&input_map);
-            exit(1);
-        });
-
-    let ast = Ast::build(pairs, &path.to_string_lossy().to_string()).unwrap_or_else(|e| {
-        e.report(&input_map);
-        exit(1);
-    });
+    let ast = parse_with_options(&source, &path.to_string_lossy(), &input_map);
 
     let compiled_project = ast
         .compile(&path, StandardFileSystem, &mut input_map)
@@ -628,6 +609,13 @@ pub fn init_command(cli_args: &InitCommand) {
     }
 }
 
+fn parse_with_options(source: &str, file_path: &str, input_map: &HashMap<String, String>) -> Ast {
+    parser::parse_ast(source, file_path).unwrap_or_else(|e| {
+        e.report(input_map);
+        exit(1);
+    })
+}
+
 pub fn add_command(cli_args: &AddCommand) {
     use std::path::Path;
 
@@ -648,7 +636,7 @@ pub fn add_command(cli_args: &AddCommand) {
             "Local dependency '{}' doesn't need to be added to alt.toml",
             dep_info.url
         );
-        println!("Just use: import [{}] in your code", dep_info.url);
+        println!("Just use: import {{{}}}] in your code", dep_info.url);
         return;
     }
 

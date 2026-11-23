@@ -10,6 +10,9 @@ export function formatAlthreadError(
 	fileContent?: string,
 ): FormattedError {
 	if (!e) return { message: "Unknown error" };
+	if (typeof e === "string") {
+		return { message: `ERROR:\nMessage: ${e}` };
+	}
 
 	const lines: string[] = [];
 	let filePath: string | undefined;
@@ -41,7 +44,7 @@ export function formatAlthreadError(
 	}
 
 	// Message
-	lines.push(`Message: ${e.message}`);
+	lines.push(`Message: ${e.message ?? String(e)}`);
 
 	// Stack trace
 	if (e.stack && Array.isArray(e.stack) && e.stack.length > 0) {

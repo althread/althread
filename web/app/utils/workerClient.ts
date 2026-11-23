@@ -29,6 +29,18 @@ class AlthreadWorkerClient {
 					}
 				}
 			};
+			const rejectAllPending = (message: string) => {
+				for (const pending of this.pendingRequests.values()) {
+					pending.reject(new Error(message));
+				}
+				this.pendingRequests.clear();
+			};
+			this.worker!.onerror = (event: ErrorEvent) => {
+				rejectAllPending(event.message || "Execution worker crashed");
+			};
+			this.worker!.onmessageerror = () => {
+				rejectAllPending("Failed to decode message from execution worker");
+			};
 		}
 	}
 

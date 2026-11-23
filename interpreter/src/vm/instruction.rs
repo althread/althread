@@ -27,7 +27,9 @@ pub enum InstructionType {
     Unstack {
         unstack_len: usize,
     },
-    Destruct,
+    DestructureTuple {
+        tuple_offset: usize,
+    },
     GlobalReads {
         variables: Vec<String>,
         only_const: bool,
@@ -161,7 +163,9 @@ impl fmt::Display for InstructionType {
             } => write!(f, "jumpIf {} (unstack {})", jump_false, unstack_len)?,
             Self::Jump(a) => write!(f, "jump {}", a)?,
             Self::Unstack { unstack_len } => write!(f, "unstack {}", unstack_len)?,
-            Self::Destruct => write!(f, "destruct tuple",)?,
+            Self::DestructureTuple { tuple_offset } => {
+                write!(f, "destructure tuple at stack offset {}", tuple_offset)?
+            }
             Self::RunCall { name, .. } => write!(f, "run {}()", name)?,
             Self::Break { unstack_len, .. } => write!(f, "break (unstack {})", unstack_len)?,
             Self::EndProgram => write!(f, "end program")?,
@@ -281,14 +285,13 @@ impl fmt::Display for InstructionType {
 impl InstructionType {
     pub fn is_local(&self) -> bool {
         match self {
-              Self::GlobalAssignment {..}
+            Self::GlobalAssignment { .. }
             | Self::ChannelPeek(_)
-            | Self::AtomicStart // starts a block that surely contains a global operation           
-            
-             // Labels are NOT local - they create a state in the state graph
+            | Self::AtomicStart // starts a block that surely contains a global operation
+            // Labels are NOT local - they create a state in the state graph
             // This allows checking if a process is at a specific label using reaches()
-            | Self::Label {..}
-            | Self::WaitStart {..} => false, // wait starts an atomic block to evaluate the conditions
+            | Self::Label { ..}
+            | Self::WaitStart { .. } => false, // wait starts an atomic block to evaluate the conditions
 
             Self::GlobalReads {only_const, ..} => *only_const, // a global read is local only if it reads constant variables
 
@@ -319,7 +322,7 @@ impl InstructionType {
             | Self::JumpIf {..}
             | Self::Jump(_)
             | Self::Break {..}
-            | Self::Destruct
+            | Self::DestructureTuple { .. }
             | Self::Unstack {..}
             | Self::FnCall {..}
             | Self::MethodCall {
@@ -383,7 +386,7 @@ impl Instruction {
 impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.pos {
-            Some(pos) => write!(f, "{}", pos.line)?,
+            Some(pos) => write!(f, "{}", pos.line())?,
             None => {}
         };
         write!(f, ": {}", self.control)?;

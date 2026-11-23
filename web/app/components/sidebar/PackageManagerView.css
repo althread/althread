@@ -239,7 +239,7 @@
 .project-version {
 	color: var(--ifm-color-primary-lighter);
 	font-size: 11px;
-	font-family: monospace;
+	font-family: var(--app-font-mono);
 }
 
 .add-dependency-section {
@@ -419,7 +419,7 @@
 .dependency-version {
 	font-size: 11px;
 	color: var(--ifm-color-primary-lighter);
-	font-family: monospace;
+	font-family: var(--app-font-mono);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -473,7 +473,7 @@
 .package-version {
 	font-size: 11px;
 	color: var(--ifm-color-primary-light);
-	font-family: monospace;
+	font-family: var(--app-font-mono);
 }
 
 .cached-package:hover {
@@ -624,4 +624,21 @@
 	.cache-section {
 		padding: 8px 6px;
 	}
+}
+
+.package-link {
+	color: inherit;
+	text-decoration: none;
+}
+
+.dependency-item > .package-link {
+	display: flex;
+	align-items: center;
+	flex: 1;
+	min-width: 0;
+}
+
+.package-link:focus-visible {
+	outline: 2px solid var(--ifm-color-primary);
+	outline-offset: -2px;
 }

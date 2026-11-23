@@ -26,11 +26,11 @@ Le fichier `mod.alt` importe et réexporte les composants du module :
 
 ```althread
 // math/mod.alt
-import [
+import {
     integers,
     floats,
     constants
-]
+}
 
 // Réexporter des fonctions spécifiques ou les utiliser directement
 // Le système de modules rend automatiquement les éléments importés disponibles
@@ -42,9 +42,9 @@ Plutôt que d'importer des fichiers individuels, vous pouvez importer tout le mo
 
 ```althread
 // main.alt
-import [
+import {
     math  // Importe math/mod.alt et son contenu
-]
+}
 
 main {
     // Accéder aux fonctions du module math
@@ -105,10 +105,10 @@ Cela télécharge et met en cache les dépendances localement, les rendant avail
 Vous pouvez importer depuis des paquets distants en utilisant le chemin complet ou en ciblant un module :
 
 ```althread
-import [
+import {
     github.com/lucianmocan/math-alt/algebra/integers,  // Fichier spécifique
     github.com/lucianmocan/math-alt/algebra            // Module (si il contient mod.alt)
-]
+}
 
 main {
     // Import d'un fichier spécifique
@@ -148,17 +148,17 @@ Conformément à la convention de Go, l'identifiant de l'espace de noms correspo
 1. Organisation claire
 ```althread
 // Au lieu d'importer de nombreux fichiers individuels
-import [
+import {
     utils/math/integers,
     utils/math/floats,
     utils/math/constants,
     utils/math/geometry
-]
+}
 
 // Importer le module complet
-import [
+import {
     utils/math
-]
+}
 ```
 
 2. Exports contrôlés  
@@ -204,10 +204,10 @@ althread-cli install
 
 ```althread
 // main.alt
-import [
+import {
     github.com/lucianmocan/math-alt/algebra,
     github.com/lucianmocan/math-alt/geometry as geo
-]
+}
 
 main {
     let sum = algebra.add(5, 3);

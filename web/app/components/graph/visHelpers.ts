@@ -1,37 +1,28 @@
 import type { Network } from "vis-network";
 
-export function setupNodeClickZoom(
+/**
+ * Pans the view (keeping the zoom level) so that the node is visible.
+ * Does nothing when the node is already comfortably inside the viewport.
+ */
+export function revealNode(
 	network: Network,
-	onNodeClick?: (nodeId: string | number) => void,
+	container: HTMLElement | undefined,
+	nodeId: string | number,
 ) {
-	network.on("click", (params) => {
-		if (params.nodes && params.nodes.length > 0) {
-			const nodeId = params.nodes[0];
-			if (onNodeClick) {
-				onNodeClick(nodeId);
-			}
-			if (network) {
-				network.setSelection({ nodes: [nodeId], edges: [] });
-				network.focus(nodeId, {
-					scale: 0.75,
-					animation: {
-						duration: 250,
-						easingFunction: "easeInOutQuad",
-					},
-				});
-			}
-		} else if (params.edges && params.edges.length > 0) {
-			// If clicking on an edge, don't deselect the node
-			return;
-		} else {
-			// Deselect if clicking on empty space
-			if (onNodeClick) {
-				onNodeClick(null as any);
-			}
-			if (network) {
-				network.setSelection({ nodes: [], edges: [] });
-			}
-		}
+	if (!container) return;
+	const position = network.getPosition(nodeId as any);
+	if (!position) return;
+	const dom = network.canvasToDOM(position);
+	const margin = 40;
+	const inside =
+		dom.x >= margin &&
+		dom.y >= margin &&
+		dom.x <= container.clientWidth - margin &&
+		dom.y <= container.clientHeight - margin;
+	if (inside) return;
+	network.moveTo({
+		position,
+		animation: { duration: 300, easingFunction: "easeInOutQuad" },
 	});
 }
 
@@ -39,7 +30,7 @@ export function createGraphToolbarHandlers(
 	getNetwork: () => Network | null,
 	getContainer: () => HTMLDivElement | undefined,
 	toggleMaximized: () => void,
-	toggleDetails: () => void,
+	toggleDetails: () => void = () => {},
 ) {
 	const handleMaximize = () => {
 		toggleMaximized();

@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::{statement::expression::LocalExpressionNode, token::{datatype::DataType, literal::Literal}},
+    ast::{
+        statement::expression::LocalExpressionNode,
+        token::{datatype::DataType, literal::Literal},
+    },
     checker::ltl::{
         automaton::BuchiAutomaton, compiled::CompiledLtlExpression, monitor::MonitoringState,
     },
@@ -22,6 +25,44 @@ pub struct TopLevelQuantifier {
     pub list_expression: LocalExpressionNode,
     pub list_read_variables: Vec<String>,
     pub kind: QuantifierKind,
+}
+
+impl TopLevelQuantifier {
+    /// True if the quantified domain does not depend on any runtime state (e.g., `0..N`).
+    pub fn is_constant(&self) -> bool {
+        self.list_read_variables.is_empty()
+    }
+
+    /// True if the quantified domain only depends on `$.procs.*` lists (which only grow on spawn).
+    pub fn is_process_only(&self) -> bool {
+        !self.list_read_variables.is_empty()
+            && self
+                .list_read_variables
+                .iter()
+                .all(|var| var.starts_with("$.procs."))
+    }
+}
+
+pub(crate) fn eval_quantifier_domain(
+    quantifier: &TopLevelQuantifier,
+    vm: &VM,
+) -> AlthreadResult<Vec<Literal>> {
+    let memory = prepare_list_memory(&quantifier.list_read_variables, vm)?;
+    let list_value = quantifier
+        .list_expression
+        .eval_with_scope(&memory, &quantifier.list_read_variables, vm)
+        .map_err(|msg| {
+            AlthreadError::new(
+                ErrorType::ExpressionError,
+                None,
+                format!("Error evaluating list for monitor update: {}", msg),
+            )
+        })?;
+
+    match list_value {
+        Literal::List(_, elems) => Ok(elems),
+        _ => Ok(Vec::new()),
+    }
 }
 
 /// Analyzes a formula to extract top-level quantifiers (for loops at the root level)
@@ -95,15 +136,10 @@ pub fn initialize_monitoring(
             for element in elements {
                 let mut bindings = HashMap::new();
                 bindings.insert(quantifier.var_name.clone(), element);
-                monitoring.add_monitors_for_enabled_initial_states(
-                    idx,
-                    automaton,
-                    bindings,
-                    vm,
-                )?;
+                monitoring.add_monitors_for_enabled_initial_states(idx, automaton, bindings, vm)?;
             }
 
-            println!(
+            log::debug!(
                 "Initialized {} monitors for formula #{} (top-level for loop)",
                 monitoring.monitors_per_formula[idx].len(),
                 idx + 1
@@ -116,7 +152,7 @@ pub fn initialize_monitoring(
                 HashMap::new(),
                 vm,
             )?;
-            println!("Initialized 1 monitor for formula #{}", idx + 1);
+            log::debug!("Initialized 1 monitor for formula #{}", idx + 1);
         }
     }
 
@@ -124,10 +160,7 @@ pub fn initialize_monitoring(
 }
 
 /// Prepares memory for evaluating list expressions
-fn prepare_list_memory(
-    read_variables: &[String],
-    vm: &VM,
-) -> AlthreadResult<crate::vm::Memory> {
+fn prepare_list_memory(read_variables: &[String], vm: &VM) -> AlthreadResult<crate::vm::Memory> {
     let mut memory = Vec::new();
 
     for var_name in read_variables {
@@ -220,17 +253,11 @@ pub fn update_monitors_for_new_processes(
 
             if new_count > 0 {
                 log::debug!(
-                    "DEBUG: Added {} new monitors for formula #{} (now {} total). next_vm has {} running programs",
+                    "Added {} new monitors for formula #{} (now {} total). next_vm has {} running programs",
                     new_count,
                     idx + 1,
                     monitoring.monitors_per_formula[idx].len(),
                     next_vm.running_programs.len()
-                );
-                println!(
-                    "Added {} new monitors for formula #{} (now {} total)",
-                    new_count,
-                    idx + 1,
-                    monitoring.monitors_per_formula[idx].len()
                 );
             }
         }

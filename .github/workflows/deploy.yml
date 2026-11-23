@@ -18,14 +18,10 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
 
       - name: Install Rust Toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Test Rust Project
         run: |
@@ -42,7 +38,7 @@ jobs:
           wasm-pack build --target web --release
 
       - name: Upload Wasm Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wasm-artifacts
           path: web/pkg
@@ -54,31 +50,33 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
 
       - name: Download Wasm Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: wasm-artifacts
           path: web/pkg
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
         name: Install pnpm
         with:
-          version: 9
+          version: 10.28.1
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
 
       - name: Build Web Editor
         run: |
           cd web
-          pnpm install
+          pnpm install --frozen-lockfile
           pnpm generate-examples # Generate examples from filesystem
           pnpm build-lezer # Build the Lezer parser
+          pnpm check:lsp
+          pnpm test:lsp
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "Building for production (main branch)"
             pnpm build --base /editor
@@ -89,7 +87,7 @@ jobs:
           mv dist ../editor
 
       - name: Upload Built Web Editor
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: web-editor
           path: editor
@@ -101,7 +99,7 @@ jobs:
     needs: build-web
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set environment variables
         run: |
@@ -114,24 +112,24 @@ jobs:
           fi
 
       - name: Download Built Web Editor
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: web-editor
           path: editor
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
         name: Install pnpm
         with:
-          version: 9
+          version: 10.28.1
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
 
       - name: Install dependencies
-        run: pnpm --prefix ./doc install
+        run: pnpm --prefix ./doc install --frozen-lockfile
 
       - name: Build site
         run: |

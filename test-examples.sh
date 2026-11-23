@@ -57,11 +57,14 @@ for file in "$EXAMPLES_DIR"/*.alt; do
     echo -n "Testing $filename ... "
     
     # Run the checker and capture output
-    if cargo run --quiet --bin althread-cli -- check "$file" > /dev/null 2>&1; then
-        actual="pass"
-    else
-        actual="fail"
-    fi
+    status=0
+    cargo run --quiet --bin althread-cli -- check "$file" > /dev/null 2>&1 || status=$?
+    case "$status" in
+        0) actual="pass" ;;
+        1) actual="fail" ;;
+        4) actual="inconclusive" ;;
+        *) actual="error ($status)" ;;
+    esac
     
     # Check if result matches expectation
     if [ "$actual" == "$expected" ]; then

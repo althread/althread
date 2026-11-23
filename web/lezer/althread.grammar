@@ -52,8 +52,7 @@ ReturnType {"->" Type}
 
 Condition {
   kw<"always"> |
-  kw<"check"> |
-  kw<"never">
+  kw<"check">
 }
 
 CodeBlock {

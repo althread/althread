@@ -506,9 +506,7 @@
 }
 
 .confirmation-dialog-file-name {
-	font-family:
-		"SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New",
-		monospace;
+	font-family: var(--app-font-mono);
 	background-color: var(--app-surface-muted);
 	padding: 2px 6px;
 	border-radius: 3px;

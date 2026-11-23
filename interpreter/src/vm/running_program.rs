@@ -6,7 +6,10 @@ use std::{
 
 use crate::{
     ast::token::{datatype::DataType, literal::Literal},
-    compiler::{stdlib::{invoke_interface_method, Stdlib}, FunctionDefinition},
+    compiler::{
+        stdlib::{invoke_interface_method, Stdlib},
+        FunctionDefinition,
+    },
     error::{AlthreadError, AlthreadResult, ErrorType, Pos},
 };
 
@@ -23,6 +26,25 @@ struct StackFrame<'a> {
     caller_code: &'a [Instruction], // the code of the caller
     expected_return_type: DataType, // the expected return type of the function
     pos: Option<Pos>,               // the position in the source code where this frame was created
+}
+
+impl PartialEq for StackFrame<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.return_ip == other.return_ip
+            && self.caller_fp == other.caller_fp
+            && std::ptr::eq(self.caller_code, other.caller_code)
+            && self.expected_return_type == other.expected_return_type
+    }
+}
+
+impl Hash for StackFrame<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.return_ip.hash(state);
+        self.caller_fp.hash(state);
+        self.caller_code.as_ptr().hash(state);
+        self.caller_code.len().hash(state);
+        self.expected_return_type.hash(state);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -47,24 +69,70 @@ pub struct RunningProgramState<'a> {
 
 impl PartialEq for RunningProgramState<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-            && self.memory == other.memory
-            && self.name == other.name
-            && self.instruction_pointer == other.instruction_pointer
-            && self.frame_pointer == other.frame_pointer
-            && self.call_stack.len() == other.call_stack.len()
+        self.clock == other.clock && self.same_execution_state(other)
     }
 }
 
 impl Hash for RunningProgramState<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.id.hash(state);
-        self.memory.hash(state);
-        self.instruction_pointer.hash(state);
+        self.hash_execution_state(state);
+        self.clock.hash(state);
     }
 }
 
 impl<'a> RunningProgramState<'a> {
+    pub(super) fn same_execution_state(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.memory == other.memory
+            && self.name == other.name
+            && self.instruction_pointer == other.instruction_pointer
+            && std::ptr::eq(self.current_code, other.current_code)
+            && self.frame_pointer == other.frame_pointer
+            && self.call_stack == other.call_stack
+    }
+
+    pub(super) fn hash_execution_state<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+        self.memory.hash(state);
+        self.name.hash(state);
+        self.instruction_pointer.hash(state);
+        self.current_code.as_ptr().hash(state);
+        self.current_code.len().hash(state);
+        self.frame_pointer.hash(state);
+        self.call_stack.hash(state);
+    }
+
+    fn destructure_tuple_at_offset(
+        &mut self,
+        tuple_offset: usize,
+        pos: Option<Pos>,
+    ) -> AlthreadResult<()> {
+        let size = self.memory.len();
+        if tuple_offset >= size {
+            let e = AlthreadError::new(
+                ErrorType::RuntimeError,
+                pos,
+                format!(
+                    "Cannot destructure tuple at stack offset {}: stack has only {} values",
+                    tuple_offset, size
+                ),
+            );
+            return Err(self.build_error_stack(e));
+        }
+
+        let index = size - 1 - tuple_offset;
+        let tuple = self.memory.remove(index).into_tuple().map_err(|message| {
+            let e = AlthreadError::new(ErrorType::TypeError, pos.clone(), message);
+            self.build_error_stack(e)
+        })?;
+
+        for (insertion_index, value) in tuple.into_iter().enumerate() {
+            self.memory.insert(index + insertion_index, value);
+        }
+
+        Ok(())
+    }
+
     fn call_interface_method_on_literal(
         &self,
         name: &String,
@@ -153,12 +221,12 @@ impl<'a> RunningProgramState<'a> {
     pub fn current_state(&self) -> (&Memory, usize, usize) {
         (&self.memory, self.instruction_pointer, self.clock)
     }
-    
+
     /// Get call stack information for debugging
     /// Returns a vector of (frame_pointer, instruction_pointer, source_position)
     pub fn get_call_stack_info(&self) -> Vec<(usize, usize, Option<Pos>)> {
         let mut stack_info = Vec::new();
-        
+
         // Add current frame
         stack_info.push((
             self.frame_pointer,
@@ -167,35 +235,33 @@ impl<'a> RunningProgramState<'a> {
                 .get(self.instruction_pointer)
                 .and_then(|inst| inst.pos.clone()),
         ));
-        
+
         // Add caller frames
         for frame in self.call_stack.iter().rev() {
-            stack_info.push((
-                frame.caller_fp,
-                frame.return_ip,
-                frame.pos.clone(),
-            ));
+            stack_info.push((frame.caller_fp, frame.return_ip, frame.pos.clone()));
         }
-        
+
         stack_info
     }
-    
+
     /// Get the frame pointer (base of current function's local variables)
     pub fn get_frame_pointer(&self) -> usize {
         self.frame_pointer
     }
 
-    pub fn current_instruction(&self) -> AlthreadResult<&Instruction> {
+    pub fn current_instruction(&self) -> AlthreadResult<&'a Instruction> {
         self.current_code
             .get(self.instruction_pointer)
-            .ok_or(AlthreadError::new(
-                ErrorType::InstructionNotAllowed,
-                None,
-                format!(
+            .ok_or_else(|| {
+                AlthreadError::new(
+                    ErrorType::InstructionNotAllowed,
+                    None,
+                    format!(
                 "the current instruction pointer points to no instruction (pointer:{}, program:{})",
                 self.instruction_pointer, self.name
             ),
-            ))
+                )
+            })
     }
 
     pub fn has_terminated(&self) -> bool {
@@ -212,21 +278,57 @@ impl<'a> RunningProgramState<'a> {
         channels: &mut Channels,
         next_pid: &mut usize,
     ) -> AlthreadResult<(GlobalActions, Vec<Instruction>)> {
+        let (actions, instructions) = self.next_global_borrowed(globals, channels, next_pid)?;
+        Ok((actions, instructions.into_iter().cloned().collect()))
+    }
+
+    pub(super) fn next_global_borrowed(
+        &mut self,
+        globals: &mut GlobalMemory,
+        channels: &mut Channels,
+        next_pid: &mut usize,
+    ) -> AlthreadResult<(GlobalActions, Vec<&'a Instruction>)> {
         let mut instructions = Vec::new();
+        let actions =
+            self.next_global_internal(globals, channels, next_pid, true, Some(&mut instructions))?;
+        Ok((actions, instructions))
+    }
+
+    pub(super) fn next_global_lightweight(
+        &mut self,
+        globals: &mut GlobalMemory,
+        channels: &mut Channels,
+        next_pid: &mut usize,
+    ) -> AlthreadResult<GlobalActions> {
+        self.next_global_internal(globals, channels, next_pid, false, None)
+    }
+
+    fn next_global_internal(
+        &mut self,
+        globals: &mut GlobalMemory,
+        channels: &mut Channels,
+        next_pid: &mut usize,
+        record_trace: bool,
+        mut instructions: Option<&mut Vec<&'a Instruction>>,
+    ) -> AlthreadResult<GlobalActions> {
         let mut actions = Vec::new();
         let mut wait = false;
         let mut end = false;
         loop {
-            let (at_actions, at_instructions) = self.next_atomic(globals, channels, next_pid)?;
+            let (at_wait, at_end) = self.next_atomic_borrowed(
+                globals,
+                channels,
+                next_pid,
+                record_trace,
+                &mut actions,
+                instructions.as_deref_mut(),
+            )?;
 
-            actions.extend(at_actions.actions);
-            instructions.extend(at_instructions);
-
-            if at_actions.wait {
+            if at_wait {
                 wait = true;
                 break;
             }
-            if at_actions.end {
+            if at_end {
                 end = true;
                 break;
             }
@@ -234,7 +336,7 @@ impl<'a> RunningProgramState<'a> {
                 break;
             }
         }
-        Ok((GlobalActions { actions, wait, end }, instructions))
+        Ok(GlobalActions { actions, wait, end })
     }
 
     pub fn is_next_instruction_global(&mut self) -> bool {
@@ -249,44 +351,65 @@ impl<'a> RunningProgramState<'a> {
         next_pid: &mut usize,
     ) -> AlthreadResult<(GlobalActions, Vec<Instruction>)> {
         let mut instructions = Vec::new();
+        let mut actions = Vec::new();
+        let (wait, end) = self.next_atomic_borrowed(
+            globals,
+            channels,
+            next_pid,
+            true,
+            &mut actions,
+            Some(&mut instructions),
+        )?;
+        Ok((
+            GlobalActions { actions, wait, end },
+            instructions.into_iter().cloned().collect(),
+        ))
+    }
 
-        let mut result = GlobalActions {
-            actions: Vec::new(),
-            wait: false,
-            end: false,
-        };
+    fn next_atomic_borrowed(
+        &mut self,
+        globals: &mut GlobalMemory,
+        channels: &mut Channels,
+        next_pid: &mut usize,
+        record_trace: bool,
+        actions: &mut Vec<GlobalAction>,
+        mut instructions: Option<&mut Vec<&'a Instruction>>,
+    ) -> AlthreadResult<(bool, bool)> {
         // if the next instruction is not the start of an atomic block, we execute the next instruction
         if !self.current_instruction()?.is_atomic_start() {
-            instructions.push(self.current_instruction()?.clone());
-            let action = self.next(globals, channels, next_pid)?;
+            if let Some(insts) = instructions.as_deref_mut() {
+                insts.push(self.current_instruction()?);
+            }
+            let action = self.next(globals, channels, next_pid, record_trace)?;
             if let Some(action) = action {
                 if action == GlobalAction::Wait {
-                    result.wait = true;
+                    return Ok((true, false));
                 } else if action == GlobalAction::EndProgram {
-                    result.end = true;
+                    return Ok((false, true));
                 } else {
-                    result.actions.push(action);
+                    actions.push(action);
                 }
             }
-            return Ok((result, instructions));
+            return Ok((false, false));
         }
         // else we execute all the instructions until the end of the atomic block
         loop {
-            instructions.push(self.current_instruction()?.clone());
-            let action = self.next(globals, channels, next_pid)?;
+            if let Some(insts) = instructions.as_deref_mut() {
+                insts.push(self.current_instruction()?);
+            }
+            let action = self.next(globals, channels, next_pid, record_trace)?;
             if let Some(action) = action {
                 if action == GlobalAction::Wait {
-                    result.wait = true;
-                    break;
+                    return Ok((true, false));
                 } else {
-                    result.actions.push(action);
+                    actions.push(action);
                 }
             }
             if self.current_instruction()?.is_atomic_end() {
                 break;
             }
         }
-        Ok((result, instructions))
+        Ok((false, false))
     }
 
     fn next(
@@ -294,13 +417,14 @@ impl<'a> RunningProgramState<'a> {
         globals: &mut GlobalMemory,
         channels: &mut Channels,
         next_pid: &mut usize,
+        record_trace: bool,
     ) -> AlthreadResult<Option<GlobalAction>> {
-        let cur_inst = self.current_instruction()?.clone();
+        let cur_inst = self.current_instruction()?;
 
         let mut action = None;
 
         // debug current instruction
-       //println!("Program '{}' (pid {}) executing instruction at {}: {}", self.name, self.id, self.instruction_pointer, cur_inst.control);
+        //println!("Program '{}' (pid {}) executing instruction at {}: {}", self.name, self.id, self.instruction_pointer, cur_inst.control);
 
         let pos_inc = match &cur_inst.control {
             InstructionType::Empty => 1,
@@ -420,7 +544,7 @@ impl<'a> RunningProgramState<'a> {
                             .expect(format!("global variable '{}' not found", identifier).as_str()),
                         &lit,
                     )
-                    .map_err(str_to_expr_error(cur_inst.pos))?;
+                    .map_err(str_to_expr_error(cur_inst.pos.clone()))?;
 
                 globals.insert(identifier.clone(), lit);
                 action = Some(GlobalAction::Write(identifier.clone()));
@@ -444,7 +568,7 @@ impl<'a> RunningProgramState<'a> {
 
                 self.memory[len - 1 - index] = operator
                     .apply(&self.memory[len - 1 - *index], &lit)
-                    .map_err(str_to_expr_error(cur_inst.pos))?;
+                    .map_err(str_to_expr_error(cur_inst.pos.clone()))?;
                 1
             }
             InstructionType::Unstack { unstack_len } => {
@@ -546,24 +670,31 @@ impl<'a> RunningProgramState<'a> {
             } => {
                 match name.as_str() {
                     "print" => {
-                        let lit = self
-                            .memory
-                            .last()
-                            .expect("Panic: stack is empty, cannot perform function call")
-                            .clone();
+                        if record_trace {
+                            let lit = self
+                                .memory
+                                .last()
+                                .expect("Panic: stack is empty, cannot perform function call")
+                                .clone();
 
-                        for _ in 0..*unstack_len {
-                            self.memory.pop();
+                            for _ in 0..*unstack_len {
+                                self.memory.pop();
+                            }
+
+                            let str_val = lit
+                                .into_tuple()
+                                .unwrap_or_default()
+                                .iter()
+                                .map(|lit| lit.to_string())
+                                .collect::<Vec<_>>()
+                                .join(" ");
+                            action = Some(GlobalAction::Print(str_val));
+                        } else {
+                            for _ in 0..*unstack_len {
+                                self.memory.pop();
+                            }
+                            action = Some(GlobalAction::Print(String::new()));
                         }
-
-                        let str_val = lit
-                            .into_tuple()
-                            .unwrap_or_default()
-                            .iter()
-                            .map(|lit| lit.to_string())
-                            .collect::<Vec<_>>()
-                            .join(" ");
-                        action = Some(GlobalAction::Print(str_val));
                         self.memory.push(Literal::Null);
 
                         1
@@ -606,7 +737,7 @@ impl<'a> RunningProgramState<'a> {
                                     // should never happen
                                     return Err(AlthreadError::new(
                                         ErrorType::RuntimeError,
-                                        cur_inst.pos,
+                                        cur_inst.pos.clone(),
                                         format!("function {} expects a tuple as argument", name),
                                     ));
                                 }
@@ -723,19 +854,11 @@ impl<'a> RunningProgramState<'a> {
                     *jump
                 }
             }
-            InstructionType::Destruct => {
-                // The values are in a tuple on the top of the stack
-                let tuple = self
-                    .memory
-                    .pop()
-                    .expect("Panic: stack is empty, cannot destruct")
-                    .into_tuple()
-                    .expect("Panic: cannot convert to tuple");
-                for val in tuple.into_iter() {
-                    self.memory.push(val);
-                }
+            InstructionType::DestructureTuple { tuple_offset } => {
+                self.destructure_tuple_at_offset(*tuple_offset, cur_inst.pos.clone())?;
                 1
             }
+
             InstructionType::Push(literal) => {
                 self.memory.push(literal.clone());
                 1
@@ -754,19 +877,24 @@ impl<'a> RunningProgramState<'a> {
                     self.memory.pop();
                 }
                 self.clock += 1;
-                let _receiver =
-                    channels.send(self.id, channel_name.clone(), value.clone(), self.clock);
-                action = Some(GlobalAction::Send(crate::vm::SendInfo {
-                    from: crate::vm::ProcessInfo {
-                        process_id: self.id,
-                        process_name: self.name.clone(),
-                    },
-                    to: crate::vm::ChannelInfo {
-                        channel_name: channel_name.clone(),
-                    },
-                    message: value,
-                    n_msg: self.clock,
-                }));
+                if record_trace {
+                    let _receiver =
+                        channels.send(self.id, channel_name.clone(), value.clone(), self.clock);
+                    action = Some(GlobalAction::Send(crate::vm::SendInfo {
+                        from: crate::vm::ProcessInfo {
+                            process_id: self.id,
+                            process_name: self.name.clone(),
+                        },
+                        to: crate::vm::ChannelInfo {
+                            channel_name: channel_name.clone(),
+                        },
+                        message: value,
+                        n_msg: self.clock,
+                    }));
+                } else {
+                    let _receiver = channels.send(self.id, channel_name.clone(), value, self.clock);
+                    action = Some(GlobalAction::Broadcast(Vec::new()));
+                }
                 1
             }
             InstructionType::Broadcast {
@@ -783,44 +911,34 @@ impl<'a> RunningProgramState<'a> {
                     self.memory.pop();
                 }
 
-                let mut targets = Vec::new();
-                let connections = channels.get_connections();
-                for (from_pid, name) in connections.keys() {
-                    if *from_pid == self.id && name.starts_with(pattern) {
-                        targets.push(name.clone());
-                    }
-                }
-                
-                let waiting = channels.get_waiting_send();
-                for (from_pid, name) in waiting.keys() {
-                    if *from_pid == self.id && name.starts_with(pattern) {
-                        if !targets.contains(name) {
-                            targets.push(name.clone());
-                        }
-                    }
-                }
-                targets.sort();
+                let targets = channels.broadcast_targets(self.id, pattern);
 
-                let mut send_infos = Vec::new();
+                if record_trace {
+                    let mut send_infos = Vec::with_capacity(targets.len());
 
-                for name in targets {
-                    self.clock += 1;
-                    let _receiver =
-                        channels.send(self.id, name.clone(), value.clone(), self.clock);
-                    send_infos.push(crate::vm::SendInfo {
-                        from: crate::vm::ProcessInfo {
-                            process_id: self.id,
-                            process_name: self.name.clone(),
-                        },
-                        to: crate::vm::ChannelInfo {
-                            channel_name: name,
-                        },
-                        message: value.clone(),
-                        n_msg: self.clock,
-                    });
+                    for name in targets {
+                        self.clock += 1;
+                        let _receiver =
+                            channels.send(self.id, name.clone(), value.clone(), self.clock);
+                        send_infos.push(crate::vm::SendInfo {
+                            from: crate::vm::ProcessInfo {
+                                process_id: self.id,
+                                process_name: self.name.clone(),
+                            },
+                            to: crate::vm::ChannelInfo { channel_name: name },
+                            message: value.clone(),
+                            n_msg: self.clock,
+                        });
+                    }
+
+                    action = Some(GlobalAction::Broadcast(send_infos));
+                } else {
+                    for name in targets {
+                        self.clock += 1;
+                        let _receiver = channels.send(self.id, name, value.clone(), self.clock);
+                    }
+                    action = Some(GlobalAction::Broadcast(Vec::new()));
                 }
-                
-                action = Some(GlobalAction::Broadcast(send_infos));
                 1
             }
             InstructionType::ChannelPeek(channel_name) => {
@@ -828,7 +946,11 @@ impl<'a> RunningProgramState<'a> {
                 match values {
                     Some(value) => {
                         // value must be a tuple, and we destructure it on the stack
-                        for v in value.clone().into_tuple().expect("Panic: cannot convert peeked value to tuple") {
+                        for v in value
+                            .clone()
+                            .into_tuple()
+                            .expect("Panic: cannot convert peeked value to tuple")
+                        {
                             self.memory.push(v);
                         }
                         self.memory.push(Literal::Bool(true));
@@ -881,7 +1003,7 @@ impl<'a> RunningProgramState<'a> {
                     .map_err(|msg| {
                         AlthreadError::new(
                             ErrorType::RuntimeError,
-                            cur_inst.pos,
+                            cur_inst.pos.clone(),
                             format!("Failed to connect channels: {}", msg),
                         )
                     })?;

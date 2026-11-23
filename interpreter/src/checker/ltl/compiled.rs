@@ -205,20 +205,19 @@ impl CompiledLtlExpression {
             | CompiledLtlExpression::Next(_)
             | CompiledLtlExpression::Until(_, _)
             | CompiledLtlExpression::Release(_, _) => false,
-            
+
             // Boolean operators - check recursively
             CompiledLtlExpression::Not(e) => e.is_propositional(),
-            CompiledLtlExpression::And(a, b) | CompiledLtlExpression::Or(a, b) | CompiledLtlExpression::Implies(a, b) => {
-                a.is_propositional() && b.is_propositional()
-            }
-            
+            CompiledLtlExpression::And(a, b)
+            | CompiledLtlExpression::Or(a, b)
+            | CompiledLtlExpression::Implies(a, b) => a.is_propositional() && b.is_propositional(),
+
             // Atomic formulas are propositional
             CompiledLtlExpression::Boolean(_) | CompiledLtlExpression::Predicate { .. } => true,
-            
+
             // Quantified formulas: check if the body is propositional
-            CompiledLtlExpression::ForLoop { body, .. } | CompiledLtlExpression::Exists { body, .. } => {
-                body.is_propositional()
-            }
+            CompiledLtlExpression::ForLoop { body, .. }
+            | CompiledLtlExpression::Exists { body, .. } => body.is_propositional(),
         }
     }
 }

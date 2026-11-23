@@ -25,7 +25,14 @@ export const loadFileSystem = (): FileSystemEntry[] => {
 	};
 
 	if (stored) {
-		return addIds(JSON.parse(stored));
+		try {
+			const parsed = JSON.parse(stored);
+			if (Array.isArray(parsed)) {
+				return addIds(parsed);
+			}
+		} catch (error) {
+			console.warn("Invalid file system in localStorage, resetting:", error);
+		}
 	}
 	// Default file system if nothing stored
 	return addIds([{ name: "main.alt", type: "file" }]);
@@ -89,5 +96,9 @@ export const saveEditorTheme = (theme: EditorTheme) => {
 
 export const loadEditorTheme = (): EditorTheme => {
 	const stored = localStorage.getItem(STORAGE_KEYS.EDITOR_THEME);
-	return stored === "light" ? "light" : "dark";
+	if (stored === "light" || stored === "dark") return stored;
+	// No explicit choice yet: follow the operating system preference.
+	return window.matchMedia?.("(prefers-color-scheme: light)").matches
+		? "light"
+		: "dark";
 };

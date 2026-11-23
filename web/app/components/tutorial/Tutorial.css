@@ -152,7 +152,7 @@
 .tutorial-content code {
 	background-color: var(--app-input-bg);
 	padding: 0.2em 0.4em;
-	font-family: "Menlo", "Monaco", "Courier New", monospace;
+	font-family: var(--app-font-mono);
 	color: var(--ifm-color-primary-lightest);
 }
 
@@ -255,7 +255,7 @@
 .validation-message {
 	white-space: pre-wrap;
 	word-wrap: break-word;
-	font-family: "Menlo", "Monaco", "Courier New", monospace;
+	font-family: var(--app-font-mono);
 	font-size: 13px;
 }
 

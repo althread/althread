@@ -169,21 +169,11 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
 		setSuccess(null);
 	};
 
-	const openPackageUrl = (packageName: string) => {
-		// If it's a GitHub URL, open it directly
-		if (packageName.startsWith("github.com/")) {
-			const url = `https://${packageName}`;
-			window.open(url, "_blank");
-		} else if (
-			packageName.startsWith("http://") ||
-			packageName.startsWith("https://")
-		) {
-			window.open(packageName, "_blank");
-		} else {
-			// For other formats, try to construct a GitHub URL
-			const githubUrl = `https://github.com/${packageName}`;
-			window.open(githubUrl, "_blank");
-		}
+	/** Web page of a package: its URL as is, or a GitHub repository otherwise. */
+	const packageUrl = (packageName: string) => {
+		if (/^https?:\/\//.test(packageName)) return packageName;
+		if (packageName.startsWith("github.com/")) return `https://${packageName}`;
+		return `https://github.com/${packageName}`;
 	};
 
 	return (
@@ -192,6 +182,7 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
 				<h3>Packages</h3>
 				<div class="package-manager-actions">
 					<button
+						type="button"
 						title="Refresh packages"
 						onClick={loadCurrentState}
 						disabled={loading()}
@@ -202,6 +193,7 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
 					</button>
 					<Show when={altTomlConfig()}>
 						<button
+							type="button"
 							title="Install all dependencies"
 							onClick={installDependencies}
 							disabled={
@@ -229,7 +221,7 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
 					<div class="error-message">
 						<i class="codicon codicon-error"></i>
 						<span>{error()}</span>
-						<button class="close-msg" onClick={clearMessages}>
+						<button type="button" class="close-msg" onClick={clearMessages}>
 							×
 						</button>
 					</div>
@@ -239,7 +231,7 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
 					<div class="success-message">
 						<i class="codicon codicon-check"></i>
 						<span>{success()}</span>
-						<button class="close-msg" onClick={clearMessages}>
+						<button type="button" class="close-msg" onClick={clearMessages}>
 							×
 						</button>
 					</div>
@@ -254,8 +246,9 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
 						<p>Create an alt.toml file to manage dependencies</p>
 
 						<div class="form-group">
-							<label>Project Name:</label>
+							<label for="init-project-name">Project Name:</label>
 							<input
+								id="init-project-name"
 								type="text"
 								value={projectName()}
 								onInput={(e) => setProjectName(e.target.value)}
@@ -264,8 +257,9 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
 						</div>
 
 						<div class="form-group">
-							<label>Version:</label>
+							<label for="init-project-version">Version:</label>
 							<input
+								id="init-project-version"
 								type="text"
 								value={projectVersion()}
 								onInput={(e) => setProjectVersion(e.target.value)}
@@ -274,8 +268,9 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
 						</div>
 
 						<div class="dependency-form-actions">
-							<label></label>
+							<span />
 							<button
+								type="button"
 								class="btn btn-add-dependency"
 								onClick={initializeProject}
 								disabled={loading()}
@@ -331,6 +326,7 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
 
 							<div class="dependency-form-actions">
 								<button
+									type="button"
 									class="btn btn-add-dependency"
 									onClick={addDependency}
 									disabled={loading()}
@@ -369,19 +365,24 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
 							<div class="dependency-list">
 								<For each={Object.entries(altTomlConfig()?.dependencies || {})}>
 									{([name, version]) => (
-										<div
-											class="dependency-item"
-											onClick={() => openPackageUrl(name)}
-											title={`Click to open ${name} in browser`}
-										>
-											<div class="dependency-icon">
-												<i class="codicon codicon-package"></i>
-											</div>
-											<div class="dependency-info">
-												<div class="dependency-name">{name}</div>
-												<div class="dependency-version">{version}</div>
-											</div>
+										<div class="dependency-item">
+											<a
+												class="package-link"
+												href={packageUrl(name)}
+												target="_blank"
+												rel="noopener noreferrer"
+												title={`Open ${name} in a new tab`}
+											>
+												<div class="dependency-icon">
+													<i class="codicon codicon-package"></i>
+												</div>
+												<div class="dependency-info">
+													<div class="dependency-name">{name}</div>
+													<div class="dependency-version">{version}</div>
+												</div>
+											</a>
 											<button
+												type="button"
 												class="btn btn-danger btn-sm btn-remove"
 												onClick={(e) => {
 													e.stopPropagation();
@@ -422,10 +423,12 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
 							<div class="cached-packages">
 								<For each={cachedPackages()}>
 									{(pkg) => (
-										<div
-											class="cached-package"
-											onClick={() => openPackageUrl(pkg.name)}
-											title={`Click to open ${pkg.name} in browser`}
+										<a
+											class="cached-package package-link"
+											href={packageUrl(pkg.name)}
+											target="_blank"
+											rel="noopener noreferrer"
+											title={`Open ${pkg.name} in a new tab`}
 										>
 											<div class="package-icon">
 												<i class="codicon codicon-package"></i>
@@ -437,7 +440,7 @@ export default function PackageManagerView(props: PackageManagerViewProps) {
 											<span class="package-type" data-type={pkg.type}>
 												{pkg.type}
 											</span>
-										</div>
+										</a>
 									)}
 								</For>
 							</div>

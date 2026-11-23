@@ -3,8 +3,6 @@ use std::{
     fmt::{self, Debug},
 };
 
-use pest::iterators::Pair;
-
 use super::{Expression, LocalExpressionNode};
 use crate::{
     ast::{
@@ -17,9 +15,7 @@ use crate::{
         },
     },
     compiler::{CompilerState, Variable},
-    error::{AlthreadError, AlthreadResult, ErrorType, Pos},
-    no_rule,
-    parser::Rule,
+    error::{AlthreadError, AlthreadResult, ErrorType},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -49,106 +45,7 @@ pub enum PrimaryExpression {
     },
 }
 
-impl PrimaryExpression {
-    pub fn build(pair: Pair<Rule>, filepath: &str) -> AlthreadResult<Node<Self>> {
-        if pair.as_rule() == Rule::primary_expression {
-            let mut inner = pair.into_inner();
-            let inner_pair = inner.next().unwrap();
-            return Self::build(inner_pair, filepath);
-        }
-        Ok(Node {
-            pos: Pos {
-                line: pair.line_col().0,
-                col: pair.line_col().1,
-                start: pair.as_span().start(),
-                end: pair.as_span().end(),
-                file_path: filepath.to_string(),
-            },
-            value: match pair.as_rule() {
-                Rule::literal => Self::Literal(Node::build(pair, filepath)?),
-                Rule::object_identifier => Self::Identifier(Node::build(pair, filepath)?),
-                Rule::IDENT => {
-                    let pos = Pos {
-                        line: pair.line_col().0,
-                        col: pair.line_col().1,
-                        start: pair.as_span().start(),
-                        end: pair.as_span().end(),
-                        file_path: filepath.to_string(),
-                    };
-                    let ident_node = Node {
-                        pos: pos.clone(),
-                        value: Identifier {
-                            value: pair.as_str().to_string(),
-                        },
-                    };
-                    Self::Identifier(Node {
-                        pos,
-                        value: ObjectIdentifier {
-                            parts: vec![ident_node],
-                        },
-                    })
-                }
-                Rule::expression => Self::Expression(Box::new(Node::build(pair, filepath)?)),
-                Rule::if_expression => {
-                    let mut inner = pair.into_inner();
-                    let condition = Box::new(Node::build(inner.next().unwrap(), filepath)?);
-                    let then_expr = Box::new(Node::build(inner.next().unwrap(), filepath)?);
-                    let else_expr = if let Some(else_pair) = inner.next() {
-                        Some(Box::new(Node::build(else_pair, filepath)?))
-                    } else {
-                        None
-                    };
-                    Self::IfExpr {
-                        condition,
-                        then_expr,
-                        else_expr,
-                    }
-                }
-                Rule::forall_expression => {
-                    let inner = pair.into_inner();
-                    let mut inner = inner.filter(|p| p.as_rule() != Rule::FOR_KW);
-                    let var_pair = inner.next().unwrap();
-                    let var = Node {
-                        pos: Pos {
-                            line: var_pair.line_col().0,
-                            col: var_pair.line_col().1,
-                            start: var_pair.as_span().start(),
-                            end: var_pair.as_span().end(),
-                            file_path: filepath.to_string(),
-                        },
-                        value: Identifier {
-                            value: var_pair.as_str().to_string(),
-                        },
-                    };
-                    let list = Box::new(Node::build(inner.next().unwrap(), filepath)?);
-                    let body = Box::new(Node::build(inner.next().unwrap(), filepath)?);
-                    Self::ForAllExpr { var, list, body }
-                }
-                Rule::exists_expression => {
-                    let inner = pair.into_inner();
-                    let mut inner = inner.filter(|p| p.as_rule() != Rule::EXISTS_KW);
-                    let var_pair = inner.next().unwrap();
-                    let var = Node {
-                        pos: Pos {
-                            line: var_pair.line_col().0,
-                            col: var_pair.line_col().1,
-                            start: var_pair.as_span().start(),
-                            end: var_pair.as_span().end(),
-                            file_path: filepath.to_string(),
-                        },
-                        value: Identifier {
-                            value: var_pair.as_str().to_string(),
-                        },
-                    };
-                    let list = Box::new(Node::build(inner.next().unwrap(), filepath)?);
-                    let body = Box::new(Node::build(inner.next().unwrap(), filepath)?);
-                    Self::ExistsExpr { var, list, body }
-                }
-                _ => return Err(no_rule!(pair, "PrimaryExpression", filepath)),
-            },
-        })
-    }
-}
+impl PrimaryExpression {}
 
 impl PrimaryExpression {
     pub fn add_dependencies(&self, dependencies: &mut WaitDependency) {

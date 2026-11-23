@@ -36,13 +36,15 @@ pub fn evaluate_ltl_predicate(
             let memory = prepare_memory(read_variables, vm, variable_bindings)?;
 
             // Evaluate the expression with the VM context
-            let result = local_expr.eval_with_scope(&memory, read_variables, vm).map_err(|msg| {
-                AlthreadError::new(
-                    ErrorType::ExpressionError,
-                    None,
-                    format!("Error evaluating predicate: {}", msg),
-                )
-            })?;
+            let result = local_expr
+                .eval_with_scope(&memory, read_variables, vm)
+                .map_err(|msg| {
+                    AlthreadError::new(
+                        ErrorType::ExpressionError,
+                        None,
+                        format!("Error evaluating predicate: {}", msg),
+                    )
+                })?;
 
             Ok(result.is_true())
         }
@@ -81,8 +83,8 @@ pub fn evaluate_ltl_predicate(
             check_no_temporal_operators(body)?;
 
             // ForAll semantics: all elements must satisfy the body
+            let mut extended_bindings = variable_bindings.clone();
             for element in elements {
-                let mut extended_bindings = variable_bindings.clone();
                 extended_bindings.insert(loop_var_name.clone(), element);
 
                 let body_result = evaluate_ltl_predicate(body, vm, &extended_bindings)?;
@@ -128,8 +130,8 @@ pub fn evaluate_ltl_predicate(
             check_no_temporal_operators(body)?;
 
             // Exists semantics: at least one element must satisfy the body
+            let mut extended_bindings = variable_bindings.clone();
             for element in elements {
-                let mut extended_bindings = variable_bindings.clone();
                 extended_bindings.insert(loop_var_name.clone(), element);
 
                 let body_result = evaluate_ltl_predicate(body, vm, &extended_bindings)?;
@@ -210,7 +212,7 @@ fn prepare_memory(
     vm: &VM,
     variable_bindings: &HashMap<String, Literal>,
 ) -> AlthreadResult<Memory> {
-    let mut memory = Vec::new();
+    let mut memory = Vec::with_capacity(read_variables.len());
 
     for var_name in read_variables {
         // First check if it's a loop variable binding

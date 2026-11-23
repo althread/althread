@@ -224,6 +224,101 @@ impl Stdlib {
                     }),
                 });
             }
+            DataType::Tuple(t) => {
+                new_interfaces.push(Interface {
+                    name: "len".to_string(),
+                    args: vec![],
+                    ret: DataType::Integer,
+                    mutates_receiver: false,
+                    f: Rc::new(|list, _v, pos| {
+                        match list {
+                            Literal::Tuple(v) => Ok(Literal::Int(v.len() as i64)),
+                            _ => Err(AlthreadError::new(
+                                ErrorType::RuntimeError,
+                                pos,
+                                "Expected tuple".to_string(),
+                            )),
+                        }
+                    }),
+                });
+                for s in 0..t.len(){
+                    let size = s.clone();
+                    let func_name : String =String::from("set") + &size.to_string();
+                    new_interfaces.push(Interface {
+                        name: func_name.clone(),
+                        args: vec![t[size].clone()],
+                        ret: DataType::Void,
+                        mutates_receiver: true,
+                        f: Rc::new(move |tuple, v, pos| {
+                            let v = v.to_tuple().unwrap();
+                            if v.len() != 1 {
+                                let message : String = func_name.clone() + &String::from("expects one arguments: l.")  + &func_name.clone() + &String::from("(value);");
+                                return Err(AlthreadError::new(
+                                    ErrorType::RuntimeError,
+                                    pos,
+                                    message
+                                ));
+                            }
+                            if let Literal::Tuple(tuple) = tuple {
+                                if tuple.len() <= 0 {
+                                    return Err(AlthreadError::new(
+                                        ErrorType::RuntimeError,
+                                        pos,
+                                        format!("Set on an empty tuple")
+                                    ));
+                                }
+                                let value = v[0].clone();
+                                let dtype_of_value = value.clone().get_datatype();
+                                let dtype_of_element = tuple[size].get_datatype();
+                                if tuple[size].get_datatype() != dtype_of_value {
+                                    return Err(AlthreadError::new(
+                                        ErrorType::RuntimeError,
+                                        pos,
+                                        format!("Element of tuple {:?} can only accept values of the same type ({} given, expect {})", tuple[size], dtype_of_value,dtype_of_element)
+                                    ));
+                                }
+                                tuple[size] = value;
+                            }
+                            else {
+                                return Err(AlthreadError::new(
+                                    ErrorType::RuntimeError,
+                                    pos,
+                                    "Expected Tuple".to_string()
+                                ));
+                            }
+                            Ok(Literal::Null)
+                        }),
+                    });
+                }
+                for s in 0..t.len()
+                {
+                    let size = s.clone();
+                    new_interfaces.push(Interface {
+                        name: size.to_string(),
+                        args: vec![],
+                        ret: t[size].clone(),
+                        mutates_receiver: false,
+                        f: Rc::new(move |tuple, _v, pos| {
+                            if let Literal::Tuple(vec ) = tuple {
+                                if vec.len() <=0  {
+                                    return Err(AlthreadError::new(
+                                        ErrorType::RuntimeError,
+                                        pos,
+                                        format!(" First call on a empty Tuple"),
+                                    ));
+                                }
+                                Ok(vec[size].clone())
+                            } else {
+                                return Err(AlthreadError::new(
+                                    ErrorType::RuntimeError,
+                                    pos,
+                                    "Expected tuple".to_string(),
+                                ));
+                            }
+                        }),
+                    });
+                } 
+            }
             _ => {}
         }
 
@@ -232,6 +327,52 @@ impl Stdlib {
             .insert(dtype.clone(), new_interfaces.clone());
         new_interfaces
     }
+}
+
+pub fn resolve_interface_method(
+    stdlib: &Stdlib,
+    receiver_type: &DataType,
+    name: &str,
+) -> Result<Interface, String> {
+    let interfaces = stdlib.interfaces(receiver_type);
+    if interfaces.is_empty() {
+        return Err(format!("Type {} has no available methods", receiver_type));
+    }
+
+    interfaces
+        .into_iter()
+        .find(|interface| interface.name == name)
+        .ok_or_else(|| {
+            format!(
+                "No method {} found on variable of type {}",
+                name, receiver_type
+            )
+        })
+}
+
+pub fn validate_interface_call(
+    interface: &Interface,
+    provided_arg_types: &[DataType],
+) -> Result<(), String> {
+    if interface.args.len() != provided_arg_types.len() {
+        return Err(format!(
+            "Method '{}' expects {} arguments, got {}",
+            interface.name,
+            interface.args.len(),
+            provided_arg_types.len()
+        ));
+    }
+
+    for (expected, provided) in interface.args.iter().zip(provided_arg_types.iter()) {
+        if expected != provided {
+            return Err(format!(
+                "Method '{}' expects argument of type {}, got {}",
+                interface.name, expected, provided
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 pub fn invoke_interface_method(

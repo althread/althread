@@ -1,7 +1,14 @@
 import createEditor from "@components/editor/Editor";
 import { marked } from "marked";
 import type { Component } from "solid-js";
-import { createEffect, createSignal, For, onMount } from "solid-js";
+import {
+	createEffect,
+	createRoot,
+	createSignal,
+	For,
+	onCleanup,
+	onMount,
+} from "solid-js";
 import "./Tutorial.css";
 import { Logo } from "@assets/images/Logo";
 import Resizable from "@corvu/resizable";
@@ -214,7 +221,16 @@ const Tutorial: Component = () => {
 	});
 
 	// Track read-only editors for theme updates
+	/** Read-only editors of the code samples, each in its own reactive root. */
 	const readOnlyEditors: any[] = [];
+	const disposeReadOnlyEditors: (() => void)[] = [];
+	const destroyReadOnlyEditors = () => {
+		for (const editor of readOnlyEditors) editor.safeEditorView()?.destroy();
+		for (const dispose of disposeReadOnlyEditors) dispose();
+		readOnlyEditors.length = 0;
+		disposeReadOnlyEditors.length = 0;
+	};
+	onCleanup(destroyReadOnlyEditors);
 
 	// Function to create and render tutorial content with embedded read-only CodeMirror editors
 	const renderTutorialContent = (markdownContent: string): string => {
@@ -222,9 +238,8 @@ const Tutorial: Component = () => {
 		let processedContent = markdownContent;
 		const codeBlocks: { id: string; code: string }[] = [];
 
-		let match;
 		let blockIndex = 0;
-		while ((match = codeBlockRegex.exec(markdownContent)) !== null) {
+		for (const match of markdownContent.matchAll(codeBlockRegex)) {
 			const blockId = `code-block-${blockIndex}`;
 			const code = match[1];
 			codeBlocks.push({ id: blockId, code });
@@ -240,24 +255,21 @@ const Tutorial: Component = () => {
 
 		setTimeout(() => {
 			// Destroy previous editors to prevent memory leaks
-			readOnlyEditors.forEach((editor) => {
-				const view = editor.safeEditorView();
-				if (view) {
-					view.destroy();
-				}
-			});
-			readOnlyEditors.length = 0;
+			destroyReadOnlyEditors();
 			codeBlocks.forEach(({ id, code }) => {
 				const container = document.getElementById(id);
 				if (container) {
 					container.innerHTML = "";
 
-					const readOnlyEditor = createEditor({
-						defaultValue: code,
-						onValueChange: undefined,
-						compile: () => Promise.resolve(),
-						filePath: "example.alt",
-						theme: theme(),
+					// Created outside of the component's render: give it its own root.
+					const readOnlyEditor = createRoot((dispose) => {
+						disposeReadOnlyEditors.push(dispose);
+						return createEditor({
+							defaultValue: code,
+							onValueChange: undefined,
+							filePath: "example.alt",
+							theme: theme(),
+						});
 					});
 
 					const editorWrapper = document.createElement("div");
@@ -294,17 +306,12 @@ const Tutorial: Component = () => {
 		});
 	});
 
-	const compileFromEditor = async (currentEditorCode: string) => {
-		const virtualFS = getTutorialVirtualFS(currentEditorCode);
-		return await workerClient.compile(currentEditorCode, "main.alt", virtualFS);
-	};
-
 	const editorInstance = createEditor({
 		defaultValue: code(),
 		onValueChange: (newCode) => {
 			setCode(newCode);
 		},
-		compile: compileFromEditor,
+		getWorkspace: () => getTutorialVirtualFS(code()),
 		theme: theme(),
 	});
 
@@ -373,7 +380,7 @@ const Tutorial: Component = () => {
 			}
 		} catch (e) {
 			setExecutionError(true);
-			setExecutionResult(formatAlthreadError(e, currentEditorCode));
+			setExecutionResult(formatAlthreadError(e, currentEditorCode).message);
 		}
 		setActiveTab("result");
 	};
@@ -426,13 +433,16 @@ const Tutorial: Component = () => {
 				{/* Placeholder for right-aligned actions if needed */}
 				<div class="actions-placeholder">
 					<button
-						class="vscode-button theme-toggle-button"
+						type="button"
+						class="vscode-button icon-only theme-toggle-button"
+						aria-label="Toggle theme"
 						title={`Switch to ${theme() === "dark" ? "light" : "dark"} theme`}
 						onClick={toggleTheme}
 					>
-						Theme: {theme() === "dark" ? "Dark" : "Light"}
+						<i class="codicon codicon-color-mode" />
 					</button>
 					<button
+						type="button"
 						onClick={() => {
 							navigate("/");
 						}}
@@ -458,6 +468,7 @@ const Tutorial: Component = () => {
 					></div>
 					<div class="navigation-buttons">
 						<button
+							type="button"
 							class="vscode-button"
 							onClick={handlePreviousTutorial}
 							disabled={currentTutorialIndex() === 0}
@@ -465,6 +476,7 @@ const Tutorial: Component = () => {
 							<i class="codicon codicon-arrow-left"></i> Previous
 						</button>
 						<button
+							type="button"
 							class="vscode-button"
 							onClick={handleNextTutorial}
 							disabled={currentTutorialIndex() === tutorialOrder.length - 1}
@@ -484,12 +496,17 @@ const Tutorial: Component = () => {
 							<h3>Editor</h3>
 							<div class="action-buttons-center editor-toolbar-actions">
 								<button
+									type="button"
 									onClick={handleValidateCode}
 									class="vscode-button validate-button"
 								>
 									<i class="codicon codicon-check"></i> Validate
 								</button>
-								<button onClick={handleRunCode} class="vscode-button">
+								<button
+									type="button"
+									onClick={handleRunCode}
+									class="vscode-button"
+								>
 									<i class="codicon codicon-play"></i> Run
 								</button>
 							</div>
@@ -502,12 +519,14 @@ const Tutorial: Component = () => {
 					<div class="output-pane">
 						<div class="tab">
 							<button
+								type="button"
 								class={`tab_button ${activeTab() === "validation" ? "active" : ""}`}
 								onClick={() => setActiveTab("validation")}
 							>
 								<h3>Validation</h3>
 							</button>
 							<button
+								type="button"
 								class={`tab_button ${activeTab() === "result" ? "active" : ""} ${executionError() ? "execution-error" : ""}`}
 								onClick={() => setActiveTab("result")}
 							>

@@ -16,13 +16,111 @@ use std::hash::{Hash, Hasher};
 
 use crate::{
     ast::token::literal::Literal,
-    checker::ltl::{
-        automaton::BuchiAutomaton, compiled::CompiledLtlExpression,
-        evaluator::evaluate_ltl_predicate,
+    checker::{
+        fxhash::FxHashMap,
+        ltl::{
+            automaton::BuchiAutomaton, compiled::CompiledLtlExpression,
+            evaluator::evaluate_ltl_predicate,
+        },
     },
     error::{AlthreadError, AlthreadResult, ErrorType},
     vm::VM,
 };
+
+/// Caches `state_formulas_satisfied` per `(vm_id, automaton_state_id, bindings)`
+/// during one product-graph exploration.
+pub(crate) struct PredicateCache {
+    num_vm_states: usize,
+    num_aut_states: usize,
+    /// Flat cache for empty-binding formulas: 0 = unknown, 1 = false, 2 = true.
+    unquantified: Vec<u8>,
+    /// Flat caches for up to 32 distinct single-binding values (zero-clone lookup on hit).
+    single_binding: FxHashMap<Literal, Vec<u8>>,
+    /// Fallback cache when there are many bindings or multi-variable bindings.
+    sparse: FxHashMap<(usize, usize, Literal), bool>,
+}
+
+impl PredicateCache {
+    pub(crate) fn new(num_vm_states: usize, num_aut_states: usize) -> Self {
+        Self {
+            num_vm_states,
+            num_aut_states,
+            unquantified: Vec::new(),
+            single_binding: FxHashMap::default(),
+            sparse: FxHashMap::default(),
+        }
+    }
+
+    pub(crate) fn check(
+        &mut self,
+        vm_id: usize,
+        vm: &VM,
+        automaton: &BuchiAutomaton,
+        target_state_id: usize,
+        bindings: &HashMap<String, Literal>,
+    ) -> AlthreadResult<bool> {
+        let flat_len = self.num_vm_states * self.num_aut_states;
+        let slot = vm_id * self.num_aut_states + target_state_id;
+
+        if bindings.is_empty() && slot < flat_len {
+            if self.unquantified.is_empty() {
+                self.unquantified.resize(flat_len, 0);
+            }
+            let cached = self.unquantified[slot];
+            if cached != 0 {
+                return Ok(cached == 2);
+            }
+            let satisfied = state_formulas_satisfied(
+                &automaton.states[target_state_id].formulas,
+                vm,
+                bindings,
+            )?;
+            self.unquantified[slot] = if satisfied { 2 } else { 1 };
+            return Ok(satisfied);
+        }
+
+        if bindings.len() == 1 && slot < flat_len {
+            let value = bindings.values().next().unwrap();
+            if let Some(table) = self.single_binding.get_mut(value) {
+                let cached = table[slot];
+                if cached != 0 {
+                    return Ok(cached == 2);
+                }
+                let satisfied = state_formulas_satisfied(
+                    &automaton.states[target_state_id].formulas,
+                    vm,
+                    bindings,
+                )?;
+                table[slot] = if satisfied { 2 } else { 1 };
+                return Ok(satisfied);
+            }
+            if flat_len <= 500_000 && self.single_binding.len() < 32 {
+                let satisfied = state_formulas_satisfied(
+                    &automaton.states[target_state_id].formulas,
+                    vm,
+                    bindings,
+                )?;
+                let mut table = vec![0u8; flat_len];
+                table[slot] = if satisfied { 2 } else { 1 };
+                self.single_binding.insert(value.clone(), table);
+                return Ok(satisfied);
+            }
+            let key = (vm_id, target_state_id, value.clone());
+            if let Some(&cached) = self.sparse.get(&key) {
+                return Ok(cached);
+            }
+            let satisfied = state_formulas_satisfied(
+                &automaton.states[target_state_id].formulas,
+                vm,
+                bindings,
+            )?;
+            self.sparse.insert(key, satisfied);
+            return Ok(satisfied);
+        }
+
+        state_formulas_satisfied(&automaton.states[target_state_id].formulas, vm, bindings)
+    }
+}
 
 /// A monitor instance for a single Büchi automaton.
 /// Each monitor tracks the current state in the automaton and maintains
@@ -43,19 +141,31 @@ impl Eq for LtlMonitor {}
 impl Hash for LtlMonitor {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.current_state_id.hash(state);
-        // Hash the bindings in a deterministic order
-        let mut keys: Vec<_> = self.bindings.keys().collect();
-        keys.sort();
-        for key in keys {
-            key.hash(state);
-            // Hash a simplified representation of the value
-            // We use Debug format as a proxy since Literal may not implement Hash
-            format!("{:?}", self.bindings.get(key)).hash(state);
+        match self.bindings.len() {
+            0 => {}
+            1 => {
+                let (key, value) = self.bindings.iter().next().unwrap();
+                key.hash(state);
+                value.hash(state);
+            }
+            _ => {
+                // Hash the bindings in a deterministic order
+                let mut keys: Vec<_> = self.bindings.keys().collect();
+                keys.sort_unstable();
+                for key in keys {
+                    key.hash(state);
+                    self.bindings[key].hash(state);
+                }
+            }
         }
     }
 }
 
 impl LtlMonitor {
+    /// A rejecting sink retains the quantified binding after its counterexample
+    /// run dies. Dropping it would turn a satisfied existential into a violation.
+    pub const REJECTED: usize = usize::MAX;
+
     /// Creates a new monitor starting at one of the automaton's initial states.
     pub fn new(initial_state_id: usize, bindings: HashMap<String, Literal>) -> Self {
         Self {
@@ -66,26 +176,25 @@ impl LtlMonitor {
 
     /// Determines possible successor states for this monitor based on the current VM state.
     /// Returns a list of next monitor states (representing non-deterministic choices).
-    /// If the list contains `None`, it means the monitor can stop tracking this path.
+    /// Rejected runs enter a rejecting sink, preserving their quantified binding.
     pub fn get_possible_successors(
         &self,
         vm: &VM,
         automaton: &BuchiAutomaton,
     ) -> AlthreadResult<Vec<Option<LtlMonitor>>> {
-        let current_state = automaton
-            .states
-            .iter()
-            .find(|s| s.id == self.current_state_id)
-            .ok_or_else(|| {
-                AlthreadError::new(
-                    ErrorType::ExpressionError,
-                    None,
-                    format!(
-                        "Monitor state {} not found in automaton",
-                        self.current_state_id
-                    ),
-                )
-            })?;
+        if self.current_state_id == Self::REJECTED {
+            return Ok(vec![Some(self.clone())]);
+        }
+        let current_state = automaton.states.get(self.current_state_id).ok_or_else(|| {
+            AlthreadError::new(
+                ErrorType::ExpressionError,
+                None,
+                format!(
+                    "Monitor state {} not found in automaton",
+                    self.current_state_id
+                ),
+            )
+        })?;
 
         // Check all outgoing transitions
         let mut successors = Vec::new();
@@ -101,12 +210,46 @@ impl LtlMonitor {
             }
         }
 
-        // If no transition is enabled, the automaton cannot make progress.
-        // For a negated formula (counter-example search), this means the current execution
-        // does not satisfy the counter-example pattern so far.
-        // We stop monitoring this specific instance (it effectively dies).
+        // Preserve the binding even when this counterexample run is rejected.
         if successors.is_empty() {
-            successors.push(None);
+            successors.push(Some(Self::new(Self::REJECTED, self.bindings.clone())));
+        }
+
+        Ok(successors)
+    }
+
+    pub(crate) fn get_possible_successors_cached(
+        &self,
+        vm_id: usize,
+        vm: &VM,
+        automaton: &BuchiAutomaton,
+        cache: &mut PredicateCache,
+    ) -> AlthreadResult<Vec<LtlMonitor>> {
+        if self.current_state_id == Self::REJECTED {
+            return Ok(vec![self.clone()]);
+        }
+        let current_state = automaton.states.get(self.current_state_id).ok_or_else(|| {
+            AlthreadError::new(
+                ErrorType::ExpressionError,
+                None,
+                format!(
+                    "Monitor state {} not found in automaton",
+                    self.current_state_id
+                ),
+            )
+        })?;
+
+        let mut successors = Vec::new();
+        for &target_state_id in &current_state.transitions {
+            if cache.check(vm_id, vm, automaton, target_state_id, &self.bindings)? {
+                let mut next_monitor = self.clone();
+                next_monitor.current_state_id = target_state_id;
+                successors.push(next_monitor);
+            }
+        }
+
+        if successors.is_empty() {
+            successors.push(Self::new(Self::REJECTED, self.bindings.clone()));
         }
 
         Ok(successors)
@@ -124,28 +267,22 @@ impl LtlMonitor {
 
     /// Checks if the monitor is currently in an accepting state for a given acceptance set.
     pub fn is_in_accepting_state(&self, automaton: &BuchiAutomaton, set_index: usize) -> bool {
-        if let Some(state) = automaton
-            .states
-            .iter()
-            .find(|s| s.id == self.current_state_id)
-        {
+        if let Some(state) = automaton.states.get(self.current_state_id) {
             state.is_accepting(set_index)
         } else {
             false
         }
     }
 
-    /// Returns true if the monitor is in any accepting state.
+    /// Whether this state alone covers every acceptance set. A cycle can also
+    /// accept by covering different sets at different states; the SCC checker
+    /// performs that test separately.
     pub fn is_accepting(&self, automaton: &BuchiAutomaton) -> bool {
-        if let Some(state) = automaton
-            .states
-            .iter()
-            .find(|s| s.id == self.current_state_id)
-        {
+        if let Some(state) = automaton.states.get(self.current_state_id) {
             if automaton.num_acceptance_sets == 0 {
                 true
             } else {
-                !state.acceptance_sets.is_empty()
+                (0..automaton.num_acceptance_sets).all(|set| state.is_accepting(set))
             }
         } else {
             false
@@ -179,6 +316,39 @@ impl MonitoringState {
         Self {
             monitors_per_formula: vec![Vec::new(); num_formulas],
         }
+    }
+
+    /// Select one initial automaton alternative per binding. Initial states
+    /// of the same instance are nondeterministic alternatives, not independent
+    /// quantified obligations (especially important for existential formulas).
+    #[must_use]
+    pub fn initial_choices(&self) -> Vec<Self> {
+        let mut choices = vec![Self::new(self.monitors_per_formula.len())];
+        for (formula, monitors) in self.monitors_per_formula.iter().enumerate() {
+            let mut groups: Vec<Vec<&LtlMonitor>> = Vec::new();
+            for monitor in monitors {
+                if let Some(group) = groups
+                    .iter_mut()
+                    .find(|g| g[0].bindings == monitor.bindings)
+                {
+                    group.push(monitor);
+                } else {
+                    groups.push(vec![monitor]);
+                }
+            }
+            for group in groups {
+                let mut next = Vec::new();
+                for choice in &choices {
+                    for monitor in &group {
+                        let mut choice = choice.clone();
+                        choice.monitors_per_formula[formula].push((*monitor).clone());
+                        next.push(choice);
+                    }
+                }
+                choices = next;
+            }
+        }
+        choices
     }
 
     /// Computes all possible next monitoring states given the current VM state.
@@ -228,6 +398,85 @@ impl MonitoringState {
         Ok(result_states)
     }
 
+    /// Optimized single-formula successor step using a shared `PredicateCache`.
+    pub(crate) fn get_possible_successors_single_cached(
+        &self,
+        vm_id: usize,
+        vm: &VM,
+        automaton: &BuchiAutomaton,
+        cache: &mut PredicateCache,
+    ) -> AlthreadResult<Vec<MonitoringState>> {
+        let monitors = &self.monitors_per_formula[0];
+        match monitors.len() {
+            0 => Ok(vec![MonitoringState {
+                monitors_per_formula: vec![Vec::new()],
+            }]),
+            1 => {
+                let next = monitors[0].get_possible_successors_cached(vm_id, vm, automaton, cache)?;
+                Ok(next
+                    .into_iter()
+                    .map(|m| MonitoringState {
+                        monitors_per_formula: vec![vec![m]],
+                    })
+                    .collect())
+            }
+            _ => {
+                let mut choices = Vec::with_capacity(monitors.len());
+                for monitor in monitors {
+                    choices.push(monitor.get_possible_successors_cached(vm_id, vm, automaton, cache)?);
+                }
+                let product = cartesian_product(&choices);
+                Ok(product
+                    .into_iter()
+                    .map(|f_monitors| MonitoringState {
+                        monitors_per_formula: vec![f_monitors],
+                    })
+                    .collect())
+            }
+        }
+    }
+
+    pub(crate) fn add_monitors_for_enabled_initial_states_cached(
+        &mut self,
+        formula_index: usize,
+        vm_id: usize,
+        automaton: &BuchiAutomaton,
+        bindings: HashMap<String, Literal>,
+        vm: &VM,
+        cache: &mut PredicateCache,
+    ) -> AlthreadResult<bool> {
+        if formula_index >= self.monitors_per_formula.len() {
+            return Err(AlthreadError::new(
+                ErrorType::ExpressionError,
+                None,
+                format!("Formula index {} out of bounds", formula_index),
+            ));
+        }
+
+        if self.monitors_per_formula[formula_index]
+            .iter()
+            .any(|monitor| monitor.bindings == bindings)
+        {
+            return Ok(false);
+        }
+
+        let mut added = 0;
+        for &initial_state_id in &automaton.initial_states {
+            if cache.check(vm_id, vm, automaton, initial_state_id, &bindings)? {
+                let monitor = LtlMonitor::new(initial_state_id, bindings.clone());
+                self.monitors_per_formula[formula_index].push(monitor);
+                added += 1;
+            }
+        }
+
+        if added == 0 {
+            self.monitors_per_formula[formula_index]
+                .push(LtlMonitor::new(LtlMonitor::REJECTED, bindings));
+        }
+
+        Ok(true)
+    }
+
     /// Adds monitors for initial automaton states that are enabled under the given VM.
     pub fn add_monitors_for_enabled_initial_states(
         &mut self,
@@ -244,12 +493,13 @@ impl MonitoringState {
             ));
         }
 
-        if automaton.initial_states.is_empty() {
-            return Err(AlthreadError::new(
-                ErrorType::ExpressionError,
-                None,
-                "Automaton has no initial states".to_string(),
-            ));
+        // Repeated list values (or a value re-entering a dynamic domain) do
+        // not introduce a second instance of the same quantified obligation.
+        if self.monitors_per_formula[formula_index]
+            .iter()
+            .any(|monitor| monitor.bindings == bindings)
+        {
+            return Ok(());
         }
 
         let mut added = 0;
@@ -263,10 +513,8 @@ impl MonitoringState {
         }
 
         if added == 0 {
-            log::debug!(
-                "No initial Büchi states were enabled for formula {} with the provided bindings",
-                formula_index
-            );
+            self.monitors_per_formula[formula_index]
+                .push(LtlMonitor::new(LtlMonitor::REJECTED, bindings));
         }
 
         Ok(())
@@ -289,11 +537,9 @@ impl MonitoringState {
         }
 
         if automaton.initial_states.is_empty() {
-            return Err(AlthreadError::new(
-                ErrorType::ExpressionError,
-                None,
-                "Automaton has no initial states".to_string(),
-            ));
+            self.monitors_per_formula[formula_index]
+                .push(LtlMonitor::new(LtlMonitor::REJECTED, bindings));
+            return Ok(());
         }
 
         for &initial_state_id in &automaton.initial_states {
